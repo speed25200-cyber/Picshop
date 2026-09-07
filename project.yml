@@ -1,0 +1,103 @@
+# XcodeGen specification for the Picshop iOS app.
+#   brew install xcodegen && xcodegen generate && open Picshop.xcodeproj
+# (or simply run Scripts/bootstrap.sh)
+name: Picshop
+options:
+  bundleIdPrefix: com.picshop
+  deploymentTarget:
+    iOS: "26.0"
+  xcodeVersion: "26.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+  defaultConfig: Release
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    SWIFT_STRICT_CONCURRENCY: complete
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    DEVELOPMENT_TEAM: ""
+  configs:
+    Debug:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+      SWIFT_OPTIMIZATION_LEVEL: -Onone
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: -O
+      SWIFT_COMPILATION_MODE: wholemodule
+
+packages:
+  PicshopKit:
+    path: .
+  # "Pro Brain": optional on-device MLX LLM (Qwen3-4B, 4-bit). Remove this
+  # package (and the App/ProBrain sources) to ship with Apple Intelligence only.
+  MLXSwiftExamples:
+    url: https://github.com/ml-explore/mlx-swift-examples
+    from: "2.25.0"
+
+targets:
+  Picshop:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes:
+          - "**/*.md"
+    dependencies:
+      - package: PicshopKit
+        product: PicshopUI
+      - package: PicshopKit
+        product: PicshopCore
+      - package: PicshopKit
+        product: PicshopIntent
+      - package: PicshopKit
+        product: PicshopImaging
+      - package: PicshopKit
+        product: PicshopVideo
+      - package: PicshopKit
+        product: PicshopSpeech
+      - package: MLXSwiftExamples
+        product: MLXLLM
+      - package: MLXSwiftExamples
+        product: MLXLMCommon
+    info:
+      path: App/Info.plist
+    entitlements:
+      path: App/Picshop.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.picshop.app
+        PRODUCT_NAME: Picshop
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_PREVIEWS: YES
+        OTHER_LDFLAGS: "-ObjC"
+    preBuildScripts:
+      - name: Verify Core ML models
+        script: |
+          "${SRCROOT}/Scripts/verify-models.sh" || true
+        basedOnDependencyAnalysis: false
+
+schemes:
+  Picshop:
+    build:
+      targets:
+        Picshop: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - package: PicshopKit/PicshopCoreTests
+        - package: PicshopKit/PicshopIntentTests
+    profile:
+      config: Release
+    archive:
+      config: Release

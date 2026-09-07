@@ -1,0 +1,28 @@
+# Xcode
+*.xcodeproj/
+!*.xcodeproj/project.pbxproj
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+
+# Models (downloaded at runtime or via Scripts/download-models.sh)
+Models/*.mlpackage
+Models/*.mlmodelc
+Models/*.safetensors
+Models/**/weights*
+
+# macOS
+.DS_Store
+
+# Tooling
+.swiftlint-cache/
+*.log

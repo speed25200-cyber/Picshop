@@ -1,0 +1,693 @@
+import Foundation
+import PicshopCore
+
+/// Deterministic grammar-based parser for French and English editing commands.
+///
+/// It is the always-available fast path: it runs in well under a millisecond,
+/// needs no model, and its output doubles as the "hint" handed to the on-device
+/// LLM for ambiguous utterances. Parsing is organised as an ordered list of
+/// matchers from most to least specific.
+public struct RuleBasedIntentEngine: IntentEngine {
+    public let kind: IntentEngineKind = .rules
+
+    public init() {}
+
+    public func isAvailable() async -> Bool { true }
+
+    public func plan(_ utterance: String, context: IntentContext) async throws -> EditPlan {
+        parse(utterance, context: context)
+    }
+
+    /// Synchronous entry point (also used directly by tests and the hybrid router).
+    public func parse(_ utterance: String, context: IntentContext) -> EditPlan {
+        let normalized = NormalizedUtterance(utterance)
+        let language: NormalizedUtterance.Language = {
+            if let preferred = context.preferredLanguage?.lowercased() {
+                if preferred.hasPrefix("fr") { return .french }
+                if preferred.hasPrefix("en") { return .english }
+            }
+            return normalized.language
+        }()
+        guard !normalized.tokens.isEmpty else {
+            return EditPlan.unknown(utterance)
+        }
+
+        if let pending = context.pendingClarification, let choice = parseCandidateChoice(normalized, pending: pending, context: context) {
+            return EditPlan(utterance: utterance, intents: [choice], confidence: choice.confidence, language: language.rawValue,
+                            reply: Replies.reply(for: choice, language: language), engine: .rules)
+        }
+
+        var intents: [EditIntent] = []
+        for segment in UtteranceSegmenter.segments(of: normalized.text) {
+            let piece = NormalizedUtterance(segment)
+            let parsed = parseSegment(piece, original: utterance, context: context)
+            intents.append(contentsOf: parsed)
+        }
+
+        // Drop unknowns if at least one segment was understood.
+        let understood = intents.filter { $0.action != .unknown }
+        let final = understood.isEmpty ? intents : understood
+        let confidence = final.map(\.confidence).min() ?? 0
+        return EditPlan(utterance: utterance, intents: final, confidence: confidence, language: language.rawValue,
+                        reply: Replies.combined(for: final, language: language), engine: .rules)
+    }
+
+    // MARK: - Segment dispatch
+
+    func parseSegment(_ u: NormalizedUtterance, original: String, context: IntentContext) -> [EditIntent] {
+        if let meta = parseMeta(u, context: context) { return [meta] }
+        if context.mode == .video, let video = parseVideo(u, context: context) { return video }
+        if let background = parseBackground(u) { return [background] }
+        if let removal = parseRemoveObject(u, context: context) { return [removal] }
+        if let text = parseText(u, original: original, context: context) { return [text] }
+        if let enhance = parseAutoEnhance(u) { return [enhance] }
+        if let crop = parseCrop(u) { return [crop] }
+        if let geometry = parseGeometry(u, context: context) { return [geometry] }
+        if let look = parseLook(u) { return [look] }
+        if let resolution = parseResolution(u) { return [resolution] }
+        if let adjust = parseAdjust(u, context: context) { return [adjust] }
+        if let layer = parseLayer(u, context: context) { return [layer] }
+        return [EditIntent(action: .unknown, confidence: 0)]
+    }
+
+    // MARK: - Shared helpers
+
+    static let removeVerbs: [String] = [
+        "efface", "effacer", "effaces", "enleve", "enlever", "enleves", "supprime", "supprimer", "supprimes", "retire", "retirer", "retires",
+        "gomme", "gommer", "vire", "virer", "degage", "fais disparaitre", "fait disparaitre", "faire disparaitre", "elimine", "eliminer",
+        "nettoie", "nettoyer", "ote", "oter", "masque", "masquer", "cache", "cacher", "remove", "erase", "delete", "get rid of", "take out",
+        "take away", "clear", "clean up", "cleanup", "wipe", "eliminate", "hide", "zap", "scrub", "scrub out", "make disappear", "drop",
+        "cut out", "efface moi", "enleve moi", "supprime moi", "vire moi", "retire moi",
+    ]
+
+    static let backgroundWords: [String] = ["background", "backdrop", "fond", "arriere plan", "l arriere plan", "decor", "arriere", "derriere le sujet", "behind the subject", "bg"]
+
+    static let allWords: [String] = ["all", "every", "everything", "tous", "toutes", "tout", "chaque", "all the", "all of the", "tous les", "toutes les"]
+
+    /// Extracts a target description from a phrase such as "the two dogs on the left".
+    func makeTarget(from phrase: String, context: IntentContext) -> ObjectTarget? {
+        let normalizedPhrase = NormalizedUtterance(phrase)
+        var tokens = normalizedPhrase.tokens
+        guard !tokens.isEmpty else { return nil }
+
+        var spatial: SpatialHint?
+        for hint in SpatialHint.allCases {
+            if let matched = normalizedPhrase.firstMatch(hint.aliases) {
+                spatial = spatial ?? hint
+                tokens = remove(phrase: matched, from: tokens)
+            }
+        }
+
+        var ordinal: Int?
+        for (index, token) in tokens.enumerated() {
+            if let value = NumberWords.ordinal(token) {
+                ordinal = value
+                tokens.remove(at: index)
+                break
+            }
+        }
+
+        var matchesAll = false
+        for phrase in Self.allWords.sorted(by: { $0.count > $1.count }) {
+            let words = phrase.split(separator: " ").map(String.init)
+            if let index = indexOfSequence(words, in: tokens) {
+                matchesAll = true
+                tokens.removeSubrange(index..<(index + words.count))
+            }
+        }
+        if let number = NumberWords.firstNumber(in: tokens), number.value > 1 {
+            matchesAll = true
+            tokens.removeSubrange(number.index..<(number.index + number.consumed))
+        }
+
+        var attributes: [String] = []
+        tokens = tokens.filter { token in
+            if ObjectVocabulary.attributeWords.contains(token) {
+                attributes.append(token)
+                return false
+            }
+            return true
+        }
+        tokens = tokens.filter { !ObjectVocabulary.fillerWords.contains($0) }
+        tokens = tokens.filter { !["autre", "autres", "other", "others", "aussi", "also", "too", "encore", "again", "completement", "completely", "entirely", "entierement"].contains($0) }
+
+        let cleaned = tokens.joined(separator: " ")
+        if cleaned.isEmpty {
+            if spatial != nil || ordinal != nil || matchesAll {
+                return ObjectTarget(label: "object", originalPhrase: phrase, spatialHint: spatial, ordinal: ordinal, matchesAll: matchesAll, attributes: attributes, point: context.lastTapPoint)
+            }
+            return nil
+        }
+        if let match = ObjectVocabulary.match(cleaned) {
+            let leftover = remove(phrase: match.matchedForm, from: cleaned.split(separator: " ").map(String.init))
+            attributes.append(contentsOf: leftover.filter { $0.count > 2 })
+            let point = match.entry.category == .generic ? context.lastTapPoint : nil
+            return ObjectTarget(label: match.entry.label, originalPhrase: phrase, spatialHint: spatial, ordinal: ordinal, matchesAll: matchesAll, attributes: attributes, point: point)
+        }
+        // Unknown noun — keep the words; the grounding layer can still try embeddings.
+        return ObjectTarget(label: cleaned, originalPhrase: phrase, spatialHint: spatial, ordinal: ordinal, matchesAll: matchesAll, attributes: attributes, point: context.lastTapPoint)
+    }
+
+    func indexOfSequence(_ words: [String], in tokens: [String]) -> Int? {
+        guard !words.isEmpty, tokens.count >= words.count else { return nil }
+        for start in 0...(tokens.count - words.count) where Array(tokens[start..<(start + words.count)]) == words {
+            return start
+        }
+        return nil
+    }
+
+    func remove(phrase: String, from tokens: [String]) -> [String] {
+        let words = phrase.split(separator: " ").map(String.init)
+        guard let index = indexOfSequence(words, in: tokens) else { return tokens }
+        var copy = tokens
+        copy.removeSubrange(index..<(index + words.count))
+        return copy
+    }
+
+    /// Words following the first matched verb phrase, or nil.
+    func remainder(of u: NormalizedUtterance, after phrases: [String]) -> String? {
+        u.remainder(after: phrases)
+    }
+
+    // MARK: - Clarification replies
+
+    func parseCandidateChoice(_ u: NormalizedUtterance, pending: ClarificationRequest, context: IntentContext) -> EditIntent? {
+        if u.contains(["cancel", "annule", "laisse tomber", "never mind", "nevermind", "forget it", "non", "no", "aucun", "aucune", "none", "stop", "oublie"]) {
+            return EditIntent(action: .cancel)
+        }
+        if u.contains(["both", "les deux", "all", "tous", "toutes", "all of them", "everyone", "tout le monde", "everything"]) {
+            return EditIntent(action: .chooseCandidate, scope: .all, confidence: 0.95)
+        }
+        for token in u.tokens {
+            if let ordinal = NumberWords.ordinal(token) {
+                let resolved = ordinal == -1 ? pending.candidates.count : ordinal
+                return EditIntent(action: .chooseCandidate, index: resolved, confidence: 0.95)
+            }
+        }
+        if let number = NumberWords.firstNumber(in: u.tokens), number.value >= 1, number.value <= Double(pending.candidates.count),
+           number.value == number.value.rounded(), !(u.tokens[number.index] == "a" || u.tokens[number.index] == "un" || u.tokens[number.index] == "une") {
+            return EditIntent(action: .chooseCandidate, index: Int(number.value), confidence: 0.9)
+        }
+        for hint in SpatialHint.allCases where u.contains(hint.aliases) {
+            var intent = EditIntent(action: .chooseCandidate, confidence: 0.9)
+            intent.target = ObjectTarget(label: pending.pendingIntent.target?.label ?? "object", originalPhrase: u.original, spatialHint: hint)
+            return intent
+        }
+        if u.contains(["this one", "that one", "celui la", "celle la", "celui ci", "celle ci", "ca", "cela", "there", "la"]), let point = context.lastTapPoint {
+            var intent = EditIntent(action: .chooseCandidate, confidence: 0.85)
+            intent.target = ObjectTarget(label: pending.pendingIntent.target?.label ?? "object", originalPhrase: u.original, point: point)
+            return intent
+        }
+        // Re-stated target with attributes: "le chien noir" → pass through as a refined target.
+        if let target = makeTarget(from: u.text, context: context), target.label == pending.pendingIntent.target?.label, (!target.attributes.isEmpty || target.spatialHint != nil) {
+            var intent = EditIntent(action: .chooseCandidate, confidence: 0.8)
+            intent.target = target
+            return intent
+        }
+        return nil
+    }
+
+    // MARK: - Meta commands
+
+    func parseMeta(_ u: NormalizedUtterance, context: IntentContext) -> EditIntent? {
+        if u.contains(["help", "aide", "aide moi", "what can you do", "que peux tu faire", "qu est ce que tu sais faire", "commandes", "commands", "what can i say", "que puis je dire"]) {
+            return EditIntent(action: .help)
+        }
+        if u.contains(["undo", "annule", "annuler", "annule ca", "reviens en arriere", "retour en arriere", "go back", "oops", "undo that", "undo the last", "annule la derniere", "non pas ca", "pas ca", "revert that", "annule le dernier"]) && !u.contains(["annule tout", "undo everything", "undo all"]) {
+            return EditIntent(action: .undo)
+        }
+        if u.contains(["redo", "retablis", "retablir", "refais", "refaire", "redo that", "remets ce que", "restore that"]) {
+            return EditIntent(action: .redo)
+        }
+        if u.contains(["revert", "revert to original", "back to the original", "reviens a l original", "remets l original", "retour a l original", "start over", "recommence", "recommencer",
+                       "reset everything", "reset all", "tout annuler", "annule tout", "undo everything", "undo all", "remove all edits", "enleve toutes les modifications",
+                       "supprime toutes les modifications", "enleve tous les reglages", "reset the photo", "reset the image", "reset the video", "reinitialise", "reinitialiser", "version originale", "original version", "restore the original"]) {
+            return EditIntent(action: .revert)
+        }
+        if u.contains(["compare", "comparer", "avant apres", "before and after", "before after", "show the original", "montre l original", "show me the original", "montre moi l original", "show before", "montre avant", "voir l original", "see the original"]) {
+            return EditIntent(action: .compare)
+        }
+        if u.contains(["export", "exporte", "exporter", "save", "sauvegarde", "sauvegarder", "enregistre", "enregistrer", "download", "telecharge", "save it", "save the photo", "save the video", "enregistre la photo", "enregistre la video", "save to photos", "save to camera roll", "enregistre dans photos"]) && !u.contains(["frame", "image", "capture"]) {
+            return EditIntent(action: .export)
+        }
+        if u.contains(["share", "partage", "partager", "send it", "envoie", "envoyer", "share it", "partage la photo", "partage la video", "airdrop", "send to"]) {
+            return EditIntent(action: .share)
+        }
+        if u.contains(["zoom in", "zoom avant", "zoome", "zoom", "agrandis la vue", "rapproche", "closer", "zoom out", "zoom arriere", "dezoome", "eloigne", "fit to screen", "fit", "ajuste a l ecran", "vue d ensemble", "show everything", "montre tout", "zoom sur", "zoom on"]) {
+            var intent = EditIntent(action: .zoom)
+            if u.contains(["zoom out", "zoom arriere", "dezoome", "eloigne", "recule"]) {
+                intent.amount = .multiplier(0.5)
+            } else if u.contains(["fit", "fit to screen", "ajuste a l ecran", "vue d ensemble", "show everything", "montre tout", "reset zoom", "zoom normal"]) {
+                intent.amount = .absolute(1)
+            } else {
+                intent.amount = .multiplier(2)
+            }
+            if let rest = remainder(of: u, after: ["zoom sur", "zoom on", "zoom in on", "zoome sur", "rapproche toi de", "closer to", "zoom to"]), let target = makeTarget(from: rest, context: context) {
+                intent.target = target
+            }
+            return intent
+        }
+        if context.pendingClarification == nil {
+            if u.contains(["cancel", "laisse tomber", "never mind", "nevermind", "forget it", "oublie", "stop", "arrete"]) && context.mode == .photo {
+                return EditIntent(action: .cancel)
+            }
+            if u.tokens.count <= 3, u.contains(["yes", "oui", "ok", "okay", "confirme", "vas y", "go", "do it", "fais le", "c est bon", "parfait", "yep", "ouais", "sure", "exactly", "exactement", "correct"]) {
+                return EditIntent(action: .confirm)
+            }
+        }
+        return nil
+    }
+
+    // MARK: - Background
+
+    func parseBackground(_ u: NormalizedUtterance) -> EditIntent? {
+        let mentionsBackground = u.contains(Self.backgroundWords)
+        // Blur / portrait effect.
+        if u.contains(["blur the background", "blur background", "blurred background", "floute le fond", "floute l arriere plan", "flouter le fond", "flouter l arriere plan", "fond flou", "arriere plan flou", "portrait mode", "mode portrait", "effet portrait", "portrait effect", "bokeh", "depth effect", "effet de profondeur", "profondeur de champ", "depth of field", "background blur", "flou d arriere plan", "flou de fond"])
+            || (mentionsBackground && u.contains(["blur", "floute", "flouter", "flou", "floue", "soften", "adoucis"])) {
+            var intent = EditIntent(action: .blurBackground)
+            let magnitude = AmountParser.magnitude(in: u)
+            intent.amount = .absolute(magnitude.explicitNumber.map { $0 } ?? (magnitude.qualifier == .slight ? 0.35 : magnitude.qualifier == .strong ? 0.9 : 0.65))
+            if u.contains(["less", "moins", "reduce", "reduis", "diminue", "baisse"]) { intent.amount = .relative(-0.2) }
+            if u.contains(["more", "plus", "davantage"]) && !u.contains(["floute", "flouter", "blur the"]) { intent.amount = .relative(0.2) }
+            return intent
+        }
+        // Replace with a colour / gradient.
+        if mentionsBackground || u.contains(["fond blanc", "fond noir", "white background", "black background"]) {
+            let colorToken = u.tokens.compactMap { PSColor.named($0) != nil ? $0 : nil }
+            let twoWordColors = ["bleu clair", "bleu fonce", "vert clair", "vert fonce", "light blue", "dark blue", "light gray", "dark gray", "light grey", "dark grey", "light green", "dark green", "rose clair", "light pink"]
+            let colorPhrase = u.firstMatch(twoWordColors) ?? colorToken.first
+            let wantsChange = u.contains(["change", "changer", "replace", "remplace", "remplacer", "mets", "met", "mettre", "put", "set", "make", "rends", "rendre", "fais", "swap", "use", "utilise", "colore", "color", "colour", "en", "with", "avec", "to", "into", "fond blanc", "fond noir", "white background", "black background"])
+            if let colorPhrase, wantsChange || colorToken.count == 1 {
+                if u.contains(["transparent", "transparente"]) {
+                    return EditIntent(action: .removeBackground, background: .transparent)
+                }
+                let color = PSColor.named(colorPhrase) ?? .white
+                return EditIntent(action: .replaceBackground, color: color, background: .color(color))
+            }
+            if u.contains(["transparent", "transparente", "sans fond", "no background", "png"]) {
+                return EditIntent(action: .removeBackground, background: .transparent)
+            }
+            if u.contains(["gradient", "degrade"]) {
+                return EditIntent(action: .replaceBackground, background: .gradient(PSColor(red: 0.16, green: 0.2, blue: 0.36), PSColor(red: 0.55, green: 0.35, blue: 0.75)))
+            }
+            if backgroundIsDirectObject(of: u) || u.contains(["detoure", "detourer", "cut out", "cutout", "isolate", "isole", "extract the subject", "extrais le sujet", "keep only the subject", "garde seulement le sujet", "ne garde que"]) {
+                return EditIntent(action: .removeBackground, background: .transparent)
+            }
+            if u.contains(Self.removeVerbs) {
+                // "remove the car in the background" → object removal with a spatial hint.
+                return nil
+            }
+            if u.contains(["change", "changer", "replace", "remplace", "remplacer", "swap", "new background", "nouveau fond", "autre fond", "another background", "different background"]) {
+                return EditIntent(action: .replaceBackground, background: nil, confidence: 0.85)
+            }
+        }
+        if u.contains(["detoure", "detourer", "detoure moi", "detourage", "cut out the subject", "cut out", "cutout", "isolate the subject", "isole le sujet", "extract the subject", "extrais le sujet", "keep only the subject", "garde seulement le sujet", "sticker", "make a sticker", "fais un sticker", "remove bg", "supprime le decor"]) {
+            return EditIntent(action: .removeBackground, background: .transparent)
+        }
+        return nil
+    }
+
+    /// True when the words right after the remove verb name the background itself
+    /// ("efface le fond"), as opposed to an object located in it.
+    func backgroundIsDirectObject(of u: NormalizedUtterance) -> Bool {
+        guard let rest = remainder(of: u, after: Self.removeVerbs) else { return false }
+        let tokens = rest.split(separator: " ").map(String.init).filter { !ObjectVocabulary.fillerWords.contains($0) && $0 != "completement" && $0 != "completely" && $0 != "entirely" }
+        let head = tokens.prefix(2).joined(separator: " ")
+        return Self.backgroundWords.contains { head == $0 || head.hasPrefix($0 + " ") || tokens.first == $0 }
+    }
+
+    // MARK: - Object removal
+
+    func parseRemoveObject(_ u: NormalizedUtterance, context: IntentContext) -> EditIntent? {
+        guard let rest = remainder(of: u, after: Self.removeVerbs) else {
+            // "sans le chien" / "without the dog" / "je ne veux pas du chien"
+            if let rest = remainder(of: u, after: ["sans", "without", "je ne veux pas", "je veux pas", "i don t want", "i do not want", "dont want", "don t want"]),
+               let target = makeTarget(from: rest, context: context), target.label != "object" {
+                return EditIntent(action: .removeObject, target: target, confidence: 0.75)
+            }
+            return nil
+        }
+        // "remove the text" on a document with text layers is a layer operation.
+        if context.mode == .photo, context.textLayerCount > 0, NormalizedUtterance(rest).contains(["text", "texte", "title", "titre", "caption", "legende", "words", "mots"]) {
+            return EditIntent(action: .removeText)
+        }
+        if context.mode == .video, NormalizedUtterance(rest).contains(["clip", "segment", "partie", "part", "passage", "scene", "sequence", "morceau", "bout", "beginning", "debut", "end", "fin", "son", "sound", "audio", "music", "musique", "transition", "transitions"]) {
+            return nil
+        }
+        let restUtterance = NormalizedUtterance(rest)
+        if restUtterance.contains(["filter", "filtre", "look", "effect", "effet", "vignette", "vignettage", "grain", "flou", "blur", "noise", "bruit", "modification", "modifications", "edits", "edit", "reglages", "adjustments", "crop", "recadrage", "layer", "calque", "zoom"]) {
+            return nil
+        }
+        guard let target = makeTarget(from: rest, context: context) else {
+            if u.contains(["ca", "cela", "this", "that", "it", "la", "ici", "here", "there"]) {
+                return EditIntent(action: .removeObject, target: ObjectTarget(label: "object", originalPhrase: u.original, point: context.lastTapPoint), confidence: 0.6)
+            }
+            return nil
+        }
+        let known = ObjectVocabulary.entry(forLabel: target.label) != nil
+        return EditIntent(action: .removeObject, target: target, confidence: known ? 0.92 : 0.65)
+    }
+
+    // MARK: - Auto enhance
+
+    func parseAutoEnhance(_ u: NormalizedUtterance) -> EditIntent? {
+        guard u.contains(["auto enhance", "auto", "automatique", "automatic", "enhance", "enhance it", "enhance the photo", "enhance the picture", "enhance the video", "ameliore", "ameliorer", "ameliore la photo", "ameliore l image", "ameliore la video", "improve", "improve it", "improve the photo", "fix it", "fix the photo", "fix the picture", "fix the lighting", "corrige", "corrige la photo", "corrige la lumiere", "corrige les couleurs", "fix the colors", "fix the colours", "magic", "magique", "baguette magique", "magic wand", "make it better", "make it look better", "make it nicer", "make it beautiful", "rends la plus belle", "rends la plus jolie", "embellis", "embellir", "optimise", "optimize", "optimise la photo", "retouche automatique", "auto retouch", "sublime", "sublimer", "one tap", "make it pop", "fais la briller", "rends la meilleure", "mets la en valeur", "arrange la photo", "arrange ca", "touch up", "touch it up", "retouche", "retoucher", "quick fix", "auto fix", "autofix", "smart enhance", "enhance colors", "enhance colours"]) else { return nil }
+        let magnitude = AmountParser.magnitude(in: u)
+        let strength: Double = magnitude.qualifier == .slight ? 0.5 : magnitude.qualifier == .strong ? 1.0 : 0.8
+        return EditIntent(action: .autoEnhance, amount: .absolute(magnitude.explicitNumber ?? strength))
+    }
+
+    // MARK: - Look / filter
+
+    static let lookKeywords: [String] = ["filter", "filtre", "look", "style", "preset", "effect", "effet", "ambiance", "mood", "vibe", "tone", "ton", "grade", "color grade", "colour grade", "etalonnage", "rendu"]
+    static let strongLookPhrases: [String] = [
+        "noir et blanc", "black and white", "black & white", "monochrome", "grayscale", "greyscale", "sepia", "sepia tone", "vintage", "retro", "cinematic", "cinematique", "cinema",
+        "golden hour", "heure doree", "dramatic", "dramatique", "teal and orange", "teal orange", "teal & orange", "matte", "film noir", "argentique", "analog", "analogue",
+        "pastel", "vivid", "eclatant", "silvertone", "hollywood", "blockbuster", "kodak", "fuji", "polaroid", "nostalgic", "nostalgique", "punchy", "35mm", "moody", "light and airy",
+    ]
+
+    func parseLook(_ u: NormalizedUtterance) -> EditIntent? {
+        let hasKeyword = u.contains(Self.lookKeywords)
+        let strong = u.firstMatch(Self.strongLookPhrases)
+        guard hasKeyword || strong != nil else { return nil }
+        if hasKeyword, u.contains(Self.removeVerbs) || u.contains(["no filter", "sans filtre", "aucun filtre", "remove the filter", "enleve le filtre", "reset the look", "original look"]) {
+            return EditIntent(action: .applyLook, look: .original)
+        }
+        var preset: FilterPreset?
+        if let strong {
+            preset = strong == "sepia" || strong == "sepia tone" || strong == "polaroid" ? .vintage : (strong == "moody" ? .cinematic : FilterPreset.matching(strong))
+        }
+        if preset == nil {
+            let candidate = remainder(of: u, after: Self.lookKeywords) ?? u.text
+            let cleaned = candidate.split(separator: " ").filter { !ObjectVocabulary.fillerWords.contains(String($0)) && !["appelle", "called", "named", "nomme", "genre", "type", "style", "kind", "of"].contains(String($0)) }.joined(separator: " ")
+            preset = FilterPreset.matching(cleaned) ?? FilterPreset.matching(u.text)
+        }
+        guard let resolved = preset else {
+            return hasKeyword ? EditIntent(action: .applyLook, look: nil, confidence: 0.5) : nil
+        }
+        let magnitude = AmountParser.magnitude(in: u)
+        var intensity = magnitude.explicitNumber ?? 1
+        if magnitude.qualifier == .slight { intensity = 0.5 }
+        if magnitude.qualifier == .strong { intensity = 1 }
+        return EditIntent(action: .applyLook, amount: .absolute(intensity), look: resolved, confidence: 0.9)
+    }
+
+    // MARK: - Crop
+
+    func parseCrop(_ u: NormalizedUtterance) -> EditIntent? {
+        let cropVerbs = ["crop", "recadre", "recadrer", "recadrage", "rogne", "rogner", "cadre", "cadrer", "coupe les bords", "trim the edges", "format", "ratio", "aspect", "aspect ratio", "resize to", "redimensionne en", "mets en format", "passe en format", "en format"]
+        let hasVerb = u.contains(cropVerbs)
+        let aspect = AspectPreset.matching(u.text)
+        if hasVerb {
+            if u.contains(["reset", "original", "d origine", "annule le recadrage", "remove the crop", "enleve le recadrage", "uncrop"]) {
+                return EditIntent(action: .setAspect, aspect: .original)
+            }
+            var intent = EditIntent(action: .crop, aspect: aspect ?? .free)
+            if let rest = remainder(of: u, after: ["crop to the", "crop on the", "crop around the", "recadre sur", "recadre autour de", "recadre autour du", "recadre sur le", "recadre sur la", "zoom on the", "crop to"]),
+               aspect == nil, let target = makeTarget(from: rest, context: .photo), target.label != "object" {
+                intent.target = target
+            }
+            if aspect == nil, intent.target == nil, !u.contains(["free", "libre", "manually", "manuellement"]) {
+                intent.confidence = 0.7
+            }
+            return intent
+        }
+        if let aspect, aspect != .original, aspect != .free, u.contains(["square", "carre", "story", "stories", "reel", "reels", "tiktok", "instagram", "youtube", "widescreen", "cinemascope", "16 9", "9 16", "4 3", "3 4", "1 1", "16:9", "9:16", "4:3", "3:4", "1:1", "4:5", "4 5", "5:4", "21:9"]) {
+            return EditIntent(action: .crop, aspect: aspect, confidence: 0.85)
+        }
+        return nil
+    }
+
+    // MARK: - Rotate / straighten / flip
+
+    func parseGeometry(_ u: NormalizedUtterance, context: IntentContext) -> EditIntent? {
+        if u.contains(["straighten", "straighten it", "level", "level the horizon", "horizon", "redresse", "redresser", "redresse l horizon", "aligne l horizon", "mets droit", "mets la droite", "de niveau", "c est de travers", "it s crooked", "crooked", "tilted", "penche", "penchee", "de travers"]) {
+            var intent = EditIntent(action: .straighten)
+            if let number = NumberWords.firstNumber(in: u.tokens) {
+                var degrees = number.value
+                if u.contains(["left", "gauche", "anticlockwise", "counterclockwise", "counter clockwise", "anti horaire"]) { degrees = -degrees }
+                intent.degrees = degrees
+            }
+            return intent
+        }
+        if context.mode == .video, u.contains(["reverse", "inverse", "backwards", "a l envers", "rewind", "marche arriere"]), !u.contains(["flip", "mirror", "miroir", "retourne"]) {
+            return nil
+        }
+        if u.contains(["flip", "mirror", "miroir", "retourne", "retourner", "inverse", "inverser", "flip it", "mirror it", "en miroir", "symetrie", "symmetry"]) && !u.contains(["upside down", "a l envers", "tete en bas"]) {
+            let axis: FlipAxis = u.contains(["vertical", "verticalement", "vertically", "upside", "haut en bas", "top to bottom"]) ? .vertical : .horizontal
+            return EditIntent(action: .flip, flipAxis: axis)
+        }
+        if u.contains(["rotate", "turn", "tourne", "tourner", "pivote", "pivoter", "fais pivoter", "fais tourner", "rotation", "upside down", "a l envers", "tete en bas", "en paysage", "en portrait", "to landscape", "to portrait"]) {
+            var degrees = 90.0
+            if let number = NumberWords.firstNumber(in: u.tokens) { degrees = number.value }
+            if u.contains(["upside down", "a l envers", "tete en bas", "180"]) { degrees = 180 }
+            if u.contains(["left", "gauche", "anticlockwise", "counterclockwise", "counter clockwise", "anti horaire", "sens inverse", "sens antihoraire"]) { degrees = -abs(degrees) }
+            if u.contains(["half", "demi", "quart de tour", "quarter turn"]) && NumberWords.firstNumber(in: u.tokens) == nil {
+                degrees = u.contains(["half", "demi"]) ? 180 : 90
+            }
+            if u.contains(["en paysage", "to landscape", "en portrait", "to portrait"]) { degrees = 90 }
+            return EditIntent(action: .rotate, degrees: degrees)
+        }
+        return nil
+    }
+
+    // MARK: - Text
+
+    func parseText(_ u: NormalizedUtterance, original: String, context: IntentContext) -> EditIntent? {
+        let addPhrases = ["add text", "add the text", "add a text", "add some text", "add a caption", "add caption", "add a title", "add title", "add the words", "add the word", "write", "put the text", "put text", "insert text", "insert the text", "type",
+                          "ajoute le texte", "ajoute un texte", "ajoute du texte", "ajoute texte", "ajoute une legende", "ajoute la legende", "ajoute un titre", "ajoute le titre", "ajoutes le texte", "ecris", "ecrire", "mets le texte", "mets un texte", "mets le mot", "mets les mots", "insere le texte", "insere un texte", "marque", "note", "titre", "legende", "caption"]
+        let editPhrases = ["change the text to", "change the text", "replace the text with", "replace the text by", "edit the text", "modifie le texte", "change le texte en", "change le texte", "remplace le texte par", "remplace le texte"]
+        let mentionsText = u.contains(["text", "texte", "title", "titre", "caption", "legende", "words", "mots", "subtitle", "sous titre", "label", "heading"])
+        if context.textLayerCount > 0, u.contains(editPhrases) {
+            var intent = EditIntent(action: .editText)
+            intent.text = extractQuoted(from: original) ?? remainder(of: u, after: editPhrases)?.replacingOccurrences(of: "^(en|par|to|with|by|into) ", with: "", options: .regularExpression)
+            return intent
+        }
+        if context.textLayerCount > 0, mentionsText, u.contains(["bigger", "larger", "smaller", "plus grand", "plus gros", "plus petit", "in red", "in blue", "en rouge", "en bleu", "en blanc", "en noir", "in white", "in black", "move", "deplace", "center", "centre", "top", "bottom", "en haut", "en bas", "font", "police", "bold", "gras", "color", "couleur"]), !u.contains(addPhrases) {
+            var intent = EditIntent(action: .editText)
+            intent.placement = placement(in: u)
+            intent.color = colorMention(in: u)
+            if u.contains(["bigger", "larger", "plus grand", "plus gros", "grand", "big"]) { intent.amount = .multiplier(1.35) }
+            if u.contains(["smaller", "plus petit", "petit", "small"]) { intent.amount = .multiplier(0.75) }
+            return intent
+        }
+        guard u.contains(addPhrases) || (mentionsText && u.contains(["add", "ajoute", "mets", "put", "insert", "insere", "with", "avec", "saying", "disant", "qui dit"])) else { return nil }
+        if u.contains(Self.removeVerbs) && !u.contains(["add", "ajoute"]) { return nil }
+        var intent = EditIntent(action: .addText)
+        var content = extractQuoted(from: original)
+        if content == nil {
+            // Take the words after the trigger phrase, dropping placement and styling words.
+            let after = remainder(of: u, after: addPhrases + ["saying", "that says", "qui dit", "disant", "which says", "with the text", "avec le texte", "with the words", "avec les mots", "the text", "le texte", "text", "texte"])
+            var words = after?.split(separator: " ").map(String.init) ?? []
+            if words.first == "saying" || words.first == "disant" || words.first == "que" || words.first == "that" || words.first == "says" { words.removeFirst() }
+            if words.first == "dit" { words.removeFirst() }
+            for phrase in Self.placementPhrases.keys.sorted(by: { $0.count > $1.count }) { words = remove(phrase: phrase, from: words) }
+            for phrase in ["in red", "in blue", "in white", "in black", "in yellow", "in green", "in pink", "in orange", "en rouge", "en bleu", "en blanc", "en noir", "en jaune", "en vert", "en rose", "en orange", "en gras", "in bold", "en grand", "in big", "big", "large", "small", "en petit", "petit", "grand", "gros"] {
+                words = remove(phrase: phrase, from: words)
+            }
+            if words.first == "in" || words.first == "en" || words.first == "de" || words.first == "on" || words.first == "sur" { words.removeFirst() }
+            if context.mode == .video { words = stripTimePhrases(from: words, frameRate: context.frameRate) }
+            let joined = words.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+            if !joined.isEmpty {
+                // Recover original casing/accents by locating the phrase in the raw string when possible.
+                content = originalSubstring(matching: joined, in: original) ?? joined
+            }
+        }
+        intent.text = content
+        intent.placement = placement(in: u) ?? .bottom
+        intent.color = colorMention(in: u)
+        if u.contains(["big", "large", "grand", "gros", "huge", "enorme", "en grand", "bigger"]) { intent.amount = .absolute(0.09) }
+        if u.contains(["small", "petit", "tiny", "discret", "en petit"]) { intent.amount = .absolute(0.035) }
+        if context.mode == .video {
+            let times = TimeExpressions.allTimes(in: u.tokens, frameRate: context.frameRate)
+            if u.contains(["from", "de", "entre", "between"]), times.count >= 2 {
+                intent.timeRange = TimeSpan(start: times[0], end: times[1])
+            } else if u.contains(["pendant", "for", "during", "durant"]), let duration = times.first {
+                intent.timeRange = TimeSpan(start: context.playheadSeconds, duration: duration)
+            } else if u.contains(["at", "a partir de", "starting at", "from"]), let start = times.first {
+                intent.timeRange = TimeSpan(start: start, duration: 3)
+            }
+        }
+        intent.confidence = content == nil ? 0.6 : 0.9
+        return intent
+    }
+
+    /// Removes "pendant 3 secondes", "from 2 to 5 seconds", "à 10 secondes" from a text payload.
+    func stripTimePhrases(from words: [String], frameRate: Double) -> [String] {
+        let prepositions: Set<String> = ["pendant", "for", "during", "durant", "a", "at", "de", "from", "to", "jusqu", "entre", "between", "et", "and", "partir", "starting"]
+        var result: [String] = []
+        var index = 0
+        while index < words.count {
+            if TimeExpressions.parse(words, at: index, frameRate: frameRate) != nil || (NumberWords.parse(words, at: index) != nil && index + 1 < words.count && TimeExpressions.rangeConnectors.contains(words[index + 1]) && (index + 2 < words.count) && TimeExpressions.parse(words, at: index + 2, frameRate: frameRate) != nil) {
+                while let last = result.last, prepositions.contains(last) { result.removeLast() }
+                // Skip the whole time phrase.
+                if let single = TimeExpressions.parse(words, at: index, frameRate: frameRate) {
+                    index += single.consumed
+                } else {
+                    let bare = NumberWords.parse(words, at: index)!
+                    let second = TimeExpressions.parse(words, at: index + 2, frameRate: frameRate)!
+                    index += bare.consumed + 1 + second.consumed
+                }
+                continue
+            }
+            result.append(words[index])
+            index += 1
+        }
+        return result
+    }
+
+    static let placementPhrases: [String: TextElement.Placement] = [
+        "at the top": .top, "on top": .top, "top": .top, "en haut": .top, "dans le haut": .top, "at the bottom": .bottom, "bottom": .bottom, "en bas": .bottom,
+        "dans le bas": .bottom, "in the middle": .center, "in the center": .center, "in the centre": .center, "centered": .center, "au centre": .center,
+        "au milieu": .center, "centre": .center, "center": .center, "top left": .topLeading, "en haut a gauche": .topLeading, "top right": .topTrailing,
+        "en haut a droite": .topTrailing, "bottom left": .bottomLeading, "en bas a gauche": .bottomLeading, "bottom right": .bottomTrailing,
+        "en bas a droite": .bottomTrailing, "in the corner": .bottomTrailing, "dans le coin": .bottomTrailing,
+    ]
+
+    func placement(in u: NormalizedUtterance) -> TextElement.Placement? {
+        guard let phrase = u.firstMatch(Array(Self.placementPhrases.keys)) else { return nil }
+        return Self.placementPhrases[phrase]
+    }
+
+    func colorMention(in u: NormalizedUtterance) -> PSColor? {
+        let twoWord = ["bleu clair", "bleu fonce", "vert clair", "vert fonce", "light blue", "dark blue", "light gray", "dark gray", "light green", "dark green", "rose clair", "light pink"]
+        if let phrase = u.firstMatch(twoWord) { return PSColor.named(phrase) }
+        for token in u.tokens {
+            if let color = PSColor.named(token), token != "clear", token != "light", token != "rose" || u.contains(["en rose", "in pink"]) { return color }
+        }
+        return nil
+    }
+
+    func extractQuoted(from original: String) -> String? {
+        let patterns = ["\"([^\"]+)\"", "“([^”]+)”", "«\\s*([^»]+?)\\s*»", "'([^']{2,})'"]
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern), let match = regex.firstMatch(in: original, range: NSRange(original.startIndex..., in: original)),
+               let range = Range(match.range(at: 1), in: original) {
+                return String(original[range]).trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return nil
+    }
+
+    /// Finds the span of the original string whose normalised form equals `normalizedPhrase`.
+    func originalSubstring(matching normalizedPhrase: String, in original: String) -> String? {
+        let words = original.split(whereSeparator: { $0.isWhitespace || $0 == "," || $0 == "." || $0 == "!" || $0 == "?" || $0 == ":" }).map(String.init)
+        let targetCount = normalizedPhrase.split(separator: " ").count
+        guard words.count >= targetCount, targetCount > 0 else { return nil }
+        for start in 0...(words.count - targetCount) {
+            let slice = words[start..<(start + targetCount)].joined(separator: " ")
+            if NormalizedUtterance.normalize(slice) == normalizedPhrase { return slice }
+        }
+        // Handle elisions ("l'été") where token counts differ.
+        for start in 0..<words.count {
+            for end in start..<words.count {
+                let slice = words[start...end].joined(separator: " ")
+                if NormalizedUtterance.normalize(slice) == normalizedPhrase { return slice }
+            }
+        }
+        return nil
+    }
+
+    // MARK: - Resolution & detail operations
+
+    func parseResolution(_ u: NormalizedUtterance) -> EditIntent? {
+        if u.contains(["upscale", "upscaling", "super resolution", "increase the resolution", "increase resolution", "augmente la resolution", "augmenter la resolution", "plus de resolution", "higher resolution", "haute resolution", "en 4k", "in 4k", "4k", "agrandis l image", "agrandis la photo", "agrandir l image", "agrandis la", "double the size", "double la taille", "enlarge", "make it bigger", "rends la plus grande", "more pixels", "plus de pixels", "hd", "en hd", "upscale it"]) {
+            var factor = 2.0
+            if let number = NumberWords.firstNumber(in: u.tokens), number.value == 2 || number.value == 3 || number.value == 4 { factor = number.value }
+            if u.contains(["4k"]) { factor = 2 }
+            return EditIntent(action: .upscale, amount: .absolute(factor))
+        }
+        if u.contains(["relight", "re light", "reeclaire", "re eclaire", "eclaire le visage", "light the face", "add light", "ajoute de la lumiere", "studio light", "lumiere de studio", "portrait light", "portrait lighting", "eclairage portrait", "eclairage studio"]) {
+            var direction = 0.0
+            if u.contains(["left", "gauche"]) { direction = -1 }
+            if u.contains(["right", "droite"]) { direction = 1 }
+            return EditIntent(action: .relight, amount: .absolute(0.6), degrees: direction)
+        }
+        return nil
+    }
+
+    // MARK: - Layers (photo)
+
+    func parseLayer(_ u: NormalizedUtterance, context: IntentContext) -> EditIntent? {
+        guard context.mode == .photo else { return nil }
+        if u.contains(["select the layer", "select layer", "selectionne le calque", "selectionne la couche", "go to layer", "va au calque", "choose the layer", "choisis le calque", "select the text", "selectionne le texte", "select the photo", "selectionne la photo"]) {
+            var intent = EditIntent(action: .selectLayer)
+            if let number = NumberWords.firstNumber(in: u.tokens) { intent.index = Int(number.value) }
+            for token in u.tokens { if let ordinal = NumberWords.ordinal(token) { intent.index = ordinal } }
+            if u.contains(["text", "texte"]) { intent.text = "text" }
+            if u.contains(["photo", "image", "picture", "base"]) { intent.text = "image" }
+            return intent
+        }
+        if u.contains(["duplicate", "duplique", "dupliquer", "copy the layer", "copie le calque", "clone the layer"]) {
+            return EditIntent(action: .duplicateLayer)
+        }
+        if u.contains(["delete the layer", "delete layer", "remove the layer", "remove layer", "supprime le calque", "efface le calque", "enleve le calque"]) {
+            return EditIntent(action: .deleteLayer)
+        }
+        return nil
+    }
+
+    // MARK: - Adjustments
+
+    func parseAdjust(_ u: NormalizedUtterance, context: IntentContext) -> EditIntent? {
+        guard let match = ParameterVocabulary.match(in: u) else {
+            return nil
+        }
+        let parameter = match.parameter
+        let outside = remove(phrase: match.matchedPhrase, from: u.tokens)
+        let outsideUtterance = NormalizedUtterance(outside.joined(separator: " "))
+        let magnitude = AmountParser.magnitude(in: outsideUtterance)
+        let current = context.currentAdjustments[parameter]
+
+        // Reset.
+        if outsideUtterance.contains(AmountParser.resetWords) {
+            return EditIntent(action: .adjust, parameter: parameter, amount: .absolute(0))
+        }
+        if u.contains(Self.removeVerbs), !parameter.isBipolar, magnitude.explicitNumber == nil, magnitude.qualifier == nil {
+            // "remove the vignette", "enlève le grain"
+            return EditIntent(action: .adjust, parameter: parameter, amount: .absolute(0))
+        }
+
+        // Direction.
+        var direction = match.impliedDirection
+        let sign = AmountParser.sign(in: outsideUtterance)
+        if sign != 0 {
+            direction = direction == 0 ? sign : direction * sign
+        }
+        let tooMuch = outsideUtterance.contains(AmountParser.tooWords)
+        if tooMuch {
+            direction = direction == 0 ? -1 : (sign == 0 ? -direction : direction)
+        }
+        if direction == 0 { direction = 1 }
+
+        // Maximum / minimum.
+        if outsideUtterance.contains(AmountParser.maxWords) {
+            let bound = direction >= 0 ? parameter.range.upperBound : parameter.range.lowerBound
+            return EditIntent(action: .adjust, parameter: parameter, amount: .absolute(bound))
+        }
+
+        // Explicit number: absolute when preceded by "to"/"à"/"at"/"set", otherwise relative.
+        if let number = magnitude.explicitNumber {
+            let absolute = magnitude.isAbsolute || outsideUtterance.contains(AmountParser.setVerbs)
+            if absolute {
+                let signed = magnitude.hasExplicitNegative ? -abs(number) : (direction < 0 && !magnitude.hasExplicitPositive && sign == 0 && match.impliedDirection == 0 ? -abs(number) : number)
+                return EditIntent(action: .adjust, parameter: parameter, amount: .absolute(signed))
+            }
+            let delta = abs(number) * Double(direction)
+            return EditIntent(action: .adjust, parameter: parameter, amount: .relative(magnitude.hasExplicitNegative ? -abs(number) : delta))
+        }
+
+        var step = parameter.defaultStep + 0.05
+        switch magnitude.qualifier {
+        case .slight: step = 0.1
+        case .strong: step = 0.4
+        case .none: break
+        }
+        // Unipolar parameters at zero cannot go negative: nudge them up unless the user asked for less.
+        if !parameter.isBipolar, direction < 0, current <= 0 {
+            return EditIntent(action: .adjust, parameter: parameter, amount: .absolute(0), confidence: 0.8)
+        }
+        return EditIntent(action: .adjust, parameter: parameter, amount: .relative(step * Double(direction)))
+    }
+}
