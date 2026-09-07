@@ -29,6 +29,7 @@ When Picshop asks *"Which one?"*, answer with **« celle de gauche »**, **"the 
 | Débouche les ombres · Recover the highlights · Deeper blacks | Shadows / highlights / blacks |
 | Plus net · Sharpen · Adoucis · Reduce the noise · Ajoute du grain · Enlève la vignette | Detail & effects |
 | Mets l'exposition à -20 · Set brightness to 50 · Reset the contrast | Absolute values & resets |
+| Rends le ciel plus bleu · Make the sky bluer · Éclaircis le visage · Brighten the background | Selective adjustments (masked to the named region) |
 
 Amounts: **un peu / a bit** (±10), default (±20), **beaucoup / a lot** (±40), **à fond / max**, numbers in
 percent, **+15**, **-20**.
