@@ -120,6 +120,15 @@ public actor ModelManager {
         for observer in observers.values { observer(id, state) }
     }
 
+    /// Progress reporting hooks for externally-managed downloads (MLX weights).
+    public func setDownloadProgress(_ id: String, _ progress: Double) {
+        set(.downloading(progress: progress.clamped(to: 0...1)), for: id)
+    }
+
+    public func setFailure(_ id: String, _ message: String) {
+        set(.failed(message), for: id)
+    }
+
     /// Marks an externally-managed model (MLX weights) as installed.
     public func markInstalled(_ id: String) throws {
         let directory = directory(for: id)

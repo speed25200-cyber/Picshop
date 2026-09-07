@@ -1,0 +1,119 @@
+# Architecture
+
+Picshop is a Swift package (`PicshopKit`) with six modules plus a thin iOS app target.
+The split keeps every piece of logic that does not need Apple frameworks buildable and
+testable on Linux/CI, and isolates the Apple-only code behind clear protocols.
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ App (SwiftUI)  PicshopApp · RootView · optional MLXIntentEngine      │
+├──────────────────────────────────────────────────────────────────────┤
+│ PicshopUI      AppEnvironment · ProjectLibrary · PhotoEditorSession  │
+│                VideoEditorSession · canvas · timeline · voice orb     │
+├───────────────┬───────────────┬───────────────┬──────────────────────┤
+│ PicshopSpeech │ PicshopImaging│ PicshopVideo  │ PicshopIntent        │
+│ SpeechAnalyzer│ CI graph      │ AVComposition │ grammar · LLM · router│
+│ SFSpeech      │ Vision ground │ compositor    │ executors · selector │
+│               │ PatchMatch/ML │ transcoder    │                      │
+├───────────────┴───────────────┴───────────────┴──────────────────────┤
+│ PicshopCore    PhotoDocument · Layer · EditStack · EditHistory       │
+│                VideoTimeline · EditIntent/EditPlan · ProjectStore    │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+## Documents are values
+
+`PhotoDocument` and `VideoTimeline` are `Codable`, `Hashable` value types. Pixels are never
+inside them — layers and clips reference media by path inside the project package. This makes
+undo trivial (`EditHistory` stores whole snapshots), persistence a JSON write, and rendering a
+pure function of the document.
+
+A photo layer carries an `EditStack`: an ordered list of `EditOperation`s. Adjustment operations
+are flattened (`resolvedAdjustments`), geometric ones are replayed in order, and pixel-synthesis
+operations (`removeObject`, `heal`, `upscale`) are cached by operation id and render size.
+
+A project package on disk:
+
+```
+<uuid>.picshop/
+  project.json      Project { photo | video }
+  media/            originals + AI-rendered derivatives (erased clips, stabilised clips…)
+  masks/            8-bit PNG masks referenced by MaskReference.relativePath
+  thumbnail.jpg
+```
+
+## From speech to pixels
+
+1. **`VoiceController`** captures audio with `AVAudioEngine` and streams it into `SpeechAnalyzer`
+   (iOS 26) or `SFSpeechRecognizer` (on-device mode). It publishes the input level for the orb,
+   detects the end of an utterance (silence after speech) and delivers the final transcript.
+2. **`HybridIntentRouter`** runs `RuleBasedIntentEngine` first. The grammar segments the utterance
+   ("… et …", "… puis …"), recognises hundreds of FR/EN phrasings, numbers, times, colours, spatial
+   hints and ordinals, and produces `EditIntent`s with a confidence. If the result is not confident
+   (unknown noun, unusual phrasing), the preferred language model is asked with a 6 s budget and the
+   grammar's guess as a hint. `IntentNormalizer` validates every model field against the vocabulary
+   (`IntentAction`, `AdjustmentParameter`, `FilterPreset`, `AspectPreset`, `TransitionKind`…).
+3. **Executors** (`PhotoCommandExecutor`, `VideoCommandExecutor`) turn intents into document
+   mutations. Anything that needs vision goes through the `PhotoAIServices` / `VideoAIServices`
+   protocols, so the executors are fully unit-tested with fakes.
+4. **Grounding** (`VisionGrounding`) finds candidates for a target:
+   people via `VNDetectHumanRectanglesRequest` + person segmentation, faces, animals
+   (`VNRecognizeAnimalsRequest`), text (`VNRecognizeTextRequest`), and everything else via
+   foreground instance masks classified with `VNClassifyImageRequest` and matched against the
+   vocabulary — or, for unknown nouns, against `NLEmbedding` word similarity. Colour adjectives
+   re-rank candidates by mean colour.
+5. **`CandidateSelector`** applies "the left one", "the second", "the biggest", "all", tap points,
+   or asks the user when several equally likely matches remain. The question is answered by voice
+   ("celle de droite"), by tapping the numbered box, or by the chips under the canvas.
+6. **Rendering**: `PhotoRenderer` (an actor) replays the edit stack with Core Image, applying
+   `AdjustmentPipeline` (the same mapping used for video), and hands a `CIImage` to
+   `MetalCanvasView`. Previews render at ≤2048 px (1280 px while dragging), exports at full size.
+
+## Inpainting
+
+`InpaintingPipeline` crops a context window around the mask, resamples it to the inpainter's
+working size, runs the inpainter, upsamples the fill and composites it back **only inside the
+feathered mask**, so untouched pixels stay bit-exact at full resolution.
+
+- `PatchMatchInpainter` (`PatchMatchCore`, pure Swift, unit-tested): coarse-to-fine nearest-neighbour
+  field search with propagation + random search, weighted voting, and a structure/texture fusion step
+  that keeps the diffusion prior's low frequencies where the surroundings are smooth (skies, skin,
+  gradients) and pure patch synthesis where they are textured.
+- `CoreMLInpainter` runs a converted LaMa network through `CoreMLImageModel`, which discovers input
+  names/sizes from the model description. When installed it becomes the neural path automatically.
+
+## Video
+
+`CompositionBuilder` lays clips on two alternating video tracks (A/B roll) so transitions can overlap,
+scales time ranges for speed changes, and builds an `AVMutableAudioMix` (clip volume, mute, transition
+fades, music ducking/fades). `PicshopCompositor` (`AVVideoCompositing`) renders every frame with Core
+Image: orientation, crop, rotation, framing (fit/fill), adjustments & looks, transitions, text overlays.
+
+AI operations that change pixels over time render a new file through `VideoTranscoder`
+(AVAssetReader → transform → AVAssetWriter, audio carried over):
+
+- **Object removal**: `VNTrackObjectRequest` follows each candidate forward from the seed frame and
+  backward via random access; every frame's mask is refined with foreground instance masks, inpainted
+  with the same pipeline as photos and temporally smoothed against the previous fill.
+- **Stabilisation**: `VNTranslationalImageRegistrationRequest` between consecutive frames, smoothed
+  trajectory, corrective translation with a 6 % zoom.
+- **Reverse**, **freeze frame**, **portrait blur** (per-frame person segmentation).
+
+The rendered file replaces the clip's `renderAsset`; the original stays in the package for undo.
+
+## Concurrency
+
+- Documents and intents are `Sendable` values; `PhotoRenderer`, `ModelManager`, `VideoThumbnailer`
+  and `HybridIntentRouter` are actors.
+- UI state (`PhotoEditorSession`, `VideoEditorSession`, `VoiceController`) is `@MainActor @Observable`.
+- `PicshopCore` and `PicshopIntent` compile in Swift 6 language mode; the Apple-framework modules use
+  Swift 5 mode with strict-concurrency warnings, because many AVFoundation/Core Image types are not
+  yet annotated.
+
+## Testing
+
+`swift test` runs 77 tests: geometry/colour, documents and undo, timeline maths (split, trim, speed,
+transitions), the FR/EN grammar (≈150 utterances), LLM response parsing and normalisation, the router
+(fallback, timeout), candidate selection, both executors with fake vision services, and PatchMatch on
+synthetic textures and gradients. CI also runs a tree-sitter syntax gate over the Apple-only sources
+and an Xcode build on macOS.

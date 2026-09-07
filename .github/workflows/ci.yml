@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  core-tests:
+    name: Core & Intent tests (Linux)
+    runs-on: ubuntu-24.04
+    container: swift:6.0-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: swift build --build-tests
+      - name: Test
+        run: swift test --parallel
+
+  syntax:
+    name: Apple-only sources syntax gate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install tree-sitter tree-sitter-swift
+      - run: python3 Scripts/swift-syntax-check.py Sources Tests App
+
+  ios-build:
+    name: iOS app build (Xcode 26)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.0.app || sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | head -1)"
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build
+        run: |
+          xcodebuild -project Picshop.xcodeproj -scheme Picshop -destination 'generic/platform=iOS' \
+            -configuration Debug CODE_SIGNING_ALLOWED=NO build | xcbeautify || xcodebuild -project Picshop.xcodeproj -scheme Picshop -destination 'generic/platform=iOS' -configuration Debug CODE_SIGNING_ALLOWED=NO build
+      - name: Package tests
+        run: swift test
