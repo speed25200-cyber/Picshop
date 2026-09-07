@@ -64,7 +64,7 @@ open Picshop.xcodeproj        # set your team, run on device
 The platform-independent engine (documents, timeline, intent parsing, PatchMatch) builds and tests anywhere Swift runs:
 
 ```bash
-swift test                    # 77 tests, ~1 s
+swift test                    # 101 tests, ~1 s
 ```
 
 ## Project layout
@@ -76,6 +76,7 @@ Sources/PicshopIntent    FR/EN grammar · LLM schema & normaliser · Foundation 
 Sources/PicshopImaging   Core Image graph · Vision grounding · masks · PatchMatch & Core ML inpainting · export
 Sources/PicshopVideo     AVComposition builder · custom compositor · transcoder · AI video services · export
 Sources/PicshopSpeech    SpeechAnalyzer / SFSpeechRecognizer voice controller · spoken replies
+Sources/PicshopPDF       PDFKit composer (real annotations) · search · signature · page extraction · merge
 Sources/PicshopUI        Liquid Glass design system · library · photo & video editors · voice orb · settings
 Tests/                   XCTest suites (core, intent, imaging)
 Scripts/                 bootstrap, string catalogue, icon, model conversion & packaging, syntax gate
