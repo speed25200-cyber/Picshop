@@ -23,6 +23,8 @@ public protocol VideoAIServices: Sendable {
     func removeObject(candidates: [ObjectCandidate], target: ObjectTarget, from clip: VideoClip, timeline: VideoTimeline,
                       progress: @escaping @Sendable (Double) -> Void) async throws -> MediaAsset
     func stabilize(clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> MediaAsset
+    /// Renders the clip's range played backwards.
+    func reverse(clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> MediaAsset
     func extractFrame(at time: Double, timeline: VideoTimeline) async throws -> MediaAsset
     func freezeFrame(at time: Double, duration: Double, timeline: VideoTimeline) async throws -> MediaAsset
     /// Person/subject matte rendered as an alpha video, for background effects.

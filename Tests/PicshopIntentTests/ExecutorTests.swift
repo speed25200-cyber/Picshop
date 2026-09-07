@@ -36,11 +36,15 @@ struct FakeVideoServices: VideoAIServices {
 
     func removeObject(candidates: [ObjectCandidate], target: ObjectTarget, from clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> MediaAsset {
         progress(1)
-        return MediaAsset(kind: .video, relativePath: "media/removed.mov", pixelSize: clip.asset.pixelSize, duration: clip.asset.duration, origin: .generated, frameRate: 30)
+        return MediaAsset(kind: .video, relativePath: "media/removed.mov", pixelSize: clip.asset.pixelSize, duration: clip.sourceRange.duration, origin: .generated, frameRate: 30)
     }
 
     func stabilize(clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> MediaAsset {
         MediaAsset(kind: .video, relativePath: "media/stab.mov", pixelSize: clip.asset.pixelSize, duration: clip.asset.duration, origin: .generated, frameRate: 30)
+    }
+
+    func reverse(clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> MediaAsset {
+        MediaAsset(kind: .video, relativePath: "media/reversed.mov", pixelSize: clip.asset.pixelSize, duration: clip.sourceRange.duration, origin: .generated, frameRate: 30)
     }
 
     func extractFrame(at time: Double, timeline: VideoTimeline) async throws -> MediaAsset {

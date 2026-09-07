@@ -70,8 +70,22 @@ public struct VideoCommandExecutor: Sendable {
             return (timeline, .applied("Speed ×\(Replies.formatted(speed))"))
 
         case .reverse:
-            for id in targetClipIDs() { timeline.update(clipID: id) { $0.isReversed.toggle() } }
-            return (timeline, .applied("Reverse"))
+            let ids = targetClipIDs()
+            do {
+                for id in ids {
+                    guard let clip = timeline.clip(id: id) else { continue }
+                    let rendered = try await services.reverse(clip: clip, timeline: timeline, progress: progress)
+                    timeline.update(clipID: id) { clip in
+                        clip.isReversed.toggle()
+                        clip.processedAsset = rendered
+                        clip.processedLabel = clip.isReversed ? "Reversed" : nil
+                        clip.sourceRange = TimeSpan(start: 0, duration: rendered.duration)
+                    }
+                }
+                return (timeline, .applied("Reverse"))
+            } catch {
+                return (timeline, .failed(errorMessage(error)))
+            }
 
         case .mute:
             for id in targetClipIDs() { timeline.update(clipID: id) { $0.isMuted = true } }
@@ -179,7 +193,7 @@ public struct VideoCommandExecutor: Sendable {
                 for id in ids {
                     guard let clip = timeline.clip(id: id) else { continue }
                     let rendered = try await services.stabilize(clip: clip, timeline: timeline, progress: progress)
-                    timeline.update(clipID: id) { $0.processedAsset = rendered; $0.processedLabel = "Stabilized" }
+                    timeline.update(clipID: id) { $0.processedAsset = rendered; $0.processedLabel = "Stabilized"; $0.sourceRange = TimeSpan(start: 0, duration: rendered.duration) }
                 }
                 return (timeline, .applied("Stabilize"))
             } catch {
@@ -280,7 +294,7 @@ public struct VideoCommandExecutor: Sendable {
             guard let clipID = targetClipIDs().first, let clip = timeline.clip(id: clipID) else { return (timeline, .failed("No clip")) }
             do {
                 let matte = try await services.subjectMatte(for: clip, timeline: timeline, progress: progress)
-                timeline.update(clipID: clipID) { $0.processedAsset = matte; $0.processedLabel = intent.action == .blurBackground ? "Portrait" : "Cutout" }
+                timeline.update(clipID: clipID) { $0.processedAsset = matte; $0.processedLabel = intent.action == .blurBackground ? "Portrait" : "Cutout"; $0.sourceRange = TimeSpan(start: 0, duration: matte.duration) }
                 return (timeline, .applied(intent.action == .blurBackground ? "Blur Background" : "Background"))
             } catch {
                 return (timeline, .failed(errorMessage(error)))
@@ -323,7 +337,7 @@ public struct VideoCommandExecutor: Sendable {
         var timeline = input
         do {
             let rendered = try await services.removeObject(candidates: candidates, target: target, from: clip, timeline: timeline, progress: progress)
-            timeline.update(clipID: clip.id) { $0.processedAsset = rendered; $0.processedLabel = "Removed \(target.originalPhrase)" }
+            timeline.update(clipID: clip.id) { $0.processedAsset = rendered; $0.processedLabel = "Removed \(target.originalPhrase)"; $0.sourceRange = TimeSpan(start: 0, duration: rendered.duration) }
             return (timeline, .applied("Remove \(target.originalPhrase)"))
         } catch {
             return (timeline, .failed(errorMessage(error)))

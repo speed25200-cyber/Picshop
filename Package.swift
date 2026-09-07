@@ -45,13 +45,13 @@ let package = Package(
         ),
         .target(
             name: "PicshopImaging",
-            dependencies: ["PicshopCore"],
+            dependencies: ["PicshopCore", "PicshopIntent"],
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .target(
             name: "PicshopVideo",
-            dependencies: ["PicshopCore", "PicshopImaging"],
+            dependencies: ["PicshopCore", "PicshopIntent", "PicshopImaging"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .target(
@@ -70,6 +70,11 @@ let package = Package(
         .testTarget(
             name: "PicshopCoreTests",
             dependencies: ["PicshopCore"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "PicshopImagingTests",
+            dependencies: ["PicshopImaging", "PicshopCore"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
