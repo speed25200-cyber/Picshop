@@ -1,18 +1,19 @@
-#if canImport(AVFoundation) && canImport(Combine)
+#if canImport(AVFoundation)
 import Foundation
 import AVFoundation
-import Combine
+import Observation
 import PicshopCore
 
 /// AVPlayer wrapper for the video editor. Rebuilds the composition when the
 /// timeline changes and publishes the playhead for the UI.
 @MainActor
-public final class TimelinePlayer: ObservableObject {
+@Observable
+public final class TimelinePlayer {
     public let player = AVPlayer()
-    @Published public private(set) var currentTime: Double = 0
-    @Published public private(set) var isPlaying = false
-    @Published public private(set) var duration: Double = 0
-    @Published public private(set) var isReady = false
+    public private(set) var currentTime: Double = 0
+    public private(set) var isPlaying = false
+    public private(set) var duration: Double = 0
+    public private(set) var isReady = false
 
     private var timeObserver: Any?
     private var builder: CompositionBuilder

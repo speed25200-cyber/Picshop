@@ -105,7 +105,9 @@ public final class VoiceController {
     // MARK: - Session lifecycle
 
     private func beginSession() async {
-        guard Self.permissionsGranted || (await Self.requestPermissions()) else {
+        var granted = Self.permissionsGranted
+        if !granted { granted = await Self.requestPermissions() }
+        guard granted else {
             state = .unavailable(PicshopError.permissionDenied("the microphone").message)
             return
         }
@@ -121,11 +123,11 @@ public final class VoiceController {
                 Task { @MainActor [weak self] in self?.updateLevel(rms) }
                 session.append(buffer)
             }
-            audioEngine.prepare()
-            try audioEngine.start()
             try await session.start { [weak self] text, isFinal in
                 Task { @MainActor [weak self] in self?.handleResult(text, isFinal: isFinal) }
             }
+            audioEngine.prepare()
+            try audioEngine.start()
             state = .listening
             scheduleTimeout()
         } catch {
@@ -206,9 +208,11 @@ public final class VoiceController {
     }
 
     private func configureAudioSession() throws {
+        #if os(iOS) || os(tvOS) || os(visionOS)
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker, .duckOthers])
         try session.setActive(true, options: [])
+        #endif
     }
 
     private func makeSession() async throws -> any TranscriptionSession {
@@ -267,7 +271,7 @@ final class AnalyzerTranscriptionSession: TranscriptionSession, @unchecked Senda
         if let installation {
             try await installation.downloadAndInstall()
         }
-        analyzerFormat = await SpeechTranscriber.bestAvailableAudioFormat(compatibleWith: [transcriber])
+        analyzerFormat = try await SpeechTranscriber.bestAvailableAudioFormat(compatibleWith: [transcriber])
         if let analyzerFormat, analyzerFormat != inputFormat {
             converter = AVAudioConverter(from: inputFormat, to: analyzerFormat)
         }

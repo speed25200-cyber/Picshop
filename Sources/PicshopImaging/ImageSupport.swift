@@ -2,6 +2,7 @@
 import Foundation
 import CoreImage
 import CoreGraphics
+import Metal
 import ImageIO
 import UniformTypeIdentifiers
 import PicshopCore

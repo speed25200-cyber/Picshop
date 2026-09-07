@@ -1,6 +1,6 @@
 # Voice commands
 
-Picshop listens in French and English (auto-detected, or fixed in Settings). Commands can be chained:
+PicShop listens in French and English (auto-detected, or fixed in Settings). Commands can be chained:
 *« efface le chien et rends l'image plus lumineuse, puis recadre en carré »*.
 
 ## Erase & cut out
@@ -15,7 +15,7 @@ Picshop listens in French and English (auto-detected, or fixed in Settings). Com
 | Mets un fond blanc · Change the background to light blue · Fond dégradé | Replaces the background |
 | Floute l'arrière-plan · Blur the background · Mode portrait · Bokeh | Portrait blur |
 
-When Picshop asks *"Which one?"*, answer with **« celle de gauche »**, **"the second one"**, **"number 2"**,
+When PicShop asks *"Which one?"*, answer with **« celle de gauche »**, **"the second one"**, **"number 2"**,
 **"both" / « toutes »**, tap the numbered box, or say **"cancel"**.
 
 ## Light & colour
@@ -68,6 +68,24 @@ Paris au centre · Make the text bigger · Change le texte en Hello · Mets le t
 | Stabilise la vidéo · Freeze frame · Extrais cette image · Screenshot | Stabilise / freeze / extract |
 | Va à 10 secondes · Go to the beginning · Avance de 5 secondes · Lecture · Pause | Navigation |
 | Mets en 9:16 · Crop for TikTok · Filtre cinéma · Plus lumineux · Ajoute le texte Vacances pendant 3 secondes | Shared commands |
+
+## Generative & recolor
+
+*Remplace le ciel par un coucher de soleil · Turn the car into a boat · Ajoute un chapeau sur la personne · Génère un dragon
+(after tapping where) · Change the shirt to red · Rends la voiture bleue.* Generative prompts need the optional Stable Diffusion
+model (Settings › On-device models); recolouring works offline.
+
+## PDF
+
+| Say | Does |
+|---|---|
+| Va à la page 3 · Next page · Dernière page | Navigation |
+| Supprime la page 3 · Delete this page · Supprime les pages 2 à 4 | Delete |
+| Tourne la page · Rotate page 2 left · Rotate all pages | Rotate |
+| Déplace la page 4 au début · Move this page to the end · Duplique la page · Insère une page blanche | Reorder / duplicate / insert |
+| Surligne « total » · Highlight the word invoice everywhere · Souligne « date » · Caviarde le nom · Cherche facture | Text markup & search |
+| Signe en bas à droite · Add my signature · Ajoute le texte « Approuvé » en haut | Signature & text |
+| Extrais la page en photo · Ajoute des numéros de page · Fusionne avec un autre PDF | Page tools |
 
 ## Control
 

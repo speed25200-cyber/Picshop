@@ -9,6 +9,8 @@ public struct ModelDescriptor: Identifiable, Hashable, Sendable {
         case inpainting
         case superResolution
         case languageModel
+        /// Stable Diffusion resources folder (text-guided fill).
+        case generative
     }
 
     public var id: String
@@ -49,6 +51,8 @@ public enum ModelCatalog {
                             kind: .inpainting, sizeMB: 205, remoteURL: baseURL?.appendingPathComponent("lama-inpainting.zip")),
             ModelDescriptor(id: "realesrgan-x4", displayName: "Super Resolution (Real-ESRGAN ×4)", summary: "Neural upscaler for sharper enlargements.",
                             kind: .superResolution, sizeMB: 67, remoteURL: baseURL?.appendingPathComponent("realesrgan-x4.zip")),
+            ModelDescriptor(id: "sd-generative-fill", displayName: "Generative Fill (Stable Diffusion)", summary: "Text-guided replacement: “remplace le ciel par un coucher de soleil”, “add a hat”.",
+                            kind: .generative, sizeMB: 1900, remoteURL: baseURL?.appendingPathComponent("sd-generative-fill.zip")),
             ModelDescriptor(id: "qwen3-4b-4bit", displayName: "Pro Brain (Qwen3 4B)", summary: "Larger on-device language model for complex, multi-step voice commands.",
                             kind: .languageModel, sizeMB: 2500, huggingFaceID: "mlx-community/Qwen3-4B-4bit"),
         ]
@@ -97,7 +101,17 @@ public actor ModelManager {
         if let descriptor = ModelCatalog.descriptor(id: id), descriptor.kind == .languageModel {
             return FileManager.default.fileExists(atPath: directory(for: id).appendingPathComponent("installed").path)
         }
+        if let descriptor = ModelCatalog.descriptor(id: id), descriptor.kind == .generative {
+            return resourcesURL(for: id) != nil
+        }
         return compiledModelURL(for: id) != nil
+    }
+
+    /// Folder of compiled Stable Diffusion resources, if installed.
+    public func resourcesURL(for id: String) -> URL? {
+        let url = directory(for: id).appendingPathComponent("resources", isDirectory: true)
+        return FileManager.default.fileExists(atPath: url.appendingPathComponent("Unet.mlmodelc").path)
+            || FileManager.default.fileExists(atPath: url.appendingPathComponent("UnetChunk1.mlmodelc").path) ? url : nil
     }
 
     public func state(of id: String) -> State {
@@ -167,6 +181,18 @@ public actor ModelManager {
                 try? FileManager.default.removeItem(at: directory)
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 let unpacked = try ModelDownloader.unzip(archive, into: directory.appendingPathComponent("unpacked", isDirectory: true))
+                if descriptor.kind == .generative {
+                    // Keep the compiled resources folder as-is (Unet.mlmodelc, TextEncoder.mlmodelc, …).
+                    let resources = try ModelDownloader.findResourcesFolder(in: unpacked)
+                    let destination = directory.appendingPathComponent("resources", isDirectory: true)
+                    try? FileManager.default.removeItem(at: destination)
+                    try FileManager.default.moveItem(at: resources, to: destination)
+                    try? FileManager.default.removeItem(at: unpacked)
+                    try? FileManager.default.removeItem(at: archive)
+                    await self.set(.installed, for: descriptor.id)
+                    await self.clearTask(descriptor.id)
+                    return
+                }
                 let package = try ModelDownloader.findModelPackage(in: unpacked)
                 let compiled = try await MLModel.compileModel(at: package)
                 let destination = directory.appendingPathComponent("\(descriptor.id).mlmodelc")
@@ -239,6 +265,16 @@ enum ModelDownloader {
         return directory
     }
 
+    static func findResourcesFolder(in directory: URL) throws -> URL {
+        guard let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: [.isDirectoryKey]) else {
+            throw PicshopError.modelUnavailable("empty archive")
+        }
+        for case let url as URL in enumerator where url.lastPathComponent == "Unet.mlmodelc" || url.lastPathComponent == "UnetChunk1.mlmodelc" {
+            return url.deletingLastPathComponent()
+        }
+        throw PicshopError.modelUnavailable("no Stable Diffusion resources in archive")
+    }
+
     static func findModelPackage(in directory: URL) throws -> URL {
         guard let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: nil) else {
             throw PicshopError.modelUnavailable("empty archive")
@@ -260,6 +296,7 @@ enum StoredZipReader {
         func u32(_ at: Int) -> Int { u16(at) | (u16(at + 2) << 16) }
         while offset + 30 <= count {
             guard u32(offset) == 0x04034b50 else { break }
+            guard u16(offset + 6) & 0x8 == 0 else { throw PicshopError.modelUnavailable("streamed zip archives are not supported") }
             let method = u16(offset + 8)
             let compressedSize = u32(offset + 18)
             let uncompressedSize = u32(offset + 22)

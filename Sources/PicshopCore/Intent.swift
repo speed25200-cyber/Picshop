@@ -24,6 +24,8 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     case denoise
     case sharpen
     case relight
+    case generativeFill
+    case recolor
     case undo
     case redo
     case revert
@@ -56,6 +58,21 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     case moveClip
     case stabilize
     case freezeFrame
+    // PDF only
+    case deletePage
+    case rotatePage
+    case movePage
+    case duplicatePage
+    case insertBlankPage
+    case goToPage
+    case highlightText
+    case underlineText
+    case redactText
+    case findText
+    case addSignature
+    case extractPage
+    case addPageNumbers
+    case mergeDocument
     // Meta / dialogue
     case chooseCandidate
     case confirm
@@ -76,8 +93,18 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
 
     public var isPhotoOnly: Bool {
         switch self {
-        case .selectLayer, .duplicateLayer, .deleteLayer, .upscale, .relight: return true
+        case .selectLayer, .duplicateLayer, .deleteLayer, .upscale, .relight, .generativeFill, .recolor: return true
         default: return false
+        }
+    }
+
+    public var isPDFOnly: Bool {
+        switch self {
+        case .deletePage, .rotatePage, .movePage, .duplicatePage, .insertBlankPage, .goToPage, .highlightText, .underlineText, .redactText, .findText,
+             .addSignature, .extractPage, .addPageNumbers, .mergeDocument:
+            return true
+        default:
+            return false
         }
     }
 
@@ -278,6 +305,22 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .denoise: return "Reduce noise"
         case .sharpen: return "Sharpen"
         case .relight: return "Relight"
+        case .generativeFill: return "Generate “\(text ?? "")”"
+        case .recolor: return "Recolor \(target?.originalPhrase ?? "")"
+        case .deletePage: return "Delete page"
+        case .rotatePage: return "Rotate page"
+        case .movePage: return "Move page"
+        case .duplicatePage: return "Duplicate page"
+        case .insertBlankPage: return "Insert page"
+        case .goToPage: return "Go to page \(index ?? 1)"
+        case .highlightText: return "Highlight “\(text ?? "")”"
+        case .underlineText: return "Underline “\(text ?? "")”"
+        case .redactText: return "Redact “\(text ?? "")”"
+        case .findText: return "Find “\(text ?? "")”"
+        case .addSignature: return "Add signature"
+        case .extractPage: return "Extract page"
+        case .addPageNumbers: return "Page numbers"
+        case .mergeDocument: return "Merge PDF"
         case .undo: return "Undo"
         case .redo: return "Redo"
         case .revert: return "Revert to original"

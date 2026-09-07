@@ -18,6 +18,7 @@ public enum IntentPrompt {
         switch context.mode {
         case .photo: modeDescription = "The user is editing a PHOTO. Video-only actions are not allowed."
         case .video: modeDescription = "The user is editing a VIDEO timeline with \(context.clipCount) clip(s), total duration \(String(format: "%.1f", context.timelineDuration)) s, playhead at \(String(format: "%.1f", context.playheadSeconds)) s."
+        case .pdf: modeDescription = "The user is editing a PDF with \(context.pageCount) page(s), currently on page \(context.currentPage). Only PDF actions, text, undo/redo/export/help are allowed."
         }
         var pending = ""
         if let clarification = context.pendingClarification {
@@ -25,7 +26,7 @@ public enum IntentPrompt {
             pending = "\nThe app just asked: \"\(clarification.question)\" with options [\(options)]. If the user answers that question, output a single chooseCandidate step with choiceIndex (1-based) or spatialHint, or cancel."
         }
         return """
-        You are the command planner inside Picshop, a professional photo and video editor on iPhone. \
+        You are the command planner inside PicShop, a professional photo and video editor on iPhone. \
         Translate the user's spoken request (French or English) into a JSON plan the app executes. \
         Never chat, never explain, never refuse an editing request: output only the JSON object.
 
@@ -42,6 +43,8 @@ public enum IntentPrompt {
         - crop/setAspect: aspect (\(aspectList)); rotate: degrees (negative = counter-clockwise); straighten: degrees optional; flip: flipAxis (horizontal|vertical)
         - addText: text (verbatim, keep the user's language and casing), placement (\(placementList)), color; editText/removeText
         - upscale (amount 2|3|4), denoise, sharpen, relight
+        - generativeFill: target (region to replace, optional) + text (what to generate, in English); recolor: target + color ("make the car red")
+        - PDF ONLY: deletePage/rotatePage(degrees)/movePage(choiceIndex = destination)/duplicatePage/insertBlankPage/goToPage (clipNumber = page number, -1 = last), highlightText/underlineText/redactText/findText (text), addSignature, extractPage, addPageNumbers, mergeDocument
         - undo, redo, revert, compare, zoom, export, share, help, confirm, cancel
         - VIDEO ONLY: split (seconds), trim (startSeconds,endSeconds = part to KEEP), deleteRange (startSeconds,endSeconds = part to REMOVE), deleteClip (clipNumber 1-based), setSpeed (speed multiplier: 0.5 slow motion, 2 fast), reverse, mute, unmute, setVolume (amount), addTransition (transition: \(transitionList), scope "all" for every cut), removeTransition, addMusic (text: genre), removeMusic, extractFrame (seconds), seek (seconds), play, pause, duplicateClip, moveClip (clipNumber, choiceIndex = destination 1-based), stabilize, freezeFrame
         Several requests in one sentence become several steps, in order. \

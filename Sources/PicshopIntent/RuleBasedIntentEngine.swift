@@ -56,7 +56,9 @@ public struct RuleBasedIntentEngine: IntentEngine {
 
     func parseSegment(_ u: NormalizedUtterance, original: String, context: IntentContext) -> [EditIntent] {
         if let meta = parseMeta(u, context: context) { return [meta] }
+        if context.mode == .pdf { return parsePDF(u, original: original, context: context) }
         if context.mode == .video, let video = parseVideo(u, context: context) { return video }
+        if context.mode == .photo, let generative = parseGenerative(u, original: original, context: context) { return [generative] }
         if let background = parseBackground(u) { return [background] }
         if let removal = parseRemoveObject(u, context: context) { return [removal] }
         if let text = parseText(u, original: original, context: context) { return [text] }
@@ -319,6 +321,77 @@ public struct RuleBasedIntentEngine: IntentEngine {
         let tokens = rest.split(separator: " ").map(String.init).filter { !ObjectVocabulary.fillerWords.contains($0) && $0 != "completement" && $0 != "completely" && $0 != "entirely" }
         let head = tokens.prefix(2).joined(separator: " ")
         return Self.backgroundWords.contains { head == $0 || head.hasPrefix($0 + " ") || tokens.first == $0 }
+    }
+
+    // MARK: - Generative fill & recolor
+
+    static let replaceVerbs: [String] = ["remplace", "remplacer", "replace", "change", "changer", "transforme", "transformer", "turn", "swap", "convertis", "convert", "mets", "put"]
+
+    func parseGenerative(_ u: NormalizedUtterance, original: String, context: IntentContext) -> EditIntent? {
+        // "remplace le ciel par un coucher de soleil" / "replace the sky with a sunset" / "turn the car into a boat"
+        let connectors = ["par", "with", "into", "en", "to", "by"]
+        if u.contains(Self.replaceVerbs), let rest = remainder(of: u, after: Self.replaceVerbs) {
+            let restTokens = rest.split(separator: " ").map(String.init)
+            if let split = restTokens.indices.dropFirst().first(where: { connectors.contains(restTokens[$0]) }), split < restTokens.count - 1 {
+                let subject = restTokens[..<split].joined(separator: " ")
+                let replacementTokens = Array(restTokens[(split + 1)...])
+                let replacement = replacementTokens.joined(separator: " ")
+                let subjectIsBackground = NormalizedUtterance(subject).contains(Self.backgroundWords)
+                // Colour target → recolor.
+                let colorWords = replacementTokens.filter { !ObjectVocabulary.fillerWords.contains($0) }
+                if colorWords.count <= 2, let color = PSColor.named(colorWords.joined(separator: " ")), !subjectIsBackground,
+                   let target = makeTarget(from: subject, context: context) {
+                    return EditIntent(action: .recolor, target: target, color: color, confidence: 0.9)
+                }
+                if subjectIsBackground, let color = PSColor.named(colorWords.joined(separator: " ")) {
+                    return EditIntent(action: .replaceBackground, color: color, background: .color(color))
+                }
+                if NormalizedUtterance(subject).contains(["text", "texte", "titre", "title", "filter", "filtre", "look", "music", "musique"]) { return nil }
+                let prompt = originalSubstring(matching: replacement, in: original) ?? replacement
+                if subjectIsBackground {
+                    return EditIntent(action: .generativeFill, target: ObjectTarget(label: "background", originalPhrase: subject), text: prompt, confidence: 0.85)
+                }
+                if let target = makeTarget(from: subject, context: context) {
+                    return EditIntent(action: .generativeFill, target: target, text: prompt, confidence: 0.85)
+                }
+            }
+        }
+        // "rends la voiture rouge" / "make the car red" / "colore les murs en bleu"
+        if u.contains(["make", "rends", "rendre", "colore", "colorer", "colorie", "colour", "color", "paint", "peins", "peindre", "teins"]) {
+            let twoWord = ["bleu clair", "bleu fonce", "vert clair", "vert fonce", "light blue", "dark blue", "light gray", "dark gray", "light green", "dark green", "rose clair", "light pink"]
+            let colorPhrase = u.firstMatch(twoWord) ?? u.tokens.first { PSColor.named($0) != nil && !["clear", "light", "rose"].contains($0) }
+            let comparativeBefore = colorPhrase.flatMap { phrase -> Bool? in
+                guard let index = u.tokenIndex(of: phrase), index > 0 else { return false }
+                return ["plus", "more", "moins", "less", "trop", "too", "tres", "very", "un peu", "bit"].contains(u.tokens[index - 1])
+            } ?? false
+            if let colorPhrase, let color = PSColor.named(colorPhrase), !comparativeBefore, !u.contains(["background", "fond", "arriere plan", "text", "texte"]) {
+                var words = remove(phrase: colorPhrase, from: u.tokens)
+                words = words.filter { !["make", "rends", "rendre", "colore", "colorer", "colorie", "colour", "color", "paint", "peins", "peindre", "teins", "en", "in", "de", "to"].contains($0) }
+                if let target = makeTarget(from: words.joined(separator: " "), context: context), ObjectVocabulary.entry(forLabel: target.label) != nil, target.label != "object" {
+                    return EditIntent(action: .recolor, target: target, color: color, confidence: 0.85)
+                }
+            }
+        }
+        // "ajoute un chapeau" / "add a hat on his head" / "génère un dragon dans le ciel"
+        if u.contains(["genere", "generer", "generate", "imagine", "dessine", "draw", "invente", "cree", "create"]) || (u.contains(["ajoute", "add", "mets", "put"]) && !u.contains(["text", "texte", "titre", "title", "legende", "caption", "filter", "filtre", "look", "vignette", "grain", "music", "musique", "transition", "page", "signature", "numero"])) {
+            let rest = remainder(of: u, after: ["genere", "generer", "generate", "imagine", "dessine", "draw", "invente", "cree", "create", "ajoute", "add", "mets", "put"]) ?? u.text
+            let restTokens = rest.split(separator: " ").map(String.init)
+            var target: ObjectTarget?
+            var promptTokens = restTokens
+            let placementConnectors = ["sur", "on", "dans", "in", "onto", "a la place de", "instead of", "devant", "in front of", "derriere", "behind", "au dessus de", "above"]
+            if let split = restTokens.indices.dropFirst().first(where: { placementConnectors.contains(restTokens[$0]) }), split < restTokens.count - 1 {
+                promptTokens = Array(restTokens[..<split])
+                target = makeTarget(from: restTokens[(split + 1)...].joined(separator: " "), context: context)
+            }
+            let cleaned = promptTokens.filter { !["un", "une", "a", "an", "des", "some", "the", "le", "la", "les"].contains($0) }
+            guard !cleaned.isEmpty, ParameterVocabulary.match(in: NormalizedUtterance(cleaned.joined(separator: " "))) == nil || u.contains(["genere", "generate", "imagine", "dessine", "draw"]) else { return nil }
+            if ObjectVocabulary.match(cleaned.joined(separator: " ")) == nil, !u.contains(["genere", "generer", "generate", "imagine", "dessine", "draw", "invente", "cree", "create"]) { return nil }
+            let prompt = originalSubstring(matching: promptTokens.joined(separator: " "), in: original) ?? promptTokens.joined(separator: " ")
+            var intent = EditIntent(action: .generativeFill, target: target, text: prompt, confidence: 0.75)
+            if intent.target == nil, let point = context.lastTapPoint { intent.target = ObjectTarget(label: "object", originalPhrase: "here", point: point) }
+            return intent
+        }
+        return nil
     }
 
     // MARK: - Object removal

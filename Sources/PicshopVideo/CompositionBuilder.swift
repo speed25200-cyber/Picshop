@@ -109,12 +109,14 @@ public struct CompositionBuilder: Sendable {
             composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid),
             composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid),
         ].compactMap { $0 }
-        guard videoTracks.count == 2 else { throw PicshopError.renderFailed("composition tracks") }
+        guard videoTracks.count == 2, audioTracks.count == 2 else { throw PicshopError.renderFailed("composition tracks") }
 
         let renderSize = timeline.renderSize.cgSize
         let starts = timeline.clipStartTimes
         var parameters: [ClipRenderParameters] = []
         var audioParameters: [AVMutableAudioMixInputParameters] = []
+        // One parameters object per composition audio track (AVFoundation keys them by track id).
+        var clipMixes: [AVMutableAudioMixInputParameters?] = [nil, nil]
 
         for (index, clip) in timeline.clips.enumerated() {
             let asset = AVURLAsset(url: store.url(for: clip.renderAsset.relativePath, in: projectID), options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
@@ -141,7 +143,8 @@ public struct CompositionBuilder: Sendable {
                 if clip.speed != 1 {
                     audioTrack.scaleTimeRange(CMTimeRange(start: start, duration: sourceRange.duration), toDuration: VideoTime.cm(clip.timelineDuration))
                 }
-                let mix = AVMutableAudioMixInputParameters(track: audioTrack)
+                let mix = clipMixes[index % 2] ?? AVMutableAudioMixInputParameters(track: audioTrack)
+                clipMixes[index % 2] = mix
                 mix.setVolume(Float(clip.volume), at: start)
                 let clipRange = CMTimeRange(start: start, duration: VideoTime.cm(clip.timelineDuration))
                 if let transition = clip.transitionOut, transition.kind != .none, index < timeline.clips.count - 1 {
@@ -152,13 +155,14 @@ public struct CompositionBuilder: Sendable {
                     let fade = VideoTime.cm(min(transition.duration, clip.timelineDuration / 2))
                     mix.setVolumeRamp(fromStartVolume: 0, toEndVolume: Float(clip.volume), timeRange: CMTimeRange(start: start, duration: fade))
                 }
-                audioParameters.append(mix)
             }
 
             parameters.append(ClipRenderParameters(clipID: clip.id, trackID: track.trackID, naturalSize: naturalSize, preferredTransform: preferredTransform,
                                                    adjustments: clip.adjustments, look: clip.look, lookIntensity: clip.lookIntensity, crop: clip.crop,
                                                    rotation: clip.rotation, flipHorizontal: clip.flipHorizontal, fill: timeline.aspect != .original))
         }
+
+        audioParameters.append(contentsOf: clipMixes.compactMap { $0 })
 
         // Music tracks.
         for music in timeline.audioTracks {

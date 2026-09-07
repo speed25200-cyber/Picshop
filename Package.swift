@@ -31,6 +31,7 @@ let package = Package(
         .library(name: "PicshopImaging", targets: ["PicshopImaging"]),
         .library(name: "PicshopVideo", targets: ["PicshopVideo"]),
         .library(name: "PicshopSpeech", targets: ["PicshopSpeech"]),
+        .library(name: "PicshopPDF", targets: ["PicshopPDF"]),
         .library(name: "PicshopUI", targets: ["PicshopUI"]),
     ],
     targets: [
@@ -59,9 +60,14 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .target(
+            name: "PicshopPDF",
+            dependencies: ["PicshopCore", "PicshopIntent", "PicshopImaging"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .target(
             name: "PicshopUI",
             dependencies: [
-                "PicshopCore", "PicshopIntent", "PicshopImaging", "PicshopVideo", "PicshopSpeech",
+                "PicshopCore", "PicshopIntent", "PicshopImaging", "PicshopVideo", "PicshopSpeech", "PicshopPDF",
             ],
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]

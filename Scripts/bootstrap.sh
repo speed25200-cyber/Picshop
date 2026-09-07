@@ -11,4 +11,4 @@ fi
 python3 Scripts/generate_strings.py
 python3 Scripts/generate_icon.py >/dev/null
 xcodegen generate
-echo "✓ Picshop.xcodeproj generated. Open it, pick your team, run on an iPhone 17 Pro (iOS 26)."
+echo "✓ PicShop.xcodeproj generated. Open it, pick your team, run on an iPhone 17 Pro (iOS 26)."

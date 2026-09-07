@@ -2,6 +2,7 @@
 import Foundation
 import CoreML
 import CoreImage
+import CoreImage.CIFilterBuiltins
 import CoreVideo
 import CoreGraphics
 import PicshopCore
@@ -119,8 +120,12 @@ public final class CoreMLImageModel: @unchecked Sendable {
             case .float32: return pointer.bindMemory(to: Float.self, capacity: plane * channels)[index]
             case .double: return Float(pointer.bindMemory(to: Double.self, capacity: plane * channels)[index])
             case .float16:
+                #if arch(arm64)
                 let half = pointer.bindMemory(to: UInt16.self, capacity: plane * channels)[index]
                 return Float(Float16(bitPattern: half))
+                #else
+                return 0
+                #endif
             default: return 0
             }
         }
@@ -150,9 +155,10 @@ public final class CoreMLImageModel: @unchecked Sendable {
         defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
         let isGray = format == kCVPixelFormatType_OneComponent8
         let space = isGray ? CGColorSpaceCreateDeviceGray() : CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo: UInt32 = isGray ? CGImageAlphaInfo.none.rawValue : (format == kCVPixelFormatType_32BGRA
-            ? (CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
-            : (CGImageAlphaInfo.premultipliedLast.rawValue))
+        let bitmapInfo: UInt32 = isGray ? CGImageAlphaInfo.none.rawValue
+            : format == kCVPixelFormatType_32BGRA ? (CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+            : format == kCVPixelFormatType_32ARGB ? CGImageAlphaInfo.premultipliedFirst.rawValue
+            : CGImageAlphaInfo.premultipliedLast.rawValue
         guard let context = CGContext(data: CVPixelBufferGetBaseAddress(buffer), width: width, height: height, bitsPerComponent: 8,
                                       bytesPerRow: CVPixelBufferGetBytesPerRow(buffer), space: space, bitmapInfo: bitmapInfo) else {
             throw PicshopError.renderFailed("pixel buffer context")

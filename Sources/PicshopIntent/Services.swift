@@ -91,3 +91,29 @@ public struct ExecutionResult: Sendable, Equatable {
         }
     } }
 }
+
+// MARK: - PDF
+
+/// A located text match inside a PDF page.
+public struct PDFTextHit: Hashable, Codable, Sendable {
+    public var pageIndex: Int
+    /// Normalised rectangles (top-left origin, in displayed page space).
+    public var rects: [PSRect]
+    public var text: String
+
+    public init(pageIndex: Int, rects: [PSRect], text: String) {
+        self.pageIndex = pageIndex
+        self.rects = rects
+        self.text = text
+    }
+}
+
+/// PDFKit-backed capabilities the PDF executor needs.
+public protocol PDFAIServices: Sendable {
+    /// Finds `query` (case-insensitive). `pageIndex` nil searches the whole document.
+    func findText(_ query: String, in document: PDFDocumentModel, pageIndex: Int?) async throws -> [PDFTextHit]
+    /// Renders a page to an image asset in the project package and saves it to Photos.
+    func extractPage(_ pageIndex: Int, from document: PDFDocumentModel) async throws -> MediaAsset
+    /// The user's saved signature image, if any.
+    func signatureAsset() async -> MediaAsset?
+}

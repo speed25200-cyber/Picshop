@@ -1,12 +1,12 @@
-# Picshop
+# PicShop
 
 **Voice-first, on-device photo & video editing for iPhone 17 Pro.**
-Say *« efface le chien à gauche »* or *"make it warmer and crop for Instagram"* — Picshop
+Say *« efface le chien à gauche »* or *"make it warmer and crop for Instagram"* — PicShop
 understands French and English, plans the edit with an on-device language model, finds the
 pixels with Apple Vision, and renders the result with Core Image and Metal. Nothing leaves the phone.
 
 <p align="center">
-  <img src="App/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="120" alt="Picshop icon">
+  <img src="App/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="120" alt="PicShop icon">
 </p>
 
 ## What it does
@@ -19,6 +19,14 @@ pixels with Apple Vision, and renders the result with Core Image and Metal. Noth
 | Crop/aspect presets, rotate, straighten (auto horizon), flip, perspective | Per-clip looks & adjustments, A/B-roll transitions (dissolve, fade, slide, wipe, zoom, blur) |
 | Text & shape layers, blend modes, opacity, masks | Text overlays with fades, music with ducking and fades, per-clip audio |
 | Upscale (Lanczos, Real-ESRGAN optional), denoise, relight | Aspect presets (9:16, 1:1, 16:9 …), HEVC export |
+| **Precise**: magic wand, lasso, pixel brush, clone stamp, pixel grid loupe | |
+| **Generative fill**: "remplace le ciel par un coucher de soleil", recolor "make the car red" | |
+
+| PDF |
+|---|
+| Reorder, rotate, delete, duplicate, insert blank pages, merge documents, page numbers |
+| Draw, highlight / underline / strike / redact by voice (« surligne « total » partout »), text, photos, signature |
+| Search, extract a page as a photo (then edit it), export a standard PDF with real annotations |
 
 Everything is undoable, saved as a project package, and exportable to Photos.
 

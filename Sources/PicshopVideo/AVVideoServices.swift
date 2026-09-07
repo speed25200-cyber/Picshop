@@ -108,7 +108,10 @@ public final class AVVideoServices: VideoAIServices, @unchecked Sendable {
                 let blended = AdjustmentPipeline.blend(previous.image, over: filled, alpha: 0.45)
                 filled = AdjustmentPipeline.blendWithMask(foreground: blended, background: filled, mask: mask)
             }
-            previousFill = (filled, box)
+            // Materialise so the carried-over image doesn't retain the whole frame chain.
+            if let cg = ImageSupport.cgImage(from: filled, context: RenderContext.export) {
+                previousFill = (CIImage(cgImage: cg), box)
+            }
             return filled
         }
         return relative(result)
@@ -361,7 +364,9 @@ public final class AVVideoServices: VideoAIServices, @unchecked Sendable {
             if let previousMask {
                 mask = AdjustmentPipeline.blend(previousMask, over: mask, alpha: 0.3)
             }
-            previousMask = mask
+            if let cg = ImageSupport.cgImage(from: mask, context: RenderContext.export) {
+                previousMask = CIImage(cgImage: cg)
+            }
             return BackgroundEffects.portraitBlur(frame.image, subjectMask: mask, amount: 0.7, scale: extent.width / 1920)
         }
         return relative(result)

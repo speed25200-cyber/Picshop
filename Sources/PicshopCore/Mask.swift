@@ -44,6 +44,12 @@ public enum MaskSource: Hashable, Codable, Sendable {
     case rectangle(PSRect)
     /// Tapped point seed in normalised coordinates.
     case point(PSPoint)
+    /// Contiguous colour region grown from a point (tolerance 0…1).
+    case magicWand(PSPoint, tolerance: Double)
+    /// Free-form polygon in normalised coordinates.
+    case lasso([PSPoint])
+    /// Named region ("sky", "grass"…).
+    case region(String)
 }
 
 /// Reference to a rasterised mask stored in the project bundle.
@@ -81,6 +87,9 @@ public struct MaskReference: Hashable, Codable, Sendable, Identifiable {
         case .brush: return "Brush"
         case .rectangle: return "Rectangle"
         case .point: return "Selection"
+        case .magicWand: return "Magic Wand"
+        case .lasso: return "Lasso"
+        case .region(let name): return name.capitalized
         }
     }
 }

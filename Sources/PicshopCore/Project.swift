@@ -14,6 +14,7 @@ public struct Project: Hashable, Codable, Sendable, Identifiable {
     public enum Content: Hashable, Codable, Sendable {
         case photo(PhotoDocument)
         case video(VideoTimeline)
+        case pdf(PDFDocumentModel)
     }
 
     public var id: UUID
@@ -32,7 +33,18 @@ public struct Project: Hashable, Codable, Sendable, Identifiable {
         switch content {
         case .photo(let document): return document.title
         case .video(let timeline): return timeline.title
+        case .pdf(let document): return document.title
         }
+    }
+
+    public var isPDF: Bool {
+        if case .pdf = content { return true }
+        return false
+    }
+
+    public var pdfDocument: PDFDocumentModel? {
+        if case .pdf(let document) = content { return document }
+        return nil
     }
 
     public var isVideo: Bool {

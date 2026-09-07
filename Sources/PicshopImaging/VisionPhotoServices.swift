@@ -170,6 +170,8 @@ public enum VisionGrounding {
             } else {
                 candidates = try detector.salientObjects()
             }
+        case .region:
+            candidates = try detector.region(label: target.label)
         default:
             candidates = try detector.instances(matching: entry, freeText: entry == nil ? target.label : nil)
         }
@@ -178,6 +180,21 @@ public enum VisionGrounding {
             candidates = detector.boostByAttributes(candidates, attributes: target.attributes)
         }
         return candidates.sorted { $0.confidence > $1.confidence }
+    }
+
+    /// Magic-wand selection saved as a mask reference.
+    public static func magicWandMask(in image: CGImage, seed: PSPoint, tolerance: Double, contiguous: Bool, maskStore: MaskStore) throws -> MaskReference {
+        let analysis = ImageSupport.resized(image, to: PSSize(width: Double(image.width), height: Double(image.height)).limited(toLongestSide: 1536).cgSize) ?? image
+        let bytes = Selection.magicWand(rgba: ImageSupport.rgbaBytes(from: analysis), width: analysis.width, height: analysis.height, seed: (seed.x, seed.y), tolerance: tolerance, contiguous: contiguous)
+        let cleaned = Selection.despeckled(bytes, width: analysis.width, height: analysis.height, minimumPixels: max(4, analysis.width * analysis.height / 20000))
+        return try maskStore.save(bytes: cleaned, width: analysis.width, height: analysis.height, source: .magicWand(seed, tolerance: tolerance), feather: 0.003)
+    }
+
+    /// Lasso polygon saved as a mask reference.
+    public static func lassoMask(imageSize: PSSize, points: [PSPoint], maskStore: MaskStore) throws -> MaskReference {
+        let size = imageSize.limited(toLongestSide: 1536)
+        let bytes = Selection.lasso(points: points.map { ($0.x, $0.y) }, width: Int(size.width), height: Int(size.height))
+        return try maskStore.save(bytes: bytes, width: Int(size.width), height: Int(size.height), source: .lasso(points), feather: 0.004)
     }
 
     /// Person/subject mask bytes for a frame (video portrait effects).
@@ -367,6 +384,37 @@ final class Detector {
         let box = MaskStore.boundingBox(of: bytes, width: width, height: height)
         let reference = try? maskStore.save(bytes: bytes, width: width, height: height, source: .point(point), feather: 0.02)
         return ObjectCandidate(label: label, boundingBox: box, confidence: 0.95, maskPath: reference?.relativePath)
+    }
+
+    // MARK: Regions
+
+    /// Sky / background / grass / water masks via heuristics and segmentation.
+    func region(label: String) throws -> [ObjectCandidate] {
+        var bytes: [UInt8]
+        switch label {
+        case "background":
+            let subject = try subjectMaskBytes()
+            bytes = subject.map { 255 - $0 }
+        case "sky", "grass", "water":
+            let small = ImageSupport.resized(image, to: PSSize(width: Double(width), height: Double(height)).limited(toLongestSide: 640).cgSize) ?? image
+            let kind: RegionMask.Kind = label == "sky" ? .sky : (label == "grass" ? .grass : .water)
+            let smallMask = RegionMask.mask(kind: kind, rgba: ImageSupport.rgbaBytes(from: small), width: small.width, height: small.height)
+            guard RegionMask.coverage(smallMask) > 0.01, let cg = ImageSupport.grayImage(width: small.width, height: small.height, bytes: smallMask),
+                  let resized = ImageSupport.resized(cg, to: CGSize(width: width, height: height)) else { return [] }
+            bytes = ImageSupport.grayBytes(from: resized)
+            // Never paint over people/animals inside the region.
+            if let observation = try? foregroundInstances(), !observation.allInstances.isEmpty,
+               let buffer = try? observation.generateScaledMaskForImage(forInstances: observation.allInstances, from: handler) {
+                let foreground = MaskStore.bytes(from: buffer, width: width, height: height)
+                for i in bytes.indices where foreground[i] > 127 { bytes[i] = 0 }
+            }
+        default:
+            return []
+        }
+        let coverage = MaskStore.coverage(of: bytes)
+        guard coverage > 0.005 else { return [] }
+        let reference = try maskStore.save(bytes: bytes, width: width, height: height, source: .region(label), feather: 0.006)
+        return [ObjectCandidate(label: label, boundingBox: reference.boundingBox, confidence: min(1, 0.6 + coverage), maskPath: reference.relativePath)]
     }
 
     // MARK: Subject

@@ -1,6 +1,6 @@
 # On-device models
 
-Picshop works out of the box with Apple's built-in models:
+PicShop works out of the box with Apple's built-in models:
 
 | Capability | Built in | Optional upgrade |
 |---|---|---|
@@ -37,6 +37,15 @@ Optional models are downloaded from **Settings › On-device models** and stored
 `CoreMLImageModel` reads input names, sizes and pixel formats from the model description, so models
 converted at other resolutions or with different feature names work without code changes. Inputs may be
 `ImageType` or `MultiArray (1,C,H,W)`; outputs may be images or float arrays in 0…1 or 0…255.
+
+## Generative Fill (Stable Diffusion)
+
+Link Apple's [`ml-stable-diffusion`](https://github.com/apple/ml-stable-diffusion) package (already in
+`project.yml`) and host the compiled resources as `sd-generative-fill.zip`: a zip of a folder containing
+`TextEncoder.mlmodelc`, `Unet.mlmodelc` (or `UnetChunk1/2.mlmodelc`), `VAEDecoder.mlmodelc`,
+`VAEEncoder.mlmodelc`, `merges.txt`, `vocab.json` — e.g. the `split_einsum/compiled` folder of
+`apple/coreml-stable-diffusion-2-1-base` on Hugging Face. The engine runs masked image-to-image on a
+512 px crop around the selection; the pipeline composites the result back inside the mask only.
 
 ## Pro Brain (MLX)
 

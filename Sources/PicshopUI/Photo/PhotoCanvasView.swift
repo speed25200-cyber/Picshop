@@ -33,6 +33,7 @@ struct PhotoCanvasView: View {
     @State private var offset: CGSize = .zero
     @State private var steadyOffset: CGSize = .zero
     @State private var currentStroke: [PSPoint] = []
+    @State private var currentStrokeID: UUID?
     @GestureState private var isPressing = false
 
     var body: some View {
@@ -41,13 +42,16 @@ struct PhotoCanvasView: View {
             let frame = imageFrame(in: container)
             ZStack {
                 PSTheme.canvas
-                MetalCanvasRepresentable(image: session.preview, overlay: nil, frame: frame)
+                MetalCanvasRepresentable(image: session.preview, overlay: session.selectionPreview, frame: frame)
                 overlays(frame: frame)
                     .allowsHitTesting(false)
             }
             .contentShape(Rectangle())
             .gesture(canvasGesture(frame: frame))
             .simultaneousGesture(compareGesture)
+            .onChange(of: isPressing) { _, pressing in
+                if session.activeTool != .erase, session.activeTool != .precise { session.showsOriginal = pressing }
+            }
             .onChange(of: session.zoomRequest) { _, request in
                 guard let request else { return }
                 applyZoomRequest(request, container: container)
@@ -121,19 +125,29 @@ struct PhotoCanvasView: View {
             }
         let drag = DragGesture(minimumDistance: 2)
             .onChanged { value in
-                if session.activeTool == .erase, session.pendingClarification == nil {
+                let paints = session.activeTool == .erase || (session.activeTool == .precise && (session.preciseMode == .pixelBrush || session.preciseMode == .clone))
+                if paints, session.pendingClarification == nil {
                     if let point = normalized(value.location, in: frame) {
+                        if currentStroke.isEmpty { session.beginPreciseStroke(at: point) }
+                        let id = currentStrokeID ?? UUID()
+                        currentStrokeID = id
                         currentStroke.append(point)
-                        session.brushStrokes = session.brushStrokes.filter { $0.id != strokeID } + [BrushStroke(id: strokeID, points: currentStroke, radius: session.brushRadius)]
+                        let radius = session.activeTool == .precise ? session.pixelBrushRadius / zoom : session.brushRadius
+                        session.brushStrokes = session.brushStrokes.filter { $0.id != id } + [BrushStroke(id: id, points: currentStroke, radius: radius, hardness: session.activeTool == .precise ? 1 : 0.6)]
                     }
+                } else if session.activeTool == .precise, session.preciseMode == .lasso, session.pendingClarification == nil {
+                    if let point = normalized(value.location, in: frame) { session.lassoPoints.append(point) }
                 } else if zoom > 1 {
                     offset = CGSize(width: steadyOffset.width + value.translation.width, height: steadyOffset.height + value.translation.height)
                 }
             }
             .onEnded { _ in
-                if session.activeTool == .erase, !currentStroke.isEmpty {
+                if !currentStroke.isEmpty {
                     currentStroke = []
+                    currentStrokeID = nil
                     Haptics.tick()
+                } else if session.activeTool == .precise, session.preciseMode == .lasso, session.lassoPoints.count >= 3 {
+                    session.commitLasso()
                 } else {
                     steadyOffset = offset
                 }
@@ -149,19 +163,11 @@ struct PhotoCanvasView: View {
         return doubleTap.exclusively(before: tap).simultaneously(with: magnify).simultaneously(with: drag)
     }
 
-    private var strokeID: UUID { session.brushStrokes.last?.id ?? UUID() }
-
     private var compareGesture: some Gesture {
         LongPressGesture(minimumDuration: 0.3)
             .sequenced(before: DragGesture(minimumDistance: 0))
             .updating($isPressing) { value, state, _ in
                 if case .second = value { state = true }
-            }
-            .onChanged { _ in
-                if !session.showsOriginal, session.activeTool != .erase { session.showsOriginal = true }
-            }
-            .onEnded { _ in
-                session.showsOriginal = false
             }
     }
 
@@ -169,23 +175,55 @@ struct PhotoCanvasView: View {
 
     @ViewBuilder
     private func overlays(frame: CGRect) -> some View {
+        let strokes = session.brushStrokes
+        let candidates = session.candidateOverlays
+        let lasso = session.lassoPoints
+        let paintColor = session.activeTool == .precise && session.preciseMode == .pixelBrush ? Color(cgColor: session.paintColor.cgColor).opacity(0.9) : PSTheme.danger.opacity(0.45)
+        let showsGrid = zoom >= 6 && session.activeTool == .precise
+        let cloneSource = session.activeTool == .precise && session.preciseMode == .clone ? session.cloneSource : nil
         Canvas { context, _ in
+            // Pixel grid (loupe) when zoomed far in.
+            if showsGrid {
+                let pixelsWide = max(1, session.document.canvasSize.width)
+                let step = frame.width / pixelsWide
+                if step >= 8 {
+                    var grid = Path()
+                    var x = frame.minX
+                    while x <= frame.maxX { grid.move(to: CGPoint(x: x, y: frame.minY)); grid.addLine(to: CGPoint(x: x, y: frame.maxY)); x += step }
+                    var y = frame.minY
+                    while y <= frame.maxY { grid.move(to: CGPoint(x: frame.minX, y: y)); grid.addLine(to: CGPoint(x: frame.maxX, y: y)); y += step }
+                    context.stroke(grid, with: .color(.white.opacity(0.18)), lineWidth: 0.5)
+                }
+            }
+            // Lasso outline.
+            if lasso.count > 1 {
+                var path = Path()
+                let points = lasso.map { CGPoint(x: frame.minX + $0.x * frame.width, y: frame.minY + $0.y * frame.height) }
+                path.move(to: points[0])
+                for point in points.dropFirst() { path.addLine(to: point) }
+                context.stroke(path, with: .color(PSTheme.accent), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+            }
+            if let cloneSource {
+                let center = CGPoint(x: frame.minX + cloneSource.x * frame.width, y: frame.minY + cloneSource.y * frame.height)
+                context.stroke(Path(ellipseIn: CGRect(x: center.x - 10, y: center.y - 10, width: 20, height: 20)), with: .color(PSTheme.warning), lineWidth: 2)
+                context.stroke(Path { $0.move(to: CGPoint(x: center.x - 14, y: center.y)); $0.addLine(to: CGPoint(x: center.x + 14, y: center.y)); $0.move(to: CGPoint(x: center.x, y: center.y - 14)); $0.addLine(to: CGPoint(x: center.x, y: center.y + 14)) }, with: .color(PSTheme.warning), lineWidth: 1.5)
+            }
             // Brush strokes.
-            for stroke in session.brushStrokes {
+            for stroke in strokes {
                 let radius = CGFloat(stroke.radius) * max(frame.width, frame.height)
                 var path = Path()
                 let points = stroke.points.map { CGPoint(x: frame.minX + $0.x * frame.width, y: frame.minY + $0.y * frame.height) }
                 if points.count == 1, let first = points.first {
                     path.addEllipse(in: CGRect(x: first.x - radius, y: first.y - radius, width: radius * 2, height: radius * 2))
-                    context.fill(path, with: .color(PSTheme.danger.opacity(0.45)))
+                    context.fill(path, with: .color(paintColor))
                 } else if let first = points.first {
                     path.move(to: first)
                     for point in points.dropFirst() { path.addLine(to: point) }
-                    context.stroke(path, with: .color(PSTheme.danger.opacity(0.45)), style: StrokeStyle(lineWidth: radius * 2, lineCap: .round, lineJoin: .round))
+                    context.stroke(path, with: .color(paintColor), style: StrokeStyle(lineWidth: max(1, radius * 2), lineCap: .round, lineJoin: .round))
                 }
             }
             // Candidate boxes.
-            for (index, candidate) in session.candidateOverlays.enumerated() {
+            for (index, candidate) in candidates.enumerated() {
                 let rect = CGRect(x: frame.minX + candidate.boundingBox.minX * frame.width, y: frame.minY + candidate.boundingBox.minY * frame.height,
                                   width: candidate.boundingBox.width * frame.width, height: candidate.boundingBox.height * frame.height)
                 let path = Path(roundedRect: rect, cornerRadius: 10)

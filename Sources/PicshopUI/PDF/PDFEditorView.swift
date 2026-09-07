@@ -1,0 +1,441 @@
+#if canImport(SwiftUI) && canImport(PDFKit)
+import SwiftUI
+import PDFKit
+import PhotosUI
+import UniformTypeIdentifiers
+import PicshopCore
+import PicshopIntent
+import PicshopPDF
+
+/// The PDF editing screen: PDFKit viewer, page strip, markup tools, voice orb.
+public struct PDFEditorView: View {
+    @State var session: PDFEditorSession
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.picshop) private var app
+    @State private var textDraft = ""
+    @State private var pickedImage: PhotosPickerItem?
+
+    public init(session: PDFEditorSession) {
+        _session = State(initialValue: session)
+    }
+
+    public var body: some View {
+        ZStack {
+            PSTheme.canvas.ignoresSafeArea()
+            VStack(spacing: 0) {
+                topBar
+                PDFViewerRepresentable(session: session)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(.horizontal, 8)
+                bottomArea
+            }
+            if session.isProcessing { ProgressHUD(title: session.processingTitle) }
+        }
+        .overlay(alignment: .top) {
+            if let toast = session.toast {
+                ToastView(text: toast.text, systemImage: toast.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill", tint: toast.isError ? PSTheme.danger : PSTheme.success)
+                    .padding(.top, 64).id(toast.id)
+            }
+        }
+        .onAppear { session.configure() }
+        .onDisappear { session.teardown() }
+        .sheet(isPresented: $session.showsHelp) { HelpSheet(mode: .pdf) }
+        .sheet(isPresented: $session.showsSignatureSheet) { SignatureSheet { strokes in session.saveSignature(strokes: strokes) } }
+        .sheet(isPresented: $session.showsExport) { PDFExportSheet(session: session) }
+        .fileImporter(isPresented: $session.showsMergePicker, allowedContentTypes: [.pdf]) { result in
+            if case .success(let url) = result { session.merge(from: url) }
+        }
+        .photosPicker(isPresented: $session.showsImagePicker, selection: $pickedImage, matching: .images)
+        .onChange(of: pickedImage) { _, item in
+            guard let item else { return }
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+                    session.placeImage(image, at: session.lastTapPoint, pageIndex: session.document.currentPageIndex)
+                }
+                pickedImage = nil
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private var topBar: some View {
+        HStack(spacing: 10) {
+            GlassIconButton("chevron.left", label: L("Close")) { session.teardown(); dismiss() }
+            Spacer()
+            PSGlassContainer(spacing: 8) {
+                HStack(spacing: 8) {
+                    GlassIconButton("arrow.uturn.backward", label: L("Undo")) { session.undo() }.disabled(!session.history.canUndo).opacity(session.history.canUndo ? 1 : 0.4)
+                    GlassIconButton("arrow.uturn.forward", label: L("Redo")) { session.redo() }.disabled(!session.history.canRedo).opacity(session.history.canRedo ? 1 : 0.4)
+                }
+            }
+            Spacer()
+            Text("\(session.document.currentPageIndex + 1) / \(session.document.pageCount)").font(PSFont.mono(12)).foregroundStyle(PSTheme.textSecondary)
+            GlassIconButton("questionmark", label: L("Help")) { session.showsHelp = true }
+            GlassIconButton("square.and.arrow.up", label: L("Export"), tint: PSTheme.accent, isActive: true) { session.export(); session.showsExport = true }
+        }
+        .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 6)
+    }
+
+    private var bottomArea: some View {
+        VStack(spacing: 10) {
+            if let app {
+                CommandFeedbackView(voice: app.voice, transcript: session.transcript, plan: session.lastPlan, clarification: session.pendingClarification,
+                                    showsTranscript: app.settings.showsVoiceTranscript, onChoose: { _ in }, onChooseAll: {}, onCancel: { session.pendingClarification = nil })
+                    .padding(.horizontal, 16)
+            }
+            if let tool = session.activeTool {
+                toolPanel(tool).padding(14).psGlassPanel().padding(.horizontal, 16).transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            ZStack(alignment: .bottom) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        ForEach(PDFEditorSession.Tool.allCases) { tool in
+                            let isActive = session.activeTool == tool
+                            Button {
+                                Haptics.tap()
+                                withAnimation(.spring(duration: 0.3)) { session.activeTool = isActive ? nil : tool }
+                                if tool == .signature, SignatureStore.currentAsset() == nil { session.showsSignatureSheet = true }
+                                if tool == .image { session.showsImagePicker = true }
+                            } label: {
+                                VStack(spacing: 4) {
+                                    Image(systemName: tool.symbol).font(.system(size: 18, weight: .semibold))
+                                    Text(tool.title).font(PSFont.caption(10))
+                                }
+                                .foregroundStyle(isActive ? Color.black : PSTheme.textPrimary)
+                                .frame(width: 60, height: 54)
+                                .background(isActive ? PSTheme.accent : Color.clear, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                            if tool == .draw { Spacer(minLength: 80) }
+                        }
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                }
+                .psGlass(shape: AnyShape(RoundedRectangle(cornerRadius: 30, style: .continuous)))
+                .padding(.horizontal, 16)
+                if let app { VoiceOrb(voice: app.voice, isBusy: session.isProcessing).offset(y: -22) }
+            }
+        }
+        .padding(.bottom, 6)
+        .animation(.spring(duration: 0.35), value: session.activeTool)
+    }
+
+    @ViewBuilder
+    private func toolPanel(_ tool: PDFEditorSession.Tool) -> some View {
+        switch tool {
+        case .pages:
+            PagesStrip(session: session)
+        case .draw:
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    ForEach([PSColor.red, .blue, .black, .green, .orange, .purple], id: \.self) { color in
+                        Button { session.inkColor = color } label: {
+                            Circle().fill(Color(cgColor: color.cgColor)).frame(width: 28, height: 28)
+                                .overlay(Circle().stroke(session.inkColor == color ? PSTheme.accent : PSTheme.hairline, lineWidth: 2))
+                        }.buttonStyle(.plain)
+                    }
+                    Spacer()
+                    PanelChip(title: L("Undo stroke"), symbol: "arrow.uturn.backward") { session.removeLastMarkup(onPage: session.document.currentPageIndex) }
+                }
+                ParameterSlider(title: L("Pen width"), value: $session.inkWidth, range: 0.001...0.015, bipolar: false)
+                Text(L("Draw directly on the page.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+            }
+        case .highlight:
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    ForEach([PSColor.yellow, .green, .pink, .teal, .orange], id: \.self) { color in
+                        Button { session.highlightColor = color } label: {
+                            Circle().fill(Color(cgColor: color.cgColor)).frame(width: 28, height: 28)
+                                .overlay(Circle().stroke(session.highlightColor == color ? PSTheme.accent : PSTheme.hairline, lineWidth: 2))
+                        }.buttonStyle(.plain)
+                    }
+                    Spacer()
+                    PanelChip(title: L("Undo"), symbol: "arrow.uturn.backward") { session.removeLastMarkup(onPage: session.document.currentPageIndex) }
+                }
+                Text(L("Tap a word to highlight it, or say “surligne « total »”.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+            }
+        case .text:
+            HStack(spacing: 8) {
+                TextField(L("Type text, then tap the page"), text: $textDraft)
+                    .textFieldStyle(.plain).font(PSFont.body(15)).foregroundStyle(PSTheme.textPrimary)
+                    .padding(.horizontal, 14).padding(.vertical, 10).background(PSTheme.hairline, in: Capsule())
+                Button {
+                    let text = textDraft.trimmingCharacters(in: .whitespaces)
+                    guard !text.isEmpty else { return }
+                    session.addText(text, at: session.lastTapPoint, pageIndex: session.document.currentPageIndex)
+                    textDraft = ""
+                } label: { Image(systemName: "plus").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
+                    .buttonStyle(.plain).foregroundStyle(.black).psGlass(tint: PSTheme.accent, interactive: true, shape: AnyShape(Circle()))
+            }
+        case .signature:
+            HStack(spacing: 8) {
+                PanelChip(title: L("Place signature"), symbol: "signature", tint: PSTheme.accent) { session.placeSignature(at: session.lastTapPoint, pageIndex: session.document.currentPageIndex) }
+                PanelChip(title: L("Redraw"), symbol: "pencil.and.scribble") { session.showsSignatureSheet = true }
+                Spacer()
+                Text(L("Tap where to sign.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+            }
+        case .image:
+            HStack(spacing: 8) {
+                PanelChip(title: L("Insert photo"), symbol: "photo.badge.plus", tint: PSTheme.accent) { session.showsImagePicker = true }
+                PanelChip(title: L("Merge PDF"), symbol: "doc.on.doc") { session.showsMergePicker = true }
+                PanelChip(title: L("Page numbers"), symbol: "number") { Task { await session.run(EditIntent(action: .addPageNumbers)) } }
+            }
+        }
+    }
+}
+
+/// Thumbnail strip with delete/rotate/duplicate actions.
+struct PagesStrip: View {
+    @Bindable var session: PDFEditorSession
+
+    var body: some View {
+        VStack(spacing: 10) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(Array(session.document.pages.enumerated()), id: \.element.id) { index, page in
+                        let selected = index == session.document.currentPageIndex
+                        VStack(spacing: 4) {
+                            PageThumbnail(session: session, index: index)
+                                .frame(height: 96)
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(selected ? PSTheme.accent : PSTheme.hairline, lineWidth: selected ? 2.5 : 1))
+                            Text("\(index + 1)").font(PSFont.caption(10)).foregroundStyle(selected ? PSTheme.accent : PSTheme.textSecondary)
+                        }
+                        .onTapGesture { Haptics.tick(); session.update(L("Page")) { $0.goToPage(index) } }
+                        .contextMenu {
+                            Button { Task { await session.run(EditIntent(action: .rotatePage, degrees: 90, index: index + 1)) } } label: { Label(L("Rotate"), systemImage: "rotate.right") }
+                            Button { Task { await session.run(EditIntent(action: .duplicatePage, index: index + 1)) } } label: { Label(L("Duplicate"), systemImage: "plus.square.on.square") }
+                            Button { Task { await session.run(EditIntent(action: .extractPage, index: index + 1)) } } label: { Label(L("Save as photo"), systemImage: "photo") }
+                            Button(role: .destructive) { Task { await session.run(EditIntent(action: .deletePage, index: index + 1)) } } label: { Label(L("Delete"), systemImage: "trash") }
+                        }
+                        .id(page.id)
+                    }
+                }
+            }
+            HStack(spacing: 8) {
+                PanelChip(title: L("Rotate"), symbol: "rotate.right") { Task { await session.run(EditIntent(action: .rotatePage, degrees: 90)) } }
+                PanelChip(title: L("Delete"), symbol: "trash") { Task { await session.run(EditIntent(action: .deletePage)) } }
+                PanelChip(title: L("Blank page"), symbol: "doc.badge.plus") { Task { await session.run(EditIntent(action: .insertBlankPage, scope: .selection)) } }
+                PanelChip(title: L("Move"), symbol: "arrow.left.arrow.right") { Task { await session.run(EditIntent(action: .movePage, clipIndex: -1)) } }
+            }
+        }
+    }
+}
+
+struct PageThumbnail: View {
+    let session: PDFEditorSession
+    let index: Int
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image { Image(uiImage: image).resizable().scaledToFit() } else { PSTheme.surfaceElevated }
+        }
+        .task(id: session.document.pages[index].hashValue) {
+            image = session.services.thumbnail(for: index, in: session.document, height: 96)
+        }
+    }
+}
+
+/// PDFKit viewer that forwards taps and pen strokes to the session.
+struct PDFViewerRepresentable: UIViewRepresentable {
+    let session: PDFEditorSession
+
+    func makeUIView(context: Context) -> PDFView {
+        let view = PDFView()
+        view.autoScales = true
+        view.displayMode = .singlePageContinuous
+        view.displayDirection = .vertical
+        view.backgroundColor = UIColor(PSTheme.canvas)
+        view.pageShadowsEnabled = true
+        view.isUserInteractionEnabled = true
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        tap.delegate = context.coordinator
+        view.addGestureRecognizer(tap)
+        let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
+        pan.delegate = context.coordinator
+        pan.maximumNumberOfTouches = 1
+        view.addGestureRecognizer(pan)
+        context.coordinator.pan = pan
+        NotificationCenter.default.addObserver(context.coordinator, selector: #selector(Coordinator.pageChanged(_:)), name: .PDFViewPageChanged, object: view)
+        return view
+    }
+
+    func updateUIView(_ view: PDFView, context: Context) {
+        if view.document !== session.composed {
+            let current = session.document.currentPageIndex
+            view.document = session.composed
+            if let page = session.composed?.page(at: current) { view.go(to: page) }
+        }
+        if let requested = session.requestedPageIndex, let document = view.document, let page = document.page(at: requested), view.currentPage !== page {
+            view.go(to: page)
+        }
+        if let query = session.searchQuery, let document = view.document {
+            let selections = document.findString(query, withOptions: [.caseInsensitive])
+            view.highlightedSelections = selections
+            if let first = selections.first { view.go(to: first) }
+        } else {
+            view.highlightedSelections = nil
+        }
+        // Pan is only for drawing; otherwise let the scroll view scroll.
+        context.coordinator.pan?.isEnabled = session.activeTool == .draw
+        context.coordinator.session = session
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(session: session) }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var session: PDFEditorSession
+        var pan: UIPanGestureRecognizer?
+        private var currentPoints: [PSPoint] = []
+        private var drawingPage: PDFPage?
+
+        init(session: PDFEditorSession) { self.session = session }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            gestureRecognizer is UITapGestureRecognizer
+        }
+
+        @objc func pageChanged(_ notification: Notification) {
+            guard let view = notification.object as? PDFView, let page = view.currentPage, let document = view.document else { return }
+            let index = document.index(for: page)
+            Task { @MainActor in self.session.viewerDidShowPage(index) }
+        }
+
+        /// Normalised, displayed (top-left) coordinates of a view point on a page.
+        func normalized(_ location: CGPoint, in view: PDFView) -> (PDFPage, PSPoint)? {
+            guard let page = view.page(for: location, nearest: true) else { return nil }
+            let pagePoint = view.convert(location, to: page)
+            let bounds = page.bounds(for: .mediaBox)
+            // `convert(_:to:)` returns coordinates in the page's rotated display space with bottom-left origin.
+            let displayBounds = page.rotation % 180 != 0 ? CGRect(x: 0, y: 0, width: bounds.height, height: bounds.width) : bounds
+            let x = (pagePoint.x - displayBounds.minX) / displayBounds.width
+            let y = 1 - (pagePoint.y - displayBounds.minY) / displayBounds.height
+            return (page, PSPoint(x: Double(x), y: Double(y)))
+        }
+
+        @objc func handleTap(_ recognizer: UITapGestureRecognizer) {
+            guard let view = recognizer.view as? PDFView, let (page, point) = normalized(recognizer.location(in: view), in: view), let document = view.document else { return }
+            let index = document.index(for: page)
+            let tool = session.activeTool
+            Task { @MainActor in
+                self.session.lastTapPoint = point
+                switch tool {
+                case .highlight:
+                    let location = view.convert(recognizer.location(in: view), to: page)
+                    if let selection = page.selectionForWord(at: location) {
+                        let bounds = selection.bounds(for: page)
+                        let size = PSSize(page.bounds(for: .mediaBox).size)
+                        let base = PDFGeometry.baseNormalized(fromPagePoints: PSRect(bounds), size: size)
+                        self.session.update(L("Highlight")) { $0.addMarkup(PDFMarkup(kind: .highlight(rects: [base], color: self.session.highlightColor)), toPageAt: index) }
+                        Haptics.tick()
+                    }
+                case .signature:
+                    self.session.placeSignature(at: point, pageIndex: index)
+                case .text:
+                    Haptics.tick()
+                default:
+                    break
+                }
+            }
+        }
+
+        @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
+            guard let view = recognizer.view as? PDFView else { return }
+            let location = recognizer.location(in: view)
+            switch recognizer.state {
+            case .began:
+                currentPoints = []
+                drawingPage = view.page(for: location, nearest: true)
+                fallthrough
+            case .changed:
+                if let (page, point) = normalized(location, in: view), page === drawingPage { currentPoints.append(point) }
+            case .ended, .cancelled:
+                guard let page = drawingPage, let document = view.document, currentPoints.count > 1 else { return }
+                let index = document.index(for: page)
+                let points = currentPoints
+                let width = session.inkWidth
+                Task { @MainActor in
+                    self.session.addInk(strokes: [BrushStroke(points: points, radius: width, hardness: 1)], pageIndex: index)
+                }
+                currentPoints = []
+            default:
+                break
+            }
+        }
+    }
+}
+
+/// Draw-your-signature sheet.
+struct SignatureSheet: View {
+    let onSave: ([BrushStroke]) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var strokes: [BrushStroke] = []
+    @State private var current: [PSPoint] = []
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                Text(L("Sign with your finger")).font(PSFont.headline(16)).foregroundStyle(PSTheme.textSecondary)
+                GeometryReader { proxy in
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white)
+                        Canvas { context, size in
+                            for stroke in strokes + (current.isEmpty ? [] : [BrushStroke(points: current, radius: 0.006)]) {
+                                var path = Path()
+                                let points = stroke.points.map { CGPoint(x: $0.x * size.width, y: $0.y * size.height) }
+                                if let first = points.first { path.move(to: first) }
+                                for point in points.dropFirst() { path.addLine(to: point) }
+                                context.stroke(path, with: .color(.black), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                            }
+                        }
+                        Rectangle().fill(PSTheme.hairline).frame(height: 1).offset(y: proxy.size.height * 0.25)
+                    }
+                    .gesture(DragGesture(minimumDistance: 0)
+                        .onChanged { value in current.append(PSPoint(x: Double(value.location.x / proxy.size.width), y: Double(value.location.y / proxy.size.height))) }
+                        .onEnded { _ in strokes.append(BrushStroke(points: current, radius: 0.006)); current = [] })
+                }
+                .aspectRatio(3, contentMode: .fit)
+                .padding(.horizontal, 20)
+                HStack {
+                    Button(L("Clear")) { strokes = []; current = [] }.buttonStyle(SecondaryButtonStyle())
+                    Button(L("Use signature")) { onSave(strokes); dismiss() }.buttonStyle(PrimaryButtonStyle()).disabled(strokes.isEmpty)
+                }
+                .padding(.horizontal, 20)
+            }
+            .padding(.top, 20)
+            .background(PSTheme.canvas.ignoresSafeArea())
+            .navigationTitle(L("Signature"))
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { dismiss() } } }
+        }
+        .preferredColorScheme(.dark)
+        .presentationDetents([.medium])
+    }
+}
+
+struct PDFExportSheet: View {
+    @Bindable var session: PDFEditorSession
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("\(session.document.pageCount) \(L("pages")) · \(session.document.allMarkups.count) \(L("markups"))").font(PSFont.caption()).foregroundStyle(PSTheme.textSecondary)
+                    if let url = session.exportedURL {
+                        ShareLink(item: url) { Label(L("Share PDF"), systemImage: "square.and.arrow.up").frame(maxWidth: .infinity) }
+                            .buttonStyle(PrimaryButtonStyle()).listRowBackground(Color.clear)
+                    }
+                    Button { Task { await session.run(EditIntent(action: .extractPage)) } } label: { Label(L("Save current page to Photos"), systemImage: "photo").frame(maxWidth: .infinity) }
+                        .buttonStyle(SecondaryButtonStyle()).listRowBackground(Color.clear)
+                }
+            }
+            .navigationTitle(L("Export"))
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("Done")) { dismiss() } } }
+            .onAppear { if session.exportedURL == nil { session.export() } }
+        }
+        .preferredColorScheme(.dark)
+        .presentationDetents([.medium])
+    }
+}
+#endif

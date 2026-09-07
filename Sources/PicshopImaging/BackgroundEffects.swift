@@ -53,6 +53,25 @@ public enum BackgroundEffects {
         return AdjustmentPipeline.blendWithMask(foreground: image, background: blurred, mask: subjectMask)
     }
 
+    /// Changes the hue/saturation of the masked region while keeping its luminance
+    /// (shading, folds and highlights survive), then blends by `strength`.
+    public static func recolor(_ image: CIImage, mask: CIImage, color: PSColor, strength: Double) -> CIImage {
+        let extent = image.extent
+        let monochrome = CIFilter.colorMonochrome()
+        monochrome.inputImage = image
+        monochrome.color = color.ciColor
+        monochrome.intensity = 1
+        guard let tinted = monochrome.outputImage?.cropped(to: extent) else { return image }
+        // Restore some contrast lost by the tint and keep true blacks/whites.
+        let controls = CIFilter.colorControls()
+        controls.inputImage = tinted
+        controls.saturation = Float(1 + (1 - color.luminance) * 0.4)
+        controls.contrast = 1.05
+        let recolored = controls.outputImage?.cropped(to: extent) ?? tinted
+        let blended = AdjustmentPipeline.blend(recolored, over: image, alpha: strength.clamped(to: 0...1))
+        return AdjustmentPipeline.blendWithMask(foreground: blended, background: image, mask: mask)
+    }
+
     /// Directional light overlay. `direction` -1 = left, 0 = front/top, 1 = right.
     public static func relight(_ image: CIImage, direction: Double, intensity: Double) -> CIImage {
         let extent = image.extent

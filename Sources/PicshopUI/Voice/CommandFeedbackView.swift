@@ -107,6 +107,10 @@ struct HelpSheet: View {
             (L("Frame"), ["Recadre en carré", "Crop for Instagram story", "Tourne de 90 degrés", "Straighten", "Retourne horizontalement"]),
             (L("Text"), ["Ajoute le texte « Été 2026 » en haut", "Add text saying Hello in yellow", "Make the text bigger", "Remove the text"]),
         ]
+        if mode == .pdf {
+            return [(L("PDF"), ["Va à la page 3", "Delete this page", "Supprime les pages 2 à 4", "Tourne la page", "Move page 2 to the end", "Surligne « total »", "Highlight the word invoice everywhere", "Caviarde le nom", "Cherche facture", "Signe en bas à droite", "Ajoute le texte « Approuvé » en haut", "Extrais la page en photo", "Ajoute des numéros de page", "Fusionne avec un autre PDF"]),
+                    (L("Control"), ["Annule", "Redo", "Exporte", "Partage", "Aide"])]
+        }
         if mode == .video {
             result.insert((L("Video"), ["Coupe ici", "Coupe les 3 premières secondes", "Delete from 5 to 12 seconds", "Accélère x2", "Slow motion", "Coupe le son", "Ajoute un fondu entre tous les clips", "Extract this frame", "Stabilise la vidéo", "Va à 10 secondes"]), at: 0)
         }

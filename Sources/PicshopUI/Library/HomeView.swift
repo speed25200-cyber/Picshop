@@ -11,6 +11,7 @@ public struct HomeView: View {
     @State private var showsSettings = false
     @State private var pickerFilter: PHPickerFilter = .images
     @State private var showsPicker = false
+    @State private var showsPDFPicker = false
 
     public init() {}
 
@@ -20,7 +21,7 @@ public struct HomeView: View {
                 PSTheme.canvas.ignoresSafeArea()
                 content
             }
-            .navigationTitle("Picshop")
+            .navigationTitle("PicShop")
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -33,6 +34,13 @@ public struct HomeView: View {
                 EditorHost(project: project)
             }
             .photosPicker(isPresented: $showsPicker, selection: $pickedItem, matching: pickerFilter, photoLibrary: .shared())
+            .fileImporter(isPresented: $showsPDFPicker, allowedContentTypes: [.pdf]) { result in
+                guard case .success(let url) = result, let app else { return }
+                if let project = app.library.createPDFProject(from: url) {
+                    Haptics.success()
+                    openProject = project
+                }
+            }
             .onChange(of: pickedItem) { _, item in
                 guard let item, let app else { return }
                 Task {
@@ -89,6 +97,9 @@ public struct HomeView: View {
                 heroButton(title: L("New Video"), subtitle: L("Cut, clean up, grade"), systemImage: "film.stack", tint: PSTheme.voice) {
                     pickerFilter = .videos
                     showsPicker = true
+                }
+                heroButton(title: L("New PDF"), subtitle: L("Sign, mark up, reorder"), systemImage: "doc.richtext", tint: PSTheme.warning) {
+                    showsPDFPicker = true
                 }
             }
             .padding(.horizontal, 20)
@@ -169,8 +180,8 @@ struct ProjectCard: View {
                 }
                 .frame(height: 150)
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                if project.isVideo {
-                    Image(systemName: "play.fill")
+                if project.isVideo || project.isPDF {
+                    Image(systemName: project.isPDF ? "doc.text.fill" : "play.fill")
                         .font(.caption.weight(.bold))
                         .padding(7)
                         .psGlass(shape: AnyShape(Circle()))
@@ -187,22 +198,35 @@ struct ProjectCard: View {
     }
 }
 
-/// Routes a project to the right editor.
+/// Routes a project to the right editor. Sessions are created once per presentation.
 struct EditorHost: View {
     let project: Project
     @Environment(\.picshop) private var app
     @Environment(\.dismiss) private var dismiss
+    @State private var photoSession: PhotoEditorSession?
+    @State private var videoSession: VideoEditorSession?
+    @State private var pdfSession: PDFEditorSession?
 
     var body: some View {
-        if let app {
-            switch project.content {
-            case .photo(let document):
-                PhotoEditorView(session: PhotoEditorSession(document: document, projectID: project.id, app: app))
-            case .video(let timeline):
-                VideoEditorView(session: VideoEditorSession(timeline: timeline, projectID: project.id, app: app))
+        Group {
+            if let photoSession {
+                PhotoEditorView(session: photoSession)
+            } else if let videoSession {
+                VideoEditorView(session: videoSession)
+            } else if let pdfSession {
+                PDFEditorView(session: pdfSession)
+            } else {
+                PSTheme.canvas.ignoresSafeArea()
             }
-        } else {
-            Text("Missing environment").onAppear { dismiss() }
+        }
+        .onAppear {
+            guard let app, photoSession == nil, videoSession == nil, pdfSession == nil else { return }
+            switch project.content {
+            case .photo(let document): photoSession = PhotoEditorSession(document: document, projectID: project.id, app: app)
+            case .video(let timeline): videoSession = VideoEditorSession(timeline: timeline, projectID: project.id, app: app)
+            case .pdf(let document): pdfSession = PDFEditorSession(document: document, projectID: project.id, app: app)
+            }
+            if app == nil { dismiss() }
         }
     }
 }

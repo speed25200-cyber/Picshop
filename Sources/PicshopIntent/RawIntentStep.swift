@@ -151,8 +151,10 @@ public enum IntentNormalizer {
         case .split where intent.time == nil: intent.time = context.playheadSeconds
         default: break
         }
-        if action.isVideoOnly, context.mode == .photo { return nil }
-        if action.isPhotoOnly, context.mode == .video { return nil }
+        if action.isVideoOnly, context.mode != .video { return nil }
+        if action.isPhotoOnly, context.mode != .photo { return nil }
+        if action.isPDFOnly, context.mode != .pdf { return nil }
+        if action.isPDFOnly, intent.index == nil, let page = intent.clipIndex { intent.index = page }
         return intent
     }
 

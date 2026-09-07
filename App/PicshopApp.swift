@@ -14,6 +14,9 @@ struct PicshopApp: App {
         #endif
         let environment = AppEnvironment(extraEngines: engines)
         _environment = State(initialValue: environment)
+        #if canImport(StableDiffusion)
+        environment.generativeEngineProvider = { url in StableDiffusionFillEngine(resourcesURL: url) }
+        #endif
         #if canImport(MLXLLM)
         ProBrainInstaller.shared = ProBrainInstaller { model, app in
             await MLXIntentEngine.shared.install(model, models: app.models)

@@ -49,6 +49,22 @@
         }
       }
     },
+    "Add Text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Text"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter du texte"
+          }
+        }
+      }
+    },
     "Add music": {
       "localizations": {
         "en": {
@@ -109,6 +125,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Le modèle Apple embarqué, avec génération guidée."
+          }
+        }
+      }
+    },
+    "Apply": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appliquer"
+          }
+        }
+      }
+    },
+    "Apply paint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply paint"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appliquer la peinture"
           }
         }
       }
@@ -221,6 +269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couleur du fond"
+          }
+        }
+      }
+    },
+    "Blank page": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blank page"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page blanche"
           }
         }
       }
@@ -385,6 +449,38 @@
         }
       }
     },
+    "Clone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tampon"
+          }
+        }
+      }
+    },
+    "Clone Stamp": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clone Stamp"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tampon de duplication"
+          }
+        }
+      }
+    },
     "Close": {
       "localizations": {
         "en": {
@@ -413,6 +509,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couleur"
+          }
+        }
+      }
+    },
+    "Contiguous": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contiguous"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contigu"
           }
         }
       }
@@ -561,6 +673,22 @@
         }
       }
     },
+    "Describe what to generate…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Describe what to generate…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Décrivez ce qu'il faut générer…"
+          }
+        }
+      }
+    },
     "Detail": {
       "localizations": {
         "en": {
@@ -673,6 +801,70 @@
         }
       }
     },
+    "Draw": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Draw"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dessiner"
+          }
+        }
+      }
+    },
+    "Draw around the area, or tap corner by corner.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Draw around the area, or tap corner by corner."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entourez la zone, ou touchez coin par coin."
+          }
+        }
+      }
+    },
+    "Draw directly on the page.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Draw directly on the page."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dessinez directement sur la page."
+          }
+        }
+      }
+    },
+    "Drawing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drawing"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dessin"
+          }
+        }
+      }
+    },
     "Duplicate": {
       "localizations": {
         "en": {
@@ -765,6 +957,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Effacer la zone peinte"
+          }
+        }
+      }
+    },
+    "Erase selection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase selection"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer la sélection"
           }
         }
       }
@@ -1009,6 +1217,70 @@
         }
       }
     },
+    "Generate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generate"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Générer"
+          }
+        }
+      }
+    },
+    "Generating “%@”…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generating “%@”…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Génération de « %@ »…"
+          }
+        }
+      }
+    },
+    "Generation failed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generation failed."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La génération a échoué."
+          }
+        }
+      }
+    },
+    "Generative Fill model not installed — see Settings.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generative Fill model not installed — see Settings."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modèle Remplissage génératif non installé — voir Réglages."
+          }
+        }
+      }
+    },
     "Get": {
       "localizations": {
         "en": {
@@ -1089,6 +1361,22 @@
         }
       }
     },
+    "Highlight": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Highlight"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Surligner"
+          }
+        }
+      }
+    },
     "Hold to talk": {
       "localizations": {
         "en": {
@@ -1121,6 +1409,22 @@
         }
       }
     },
+    "Image": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image"
+          }
+        }
+      }
+    },
     "Importing…": {
       "localizations": {
         "en": {
@@ -1133,6 +1437,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importation…"
+          }
+        }
+      }
+    },
+    "Insert photo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Insert photo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Insérer une photo"
+          }
+        }
+      }
+    },
+    "Install Generative Fill in Settings › On-device models to use prompts.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install Generative Fill in Settings › On-device models to use prompts."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installez Remplissage génératif dans Réglages › Modèles embarqués pour utiliser les prompts."
           }
         }
       }
@@ -1197,6 +1533,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Langue"
+          }
+        }
+      }
+    },
+    "Lasso": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lasso"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lasso"
           }
         }
       }
@@ -1313,6 +1665,54 @@
         }
       }
     },
+    "Magic wand": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Magic wand"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Baguette magique"
+          }
+        }
+      }
+    },
+    "Merge": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fusion"
+          }
+        }
+      }
+    },
+    "Merge PDF": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge PDF"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fusionner un PDF"
+          }
+        }
+      }
+    },
     "Microphone & speech": {
       "localizations": {
         "en": {
@@ -1357,6 +1757,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Serveur de modèles"
+          }
+        }
+      }
+    },
+    "Move": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déplacer"
           }
         }
       }
@@ -1409,18 +1825,34 @@
         }
       }
     },
-    "Neural models improve object removal and upscaling. Without them, Picshop uses its built-in PatchMatch engine — see docs/MODELS.md to host the archives.": {
+    "Neural models improve object removal and upscaling. Without them, PicShop uses its built-in PatchMatch engine — see docs/MODELS.md to host the archives.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Neural models improve object removal and upscaling. Without them, Picshop uses its built-in PatchMatch engine — see docs/MODELS.md to host the archives."
+            "value": "Neural models improve object removal and upscaling. Without them, PicShop uses its built-in PatchMatch engine — see docs/MODELS.md to host the archives."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les modèles neuronaux améliorent la suppression d'objets et l'agrandissement. Sans eux, Picshop utilise son moteur PatchMatch intégré — voir docs/MODELS.md pour héberger les archives."
+            "value": "Les modèles neuronaux améliorent la suppression d'objets et l'agrandissement. Sans eux, PicShop utilise son moteur PatchMatch intégré — voir docs/MODELS.md pour héberger les archives."
+          }
+        }
+      }
+    },
+    "New PDF": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New PDF"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau PDF"
           }
         }
       }
@@ -1569,6 +2001,118 @@
         }
       }
     },
+    "PDF": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDF"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDF"
+          }
+        }
+      }
+    },
+    "PDF ready to share": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDF ready to share"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDF prêt à partager"
+          }
+        }
+      }
+    },
+    "Page": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page"
+          }
+        }
+      }
+    },
+    "Page numbers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page numbers"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Numéros de page"
+          }
+        }
+      }
+    },
+    "Pages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pages"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pages"
+          }
+        }
+      }
+    },
+    "Paint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paint"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Peinture"
+          }
+        }
+      }
+    },
+    "Paint to clone from the marked source.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paint to clone from the marked source."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Peignez pour cloner depuis la source marquée."
+          }
+        }
+      }
+    },
     "Pause": {
       "localizations": {
         "en": {
@@ -1581,6 +2125,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pause"
+          }
+        }
+      }
+    },
+    "Pen width": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pen width"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Épaisseur"
           }
         }
       }
@@ -1633,18 +2193,18 @@
         }
       }
     },
-    "Photos, videos and voice never leave your device. Picshop has no servers, no accounts and no tracking.": {
+    "Photos, videos and voice never leave your device. PicShop has no servers, no accounts and no tracking.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Photos, videos and voice never leave your device. Picshop has no servers, no accounts and no tracking."
+            "value": "Photos, videos and voice never leave your device. PicShop has no servers, no accounts and no tracking."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vos photos, vidéos et votre voix ne quittent jamais votre appareil. Picshop n'a ni serveur, ni compte, ni suivi."
+            "value": "Vos photos, vidéos et votre voix ne quittent jamais votre appareil. PicShop n'a ni serveur, ni compte, ni suivi."
           }
         }
       }
@@ -1665,6 +2225,38 @@
         }
       }
     },
+    "Pixel brush": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pixel brush"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pinceau pixel"
+          }
+        }
+      }
+    },
+    "Place signature": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Place signature"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Placer la signature"
+          }
+        }
+      }
+    },
     "Play": {
       "localizations": {
         "en": {
@@ -1677,6 +2269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lecture"
+          }
+        }
+      }
+    },
+    "Precise": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Precise"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Précis"
           }
         }
       }
@@ -1809,6 +2417,38 @@
         }
       }
     },
+    "Recolor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recolor"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recolorer"
+          }
+        }
+      }
+    },
+    "Recolouring…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recolouring…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recoloration…"
+          }
+        }
+      }
+    },
     "Redo": {
       "localizations": {
         "en": {
@@ -1821,6 +2461,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rétablir"
+          }
+        }
+      }
+    },
+    "Redraw": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redraw"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redessiner"
           }
         }
       }
@@ -2033,6 +2689,38 @@
         }
       }
     },
+    "Save as photo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save as photo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer en photo"
+          }
+        }
+      }
+    },
+    "Save current page to Photos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save current page to Photos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer la page dans Photos"
+          }
+        }
+      }
+    },
     "Save to Photos": {
       "localizations": {
         "en": {
@@ -2129,6 +2817,38 @@
         }
       }
     },
+    "Select an area first (wand, lasso or tap), then describe the change.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select an area first (wand, lasso or tap), then describe the change."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélectionnez d'abord une zone (baguette, lasso ou toucher), puis décrivez le changement."
+          }
+        }
+      }
+    },
+    "Selection ready. Say or type what should appear there.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selection ready. Say or type what should appear there."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélection prête. Dites ou écrivez ce qui doit apparaître."
+          }
+        }
+      }
+    },
     "Settings": {
       "localizations": {
         "en": {
@@ -2141,6 +2861,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Réglages"
+          }
+        }
+      }
+    },
+    "Share PDF": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share PDF"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partager le PDF"
           }
         }
       }
@@ -2173,6 +2909,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "Afficher la transcription"
+          }
+        }
+      }
+    },
+    "Sign": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signer"
+          }
+        }
+      }
+    },
+    "Sign with your finger": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign with your finger"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signez avec le doigt"
+          }
+        }
+      }
+    },
+    "Sign, mark up, reorder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign, mark up, reorder"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signer, annoter, réorganiser"
+          }
+        }
+      }
+    },
+    "Signature": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signature"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signature"
           }
         }
       }
@@ -2221,6 +3021,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Un problème est survenu"
+          }
+        }
+      }
+    },
+    "Source set. Now paint where to clone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source set. Now paint where to clone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source définie. Peignez maintenant la destination."
           }
         }
       }
@@ -2385,6 +3201,54 @@
         }
       }
     },
+    "Tap a colour to select it. Pinch in for the pixel grid.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap a colour to select it. Pinch in for the pixel grid."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez une couleur pour la sélectionner. Pincez pour afficher la grille de pixels."
+          }
+        }
+      }
+    },
+    "Tap a word to highlight it, or say “surligne « total »”.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap a word to highlight it, or say “surligne « total »”."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez un mot pour le surligner, ou dites « surligne « total » »."
+          }
+        }
+      }
+    },
+    "Tap the source area, then paint the destination.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the source area, then paint the destination."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez la zone source, puis peignez la destination."
+          }
+        }
+      }
+    },
     "Tap to talk": {
       "localizations": {
         "en": {
@@ -2397,6 +3261,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Toucher pour parler"
+          }
+        }
+      }
+    },
+    "Tap where to sign.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap where to sign."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez l'endroit où signer."
           }
         }
       }
@@ -2429,6 +3309,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Durée du texte"
+          }
+        }
+      }
+    },
+    "This build was compiled without the Stable Diffusion runtime.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This build was compiled without the Stable Diffusion runtime."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette version a été compilée sans le moteur Stable Diffusion."
+          }
+        }
+      }
+    },
+    "Tolerance": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tolerance"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tolérance"
           }
         }
       }
@@ -2513,6 +3425,22 @@
         }
       }
     },
+    "Type text, then tap the page": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type text, then tap the page"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Écrivez le texte, puis touchez la page"
+          }
+        }
+      }
+    },
     "Undo": {
       "localizations": {
         "en": {
@@ -2525,6 +3453,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Annuler"
+          }
+        }
+      }
+    },
+    "Undo stroke": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undo stroke"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annuler le trait"
           }
         }
       }
@@ -2557,6 +3501,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Agrandissement…"
+          }
+        }
+      }
+    },
+    "Use signature": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use signature"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utiliser la signature"
           }
         }
       }
@@ -2673,6 +3633,22 @@
         }
       }
     },
+    "markups": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "markups"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "annotations"
+          }
+        }
+      }
+    },
     "object": {
       "localizations": {
         "en": {
@@ -2685,6 +3661,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "l'objet"
+          }
+        }
+      }
+    },
+    "pages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "pages"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "pages"
           }
         }
       }
@@ -2721,18 +3713,18 @@
         }
       }
     },
-    "“Efface le chien”, “make it warmer”, “coupe les 3 premières secondes”. Picshop understands French and English and edits instantly.": {
+    "“Efface le chien”, “make it warmer”, “coupe les 3 premières secondes”. PicShop understands French and English and edits instantly.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "“Efface le chien”, “make it warmer”, “coupe les 3 premières secondes”. Picshop understands French and English and edits instantly."
+            "value": "“Efface le chien”, “make it warmer”, “coupe les 3 premières secondes”. PicShop understands French and English and edits instantly."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "« Efface le chien », « plus chaud », « coupe les 3 premières secondes ». Picshop comprend le français et l'anglais et retouche instantanément."
+            "value": "« Efface le chien », « plus chaud », « coupe les 3 premières secondes ». PicShop comprend le français et l'anglais et retouche instantanément."
           }
         }
       }

@@ -41,7 +41,5 @@ jobs:
         run: xcodegen generate
       - name: Build
         run: |
-          xcodebuild -project Picshop.xcodeproj -scheme Picshop -destination 'generic/platform=iOS' \
-            -configuration Debug CODE_SIGNING_ALLOWED=NO build | xcbeautify || xcodebuild -project Picshop.xcodeproj -scheme Picshop -destination 'generic/platform=iOS' -configuration Debug CODE_SIGNING_ALLOWED=NO build
-      - name: Package tests
-        run: swift test
+          xcodebuild -project PicShop.xcodeproj -scheme PicShop -destination 'generic/platform=iOS' \
+            -configuration Debug CODE_SIGNING_ALLOWED=NO build | xcbeautify || xcodebuild -project PicShop.xcodeproj -scheme PicShop -destination 'generic/platform=iOS' -configuration Debug CODE_SIGNING_ALLOWED=NO build

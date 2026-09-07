@@ -3,6 +3,7 @@ import SwiftUI
 import PicshopCore
 import PicshopIntent
 import PicshopImaging
+import PicshopVideo
 import PicshopSpeech
 
 /// Preferences: AI brain, models, voice, feedback, export.
@@ -100,7 +101,7 @@ public struct SettingsView: View {
         } header: {
             Text(L("On-device models"))
         } footer: {
-            Text(L("Neural models improve object removal and upscaling. Without them, Picshop uses its built-in PatchMatch engine — see docs/MODELS.md to host the archives."))
+            Text(L("Neural models improve object removal and upscaling. Without them, PicShop uses its built-in PatchMatch engine — see docs/MODELS.md to host the archives."))
         }
     }
 
@@ -133,6 +134,10 @@ public struct SettingsView: View {
 
     private func install(_ model: ModelDescriptor, app: AppEnvironment) {
         Haptics.tap()
+        if model.kind == .generative, app.generativeEngineProvider == nil {
+            app.library.errorMessage = L("This build was compiled without the Stable Diffusion runtime.")
+            return
+        }
         if model.kind == .languageModel {
             Task { await ProBrainInstaller.shared?.install(model, app: app) }
         } else {
@@ -187,7 +192,7 @@ public struct SettingsView: View {
     private var aboutSection: some View {
         Section {
             LabeledContent(L("Version"), value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
-            Text(L("Photos, videos and voice never leave your device. Picshop has no servers, no accounts and no tracking."))
+            Text(L("Photos, videos and voice never leave your device. PicShop has no servers, no accounts and no tracking."))
                 .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
         } header: {
             Text(L("Privacy"))

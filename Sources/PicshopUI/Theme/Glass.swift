@@ -7,10 +7,7 @@ public extension View {
     @ViewBuilder
     func psGlass(tint: Color? = nil, interactive: Bool = false, shape: AnyShape = AnyShape(Capsule())) -> some View {
         if #available(iOS 26.0, *) {
-            var glass = Glass.regular
-            if let tint { glass = glass.tint(tint) }
-            if interactive { glass = glass.interactive() }
-            self.glassEffect(glass, in: shape)
+            self.glassEffect(makeGlass(tint: tint, interactive: interactive), in: shape)
         } else {
             self.background(.ultraThinMaterial, in: shape)
         }
@@ -20,6 +17,14 @@ public extension View {
     func psGlassPanel(cornerRadius: CGFloat = PSTheme.panelRadius) -> some View {
         psGlass(shape: AnyShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)))
     }
+}
+
+@available(iOS 26.0, *)
+private func makeGlass(tint: Color?, interactive: Bool) -> Glass {
+    var glass = Glass.regular
+    if let tint { glass = glass.tint(tint) }
+    if interactive { glass = glass.interactive() }
+    return glass
 }
 
 /// Groups glass elements so they morph/blend together on iOS 26.

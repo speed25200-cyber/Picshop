@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 import PicshopCore
 import PicshopImaging
 import PicshopVideo
+import PicshopPDF
 
 /// Creates, lists and deletes projects; imports media from the photo library.
 @MainActor
@@ -47,6 +48,10 @@ public final class ProjectLibrary {
             timeline.id = newID
             timeline.title += " copy"
             copy.content = .video(timeline)
+        case .pdf(var document):
+            document.id = newID
+            document.title += " copy"
+            copy.content = .pdf(document)
         }
         do {
             try FileManager.default.copyItem(at: store.packageURL(for: project.id), to: store.packageURL(for: newID))
@@ -115,6 +120,21 @@ public final class ProjectLibrary {
         }
         refresh()
         return project
+    }
+
+    public func createPDFProject(from url: URL) -> Project? {
+        isImporting = true
+        defer { isImporting = false }
+        do {
+            let model = try PDFEditingService.importDocument(from: url, store: store, title: url.deletingPathExtension().lastPathComponent)
+            let project = Project(id: model.id, content: .pdf(model))
+            try store.save(project)
+            refresh()
+            return project
+        } catch {
+            errorMessage = (error as? PicshopError)?.message ?? error.localizedDescription
+            return nil
+        }
     }
 
     public func save(_ project: Project) {

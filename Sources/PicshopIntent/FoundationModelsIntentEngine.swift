@@ -73,7 +73,7 @@ public final class FoundationModelsIntentEngine: IntentEngine, @unchecked Sendab
 }
 
 @available(iOS 26.0, macOS 26.0, *)
-@Generable(description: "One editing step for the Picshop photo/video editor.")
+@Generable(description: "One editing step for the PicShop photo/video editor.")
 struct GeneratedStep {
     @Guide(description: "The action to perform.", .anyOf(IntentAction.allCases.map(\.rawValue)))
     var action: String

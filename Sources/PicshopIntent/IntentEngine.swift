@@ -4,6 +4,7 @@ import PicshopCore
 public enum EditorMode: String, Codable, Sendable {
     case photo
     case video
+    case pdf
 }
 
 /// Everything the language layer may need to resolve references such as
@@ -25,11 +26,16 @@ public struct IntentContext: Sendable {
     public var canRedo: Bool
     /// BCP-47 language the user selected for voice, if any ("fr", "en").
     public var preferredLanguage: String?
+    /// PDF: number of pages and the 1-based current page.
+    public var pageCount: Int
+    public var currentPage: Int
+    /// Whether a signature has been saved on this device.
+    public var hasSignature: Bool
 
     public init(mode: EditorMode, currentAdjustments: Adjustments = .neutral, hasSelection: Bool = false, selectedIndex: Int? = nil,
                 clipCount: Int = 0, textLayerCount: Int = 0, playheadSeconds: Double = 0, timelineDuration: Double = 0, frameRate: Double = 30,
                 pendingClarification: ClarificationRequest? = nil, lastTapPoint: PSPoint? = nil, canUndo: Bool = false, canRedo: Bool = false,
-                preferredLanguage: String? = nil) {
+                preferredLanguage: String? = nil, pageCount: Int = 0, currentPage: Int = 1, hasSignature: Bool = false) {
         self.mode = mode
         self.currentAdjustments = currentAdjustments
         self.hasSelection = hasSelection
@@ -44,10 +50,14 @@ public struct IntentContext: Sendable {
         self.canUndo = canUndo
         self.canRedo = canRedo
         self.preferredLanguage = preferredLanguage
+        self.pageCount = pageCount
+        self.currentPage = currentPage
+        self.hasSignature = hasSignature
     }
 
     public static let photo = IntentContext(mode: .photo)
     public static let video = IntentContext(mode: .video, clipCount: 1, timelineDuration: 10)
+    public static let pdf = IntentContext(mode: .pdf, pageCount: 5, currentPage: 2)
 }
 
 /// A component that turns an utterance into an `EditPlan`.

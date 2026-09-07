@@ -14,11 +14,20 @@ public protocol Inpainter: Sendable {
     func inpaint(rgba: [UInt8], mask: [UInt8], width: Int, height: Int) async throws -> [UInt8]
 }
 
+/// Text-guided synthesis inside a mask (Stable Diffusion or similar).
+public protocol GenerativeFillEngine: Sendable {
+    var name: String { get }
+    var preferredLongestSide: Int { get }
+    /// Returns RGBA8 of the same size; pixels outside the mask are replaced by the pipeline anyway.
+    func generate(rgba: [UInt8], mask: [UInt8], width: Int, height: Int, prompt: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [UInt8]
+}
+
 /// Orchestrates cropping, resampling, running an `Inpainter` and compositing
 /// the result back so only the masked pixels change.
 public final class InpaintingPipeline: @unchecked Sendable {
     private let lock = NSLock()
     private var neural: (any Inpainter)?
+    private var generative: (any GenerativeFillEngine)?
     private let fallback: any Inpainter
 
     public init(neural: (any Inpainter)? = nil, fallback: any Inpainter = PatchMatchInpainter()) {
@@ -38,6 +47,29 @@ public final class InpaintingPipeline: @unchecked Sendable {
         return neural ?? fallback
     }
 
+    public func setGenerative(_ engine: (any GenerativeFillEngine)?) {
+        lock.lock()
+        generative = engine
+        lock.unlock()
+    }
+
+    public var hasGenerativeEngine: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return generative != nil
+    }
+
+    /// Text-guided fill. Same crop/composite strategy as `fill`, with the generative engine.
+    public func generate(image: CIImage, mask: CIImage, boundingBox: PSRect, prompt: String, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> CIImage {
+        lock.lock()
+        let engine = generative
+        lock.unlock()
+        guard let engine else { throw PicshopError.modelUnavailable("Generative Fill") }
+        return try await process(image: image, mask: mask, boundingBox: boundingBox, feather: 0.015, contextMargin: 1.0, workingSide: engine.preferredLongestSide) { rgba, maskBytes, width, height in
+            try await engine.generate(rgba: rgba, mask: maskBytes, width: width, height: height, prompt: prompt, progress: progress)
+        }
+    }
+
     /// - Parameters:
     ///   - image: the layer image (any extent, bottom-left origin)
     ///   - mask: white where content must be synthesised, same extent as `image`
@@ -45,18 +77,25 @@ public final class InpaintingPipeline: @unchecked Sendable {
     public func fill(image: CIImage, mask: CIImage, boundingBox: PSRect, feather: Double) async throws -> CIImage {
         let timer = PSTimer("inpaint")
         defer { timer.log(category: .imaging) }
-        let extent = image.extent
         let inpainter = activeInpainter
+        return try await process(image: image, mask: mask, boundingBox: boundingBox, feather: feather, contextMargin: 0.75, workingSide: inpainter.preferredLongestSide) { rgba, maskBytes, width, height in
+            try await inpainter.inpaint(rgba: rgba, mask: maskBytes, width: width, height: height)
+        }
+    }
+
+    private func process(image: CIImage, mask: CIImage, boundingBox: PSRect, feather: Double, contextMargin: CGFloat, workingSide: Int,
+                         worker: ([UInt8], [UInt8], Int, Int) async throws -> [UInt8]) async throws -> CIImage {
+        let extent = image.extent
 
         // Context crop: the mask box plus generous margin so the filler sees surrounding texture.
         let box = (boundingBox.isEmpty ? PSRect.unit : boundingBox).ciRect(in: extent)
-        let margin = max(96, max(box.width, box.height) * 0.75)
+        let margin = max(96, max(box.width, box.height) * contextMargin)
         let crop = box.insetBy(dx: -margin, dy: -margin).intersection(extent).integral
         guard !crop.isEmpty else { return image }
 
         // Working resolution.
         let longest = max(crop.width, crop.height)
-        let workScale = min(1, CGFloat(inpainter.preferredLongestSide) / longest)
+        let workScale = min(1, CGFloat(workingSide) / longest)
         let workWidth = max(32, Int((crop.width * workScale).rounded()))
         let workHeight = max(32, Int((crop.height * workScale).rounded()))
         let workRect = CGRect(x: 0, y: 0, width: workWidth, height: workHeight)
@@ -82,7 +121,7 @@ public final class InpaintingPipeline: @unchecked Sendable {
         maskBytes = MaskStore.dilated(maskBytes, width: workWidth, height: workHeight, radius: max(1, workWidth / 200))
         guard maskBytes.contains(where: { $0 > 0 }) else { return image }
 
-        let filledBytes = try await inpainter.inpaint(rgba: rgba, mask: maskBytes, width: workWidth, height: workHeight)
+        let filledBytes = try await worker(rgba, maskBytes, workWidth, workHeight)
         guard let filledCG = ImageSupport.rgbaImage(width: workWidth, height: workHeight, bytes: filledBytes) else {
             throw PicshopError.renderFailed("inpaint output")
         }

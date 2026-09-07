@@ -248,6 +248,36 @@ public actor PhotoRenderer {
 
         case .relight(let direction, let intensity):
             return BackgroundEffects.relight(input, direction: direction, intensity: intensity)
+
+        case .generativeFill(let mask, let prompt):
+            if let cached = operationCache[cacheKey] { return cached }
+            guard options.allowExpensiveWork, let maskImage = maskStore.load(mask, fitting: extent) else { return input }
+            let result = try await inpainting.generate(image: input, mask: maskImage, boundingBox: mask.boundingBox, prompt: prompt)
+            operationCache[cacheKey] = result
+            return result
+
+        case .recolor(let mask, let color, let strength):
+            guard let maskImage = maskStore.load(mask, fitting: extent) else { return input }
+            return BackgroundEffects.recolor(input, mask: maskImage, color: color, strength: strength)
+
+        case .cloneStamp(let strokes, let offset):
+            let width = Int(extent.width), height = Int(extent.height)
+            var bytes = [UInt8](repeating: 0, count: width * height)
+            MaskStore.rasterize(strokes: strokes, width: width, height: height, into: &bytes)
+            guard let cg = ImageSupport.grayImage(width: width, height: height, bytes: bytes) else { return input }
+            let maskImage = CIImage(cgImage: cg).clampedToExtent().applyingGaussianBlur(sigma: 1.5 * scale).cropped(to: extent)
+            // Source pixels come from the image shifted by the (normalised) offset; y flips because CI is bottom-up.
+            let shifted = input.transformed(by: CGAffineTransform(translationX: -CGFloat(offset.x) * extent.width, y: CGFloat(offset.y) * extent.height)).clampedToExtent().cropped(to: extent)
+            return AdjustmentPipeline.blendWithMask(foreground: shifted, background: input, mask: maskImage)
+
+        case .pixelPaint(let strokes, let color):
+            let width = Int(extent.width), height = Int(extent.height)
+            var bytes = [UInt8](repeating: 0, count: width * height)
+            MaskStore.rasterize(strokes: strokes, width: width, height: height, into: &bytes)
+            guard let cg = ImageSupport.grayImage(width: width, height: height, bytes: bytes) else { return input }
+            let maskImage = CIImage(cgImage: cg)
+            let paint = CIImage(color: color.ciColor).cropped(to: extent)
+            return AdjustmentPipeline.blendWithMask(foreground: paint, background: input, mask: maskImage)
         }
     }
 

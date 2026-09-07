@@ -287,6 +287,7 @@ public enum PatchMatchCore {
         let w = level.width, h = level.height
         let count = w * h
         let radius = patchRadius
+        guard w > 2 * radius + 1, h > 2 * radius + 1 else { return }
 
         // Target pixels: hole dilated by the patch radius (patches straddling the hole boundary drive the reconstruction).
         var target = [Bool](repeating: false, count: count)

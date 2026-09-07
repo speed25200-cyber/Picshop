@@ -4,6 +4,7 @@ import Observation
 import PicshopCore
 import PicshopSpeech
 import PicshopImaging
+import PicshopVideo
 
 /// User preferences, persisted in `UserDefaults`.
 @MainActor

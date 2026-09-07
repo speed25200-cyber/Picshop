@@ -16,6 +16,7 @@ struct PhotoToolPanel: View {
             case .adjust: AdjustPanel(session: session)
             case .looks: LooksPanel(session: session)
             case .erase: ErasePanel(session: session)
+            case .precise: PrecisePanel(session: session)
             case .cutout: CutoutPanel(session: session)
             case .crop: CropPanel(session: session)
             case .text: TextPanel(session: session)
@@ -194,6 +195,120 @@ struct ErasePanel: View {
                 .buttonStyle(.plain).foregroundStyle(.black).psGlass(tint: PSTheme.accent, interactive: true)
                 .disabled(session.brushStrokes.isEmpty)
                 .opacity(session.brushStrokes.isEmpty ? 0.5 : 1)
+            }
+        }
+    }
+}
+
+// MARK: - Precise
+
+struct PrecisePanel: View {
+    @Bindable var session: PhotoEditorSession
+    private let colors: [PSColor] = [.white, .black, .red, .orange, .yellow, .green, .teal, .blue, .purple, .pink, .gray, .brown]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(PhotoEditorSession.PreciseMode.allCases) { mode in
+                        let active = session.preciseMode == mode
+                        Button {
+                            Haptics.tick()
+                            session.commitBrushErase()
+                            session.brushStrokes = []
+                            session.preciseMode = mode
+                        } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: mode.symbol).font(.system(size: 16, weight: .semibold))
+                                Text(mode.title).font(PSFont.caption(10)).lineLimit(1)
+                            }
+                            .foregroundStyle(active ? Color.black : PSTheme.textPrimary)
+                            .frame(width: 74, height: 50)
+                            .background(active ? PSTheme.accent : PSTheme.hairline, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            switch session.preciseMode {
+            case .wand:
+                ParameterSlider(title: L("Tolerance"), value: $session.wandTolerance, range: 0.02...0.8, bipolar: false)
+                HStack {
+                    Toggle(L("Contiguous"), isOn: $session.wandContiguous).font(PSFont.caption(13)).tint(PSTheme.accent)
+                    Spacer()
+                    selectionActions
+                }
+                Text(L("Tap a colour to select it. Pinch in for the pixel grid.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+            case .lasso:
+                HStack {
+                    Text(L("Draw around the area, or tap corner by corner.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                    Spacer()
+                    if session.lassoPoints.count >= 3 {
+                        PanelChip(title: L("Close"), symbol: "checkmark", tint: PSTheme.accent) { session.commitLasso() }
+                    }
+                    selectionActions
+                }
+            case .generate:
+                HStack(spacing: 8) {
+                    TextField(L("Describe what to generate…"), text: $session.generativePrompt)
+                        .textFieldStyle(.plain).font(PSFont.body(15)).foregroundStyle(PSTheme.textPrimary)
+                        .padding(.horizontal, 14).padding(.vertical, 10).background(PSTheme.hairline, in: Capsule())
+                        .submitLabel(.go).onSubmit { session.generateInSelection(session.generativePrompt) }
+                    Button { session.generateInSelection(session.generativePrompt) } label: { Image(systemName: "sparkles").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
+                        .buttonStyle(.plain).foregroundStyle(.black).psGlass(tint: PSTheme.accent, interactive: true, shape: AnyShape(Circle()))
+                        .disabled(session.generativePrompt.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                HStack {
+                    Text(session.selectionMask == nil ? L("Select an area first (wand, lasso or tap), then describe the change.") : L("Selection ready. Say or type what should appear there."))
+                        .font(PSFont.caption(12)).foregroundStyle(session.hasGenerativeEngine ? PSTheme.textSecondary : PSTheme.warning)
+                    Spacer()
+                    selectionActions
+                }
+                if !session.hasGenerativeEngine {
+                    Text(L("Generative Fill model not installed — see Settings.")).font(PSFont.caption(11)).foregroundStyle(PSTheme.warning)
+                }
+            case .pixelBrush:
+                HStack(spacing: 8) {
+                    ForEach(colors, id: \.self) { color in
+                        Button { session.paintColor = color } label: {
+                            Circle().fill(Color(cgColor: color.cgColor)).frame(width: 24, height: 24)
+                                .overlay(Circle().stroke(session.paintColor == color ? PSTheme.accent : PSTheme.hairline, lineWidth: 2))
+                        }.buttonStyle(.plain)
+                    }
+                }
+                ParameterSlider(title: L("Brush size"), value: $session.pixelBrushRadius, range: 0.0005...0.03, bipolar: false)
+                HStack {
+                    Button { session.brushStrokes = [] } label: { Text(L("Clear")).font(PSFont.caption(13)) }.buttonStyle(.plain).foregroundStyle(PSTheme.textSecondary)
+                    Spacer()
+                    PanelChip(title: L("Apply paint"), symbol: "checkmark", tint: PSTheme.accent) { session.commitPixelPaint() }.disabled(session.brushStrokes.isEmpty)
+                }
+            case .clone:
+                ParameterSlider(title: L("Brush size"), value: $session.pixelBrushRadius, range: 0.002...0.06, bipolar: false)
+                HStack {
+                    Text(session.cloneSource == nil ? L("Tap the source area, then paint the destination.") : L("Paint to clone from the marked source."))
+                        .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                    Spacer()
+                    Button { session.cloneSource = nil; session.cloneOffset = nil; session.brushStrokes = [] } label: { Text(L("Reset")).font(PSFont.caption(13)) }.buttonStyle(.plain).foregroundStyle(PSTheme.textSecondary)
+                    PanelChip(title: L("Apply"), symbol: "checkmark", tint: PSTheme.accent) { session.commitClone() }.disabled(session.brushStrokes.isEmpty || session.cloneOffset == nil)
+                }
+            }
+        }
+    }
+
+    private var selectionActions: some View {
+        HStack(spacing: 6) {
+            if session.selectionMask != nil {
+                PanelChip(title: L("Erase"), symbol: "eraser", tint: PSTheme.accent) { session.eraseSelection() }
+                Menu {
+                    ForEach(colors, id: \.self) { color in
+                        Button(color.hexString) { session.recolorSelection(color) }
+                    }
+                } label: {
+                    Label(L("Recolor"), systemImage: "paintpalette").font(PSFont.caption(13)).padding(.horizontal, 12).padding(.vertical, 9)
+                }
+                .foregroundStyle(PSTheme.textPrimary).psGlass(interactive: true)
+                Button { session.clearSelection() } label: { Image(systemName: "xmark").font(PSFont.caption(13)).padding(8) }
+                    .buttonStyle(.plain).psGlass(interactive: true, shape: AnyShape(Circle()))
             }
         }
     }

@@ -14,13 +14,14 @@ import PicshopSpeech
 @Observable
 public final class PhotoEditorSession {
     public enum Tool: String, CaseIterable, Identifiable {
-        case adjust, looks, erase, cutout, crop, text, layers
+        case adjust, looks, erase, precise, cutout, crop, text, layers
         public var id: String { rawValue }
         var title: String {
             switch self {
             case .adjust: return L("Adjust")
             case .looks: return L("Looks")
             case .erase: return L("Erase")
+            case .precise: return L("Precise")
             case .cutout: return L("Cutout")
             case .crop: return L("Crop")
             case .text: return L("Text")
@@ -32,10 +33,35 @@ public final class PhotoEditorSession {
             case .adjust: return "slider.horizontal.3"
             case .looks: return "camera.filters"
             case .erase: return "eraser.line.dashed"
+            case .precise: return "scope"
             case .cutout: return "person.crop.rectangle"
             case .crop: return "crop.rotate"
             case .text: return "textformat"
             case .layers: return "square.3.layers.3d"
+            }
+        }
+    }
+
+    /// Sub-modes of the pixel-precise tool.
+    public enum PreciseMode: String, CaseIterable, Identifiable {
+        case wand, lasso, generate, pixelBrush, clone
+        public var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .wand: return L("Magic wand")
+            case .lasso: return L("Lasso")
+            case .generate: return L("Generate")
+            case .pixelBrush: return L("Pixel brush")
+            case .clone: return L("Clone")
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .wand: return "wand.and.rays"
+            case .lasso: return "lasso"
+            case .generate: return "sparkles"
+            case .pixelBrush: return "paintbrush.pointed"
+            case .clone: return "doc.on.doc"
             }
         }
     }
@@ -62,6 +88,21 @@ public final class PhotoEditorSession {
     public var selectedParameter: AdjustmentParameter = .exposure
     public var brushRadius: Double = 0.03
     public var brushStrokes: [BrushStroke] = []
+    // Precise tool state.
+    public var preciseMode: PreciseMode = .wand
+    public var wandTolerance: Double = 0.25
+    public var wandContiguous = true
+    public var lassoPoints: [PSPoint] = []
+    /// Current selection made with the wand or lasso, ready for erase/generate/recolor.
+    public var selectionMask: MaskReference?
+    public var selectionPreview: CIImage?
+    public var paintColor: PSColor = .white
+    public var pixelBrushRadius: Double = 0.004
+    /// Clone source (normalised) and the offset between source and destination.
+    public var cloneSource: PSPoint?
+    public var cloneOffset: PSPoint?
+    public var generativePrompt = ""
+    public var hasGenerativeEngine = false
     public var lastTapPoint: PSPoint?
     public var isProcessing = false
     public var processingTitle = ""
@@ -99,6 +140,7 @@ public final class PhotoEditorSession {
         let services = VisionPhotoServices(renderer: renderer, store: app.store, projectID: projectID)
         self.services = services
         executor = PhotoCommandExecutor(services: services, language: language)
+        hasGenerativeEngine = pipeline.hasGenerativeEngine
         app.voice.onFinalTranscript = { [weak self] text in
             Task { await self?.handleTranscript(text) }
         }
@@ -298,10 +340,131 @@ public final class PhotoEditorSession {
         apply(.heal(strokes: strokes), label: L("Erase"))
     }
 
+    // MARK: - Precise tools
+
+    /// Magic-wand selection at a point on the rendered base image.
+    public func magicWandSelect(at point: PSPoint) {
+        guard let renderer else { return }
+        Task {
+            do {
+                let image = try await renderer.renderBase(document, options: PhotoRenderer.Options(targetLongestSide: 1536))
+                guard let cg = ImageSupport.cgImage(from: image) else { return }
+                let maskStore = MaskStore(store: app.store, projectID: projectID)
+                let mask = try VisionGrounding.magicWandMask(in: cg, seed: point, tolerance: wandTolerance, contiguous: wandContiguous, maskStore: maskStore)
+                setSelection(mask)
+                Haptics.confirm()
+            } catch {
+                showToast(error.localizedDescription, isError: true)
+            }
+        }
+    }
+
+    public func commitLasso() {
+        guard lassoPoints.count >= 3 else { return }
+        let maskStore = MaskStore(store: app.store, projectID: projectID)
+        if let mask = try? VisionGrounding.lassoMask(imageSize: document.canvasSize, points: lassoPoints, maskStore: maskStore) {
+            setSelection(mask)
+            Haptics.confirm()
+        }
+        lassoPoints = []
+    }
+
+    private func setSelection(_ mask: MaskReference) {
+        selectionMask = mask
+        let maskStore = MaskStore(store: app.store, projectID: projectID)
+        if let preview = preview, let image = maskStore.load(mask, fitting: preview.extent) {
+            // Tinted overlay for the canvas.
+            let tint = CIImage(color: CIColor(red: 0.36, green: 0.55, blue: 1.0, alpha: 0.45)).cropped(to: preview.extent)
+            selectionPreview = AdjustmentPipeline.applyingAlpha(mask: image, to: tint)
+        }
+    }
+
+    public func clearSelection() {
+        selectionMask = nil
+        selectionPreview = nil
+        lassoPoints = []
+    }
+
+    public func eraseSelection() {
+        guard let mask = selectionMask else { return }
+        apply(.removeObject(mask), label: L("Erase selection"))
+        clearSelection()
+    }
+
+    public func recolorSelection(_ color: PSColor) {
+        guard let mask = selectionMask else { return }
+        apply(.recolor(mask, color, strength: 0.9), label: L("Recolor"))
+    }
+
+    public func generateInSelection(_ prompt: String) {
+        let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        guard hasGenerativeEngine else {
+            showToast(L("Install Generative Fill in Settings › On-device models to use prompts."), isError: true)
+            return
+        }
+        if let mask = selectionMask {
+            Task {
+                isProcessing = true
+                processingTitle = String(format: L("Generating “%@”…"), text)
+                defer { isProcessing = false }
+                var document = self.document
+                document.apply(.generativeFill(mask, prompt: text))
+                // Render once so failures surface before the change lands in history.
+                if let renderer, (try? await renderer.render(document, options: .preview)) != nil {
+                    commit(document, label: "Generate “\(text)”")
+                    clearSelection()
+                    Haptics.success()
+                } else {
+                    showToast(L("Generation failed."), isError: true)
+                }
+            }
+        } else {
+            Task { await run(EditIntent(action: .generativeFill, target: nil, text: text)) }
+        }
+    }
+
+    public func commitPixelPaint() {
+        guard !brushStrokes.isEmpty else { return }
+        let strokes = brushStrokes.map { BrushStroke(id: $0.id, points: $0.points, radius: $0.radius, hardness: 1) }
+        brushStrokes = []
+        apply(.pixelPaint(strokes: strokes, color: paintColor), label: L("Paint"))
+    }
+
+    public func commitClone() {
+        guard !brushStrokes.isEmpty, let offset = cloneOffset else { return }
+        let strokes = brushStrokes
+        brushStrokes = []
+        apply(.cloneStamp(strokes: strokes, offset: offset), label: L("Clone Stamp"))
+    }
+
+    /// First tap in clone mode sets the source; the next stroke defines the offset.
+    public func handlePreciseTap(at point: PSPoint) {
+        switch preciseMode {
+        case .wand: magicWandSelect(at: point)
+        case .lasso: lassoPoints.append(point)
+        case .clone:
+            if cloneSource == nil || brushStrokes.isEmpty { cloneSource = point; cloneOffset = nil; showToast(L("Source set. Now paint where to clone.")) }
+        case .generate:
+            if selectionMask == nil { magicWandSelect(at: point) }
+        case .pixelBrush: break
+        }
+    }
+
+    public func beginPreciseStroke(at point: PSPoint) {
+        if preciseMode == .clone, let source = cloneSource, cloneOffset == nil {
+            cloneOffset = PSPoint(x: source.x - point.x, y: source.y - point.y)
+        }
+    }
+
     // MARK: - Canvas taps
 
     public func tapCanvas(at point: PSPoint) {
         lastTapPoint = point
+        if activeTool == .precise, pendingClarification == nil {
+            handlePreciseTap(at: point)
+            return
+        }
         if let pending = pendingClarification {
             if let hit = pending.candidates.filter({ $0.boundingBox.insetBy(dx: -0.02, dy: -0.02).contains(point) }).min(by: { $0.boundingBox.area < $1.boundingBox.area }),
                let index = pending.candidates.firstIndex(where: { $0.id == hit.id }) {
@@ -356,7 +519,11 @@ public final class PhotoEditorSession {
     public func run(_ intent: EditIntent) async -> CommandOutcome {
         guard var executor else { return .failed(message: "not ready") }
         executor.language = language
-        if intent.action == .removeObject || intent.action == .removeBackground || intent.action == .blurBackground || intent.action == .replaceBackground || intent.action == .upscale || intent.action == .selectiveAdjust || intent.action == .chooseCandidate || intent.action == .straighten {
+        if intent.action == .generativeFill, !hasGenerativeEngine {
+            showToast(L("Install Generative Fill in Settings › On-device models to use prompts."), isError: true)
+            return .failed(message: "no generative engine")
+        }
+        if [.removeObject, .removeBackground, .blurBackground, .replaceBackground, .upscale, .selectiveAdjust, .chooseCandidate, .straighten, .generativeFill, .recolor].contains(intent.action) {
             isProcessing = true
             processingTitle = intent.action == .chooseCandidate ? L("Erasing…") : processingLabel(for: intent)
         }
@@ -370,6 +537,8 @@ public final class PhotoEditorSession {
     private func processingLabel(for intent: EditIntent) -> String {
         switch intent.action {
         case .removeObject: return String(format: L("Finding %@…"), intent.target?.originalPhrase ?? L("object"))
+        case .generativeFill: return String(format: L("Generating “%@”…"), intent.text ?? "")
+        case .recolor: return L("Recolouring…")
         case .removeBackground: return L("Cutting out the subject…")
         case .blurBackground: return L("Blurring the background…")
         case .replaceBackground: return L("Replacing the background…")
@@ -414,6 +583,10 @@ public final class PhotoEditorSession {
         }
         for effect in result.effects {
             switch effect {
+            case .message("selectRegion"):
+                activeTool = .precise
+                preciseMode = .lasso
+                if let text = intent.text, intent.action == .generativeFill { generativePrompt = text }
             case .undo: undo()
             case .redo: redo()
             case .revert: revert()

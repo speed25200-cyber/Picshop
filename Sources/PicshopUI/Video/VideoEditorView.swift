@@ -148,13 +148,18 @@ public struct VideoEditorView: View {
 struct PlayerPreview: View {
     @Bindable var session: VideoEditorSession
 
+    private func videoFrame(in container: CGSize) -> CGRect {
+        let aspect = CGFloat(max(0.1, session.timeline.renderSize.aspectRatio))
+        let available = CGSize(width: container.width - 24, height: container.height - 12)
+        var size = CGSize(width: available.width, height: available.width / aspect)
+        if size.height > available.height { size = CGSize(width: available.height * aspect, height: available.height) }
+        return CGRect(x: (container.width - size.width) / 2, y: (container.height - size.height) / 2, width: size.width, height: size.height)
+    }
+
     var body: some View {
         GeometryReader { proxy in
-            let aspect = CGFloat(max(0.1, session.timeline.renderSize.aspectRatio))
-            let available = CGSize(width: proxy.size.width - 24, height: proxy.size.height - 12)
-            var size = CGSize(width: available.width, height: available.width / aspect)
-            if size.height > available.height { size = CGSize(width: available.height * aspect, height: available.height) }
-            let frame = CGRect(x: (proxy.size.width - size.width) / 2, y: (proxy.size.height - size.height) / 2, width: size.width, height: size.height)
+            let frame = videoFrame(in: proxy.size)
+            let candidates = session.candidateOverlays
             ZStack {
                 PlayerLayerView(player: session.player.player)
                     .frame(width: frame.width, height: frame.height)
@@ -165,7 +170,7 @@ struct PlayerPreview: View {
                         if point.x >= 0, point.x <= 1, point.y >= 0, point.y <= 1 { session.tapPreview(at: point) }
                     }
                 Canvas { context, _ in
-                    for (index, candidate) in session.candidateOverlays.enumerated() {
+                    for (index, candidate) in candidates.enumerated() {
                         let rect = CGRect(x: frame.minX + candidate.boundingBox.minX * frame.width, y: frame.minY + candidate.boundingBox.minY * frame.height,
                                           width: candidate.boundingBox.width * frame.width, height: candidate.boundingBox.height * frame.height)
                         let path = Path(roundedRect: rect, cornerRadius: 10)

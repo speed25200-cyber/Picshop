@@ -19,6 +19,8 @@ public final class AppEnvironment {
     /// Engines available on this device (refreshed on launch and after model installs).
     public private(set) var availableEngines: [IntentEngineKind] = [.rules]
     public private(set) var appleIntelligenceReason: String?
+    /// Provided by the app target when the Stable Diffusion runtime is linked.
+    public var generativeEngineProvider: (@Sendable (URL) -> any GenerativeFillEngine)?
 
     public init(extraEngines: [any IntentEngine] = []) {
         let settings = AppSettings()
@@ -68,6 +70,9 @@ public final class AppEnvironment {
         let pipeline = InpaintingPipeline()
         if let url = await models.compiledModelURL(for: "lama-inpainting"), let neural = try? CoreMLInpainter(compiledModelURL: url) {
             pipeline.setNeural(neural)
+        }
+        if let provider = generativeEngineProvider, let resources = await models.resourcesURL(for: "sd-generative-fill") {
+            pipeline.setGenerative(provider(resources))
         }
         return pipeline
     }

@@ -107,6 +107,7 @@ public struct PhotoEditorView: View {
                                 Haptics.tap()
                                 withAnimation(.spring(duration: 0.3)) {
                                     if session.activeTool == .erase, tool != .erase { session.commitBrushErase() }
+                                    if session.activeTool == .precise, tool != .precise { session.brushStrokes = []; session.lassoPoints = [] }
                                     session.activeTool = isActive ? nil : tool
                                 }
                             } label: {

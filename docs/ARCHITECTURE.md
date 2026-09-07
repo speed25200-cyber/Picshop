@@ -1,6 +1,6 @@
 # Architecture
 
-Picshop is a Swift package (`PicshopKit`) with six modules plus a thin iOS app target.
+PicShop is a Swift package (`PicshopKit`) with six modules plus a thin iOS app target.
 The split keeps every piece of logic that does not need Apple frameworks buildable and
 testable on Linux/CI, and isolates the Apple-only code behind clear protocols.
 
@@ -11,6 +11,10 @@ testable on Linux/CI, and isolates the Apple-only code behind clear protocols.
 │ PicshopUI      AppEnvironment · ProjectLibrary · PhotoEditorSession  │
 │                VideoEditorSession · canvas · timeline · voice orb     │
 ├───────────────┬───────────────┬───────────────┬──────────────────────┤
+│ PicshopPDF    │               │               │                      │
+│ PDFKit compose│               │               │                      │
+│ search·export │               │               │                      │
+├───────────────┼───────────────┼───────────────┼──────────────────────┤
 │ PicshopSpeech │ PicshopImaging│ PicshopVideo  │ PicshopIntent        │
 │ SpeechAnalyzer│ CI graph      │ AVComposition │ grammar · LLM · router│
 │ SFSpeech      │ Vision ground │ compositor    │ executors · selector │
@@ -81,6 +85,30 @@ feathered mask**, so untouched pixels stay bit-exact at full resolution.
   gradients) and pure patch synthesis where they are textured.
 - `CoreMLInpainter` runs a converted LaMa network through `CoreMLImageModel`, which discovers input
   names/sizes from the model description. When installed it becomes the neural path automatically.
+
+## Precision tools & generative fill
+
+`Selection` (pure Swift) implements the magic wand (colour-tolerance flood fill with despeckling) and lasso
+(scanline polygon fill); `VisionGrounding.magicWandMask/lassoMask` persist them as `MaskReference`s that any
+operation can consume: `removeObject` (erase), `recolor` (luminance-preserving tint), `generativeFill`
+(prompt), `selectiveAdjust`. `pixelPaint` and `cloneStamp` are stroke-based operations rendered by the
+same Core Image graph; the canvas shows a pixel grid once zoomed past 6×.
+
+`InpaintingPipeline.generate` reuses the crop → work-size → composite-inside-mask strategy with a
+`GenerativeFillEngine`. The app target provides `StableDiffusionFillEngine` (Apple's Core ML Stable
+Diffusion runtime, masked image-to-image) when the optional package and resources are present. Voice
+commands such as *« remplace le ciel par un coucher de soleil »* become `generativeFill(target: sky,
+text: …)`; *"make the car red"* becomes `recolor`, which works offline.
+
+## PDF
+
+`PDFDocumentModel` is a page list referencing the original file (never modified) plus rotation and
+`PDFMarkup`s stored in each page's *base* normalised space (`PDFGeometry` converts to/from the rotated
+display space and PDF points). `PDFComposer` rebuilds a PDFKit document with real annotations (ink,
+highlight/underline/strike-out quads, redaction squares, free text, image/signature stamps) for display
+and export. `PDFEditingService` implements `PDFAIServices` (search via `findString`, page → photo,
+signature store) and import/merge; `PDFCommandExecutor` handles the voice grammar in
+`RuleBasedIntentEngine+PDF.swift`.
 
 ## Video
 

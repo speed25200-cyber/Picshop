@@ -13,7 +13,7 @@ public struct OnboardingView: View {
     public init() {}
 
     private let pages: [(String, String, String)] = [
-        ("waveform.and.mic", L("Just say it"), L("“Efface le chien”, “make it warmer”, “coupe les 3 premières secondes”. Picshop understands French and English and edits instantly.")),
+        ("waveform.and.mic", L("Just say it"), L("“Efface le chien”, “make it warmer”, “coupe les 3 premières secondes”. PicShop understands French and English and edits instantly.")),
         ("sparkles.rectangle.stack", L("Pro tools, zero friction"), L("Non-destructive layers, looks, cutouts, object removal, and a full video timeline — all on your iPhone.")),
         ("lock.shield", L("Private by design"), L("Recognition, language models and every pixel stay on device. Nothing is uploaded, ever.")),
     ]

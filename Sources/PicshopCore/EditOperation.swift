@@ -42,6 +42,14 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
         case denoise(amount: Double)
         case sharpen(amount: Double)
         case relight(direction: Double, intensity: Double)
+        /// Text-guided synthesis inside the mask ("replace the sky with a sunset").
+        case generativeFill(MaskReference, prompt: String)
+        /// Changes the colour of the masked region while keeping its shading.
+        case recolor(MaskReference, PSColor, strength: Double)
+        /// Copies pixels from `offset` (normalised) along the strokes.
+        case cloneStamp(strokes: [BrushStroke], offset: PSPoint)
+        /// Paints an opaque colour along the strokes (pixel brush).
+        case pixelPaint(strokes: [BrushStroke], color: PSColor)
 
         public var defaultLabel: String {
             switch self {
@@ -67,6 +75,10 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
             case .denoise: return "Denoise"
             case .sharpen: return "Sharpen"
             case .relight: return "Relight"
+            case .generativeFill(_, let prompt): return "Generate: \(prompt)"
+            case .recolor(let mask, _, _): return "Recolor \(mask.displayName)"
+            case .cloneStamp: return "Clone Stamp"
+            case .pixelPaint: return "Paint"
             }
         }
 
@@ -81,7 +93,7 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
         /// Operations that need heavy ML/compute and should show progress.
         public var isExpensive: Bool {
             switch self {
-            case .removeObject, .heal, .removeBackground, .replaceBackground, .blurBackground, .upscale, .denoise, .relight: return true
+            case .removeObject, .heal, .removeBackground, .replaceBackground, .blurBackground, .upscale, .denoise, .relight, .generativeFill: return true
             default: return false
             }
         }

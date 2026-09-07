@@ -93,6 +93,26 @@ public struct PhotoCommandExecutor: Sendable {
             document.apply(.adjust(parameter, value: value))
             return (document, .applied(EditOperation.Kind.adjust(parameter, value: value).defaultLabel))
 
+        case .generativeFill, .recolor:
+            guard let target = intent.target else {
+                let message = fr ? "Touche ou entoure la zone à modifier, puis redis la commande." : "Tap or lasso the area to change, then repeat the command."
+                return (document, ExecutionResult(outcome: .info(message: message), effects: [.message("selectRegion")]))
+            }
+            do {
+                let candidates = try await services.candidates(for: target, in: document)
+                switch CandidateSelector.select(from: candidates, for: target) {
+                case .single(let candidate): return await apply(pendingIntent: intent, candidates: [candidate], document: document)
+                case .multiple(let list): return await apply(pendingIntent: intent, candidates: list, document: document)
+                case .ambiguous(let options):
+                    return (document, .clarify(ClarificationRequest(question: CandidateSelector.question(for: target, options: options, language: language), candidates: options, pendingIntent: intent)))
+                case .none:
+                    let message = fr ? "Je ne trouve pas « \(target.originalPhrase) ». Touche ou entoure la zone." : "I can't find “\(target.originalPhrase)”. Tap or lasso the area."
+                    return (document, ExecutionResult(outcome: .info(message: message), effects: [.message("selectRegion")]))
+                }
+            } catch {
+                return (document, .failed(errorMessage(error)))
+            }
+
         case .selectiveAdjust:
             guard let target = intent.target, let parameter = intent.parameter else { return (document, .failed("Missing target")) }
             do {
@@ -319,6 +339,14 @@ public struct PhotoCommandExecutor: Sendable {
                 let rect = candidates.map(\.boundingBox).reduce(PSRect.zero) { $0.union($1) }.insetBy(dx: -0.05, dy: -0.05).clampedToUnit()
                 document.apply(.crop(rect))
                 return (document, .applied("Crop to \(target.originalPhrase)"))
+            case .generativeFill:
+                guard let prompt = intent.text, !prompt.isEmpty else { return (document, .failed("Missing prompt")) }
+                document.apply(.generativeFill(mask, prompt: prompt))
+                return (document, .applied("Generate “\(prompt)”"))
+            case .recolor:
+                guard let color = intent.color else { return (document, .failed("Missing colour")) }
+                document.apply(.recolor(mask, color, strength: (intent.amount?.value ?? 0.9).clamped(to: 0...1)))
+                return (document, .applied("Recolor \(target.originalPhrase)"))
             default:
                 document.apply(.removeObject(mask))
                 let label = candidates.count > 1 ? "Remove \(candidates.count) × \(target.label)" : "Remove \(target.originalPhrase)"
