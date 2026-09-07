@@ -46,7 +46,6 @@ let package = Package(
         .target(
             name: "PicshopImaging",
             dependencies: ["PicshopCore", "PicshopIntent"],
-            resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .target(

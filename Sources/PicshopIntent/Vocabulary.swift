@@ -15,12 +15,12 @@ public enum ObjectVocabulary {
         public let category: Category
 
         public enum Category: String, Sendable {
-            case person, animal, vehicle, furniture, nature, object, text, blemish, generic
+            case person, animal, vehicle, furniture, nature, object, text, blemish, generic, region
         }
     }
 
     public static let entries: [Entry] = [
-        Entry(label: "person", spoken: ["person", "people", "personne", "personnes", "gens", "man", "men", "homme", "hommes", "woman", "women", "femme", "femmes", "guy", "guys", "mec", "type", "monsieur", "madame", "dame", "lady", "kid", "kids", "child", "children", "enfant", "enfants", "boy", "garcon", "girl", "fille", "baby", "bebe", "tourist", "tourists", "touriste", "touristes", "passant", "passants", "passerby", "stranger", "inconnu", "photobomber", "someone", "quelqu un", "crowd", "foule", "human", "humain", "bystander", "silhouette"], classifierTerms: ["person", "people", "man", "woman", "child", "boy", "girl", "baby", "adult", "crowd", "human", "face", "pedestrian"], category: .person),
+        Entry(label: "person", spoken: ["person", "people", "personne", "personnes", "gens", "man", "men", "homme", "hommes", "woman", "women", "femme", "femmes", "guy", "guys", "mec", "type", "monsieur", "madame", "dame", "lady", "kid", "kids", "child", "children", "enfant", "enfants", "boy", "garcon", "girl", "fille", "baby", "bebe", "tourist", "tourists", "touriste", "touristes", "passant", "passants", "passerby", "stranger", "inconnu", "photobomber", "someone", "quelqu un", "crowd", "foule", "human", "humain", "bystander", "silhouette", "him", "her", "lui", "elle", "them", "eux", "elles", "me", "moi", "myself", "moi meme", "couple", "family", "famille"], classifierTerms: ["person", "people", "man", "woman", "child", "boy", "girl", "baby", "adult", "crowd", "human", "face", "pedestrian"], category: .person),
         Entry(label: "face", spoken: ["face", "visage", "tete", "head"], classifierTerms: ["face", "head", "person"], category: .person),
         Entry(label: "hand", spoken: ["hand", "hands", "main", "mains", "finger", "doigt", "doigts", "arm", "bras"], classifierTerms: ["hand", "arm", "finger"], category: .person),
         Entry(label: "dog", spoken: ["dog", "dogs", "chien", "chiens", "chiot", "puppy", "puppies", "toutou"], classifierTerms: ["dog", "puppy", "canine", "hound", "terrier", "retriever", "labrador", "bulldog", "poodle", "shepherd"], category: .animal),
@@ -40,6 +40,13 @@ public enum ObjectVocabulary {
         Entry(label: "tree", spoken: ["tree", "trees", "arbre", "arbres", "branch", "branches", "branche", "bush", "buisson", "buissons", "palm", "palmier", "sapin", "hedge", "haie"], classifierTerms: ["tree", "branch", "bush", "shrub", "palm", "foliage", "hedge", "plant"], category: .nature),
         Entry(label: "plant", spoken: ["plant", "plants", "plante", "plantes", "flower", "flowers", "fleur", "fleurs", "pot", "pot de fleurs", "cactus", "leaf", "feuille", "feuilles", "leaves", "grass", "herbe", "weeds", "mauvaises herbes"], classifierTerms: ["plant", "flower", "houseplant", "potted plant", "cactus", "leaf", "grass", "weed", "vase"], category: .nature),
         Entry(label: "cloud", spoken: ["cloud", "clouds", "nuage", "nuages"], classifierTerms: ["cloud", "sky"], category: .nature),
+        Entry(label: "sky", spoken: ["sky", "ciel", "the sky", "le ciel", "heaven", "sunset", "coucher de soleil"], classifierTerms: ["sky", "cloud", "sunset"], category: .region),
+        Entry(label: "background", spoken: ["backdrop", "the background", "l arriere plan", "le fond", "decor"], classifierTerms: [], category: .region),
+        Entry(label: "hair", spoken: ["hair", "cheveux", "chevelure", "barbe", "beard"], classifierTerms: ["hair", "beard"], category: .person),
+        Entry(label: "eyes", spoken: ["eyes", "eye", "yeux", "oeil", "regard"], classifierTerms: ["eye"], category: .person),
+        Entry(label: "teeth", spoken: ["teeth", "tooth", "dents", "smile", "sourire"], classifierTerms: ["teeth", "smile"], category: .person),
+        Entry(label: "grass", spoken: ["grass", "herbe", "pelouse", "lawn", "gazon", "field", "champ"], classifierTerms: ["grass", "lawn", "field", "meadow"], category: .region),
+        Entry(label: "water", spoken: ["water", "eau", "sea", "mer", "ocean", "lake", "lac", "river", "riviere", "pool", "piscine"], classifierTerms: ["water", "sea", "ocean", "lake", "river", "pool"], category: .region),
         Entry(label: "rock", spoken: ["rock", "rocks", "rocher", "rochers", "stone", "stones", "pierre", "pierres", "caillou", "cailloux", "boulder"], classifierTerms: ["rock", "stone", "boulder", "pebble"], category: .nature),
         Entry(label: "pole", spoken: ["pole", "poles", "poteau", "poteaux", "lamppost", "lampadaire", "lampadaires", "streetlight", "reverbere", "post", "mat", "pylon", "pylone", "antenna", "antenne"], classifierTerms: ["pole", "lamppost", "streetlight", "post", "pylon", "antenna", "mast", "column"], category: .object),
         Entry(label: "wire", spoken: ["wire", "wires", "fil", "fils", "cable", "cables", "cable electrique", "fils electriques", "power line", "power lines", "ligne electrique", "lignes electriques", "cord", "cordon"], classifierTerms: ["wire", "cable", "power line", "cord", "rope"], category: .object),
@@ -115,7 +122,8 @@ public enum ObjectVocabulary {
     public static let fillerWords: Set<String> = [
         "the", "a", "an", "this", "that", "these", "those", "le", "la", "les", "l", "un", "une", "des", "du", "de", "d", "ce", "cet", "cette",
         "ces", "mon", "ma", "mes", "my", "sur", "on", "dans", "in", "de", "of", "photo", "image", "picture", "video", "frame", "there", "here",
-        "la bas", "ici", "please", "s il te plait", "s il vous plait", "stp", "svp", "please", "qui", "est", "which", "is", "who", "y", "il",
+        "la bas", "ici", "please", "s il te plait", "s il vous plait", "stp", "svp", "qui", "est", "which", "is", "who", "y", "il", "s", "te", "vous",
+        "plait", "merci", "thanks", "thank", "you", "tu", "peux", "pouvez", "can", "could", "would", "like", "want", "veux", "voudrais", "je", "i", "d",
     ]
 
     /// Colour and material adjectives that describe (not identify) a target.
@@ -188,6 +196,8 @@ public enum ParameterVocabulary {
         ("noise reduction", .noiseReduction, 0), ("reduction du bruit", .noiseReduction, 0), ("denoise", .noiseReduction, 1), ("noise", .noiseReduction, 0),
         ("bruit", .noiseReduction, 0), ("noisy", .noiseReduction, 1), ("bruitee", .noiseReduction, 1), ("bruite", .noiseReduction, 1), ("grainy", .noiseReduction, 1),
         ("remove the noise", .noiseReduction, 1), ("enleve le bruit", .noiseReduction, 1), ("reduis le bruit", .noiseReduction, 1), ("reduce the noise", .noiseReduction, 1),
+        ("bluer", .saturation, 1), ("plus bleu", .saturation, 1), ("plus bleue", .saturation, 1), ("greener", .saturation, 1), ("plus verte", .saturation, 1),
+        ("more blue", .saturation, 1), ("more green", .saturation, 1), ("plus de bleu", .saturation, 1), ("plus de vert", .saturation, 1), ("whiter", .brightness, 1), ("plus blanc", .brightness, 1), ("plus blanches", .brightness, 1), ("plus blancs", .brightness, 1),
         // Effects
         ("vignette", .vignette, 0), ("vignettage", .vignette, 0), ("vignetting", .vignette, 0), ("dark corners", .vignette, 0), ("coins sombres", .vignette, 0),
         ("grain", .grain, 0), ("film grain", .grain, 0), ("grain argentique", .grain, 0), ("matte", .fade, 0), ("mat", .fade, 0), ("faded", .fade, 1),

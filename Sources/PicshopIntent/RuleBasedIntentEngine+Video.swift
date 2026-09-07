@@ -19,13 +19,13 @@ extension RuleBasedIntentEngine {
         }
 
         // Seek.
-        if u.contains(["go to", "goto", "jump to", "skip to", "va a", "vas a", "aller a", "saute a", "avance a", "place toi a", "positionne toi a", "mets toi a", "seek to", "at the beginning", "at the start", "to the beginning", "to the start", "au debut", "to the end", "at the end", "a la fin", "beginning of the video", "start of the video", "debut de la video", "fin de la video", "rewind to", "reviens au debut", "retourne au debut", "back to the start", "back to the beginning", "avance de", "recule de", "skip forward", "skip back", "go forward", "go back by", "forward", "backward", "rewind"]) && !u.contains(["transition", "text", "texte", "musique", "music", "clip", "cut", "coupe", "split", "trim", "delete", "supprime", "efface", "enleve", "remove", "rotate", "tourne", "crop", "recadre"]) {
+        if u.contains(["go to", "goto", "jump to", "skip to", "va a", "vas a", "aller a", "saute a", "avance a", "place toi a", "positionne toi a", "mets toi a", "seek to", "at the beginning", "at the start", "to the beginning", "to the start", "au debut", "to the end", "at the end", "a la fin", "beginning of the video", "start of the video", "debut de la video", "fin de la video", "rewind to", "reviens au debut", "retourne au debut", "back to the start", "back to the beginning", "avance de", "recule de", "recule", "skip forward", "skip back", "go forward", "go back by", "go back", "forward", "backward", "rewind"]) && !u.contains(["transition", "text", "texte", "musique", "music", "clip", "cut", "coupe", "split", "trim", "delete", "supprime", "efface", "enleve", "remove", "rotate", "tourne", "crop", "recadre"]) {
             if u.contains(["beginning", "start", "debut", "commencement"]) { return [EditIntent(action: .seek, time: 0)] }
             if u.contains(["end", "fin", "bout"]) { return [EditIntent(action: .seek, time: duration)] }
             if u.contains(["avance de", "skip forward", "go forward", "forward", "fast forward", "saute"]), let delta = times.first {
                 return [EditIntent(action: .seek, time: min(duration, playhead + delta))]
             }
-            if u.contains(["recule de", "skip back", "go back by", "back", "backward", "rewind"]), let delta = times.first {
+            if u.contains(["recule de", "recule", "skip back", "go back by", "go back", "back", "backward", "rewind"]), let delta = times.first {
                 return [EditIntent(action: .seek, time: max(0, playhead - delta))]
             }
             if let time = times.first { return [EditIntent(action: .seek, time: min(max(0, time), duration))] }
@@ -63,10 +63,10 @@ extension RuleBasedIntentEngine {
                 let cleaned = rest.split(separator: " ").filter { !ObjectVocabulary.fillerWords.contains(String($0)) && !["genre", "type", "style", "kind", "of", "de", "d"].contains(String($0)) }.joined(separator: " ")
                 intent.text = cleaned.isEmpty ? nil : cleaned
             }
-            if u.contains(["volume", "louder", "quieter", "plus fort", "moins fort"]) {
+            if u.contains(["volume", "louder", "quieter", "plus fort", "plus forte", "moins fort", "moins forte", "baisse", "monte", "lower", "softer", "turn down", "turn up", "plus bas", "plus doucement", "moins forte"]) {
                 intent.action = .setVolume
                 intent.scope = .selection
-                intent.amount = .relative(u.contains(["louder", "plus fort", "up", "monte"]) ? 0.25 : -0.25)
+                intent.amount = .relative(u.contains(["louder", "plus fort", "plus forte", "up", "monte", "turn up"]) ? 0.25 : -0.25)
             }
             return [intent]
         }
@@ -86,7 +86,7 @@ extension RuleBasedIntentEngine {
         }
 
         // Frame extraction.
-        if u.contains(["extract the frame", "extract frame", "extract this frame", "save this frame", "save the frame", "screenshot", "capture d ecran", "capture", "capture l image", "extrais l image", "extrais cette image", "enregistre cette image", "enregistre l image", "photo de cette image", "prends une photo", "take a photo", "take a picture", "grab this frame", "grab the frame", "freeze this as a photo", "export this frame", "exporte cette image", "exporte l image", "still", "still image", "image fixe"]) {
+        if u.contains(["extract the frame", "extract frame", "extract this frame", "save this frame", "save the frame", "save this image", "save the image", "screenshot", "capture d ecran", "capture", "capture l image", "capture cette image", "extrais l image", "extrais cette image", "enregistre cette image", "enregistre l image", "sauvegarde cette image", "sauvegarde l image", "garde cette image", "photo de cette image", "prends une photo", "take a photo", "take a picture", "grab this frame", "grab the frame", "freeze this as a photo", "export this frame", "exporte cette image", "exporte l image", "still", "still image", "image fixe"]) {
             return [EditIntent(action: .extractFrame, time: times.first ?? playhead)]
         }
 
@@ -141,7 +141,8 @@ extension RuleBasedIntentEngine {
             if u.contains(["cut out", "cut the", "coupe le", "coupe la", "coupe les"]), let target = remainder(of: u, after: ["cut out", "cut the", "coupe le", "coupe la", "coupe les"]), let object = makeTarget(from: target, context: context), object.label != "object", !NormalizedUtterance(target).contains(Self.clipWords + ["video", "film"]) {
                 return [EditIntent(action: .removeObject, target: object, confidence: 0.8)]
             }
-            let time = times.first ?? (NumberWords.firstNumber(in: u.tokens).map { $0.value } ?? playhead)
+            let halves = u.contains(["en deux", "in two", "in half", "en deux parties", "au milieu", "in the middle"])
+            let time = halves ? playhead : (times.first ?? (NumberWords.firstNumber(in: u.tokens).map { $0.value } ?? playhead))
             return [EditIntent(action: .split, time: min(max(0, time), duration))]
         }
 

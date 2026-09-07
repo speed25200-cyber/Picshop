@@ -131,6 +131,11 @@ public enum TimeExpressions {
             if parts.count == 2 { return (parts[0] * 60 + parts[1], 1) }
             if parts.count == 3 { return (parts[0] * 3600 + parts[1] * 60 + parts[2], 1) }
         }
+        // "the first second", "a second", "une minute" → quantity 1.
+        if (adjectiveWords.contains(token) || ["a", "an", "un", "une"].contains(token)), index + 1 < tokens.count,
+           secondWords.contains(tokens[index + 1]) || minuteWords.contains(tokens[index + 1]) {
+            return (minuteWords.contains(tokens[index + 1]) ? 60 : 1, 2)
+        }
         guard let number = NumberWords.parse(tokens, at: index) else { return nil }
         var seconds = 0.0
         var consumed = number.consumed

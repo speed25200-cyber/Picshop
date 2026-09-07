@@ -126,7 +126,7 @@ public struct NormalizedUtterance: Sendable {
 public enum UtteranceSegmenter {
     /// Phrases that contain a conjunction but must not be split.
     static let protectedPhrases: [String] = [
-        "noir et blanc", "black and white", "teal and orange", "teal et orange", "rock and roll", "light and airy", "bright and clean",
+        "noir et blanc", "black and white", "teal and orange", "teal et orange", "rock and roll", "light and airy", "bright and clean", "avant apres", "before and after", "before after", "avant et apres",
         "and then", "et ensuite", "et puis", "et apres", "and after that", "et aussi", "and also", "et en plus",
     ]
 

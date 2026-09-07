@@ -213,7 +213,8 @@ public struct RuleBasedIntentEngine: IntentEngine {
         if u.contains(["help", "aide", "aide moi", "what can you do", "que peux tu faire", "qu est ce que tu sais faire", "commandes", "commands", "what can i say", "que puis je dire"]) {
             return EditIntent(action: .help)
         }
-        if u.contains(["undo", "annule", "annuler", "annule ca", "reviens en arriere", "retour en arriere", "go back", "oops", "undo that", "undo the last", "annule la derniere", "non pas ca", "pas ca", "revert that", "annule le dernier"]) && !u.contains(["annule tout", "undo everything", "undo all"]) {
+        let hasTime = TimeExpressions.firstTime(in: u.tokens, frameRate: context.frameRate) != nil
+        if u.contains(["undo", "annule", "annuler", "annule ca", "reviens en arriere", "revenir en arriere", "retourne en arriere", "retour en arriere", "go back", "oops", "undo that", "undo the last", "annule la derniere", "non pas ca", "pas ca", "revert that", "annule le dernier", "step back"]) && !u.contains(["annule tout", "undo everything", "undo all"]) && !(context.mode == .video && hasTime) {
             return EditIntent(action: .undo)
         }
         if u.contains(["redo", "retablis", "retablir", "refais", "refaire", "redo that", "remets ce que", "restore that"]) {
@@ -224,7 +225,7 @@ public struct RuleBasedIntentEngine: IntentEngine {
                        "supprime toutes les modifications", "enleve tous les reglages", "reset the photo", "reset the image", "reset the video", "reinitialise", "reinitialiser", "version originale", "original version", "restore the original"]) {
             return EditIntent(action: .revert)
         }
-        if u.contains(["compare", "comparer", "avant apres", "before and after", "before after", "show the original", "montre l original", "show me the original", "montre moi l original", "show before", "montre avant", "voir l original", "see the original"]) {
+        if u.contains(["compare", "comparer", "avant apres", "avant et apres", "before and after", "before after", "show the original", "montre l original", "show me the original", "montre moi l original", "show before", "montre avant", "montre moi avant", "show me before", "voir l original", "see the original", "avant", "before"]) && u.tokens.count <= 5 {
             return EditIntent(action: .compare)
         }
         if u.contains(["export", "exporte", "exporter", "save", "sauvegarde", "sauvegarder", "enregistre", "enregistrer", "download", "telecharge", "save it", "save the photo", "save the video", "enregistre la photo", "enregistre la video", "save to photos", "save to camera roll", "enregistre dans photos"]) && !u.contains(["frame", "image", "capture"]) {
@@ -261,6 +262,9 @@ public struct RuleBasedIntentEngine: IntentEngine {
     // MARK: - Background
 
     func parseBackground(_ u: NormalizedUtterance) -> EditIntent? {
+        if u.contains(["everything except", "everything but", "all but", "tout sauf", "tout le monde sauf", "everyone except", "everyone but", "apart from", "a part"]) && (u.contains(Self.removeVerbs) || u.contains(["keep", "garde", "only", "seulement"])) {
+            return EditIntent(action: .removeBackground, background: .transparent, confidence: 0.85)
+        }
         let mentionsBackground = u.contains(Self.backgroundWords)
         // Blur / portrait effect.
         if u.contains(["blur the background", "blur background", "blurred background", "floute le fond", "floute l arriere plan", "flouter le fond", "flouter l arriere plan", "fond flou", "arriere plan flou", "portrait mode", "mode portrait", "effet portrait", "portrait effect", "bokeh", "depth effect", "effet de profondeur", "profondeur de champ", "depth of field", "background blur", "flou d arriere plan", "flou de fond"])
@@ -320,6 +324,13 @@ public struct RuleBasedIntentEngine: IntentEngine {
     // MARK: - Object removal
 
     func parseRemoveObject(_ u: NormalizedUtterance, context: IntentContext) -> EditIntent? {
+        // "make him disappear" / "fais disparaître le chien" / "je ne veux plus voir la voiture"
+        if u.contains(["disappear", "disparaitre", "vanish", "gone"]), let start = remainder(of: u, after: ["make", "fais", "fait", "faire", "rends"]) {
+            let phrase = start.replacingOccurrences(of: " disappear", with: "").replacingOccurrences(of: "disparaitre ", with: "").replacingOccurrences(of: " vanish", with: "").replacingOccurrences(of: " gone", with: "")
+            if let target = makeTarget(from: phrase, context: context) {
+                return EditIntent(action: .removeObject, target: target, confidence: ObjectVocabulary.entry(forLabel: target.label) != nil ? 0.9 : 0.65)
+            }
+        }
         guard let rest = remainder(of: u, after: Self.removeVerbs) else {
             // "sans le chien" / "without the dog" / "je ne veux pas du chien"
             if let rest = remainder(of: u, after: ["sans", "without", "je ne veux pas", "je veux pas", "i don t want", "i do not want", "dont want", "don t want"]),
@@ -640,6 +651,21 @@ public struct RuleBasedIntentEngine: IntentEngine {
         let magnitude = AmountParser.magnitude(in: outsideUtterance)
         let current = context.currentAdjustments[parameter]
 
+        // Selective adjustments: "make the sky bluer", "éclaircis le visage", "blur the background" is handled earlier.
+        var selectiveTarget: ObjectTarget?
+        let nouns = outside.filter { !ObjectVocabulary.fillerWords.contains($0) && !AmountParser.slightWords.contains($0) && !AmountParser.strongWords.contains($0) }
+        if let match = ObjectVocabulary.match(nouns.joined(separator: " ")), [.region, .person, .animal, .nature, .object, .vehicle, .furniture].contains(match.entry.category),
+           !["object"].contains(match.entry.label), !u.contains(["photo", "image", "picture", "la photo", "l image", "the photo", "the picture", "whole", "entire", "toute"]) || match.entry.category == .region {
+            selectiveTarget = ObjectTarget(label: match.entry.label, originalPhrase: match.matchedForm)
+        }
+        func finish(_ intent: EditIntent) -> EditIntent {
+            guard let selectiveTarget else { return intent }
+            var copy = intent
+            copy.action = .selectiveAdjust
+            copy.target = selectiveTarget
+            return copy
+        }
+
         // Reset.
         if outsideUtterance.contains(AmountParser.resetWords) {
             return EditIntent(action: .adjust, parameter: parameter, amount: .absolute(0))
@@ -659,12 +685,16 @@ public struct RuleBasedIntentEngine: IntentEngine {
         if tooMuch {
             direction = direction == 0 ? -1 : (sign == 0 ? -direction : direction)
         }
+        // "too much noise" / "less noise" ask for MORE noise reduction.
+        if parameter == .noiseReduction, !match.matchedPhrase.contains("reduction"), !match.matchedPhrase.contains("denoise") {
+            direction = 1
+        }
         if direction == 0 { direction = 1 }
 
         // Maximum / minimum.
         if outsideUtterance.contains(AmountParser.maxWords) {
             let bound = direction >= 0 ? parameter.range.upperBound : parameter.range.lowerBound
-            return EditIntent(action: .adjust, parameter: parameter, amount: .absolute(bound))
+            return finish(EditIntent(action: .adjust, parameter: parameter, amount: .absolute(bound)))
         }
 
         // Explicit number: absolute when preceded by "to"/"à"/"at"/"set", otherwise relative.
@@ -672,10 +702,10 @@ public struct RuleBasedIntentEngine: IntentEngine {
             let absolute = magnitude.isAbsolute || outsideUtterance.contains(AmountParser.setVerbs)
             if absolute {
                 let signed = magnitude.hasExplicitNegative ? -abs(number) : (direction < 0 && !magnitude.hasExplicitPositive && sign == 0 && match.impliedDirection == 0 ? -abs(number) : number)
-                return EditIntent(action: .adjust, parameter: parameter, amount: .absolute(signed))
+                return finish(EditIntent(action: .adjust, parameter: parameter, amount: .absolute(signed)))
             }
             let delta = abs(number) * Double(direction)
-            return EditIntent(action: .adjust, parameter: parameter, amount: .relative(magnitude.hasExplicitNegative ? -abs(number) : delta))
+            return finish(EditIntent(action: .adjust, parameter: parameter, amount: .relative(magnitude.hasExplicitNegative ? -abs(number) : delta)))
         }
 
         var step = parameter.defaultStep + 0.05
@@ -685,9 +715,9 @@ public struct RuleBasedIntentEngine: IntentEngine {
         case .none: break
         }
         // Unipolar parameters at zero cannot go negative: nudge them up unless the user asked for less.
-        if !parameter.isBipolar, direction < 0, current <= 0 {
+        if !parameter.isBipolar, direction < 0, current <= 0, selectiveTarget == nil {
             return EditIntent(action: .adjust, parameter: parameter, amount: .absolute(0), confidence: 0.8)
         }
-        return EditIntent(action: .adjust, parameter: parameter, amount: .relative(step * Double(direction)))
+        return finish(EditIntent(action: .adjust, parameter: parameter, amount: .relative(step * Double(direction))))
     }
 }
