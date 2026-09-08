@@ -86,10 +86,12 @@ public struct SettingsView: View {
                     }
                 }
             }
-            Toggle(L("Download large models automatically"), isOn: Binding(get: { app.settings.autoInstallsModels }, set: { value in
-                app.settings.autoInstallsModels = value
-                if value { Task { await app.autoInstallModels() } }
-            }))
+            SettingsRow(systemName: "arrow.down.circle.fill", tint: PSTheme.accent) {
+                Toggle(L("Download large models automatically"), isOn: Binding(get: { app.settings.autoInstallsModels }, set: { value in
+                    app.settings.autoInstallsModels = value
+                    if value { Task { await app.autoInstallModels() } }
+                }))
+            }
         } header: {
             Text(L("On-device models"))
         } footer: {
@@ -174,13 +176,15 @@ public struct SettingsView: View {
                 Text("\(Int(app.performance.previewLongestSide)) px").font(PSFont.mono(11)).foregroundStyle(PSTheme.textTertiary)
             }
             .animation(PSMotion.quick, value: app.performance.tier)
-            Picker(L("Rendering"), selection: Binding(get: { app.settings.performancePreference }, set: { value in
-                app.settings.performancePreference = value
-                app.applyPerformanceSettings()
-            })) {
-                Text(L("Automatic")).tag(PerformanceGovernor.Preference.automatic)
-                Text(L("Best quality")).tag(PerformanceGovernor.Preference.quality)
-                Text(L("Cool & battery")).tag(PerformanceGovernor.Preference.efficiency)
+            SettingsRow(systemName: "gauge.with.dots.needle.67percent", tint: PSTheme.warning) {
+                Picker(L("Rendering"), selection: Binding(get: { app.settings.performancePreference }, set: { value in
+                    app.settings.performancePreference = value
+                    app.applyPerformanceSettings()
+                })) {
+                    Text(L("Automatic")).tag(PerformanceGovernor.Preference.automatic)
+                    Text(L("Best quality")).tag(PerformanceGovernor.Preference.quality)
+                    Text(L("Cool & battery")).tag(PerformanceGovernor.Preference.efficiency)
+                }
             }
         } header: {
             Text(L("Performance"))
@@ -201,29 +205,41 @@ public struct SettingsView: View {
     @ViewBuilder
     private func voiceSection(_ app: AppEnvironment) -> some View {
         Section(L("Voice")) {
-            Picker(L("Activation"), selection: Binding(get: { app.settings.voiceMode }, set: { app.settings.voiceMode = $0; app.applyVoiceSettings() })) {
-                Text(L("Tap to talk")).tag(VoiceController.Mode.tapToTalk)
-                Text(L("Hold to talk")).tag(VoiceController.Mode.pushToTalk)
-                Text(L("Hands-free")).tag(VoiceController.Mode.handsFree)
+            SettingsRow(systemName: "mic.fill", tint: PSTheme.voice) {
+                Picker(L("Activation"), selection: Binding(get: { app.settings.voiceMode }, set: { app.settings.voiceMode = $0; app.applyVoiceSettings() })) {
+                    Text(L("Tap to talk")).tag(VoiceController.Mode.tapToTalk)
+                    Text(L("Hold to talk")).tag(VoiceController.Mode.pushToTalk)
+                    Text(L("Hands-free")).tag(VoiceController.Mode.handsFree)
+                }
             }
-            Picker(L("Language"), selection: Binding(get: { app.settings.voiceLanguage }, set: { app.settings.voiceLanguage = $0; app.applyVoiceSettings() })) {
-                Text(L("Automatic")).tag("auto")
-                Text("Français").tag("fr")
-                Text("English").tag("en")
+            SettingsRow(systemName: "globe", tint: PSTheme.success) {
+                Picker(L("Language"), selection: Binding(get: { app.settings.voiceLanguage }, set: { app.settings.voiceLanguage = $0; app.applyVoiceSettings() })) {
+                    Text(L("Automatic")).tag("auto")
+                    Text("Français").tag("fr")
+                    Text("English").tag("en")
+                }
             }
-            Toggle(L("Speak replies"), isOn: Binding(get: { app.settings.speaksReplies }, set: { app.settings.speaksReplies = $0 }))
-            Toggle(L("Haptics"), isOn: Binding(get: { app.settings.hapticsEnabled }, set: { app.settings.hapticsEnabled = $0 }))
+            SettingsRow(systemName: "speaker.wave.2.fill", tint: PSTheme.voice) {
+                Toggle(L("Speak replies"), isOn: Binding(get: { app.settings.speaksReplies }, set: { app.settings.speaksReplies = $0 }))
+            }
+            SettingsRow(systemName: "hand.tap.fill", tint: PSTheme.danger) {
+                Toggle(L("Haptics"), isOn: Binding(get: { app.settings.hapticsEnabled }, set: { app.settings.hapticsEnabled = $0 }))
+            }
         }
     }
 
     @ViewBuilder
     private func exportSection(_ app: AppEnvironment) -> some View {
         Section(L("Export defaults")) {
-            Picker(L("Photo format"), selection: Binding(get: { app.settings.photoExportFormat }, set: { app.settings.photoExportFormat = $0 })) {
-                ForEach(ExportOptions.Format.allCases) { Text($0.displayName).tag($0) }
+            SettingsRow(systemName: "photo.fill", tint: PSTheme.accent) {
+                Picker(L("Photo format"), selection: Binding(get: { app.settings.photoExportFormat }, set: { app.settings.photoExportFormat = $0 })) {
+                    ForEach(ExportOptions.Format.allCases) { Text($0.displayName).tag($0) }
+                }
             }
-            Picker(L("Video quality"), selection: Binding(get: { app.settings.videoExportQuality }, set: { app.settings.videoExportQuality = $0 })) {
-                ForEach(VideoExportOptions.Quality.allCases) { Text($0.displayName).tag($0) }
+            SettingsRow(systemName: "film.fill", tint: PSTheme.voice) {
+                Picker(L("Video quality"), selection: Binding(get: { app.settings.videoExportQuality }, set: { app.settings.videoExportQuality = $0 })) {
+                    ForEach(VideoExportOptions.Quality.allCases) { Text($0.displayName).tag($0) }
+                }
             }
         }
     }
@@ -235,6 +251,35 @@ public struct SettingsView: View {
                 .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
         } header: {
             Text(L("Privacy"))
+        }
+    }
+}
+
+/// Coloured squircle in front of a settings row, like the system Settings app.
+struct SettingsRowIcon: View {
+    let systemName: String
+    let tint: Color
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: 13, weight: .semibold))
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(.white)
+            .frame(width: 28, height: 28)
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(tint.gradient))
+    }
+}
+
+/// A picker or toggle with the settings icon leading it.
+struct SettingsRow<Content: View>: View {
+    let systemName: String
+    let tint: Color
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        HStack(spacing: 12) {
+            SettingsRowIcon(systemName: systemName, tint: tint)
+            content()
         }
     }
 }

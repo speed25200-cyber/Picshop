@@ -74,17 +74,25 @@ public struct OnboardingView: View {
             Haptics.tap()
             Task { await request() }
         } label: {
-            HStack {
-                Image(systemName: symbol).frame(width: 26).symbolRenderingMode(.hierarchical)
+            HStack(spacing: 12) {
+                Image(systemName: symbol)
+                    .font(.system(size: 14, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill((granted ? PSTheme.success : PSTheme.accent).gradient))
                 Text(title).font(PSFont.headline(15))
                 Spacer()
                 Image(systemName: granted ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(granted ? PSTheme.success : PSTheme.textSecondary)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(granted ? PSTheme.success : PSTheme.textTertiary)
                     .contentTransition(.symbolEffect(.replace))
+                    .symbolEffect(.bounce, value: granted)
             }
             .foregroundStyle(PSTheme.textPrimary)
-            .padding(.horizontal, 16).padding(.vertical, 12)
+            .padding(.horizontal, 14).padding(.vertical, 11)
             .psCard(cornerRadius: 18, shadow: false)
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(PSTheme.success.opacity(granted ? 0.5 : 0), lineWidth: 1))
         }
         .buttonStyle(PSPressStyle(scale: 0.98))
         .animation(PSMotion.quick, value: granted)
