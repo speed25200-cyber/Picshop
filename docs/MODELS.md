@@ -51,7 +51,7 @@ Generate the project with `xcodegen generate --spec project-pro.yml` (adds Apple
 The app target links [`mlx-swift-examples`](https://github.com/ml-explore/mlx-swift-examples) (see
 `project.yml`). `App/ProBrain/MLXIntentEngine.swift` downloads `mlx-community/Qwen3-4B-4bit` through
 the MLX hub client on first use (≈2.5 GB) and plans commands with the same JSON schema as the other
-engines. To ship without it, delete the `MLXSwiftExamples` package from `project.yml`; the file is
+engines. To ship without it, generate with `project.yml` instead of `project-pro.yml`; the file is
 compiled out automatically (`#if canImport(MLXLLM)`).
 
 Qwen3 4B in 4-bit runs comfortably in the iPhone 17 Pro's memory; the app requests the
