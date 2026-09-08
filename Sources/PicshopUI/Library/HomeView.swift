@@ -88,47 +88,59 @@ public struct HomeView: View {
     }
 
     private var heroActions: some View {
-        PSGlassContainer(spacing: 16) {
-            HStack(spacing: 14) {
-                heroButton(title: L("New Photo"), subtitle: L("Retouch, erase, restyle"), systemImage: "photo.on.rectangle.angled", tint: PSTheme.accent) {
+        PSGlassContainer(spacing: 14) {
+            VStack(spacing: 12) {
+                heroCard(title: L("New Photo"), subtitle: L("Retouch, erase, restyle"), systemImage: "photo.on.rectangle.angled", tint: PSTheme.accent, prominent: true) {
                     pickerFilter = .images
                     showsPicker = true
                 }
-                heroButton(title: L("New Video"), subtitle: L("Cut, clean up, grade"), systemImage: "film.stack", tint: PSTheme.voice) {
-                    pickerFilter = .videos
-                    showsPicker = true
-                }
-                heroButton(title: L("New PDF"), subtitle: L("Sign, mark up, reorder"), systemImage: "doc.richtext", tint: PSTheme.warning) {
-                    showsPDFPicker = true
+                HStack(spacing: 12) {
+                    heroCard(title: L("New Video"), subtitle: L("Cut, clean up, grade"), systemImage: "film.stack", tint: PSTheme.voice) {
+                        pickerFilter = .videos
+                        showsPicker = true
+                    }
+                    heroCard(title: L("New PDF"), subtitle: L("Sign, mark up, reorder"), systemImage: "doc.richtext", tint: PSTheme.warning) {
+                        showsPDFPicker = true
+                    }
                 }
             }
             .padding(.horizontal, 20)
         }
     }
 
-    private func heroButton(title: String, subtitle: String, systemImage: String, tint: Color, action: @escaping () -> Void) -> some View {
+    private func heroCard(title: String, subtitle: String, systemImage: String, tint: Color, prominent: Bool = false, action: @escaping () -> Void) -> some View {
         Button {
             Haptics.confirm()
             action()
         } label: {
-            VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 14) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 30, weight: .semibold))
-                    .foregroundStyle(tint)
-                Spacer(minLength: 8)
-                Text(title).font(PSFont.headline(18)).foregroundStyle(PSTheme.textPrimary)
-                Text(subtitle).font(PSFont.caption()).foregroundStyle(PSTheme.textSecondary)
+                    .font(.system(size: prominent ? 26 : 20, weight: .semibold))
+                    .foregroundStyle(prominent ? Color.black : tint)
+                    .frame(width: prominent ? 56 : 44, height: prominent ? 56 : 44)
+                    .background(prominent ? tint : tint.opacity(0.18), in: RoundedRectangle(cornerRadius: prominent ? 18 : 14, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(PSFont.headline(prominent ? 19 : 15)).foregroundStyle(PSTheme.textPrimary)
+                    Text(subtitle).font(PSFont.caption(prominent ? 13 : 11)).foregroundStyle(PSTheme.textSecondary).lineLimit(2)
+                }
+                Spacer(minLength: 0)
+                if prominent {
+                    Image(systemName: "chevron.right").font(.system(size: 14, weight: .bold)).foregroundStyle(PSTheme.textSecondary)
+                }
             }
-            .padding(18)
-            .frame(maxWidth: .infinity, minHeight: 150, alignment: .leading)
-            .contentShape(RoundedRectangle(cornerRadius: PSTheme.panelRadius, style: .continuous))
+            .padding(.horizontal, 16)
+            .padding(.vertical, prominent ? 18 : 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
         .buttonStyle(.plain)
-        .psGlassPanel()
+        .psGlass(interactive: true, shape: AnyShape(RoundedRectangle(cornerRadius: 24, style: .continuous)))
+        .accessibilityLabel(title)
+        .accessibilityHint(subtitle)
     }
 
     private func projectGrid(_ projects: [Project]) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 14)], spacing: 14) {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 16) {
             ForEach(projects) { project in
                 ProjectCard(project: project, thumbnail: app?.library.thumbnail(for: project))
                     .onTapGesture {
@@ -178,8 +190,10 @@ struct ProjectCard: View {
                         PSTheme.surfaceElevated
                     }
                 }
-                .frame(height: 150)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .frame(maxWidth: .infinity)
+                .aspectRatio(4 / 5, contentMode: .fill)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(PSTheme.hairline, lineWidth: 1))
                 if project.isVideo || project.isPDF {
                     Image(systemName: project.isPDF ? "doc.text.fill" : "play.fill")
                         .font(.caption.weight(.bold))
@@ -188,10 +202,11 @@ struct ProjectCard: View {
                         .padding(8)
                 }
             }
-            Text(project.title)
-                .font(PSFont.caption(13))
-                .lineLimit(1)
-                .foregroundStyle(PSTheme.textSecondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(project.title).font(PSFont.headline(13)).lineLimit(1).foregroundStyle(PSTheme.textPrimary)
+                Text(project.modifiedAt, format: .relative(presentation: .named)).font(PSFont.caption(11)).foregroundStyle(PSTheme.textSecondary)
+            }
+            .padding(.horizontal, 4)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(project.title)
