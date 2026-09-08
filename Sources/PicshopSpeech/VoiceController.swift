@@ -271,7 +271,7 @@ final class AnalyzerTranscriptionSession: TranscriptionSession, @unchecked Senda
         if let installation {
             try await installation.downloadAndInstall()
         }
-        analyzerFormat = try await SpeechTranscriber.bestAvailableAudioFormat(compatibleWith: [transcriber])
+        analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
         if let analyzerFormat, analyzerFormat != inputFormat {
             converter = AVAudioConverter(from: inputFormat, to: analyzerFormat)
         }
@@ -285,15 +285,15 @@ final class AnalyzerTranscriptionSession: TranscriptionSession, @unchecked Senda
                 for try await result in transcriber.results {
                     let text = String(result.text.characters)
                     guard let self else { return }
-                    self.lock.lock()
-                    if result.isFinal {
-                        self.finalText += (self.finalText.isEmpty ? "" : " ") + text
-                        self.latest = self.finalText
-                    } else {
-                        self.latest = self.finalText.isEmpty ? text : self.finalText + " " + text
+                    let snapshot: String = self.lock.withLock {
+                        if result.isFinal {
+                            self.finalText += (self.finalText.isEmpty ? "" : " ") + text
+                            self.latest = self.finalText
+                        } else {
+                            self.latest = self.finalText.isEmpty ? text : self.finalText + " " + text
+                        }
+                        return self.latest
                     }
-                    let snapshot = self.latest
-                    self.lock.unlock()
                     onResult(snapshot, false)
                 }
             } catch {
@@ -333,9 +333,7 @@ final class AnalyzerTranscriptionSession: TranscriptionSession, @unchecked Senda
         continuation = nil
         try await analyzer.finalizeAndFinishThroughEndOfInput()
         resultsTask?.cancel()
-        lock.lock()
-        defer { lock.unlock() }
-        return latest
+        return lock.withLock { latest }
     }
 }
 
@@ -402,11 +400,11 @@ final class LegacyTranscriptionSession: TranscriptionSession, @unchecked Sendabl
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(1.5))
                 guard let self else { return }
-                self.lock.lock()
-                let pending = self.finalContinuation
-                self.finalContinuation = nil
-                let latest = self.latest
-                self.lock.unlock()
+                let (pending, latest) = self.lock.withLock {
+                    let pending = self.finalContinuation
+                    self.finalContinuation = nil
+                    return (pending, self.latest)
+                }
                 pending?.resume(returning: latest)
             }
         }
