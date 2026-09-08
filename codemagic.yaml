@@ -2,12 +2,16 @@
 #
 # Workflows
 #   picshop-testflight  — signs with your App Store Connect API key and uploads to TestFlight.
-#                          Requirements in Codemagic (Teams → Integrations):
+#                          Requirements in Codemagic (Teams → Integrations → Developer Portal):
 #                            • an App Store Connect integration named "app_store_connect"
 #                              (API key with the App Manager role)
-#                          Requirements in App Store Connect:
-#                            • an app record with bundle ID com.picshop.app (the bundle ID and
-#                              provisioning profile are created automatically if missing).
+#                          Optional Codemagic environment variables:
+#                            • CERTIFICATE_PRIVATE_KEY — RSA key backing the distribution certificate
+#                              (a throw-away key is generated per build when absent)
+#                            • APP_STORE_APPLE_ID — numeric App Store app id for build-number lookup
+#                          The bundle ID, certificate and provisioning profile are created in the
+#                          developer portal automatically when missing. An app record with bundle ID
+#                          com.picshop.app must exist in App Store Connect for the TestFlight upload.
 #   picshop-unsigned    — build + tests + unsigned archive, no Apple credentials needed.
 definitions:
   env: &env
@@ -64,11 +68,7 @@ workflows:
     instance_type: mac_mini_m2
     integrations:
       app_store_connect: app_store_connect
-    environment:
-      <<: *env
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.picshop.app
+    environment: *env
     cache: *cache
     triggering:
       events:
@@ -85,8 +85,24 @@ workflows:
       - name: Signing files
         script: |
           set -e
-          # Creates the bundle ID / App Store profile in the developer portal when missing.
+          if [ -z "${APP_STORE_CONNECT_PRIVATE_KEY:-}" ]; then
+            echo "❌ Intégration App Store Connect introuvable."
+            echo "   Codemagic → Teams → Integrations → Developer Portal → ajouter une clé API App Store Connect"
+            echo "   (rôle App Manager) et la nommer « app_store_connect »."
+            exit 1
+          fi
+          if [ -z "${CERTIFICATE_PRIVATE_KEY:-}" ]; then
+            echo "⚠️  CERTIFICATE_PRIVATE_KEY non défini : clé éphémère générée, un nouveau certificat"
+            echo "   de distribution sera créé dans le portail développeur pour ce build."
+            echo "   Pour un certificat stable, ajoutez la variable CERTIFICATE_PRIVATE_KEY (clé RSA 2048,"
+            echo "   openssl genrsa 2048) dans Codemagic → App settings → Environment variables."
+            openssl genrsa -out "$CM_BUILD_DIR/ephemeral_cert_key.pem" 2048 2>/dev/null
+            export CERTIFICATE_PRIVATE_KEY="$(cat "$CM_BUILD_DIR/ephemeral_cert_key.pem")"
+          fi
+          keychain initialize
+          # Creates the bundle ID, the distribution certificate and the App Store profile when missing.
           app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          keychain add-certificates
           xcode-project use-profiles --project "$XCODE_PROJECT"
       - name: Build number
         script: |
