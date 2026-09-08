@@ -1,4 +1,4 @@
-#if canImport(SwiftUI) && canImport(AVKit)
+#if canImport(SwiftUI) && canImport(AVKit) && canImport(UIKit)
 import SwiftUI
 import AVKit
 import UniformTypeIdentifiers

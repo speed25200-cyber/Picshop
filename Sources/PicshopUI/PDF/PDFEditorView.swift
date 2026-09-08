@@ -1,4 +1,4 @@
-#if canImport(SwiftUI) && canImport(PDFKit)
+#if canImport(SwiftUI) && canImport(PDFKit) && canImport(UIKit)
 import SwiftUI
 import PDFKit
 import PhotosUI

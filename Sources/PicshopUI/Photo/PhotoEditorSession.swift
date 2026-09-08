@@ -1,4 +1,4 @@
-#if canImport(SwiftUI) && canImport(CoreImage)
+#if canImport(SwiftUI) && canImport(CoreImage) && canImport(UIKit)
 import SwiftUI
 import CoreImage
 import Observation

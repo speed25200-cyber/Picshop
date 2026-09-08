@@ -1,4 +1,4 @@
-#if canImport(SwiftUI) && canImport(AVFoundation)
+#if canImport(SwiftUI) && canImport(AVFoundation) && canImport(UIKit)
 import SwiftUI
 import PicshopCore
 import PicshopIntent

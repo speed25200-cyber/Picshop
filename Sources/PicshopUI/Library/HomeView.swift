@@ -1,4 +1,4 @@
-#if canImport(SwiftUI) && canImport(PhotosUI)
+#if canImport(SwiftUI) && canImport(PhotosUI) && canImport(UIKit)
 import SwiftUI
 import PhotosUI
 import PicshopCore

@@ -21,27 +21,30 @@ public enum PSLog {
 
     public static func debug(_ message: @autoclosure () -> String, category: Category = .core) {
         #if DEBUG
+        let text = message()
         #if canImport(os)
-        loggers[category]?.debug("\(message(), privacy: .public)")
+        loggers[category]?.debug("\(text, privacy: .public)")
         #else
-        print("[\(category.rawValue)] \(message())")
+        print("[\(category.rawValue)] \(text)")
         #endif
         #endif
     }
 
     public static func info(_ message: @autoclosure () -> String, category: Category = .core) {
+        let text = message()
         #if canImport(os)
-        loggers[category]?.info("\(message(), privacy: .public)")
+        loggers[category]?.info("\(text, privacy: .public)")
         #else
-        print("[\(category.rawValue)] \(message())")
+        print("[\(category.rawValue)] \(text)")
         #endif
     }
 
     public static func error(_ message: @autoclosure () -> String, category: Category = .core) {
+        let text = message()
         #if canImport(os)
-        loggers[category]?.error("\(message(), privacy: .public)")
+        loggers[category]?.error("\(text, privacy: .public)")
         #else
-        print("[\(category.rawValue)] ERROR \(message())")
+        print("[\(category.rawValue)] ERROR \(text)")
         #endif
     }
 }

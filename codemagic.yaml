@@ -39,7 +39,9 @@ definitions:
       name: Package tests
       script: |
         set -e
-        swift test --filter 'PicshopCoreTests|PicshopIntentTests|PicshopImagingTests'
+        # Build only the platform-independent modules and their tests (the UI/AV modules are iOS-only).
+        swift build --target PicshopCoreTests --target PicshopIntentTests --target PicshopImagingTests
+        swift test --skip-build --filter 'PicshopCoreTests|PicshopIntentTests|PicshopImagingTests'
     - &resolve
       name: Resolve dependencies
       script: |
