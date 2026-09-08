@@ -87,8 +87,43 @@ public enum Replies {
         case .confirm: return fr ? "OK." : "OK."
         case .cancel: return fr ? "Annulé." : "Cancelled."
         case .help: return fr ? "Dis par exemple : « efface le chien », « plus lumineux », « recadre en carré »." : "Try: “remove the dog”, “make it brighter”, “crop to square”."
+        case .describe: return fr ? "Je regarde la photo…" : "Looking at the photo…"
+        case .readPage: return fr ? "Je lis la page." : "Reading the page."
+        case .saveVersion: return fr ? "Version « \(intent.text ?? "") » enregistrée." : "Saved version “\(intent.text ?? "")”."
+        case .restoreVersion: return fr ? "Je reviens à la version « \(intent.text ?? "") »." : "Back to version “\(intent.text ?? "")”."
         case .unknown: return fr ? "Je n'ai pas compris. Tu peux reformuler ?" : "I didn't catch that. Could you rephrase?"
         }
+    }
+
+    /// Sentence for "décris la photo".
+    public static func describe(_ scene: SceneDescription, language: NormalizedUtterance.Language) -> String {
+        let fr = language == .french
+        guard !scene.isEmpty else { return fr ? "Je ne reconnais rien de précis sur cette photo." : "I can't make out anything specific in this photo." }
+        var parts: [String] = []
+        if scene.people > 0 {
+            parts.append(fr ? (scene.people == 1 ? "une personne" : "\(scene.people) personnes") : (scene.people == 1 ? "one person" : "\(scene.people) people"))
+        } else if scene.faces > 0 {
+            parts.append(fr ? (scene.faces == 1 ? "un visage" : "\(scene.faces) visages") : (scene.faces == 1 ? "a face" : "\(scene.faces) faces"))
+        }
+        let animalNames: [String: (String, String)] = ["dog": ("un chien", "a dog"), "cat": ("un chat", "a cat")]
+        for animal in scene.animals {
+            let names = animalNames[animal] ?? (fr ? "un animal" : "an animal", "an animal")
+            parts.append(fr ? names.0 : names.1)
+        }
+        if scene.hasText { parts.append(fr ? "du texte" : "some text") }
+        var sentence = ""
+        if !parts.isEmpty {
+            let list = parts.count > 1 ? parts.dropLast().joined(separator: ", ") + (fr ? " et " : " and ") + parts.last! : parts[0]
+            sentence = fr ? "Je vois \(list)." : "I see \(list)."
+        }
+        if !scene.labels.isEmpty {
+            let labels = scene.labels.prefix(3).map { fr ? ObjectVocabulary.frenchSceneLabel($0) : $0.replacingOccurrences(of: "_", with: " ") }.joined(separator: ", ")
+            sentence += (sentence.isEmpty ? "" : " ") + (fr ? "Ambiance : \(labels)." : "Scene: \(labels).")
+        }
+        if scene.brightness < 0.3 { sentence += fr ? " La photo est assez sombre." : " The photo is quite dark." }
+        else if scene.brightness > 0.8 { sentence += fr ? " La photo est très claire." : " The photo is very bright." }
+        if scene.colourfulness < 0.12 { sentence += fr ? " Les couleurs sont ternes." : " The colours are muted." }
+        return sentence
     }
 
     /// Three concrete things to try, shown when a request was not understood.

@@ -233,3 +233,22 @@ public enum ParameterVocabulary {
         return match(in: probe)?.parameter
     }
 }
+
+
+public extension ObjectVocabulary {
+    /// French names for the most common Vision scene identifiers; others come back unchanged.
+    static func frenchSceneLabel(_ identifier: String) -> String {
+        let table: [String: String] = [
+            "beach": "plage", "sea": "mer", "ocean": "océan", "sky": "ciel", "sunset": "coucher de soleil", "sunrise": "lever de soleil", "mountain": "montagne",
+            "forest": "forêt", "tree": "arbre", "flower": "fleur", "garden": "jardin", "city": "ville", "street": "rue", "building": "bâtiment", "car": "voiture",
+            "food": "nourriture", "meal": "repas", "dessert": "dessert", "coffee": "café", "restaurant": "restaurant", "kitchen": "cuisine", "room": "pièce",
+            "bedroom": "chambre", "office": "bureau", "document": "document", "screenshot": "capture d'écran", "text": "texte", "portrait": "portrait",
+            "selfie": "selfie", "wedding": "mariage", "party": "fête", "concert": "concert", "sport": "sport", "snow": "neige", "lake": "lac", "river": "rivière",
+            "night": "nuit", "indoor": "intérieur", "outdoor": "extérieur", "landscape": "paysage", "animal": "animal", "bird": "oiseau", "baby": "bébé",
+            "child": "enfant", "people": "gens", "crowd": "foule", "art": "art", "painting": "peinture", "vehicle": "véhicule", "boat": "bateau", "plane": "avion",
+            "airplane": "avion", "train": "train", "bicycle": "vélo", "motorcycle": "moto", "water": "eau", "pool": "piscine", "swimming_pool": "piscine",
+            "grass": "herbe", "field": "champ", "road": "route", "bridge": "pont", "church": "église", "castle": "château", "museum": "musée", "shop": "boutique",
+        ]
+        return table[identifier] ?? identifier.replacingOccurrences(of: "_", with: " ")
+    }
+}

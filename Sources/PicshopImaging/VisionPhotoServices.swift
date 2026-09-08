@@ -93,6 +93,44 @@ public final class VisionPhotoServices: PhotoAIServices, @unchecked Sendable {
         return try maskStore.save(bytes: bytes, width: image.width, height: image.height, source: .subject, feather: 0.004)
     }
 
+    public func describe(_ document: PhotoDocument) async throws -> SceneDescription {
+        let image = try await analysisImage(for: document)
+        let detector = Detector(image: image, maskStore: maskStore, embedding: embedding)
+        var scene = SceneDescription()
+        let handler = VNImageRequestHandler(cgImage: image, orientation: .up, options: [:])
+        let humans = VNDetectHumanRectanglesRequest()
+        humans.upperBodyOnly = true
+        let animals = VNRecognizeAnimalsRequest()
+        let classify = VNClassifyImageRequest()
+        try? handler.perform([humans, animals, classify])
+        scene.people = (humans.results ?? []).filter { $0.confidence > 0.5 }.count
+        if scene.people == 0 { scene.faces = (try? detector.faces().count) ?? 0 }
+        scene.animals = (animals.results ?? []).compactMap { observation in
+            observation.labels.max(by: { $0.confidence < $1.confidence }).flatMap { $0.confidence > 0.5 ? $0.identifier.lowercased() : nil }
+        }
+        let generic: Set<String> = ["structure", "material", "object", "outdoor", "indoor", "adult", "person", "people", "human", "face", "clothing", "furniture", "equipment", "device", "plant"]
+        scene.labels = (classify.results ?? [])
+            .filter { $0.confidence > 0.35 && !generic.contains($0.identifier.lowercased()) }
+            .sorted { $0.confidence > $1.confidence }
+            .prefix(4)
+            .map { $0.identifier.lowercased() }
+        scene.hasText = ((try? detector.text()) ?? []).contains { $0.boundingBox.width * $0.boundingBox.height > 0.004 }
+        // Exposure and colourfulness from a coarse sample.
+        let small = ImageSupport.resized(image, to: CGSize(width: 64, height: 64)) ?? image
+        let bytes = ImageSupport.rgbaBytes(from: small)
+        var luminance = 0.0, saturation = 0.0
+        let count = max(1, small.width * small.height)
+        for pixel in 0..<count {
+            let r = Double(bytes[pixel * 4]) / 255, g = Double(bytes[pixel * 4 + 1]) / 255, b = Double(bytes[pixel * 4 + 2]) / 255
+            luminance += 0.2126 * r + 0.7152 * g + 0.0722 * b
+            let maxC = max(r, g, b), minC = min(r, g, b)
+            saturation += maxC > 0 ? (maxC - minC) / maxC : 0
+        }
+        scene.brightness = luminance / Double(count)
+        scene.colourfulness = saturation / Double(count)
+        return scene
+    }
+
     public func horizonAngle(in document: PhotoDocument) async throws -> Double? {
         let image = try await analysisImage(for: document)
         let request = VNDetectHorizonRequest()

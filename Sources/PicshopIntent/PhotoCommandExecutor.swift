@@ -286,6 +286,16 @@ public struct PhotoCommandExecutor: Sendable {
         case .revert: return (document, .effect(.revert, label: ""))
         case .compare: return (document, .effect(.compare, label: ""))
         case .zoom: return (document, .effect(.zoom(intent.amount, intent.target), label: ""))
+        case .describe:
+            do {
+                let scene = try await services.describe(document)
+                let sentence = Replies.describe(scene, language: language)
+                return (document, ExecutionResult(outcome: .info(message: sentence), effects: [.message("speak:" + sentence)]))
+            } catch {
+                return (document, .failed(errorMessage(error)))
+            }
+        case .saveVersion: return (document, .effect(.message("version:save:" + (intent.text ?? "")), label: ""))
+        case .restoreVersion: return (document, .effect(.message("version:restore:" + (intent.text ?? "")), label: ""))
         case .export: return (document, .effect(.export, label: ""))
         case .share: return (document, .effect(.share, label: ""))
         case .help: return (document, .effect(.help, label: ""))

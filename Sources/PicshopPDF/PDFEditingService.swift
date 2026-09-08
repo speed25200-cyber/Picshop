@@ -136,6 +136,14 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
         return WordHit(text: word.text, rect: word.baseRect, background: word.background)
     }
 
+    /// The words of a page in reading order: the text layer, or OCR for scans.
+    public func pageText(pageIndex: Int, in model: PDFDocumentModel) -> String {
+        guard let composed = compose(model), let page = composed.page(at: pageIndex), model.pages.indices.contains(pageIndex) else { return "" }
+        if let string = page.string?.trimmingCharacters(in: .whitespacesAndNewlines), !string.isEmpty { return string }
+        let text = recognizer.text(for: page, key: ocrKey(for: model, pageIndex: pageIndex))
+        return text.lines.map { $0.map(\.text).joined(separator: " ") }.joined(separator: "\n")
+    }
+
     /// Whether the page has recognisable text at all (text layer or OCR).
     public func hasText(pageIndex: Int, in model: PDFDocumentModel) -> Bool {
         guard let composed = compose(model), let page = composed.page(at: pageIndex) else { return false }

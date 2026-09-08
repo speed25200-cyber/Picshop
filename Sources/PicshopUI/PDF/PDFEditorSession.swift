@@ -348,11 +348,67 @@ public final class PDFEditorSession {
                 else if message == "merge" { showsMergePicker = true }
                 else if message == "image" { showsImagePicker = true }
                 else if message.hasPrefix("find:") { searchQuery = String(message.dropFirst(5)) }
+                else if message.hasPrefix("version:") { handleVersionEffect(message) }
+                else if message.hasPrefix("read:"), let index = Int(message.dropFirst(5)) { readPage(index) }
             case .cancel: pendingClarification = nil
             default: break
             }
         }
         return result.outcome
+    }
+
+    // MARK: Reading aloud
+
+    /// Speaks the page (text layer or OCR), a few hundred words at most.
+    public func readPage(_ index: Int) {
+        let services = self.services
+        let document = self.document
+        let french = language == .french
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let text = services.pageText(pageIndex: index, in: document)
+            await MainActor.run {
+                guard let self else { return }
+                guard !text.isEmpty else {
+                    self.showToast(french ? "Je ne trouve pas de texte sur cette page." : "I can't find any text on this page.", isError: true)
+                    return
+                }
+                let words = text.split(whereSeparator: { $0.isWhitespace })
+                let spoken = words.prefix(400).joined(separator: " ")
+                VoiceFeedback.shared.speak(spoken, language: french ? "fr" : "en", force: true)
+                self.showToast(words.count > 400 ? (french ? "Je lis le début de la page." : "Reading the start of the page.") : (french ? "Je lis la page." : "Reading the page."))
+            }
+        }
+    }
+
+    // MARK: - Named versions
+
+    /// Snapshots the user named by voice ("enregistre cette version sous brouillon").
+    public private(set) var versions: [(name: String, state: PDFDocumentModel)] = []
+
+    func handleVersionEffect(_ message: String) {
+        let parts = message.split(separator: ":", maxSplits: 2).map(String.init)
+        guard parts.count >= 2 else { return }
+        let requested = parts.count > 2 ? parts[2].trimmingCharacters(in: .whitespaces) : ""
+        if parts[1] == "save" {
+            let name = requested.isEmpty ? "v\(versions.count + 1)" : requested
+            versions.removeAll { $0.name.lowercased() == name.lowercased() }
+            versions.append((name, document))
+            showToast(String(format: L("Version “%@” saved"), name))
+            Haptics.success()
+        } else if parts[1] == "restore" {
+            let match = requested.isEmpty ? versions.last : versions.last { $0.name.lowercased() == requested.lowercased() } ?? versions.last { $0.name.lowercased().contains(requested.lowercased()) }
+            guard let match else {
+                showToast(versions.isEmpty ? L("No saved version yet. Say “save this version as …”.") : String(format: L("No version named “%@”"), requested), isError: true)
+                return
+            }
+            restoreVersion(match.state, label: String(format: L("Version “%@”"), match.name))
+        }
+    }
+
+    private func restoreVersion(_ state: PDFDocumentModel, label: String) {
+        update(label) { $0 = state }
+        showToast(label)
+        Haptics.success()
     }
 
     // MARK: Export

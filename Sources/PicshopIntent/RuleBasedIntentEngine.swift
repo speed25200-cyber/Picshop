@@ -55,7 +55,9 @@ public struct RuleBasedIntentEngine: IntentEngine {
     // MARK: - Segment dispatch
 
     func parseSegment(_ u: NormalizedUtterance, original: String, context: IntentContext) -> [EditIntent] {
+        if let version = parseVersion(u, original: original) { return [version] }
         if let meta = parseMeta(u, context: context) { return [meta] }
+        if context.mode == .photo, let describe = parseDescribe(u) { return [describe] }
         if context.mode == .pdf { return parsePDF(u, original: original, context: context) }
         if context.mode == .video, let video = parseVideo(u, context: context) { return video }
         if context.mode == .photo, let generative = parseGenerative(u, original: original, context: context) { return [generative] }
@@ -475,6 +477,42 @@ public struct RuleBasedIntentEngine: IntentEngine {
         if magnitude.qualifier == .slight { intensity = 0.5 }
         if magnitude.qualifier == .strong { intensity = 1 }
         return EditIntent(action: .applyLook, amount: .absolute(intensity), look: resolved, confidence: 0.9)
+    }
+
+    // MARK: - Versions & description
+
+    static let saveVersionPhrases = ["enregistre cette version", "sauvegarde cette version", "garde cette version", "conserve cette version", "enregistre la version", "sauvegarde la version", "nomme cette version", "appelle cette version", "marque cette version", "cree une version", "nouvelle version",
+                                     "save this version", "save the version", "save version", "save a version", "name this version", "call this version", "bookmark this version", "snapshot", "create a version", "new version"]
+    static let restoreVersionPhrases = ["reviens a la version", "retourne a la version", "restaure la version", "reprends la version", "charge la version", "remets la version", "recharge la version", "passe a la version", "montre la version", "ouvre la version",
+                                        "go back to version", "go back to the version", "restore version", "restore the version", "load version", "load the version", "switch to version", "back to version", "show version", "open version", "revert to version"]
+
+    /// "enregistre cette version sous brouillon" / "reviens à la version brouillon".
+    func parseVersion(_ u: NormalizedUtterance, original: String) -> EditIntent? {
+        let fillers: Set<String> = ["sous", "as", "comme", "nommee", "nommé", "named", "called", "appelee", "le", "la", "the", "nom", "name", "en", "in", "de", "of", "a", "to"]
+        func name(after phrases: [String]) -> String {
+            if let quoted = extractQuoted(from: original) { return quoted }
+            var words = remainder(of: u, after: phrases)?.split(separator: " ").map(String.init) ?? []
+            while let first = words.first, fillers.contains(first) { words.removeFirst() }
+            let joined = words.joined(separator: " ")
+            return originalSubstring(matching: joined, in: original) ?? joined
+        }
+        if u.contains(Self.restoreVersionPhrases) {
+            let value = name(after: Self.restoreVersionPhrases)
+            return EditIntent(action: .restoreVersion, text: value.isEmpty ? nil : value, confidence: value.isEmpty ? 0.6 : 1)
+        }
+        if u.contains(Self.saveVersionPhrases) {
+            let value = name(after: Self.saveVersionPhrases)
+            return EditIntent(action: .saveVersion, text: value.isEmpty ? nil : value)
+        }
+        return nil
+    }
+
+    /// "décris la photo", "qu'est-ce qu'il y a sur cette image", "what do you see".
+    func parseDescribe(_ u: NormalizedUtterance) -> EditIntent? {
+        let phrases = ["decris", "decris moi", "decrire", "description", "qu est ce qu il y a", "qu y a t il", "que vois tu", "qu est ce que tu vois", "tu vois quoi", "c est quoi cette photo", "c est quoi cette image", "qu est ce que c est", "raconte moi la photo", "analyse la photo", "analyse l image",
+                       "describe", "what s in", "what is in", "what do you see", "what can you see", "what s this", "what is this", "what s on", "what is on", "tell me about", "analyse the photo", "analyze the photo", "analyze this", "analyse this"]
+        guard u.contains(phrases), !u.contains(Self.removeVerbs) else { return nil }
+        return EditIntent(action: .describe)
     }
 
     // MARK: - Crop

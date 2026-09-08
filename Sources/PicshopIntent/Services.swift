@@ -14,6 +14,39 @@ public protocol PhotoAIServices: Sendable {
     func horizonAngle(in document: PhotoDocument) async throws -> Double?
     /// Rectangle (normalised) tightly framing the target, for "crop to the face".
     func framingRect(for target: ObjectTarget, in document: PhotoDocument) async throws -> PSRect?
+    /// What the photo shows, for "décris la photo".
+    func describe(_ document: PhotoDocument) async throws -> SceneDescription
+}
+
+public extension PhotoAIServices {
+    func describe(_ document: PhotoDocument) async throws -> SceneDescription { SceneDescription() }
+}
+
+/// Facts about a photo, assembled into a sentence by the executor.
+public struct SceneDescription: Sendable, Equatable {
+    public var people: Int
+    public var faces: Int
+    /// English animal identifiers ("dog", "cat").
+    public var animals: [String]
+    /// English scene labels, most confident first ("beach", "sunset").
+    public var labels: [String]
+    public var hasText: Bool
+    /// 0 = very dark … 1 = very bright.
+    public var brightness: Double
+    /// Mean saturation 0…1.
+    public var colourfulness: Double
+
+    public init(people: Int = 0, faces: Int = 0, animals: [String] = [], labels: [String] = [], hasText: Bool = false, brightness: Double = 0.5, colourfulness: Double = 0.5) {
+        self.people = people
+        self.faces = faces
+        self.animals = animals
+        self.labels = labels
+        self.hasText = hasText
+        self.brightness = brightness
+        self.colourfulness = colourfulness
+    }
+
+    public var isEmpty: Bool { people == 0 && faces == 0 && animals.isEmpty && labels.isEmpty && !hasText }
 }
 
 /// Capabilities the executors need for video.

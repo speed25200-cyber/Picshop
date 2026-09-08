@@ -80,6 +80,13 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     case cancel
     case help
     case unknown
+    /// Spoken description of what is in the photo.
+    case describe
+    /// Reads a PDF page aloud.
+    case readPage
+    /// Named snapshots of the whole document ("enregistre cette version sous v1").
+    case saveVersion
+    case restoreVersion
 
     public var isVideoOnly: Bool {
         switch self {
@@ -94,7 +101,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
 
     public var isPhotoOnly: Bool {
         switch self {
-        case .selectLayer, .duplicateLayer, .deleteLayer, .upscale, .relight, .generativeFill, .recolor: return true
+        case .selectLayer, .duplicateLayer, .deleteLayer, .upscale, .relight, .generativeFill, .recolor, .describe: return true
         default: return false
         }
     }
@@ -102,7 +109,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     public var isPDFOnly: Bool {
         switch self {
         case .deletePage, .rotatePage, .movePage, .duplicatePage, .insertBlankPage, .goToPage, .highlightText, .underlineText, .redactText, .findText, .replaceText,
-             .addSignature, .extractPage, .addPageNumbers, .mergeDocument:
+             .addSignature, .extractPage, .addPageNumbers, .mergeDocument, .readPage:
             return true
         default:
             return false
@@ -111,7 +118,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
 
     public var isMeta: Bool {
         switch self {
-        case .chooseCandidate, .confirm, .cancel, .help, .unknown, .undo, .redo, .compare, .zoom, .play, .pause, .seek: return true
+        case .chooseCandidate, .confirm, .cancel, .help, .unknown, .undo, .redo, .compare, .zoom, .play, .pause, .seek, .saveVersion, .restoreVersion: return true
         default: return false
         }
     }
@@ -362,6 +369,10 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .cancel: return "Cancel"
         case .help: return "Help"
         case .unknown: return "Not understood"
+        case .describe: return "Describe"
+        case .readPage: return "Read page"
+        case .saveVersion: return "Save version “\(text ?? "")”"
+        case .restoreVersion: return "Restore version “\(text ?? "")”"
         }
     }
 }

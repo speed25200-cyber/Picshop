@@ -865,9 +865,45 @@ public final class PhotoEditorSession {
                 showToast(L("Cancelled."))
             case .zoom(let amount, let target):
                 zoomRequest = ZoomRequest(amount: amount, target: target)
+            case .message(let message) where message.hasPrefix("version:"):
+                handleVersionEffect(message)
+            case .message(let message) where message.hasPrefix("speak:"):
+                VoiceFeedback.shared.speak(String(message.dropFirst(6)), language: language == .french ? "fr" : "en", force: true)
             default: break
             }
         }
+    }
+
+    // MARK: - Named versions
+
+    /// Snapshots the user named by voice ("enregistre cette version sous brouillon").
+    public private(set) var versions: [(name: String, state: PhotoDocument)] = []
+
+    func handleVersionEffect(_ message: String) {
+        let parts = message.split(separator: ":", maxSplits: 2).map(String.init)
+        guard parts.count >= 2 else { return }
+        let requested = parts.count > 2 ? parts[2].trimmingCharacters(in: .whitespaces) : ""
+        if parts[1] == "save" {
+            let name = requested.isEmpty ? "v\(versions.count + 1)" : requested
+            versions.removeAll { $0.name.lowercased() == name.lowercased() }
+            versions.append((name, document))
+            showToast(String(format: L("Version “%@” saved"), name))
+            Haptics.success()
+        } else if parts[1] == "restore" {
+            let match = requested.isEmpty ? versions.last : versions.last { $0.name.lowercased() == requested.lowercased() } ?? versions.last { $0.name.lowercased().contains(requested.lowercased()) }
+            guard let match else {
+                showToast(versions.isEmpty ? L("No saved version yet. Say “save this version as …”.") : String(format: L("No version named “%@”"), requested), isError: true)
+                return
+            }
+            restoreVersion(match.state, label: String(format: L("Version “%@”"), match.name))
+        }
+    }
+
+    private func restoreVersion(_ state: PhotoDocument, label: String) {
+        history.commit(state, label: label)
+        requestPreview()
+        showToast(label)
+        Haptics.success()
     }
 
     public struct ZoomRequest: Equatable {

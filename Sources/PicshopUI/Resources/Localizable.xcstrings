@@ -2177,6 +2177,38 @@
         }
       }
     },
+    "No saved version yet. Say “save this version as …”.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No saved version yet. Say “save this version as …”."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune version enregistrée. Dites « enregistre cette version sous … »."
+          }
+        }
+      }
+    },
+    "No version named “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No version named “%@”"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune version nommée « %@ »"
+          }
+        }
+      }
+    },
     "Non-destructive layers, looks, cutouts, object removal, and a full video timeline — all on your iPhone.": {
       "localizations": {
         "en": {
@@ -4205,6 +4237,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Version"
+          }
+        }
+      }
+    },
+    "Version “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version “%@”"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version « %@ »"
+          }
+        }
+      }
+    },
+    "Version “%@” saved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version “%@” saved"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version « %@ » enregistrée"
           }
         }
       }

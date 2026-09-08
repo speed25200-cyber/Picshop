@@ -101,6 +101,12 @@ extension RuleBasedIntentEngine {
             return [EditIntent(action: .extractPage, index: page)]
         }
 
+        // Read aloud: "lis la page", "de quoi parle cette page", "read this page".
+        if u.contains(["lis la page", "lis cette page", "lis moi", "lis le texte", "lis le document", "lis ca", "lecture", "fais moi la lecture", "de quoi parle", "ca parle de quoi", "ca dit quoi", "qu est ce qui est ecrit", "resume la page", "resume cette page", "resume moi",
+                       "read the page", "read this page", "read it", "read aloud", "read out", "read me", "read the text", "read the document", "what does it say", "what does the page say", "what s written", "what is written", "summarize", "summarise", "summary"]) {
+            return [EditIntent(action: .readPage, index: page)]
+        }
+
         // Replace words: "remplace monsieur par madame", "change X en Y", "replace X with Y".
         if let replacement = parseReplacement(u, original: original) { return [replacement] }
         // Erase words: "efface le mot monsieur", "supprime « total » partout", "remove the word draft".

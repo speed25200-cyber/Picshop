@@ -143,15 +143,16 @@ private struct BackgroundSampler {
     private let height: Int
 
     init(image: CGImage) {
-        self.image = image
-        width = image.width
-        height = image.height
-        var data = [UInt8](repeating: 255, count: width * height * 4)
+        let w = image.width, h = image.height
+        var data = [UInt8](repeating: 255, count: w * h * 4)
         data.withUnsafeMutableBytes { buffer in
-            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+            guard let context = CGContext(data: buffer.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
                                           space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return }
-            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
         }
+        self.image = image
+        width = w
+        height = h
         bytes = data
     }
 

@@ -11,6 +11,10 @@ UI = ROOT / "Sources/PicshopUI"
 OUT = UI / "Resources/Localizable.xcstrings"
 
 FR = {
+    "Version “%@” saved": "Version « %@ » enregistrée",
+    "No saved version yet. Say “save this version as …”.": "Aucune version enregistrée. Dites « enregistre cette version sous … ».",
+    "No version named “%@”": "Aucune version nommée « %@ »",
+    "Version “%@”": "Version « %@ »",
     "Reading the page…": "Lecture de la page…",
     "Edit text": "Modifier le texte",
     "Erase text": "Effacer le texte",

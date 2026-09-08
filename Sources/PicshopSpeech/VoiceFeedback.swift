@@ -15,12 +15,12 @@ public final class VoiceFeedback {
 
     private init() {}
 
-    public func speak(_ text: String, language: String?) {
-        guard isEnabled, !text.isEmpty else { return }
+    public func speak(_ text: String, language: String?, force: Bool = false) {
+        guard isEnabled || force, !text.isEmpty else { return }
         synthesizer.stopSpeaking(at: .immediate)
         let utterance = AVSpeechUtterance(string: text)
-        utterance.rate = rate
-        utterance.volume = 0.8
+        utterance.rate = force ? AVSpeechUtteranceDefaultSpeechRate : rate
+        utterance.volume = force ? 1 : 0.8
         utterance.prefersAssistiveTechnologySettings = false
         let code = (language ?? Locale.current.language.languageCode?.identifier ?? "en").hasPrefix("fr") ? "fr-FR" : "en-US"
         utterance.voice = AVSpeechSynthesisVoice(language: code)

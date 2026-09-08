@@ -5,6 +5,23 @@ import XCTest
 final class RuleParserTests: XCTestCase {
     let engine = RuleBasedIntentEngine()
 
+    func testVersionsAndDescribe() {
+        let save = first("enregistre cette version sous brouillon")
+        XCTAssertEqual(save.action, .saveVersion)
+        XCTAssertEqual(save.text, "brouillon")
+        let saveEN = first("save this version as \"before colour\"")
+        XCTAssertEqual(saveEN.text, "before colour")
+        let restore = first("reviens à la version brouillon")
+        XCTAssertEqual(restore.action, .restoreVersion)
+        XCTAssertEqual(restore.text, "brouillon")
+        XCTAssertEqual(first("go back to version v1").text, "v1")
+        XCTAssertEqual(first("décris la photo").action, .describe)
+        XCTAssertEqual(first("what do you see").action, .describe)
+        XCTAssertEqual(first("save this version as v2", context: .video).action, .saveVersion)
+        XCTAssertEqual(first("lis la page", context: .pdf).action, .readPage)
+        XCTAssertEqual(first("de quoi parle cette page", context: .pdf).action, .readPage)
+    }
+
     private func first(_ utterance: String, context: IntentContext = .photo, file: StaticString = #filePath, line: UInt = #line) -> EditIntent {
         let plan = engine.parse(utterance, context: context)
         XCTAssertFalse(plan.intents.isEmpty, "no intents for \(utterance)", file: file, line: line)

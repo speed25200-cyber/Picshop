@@ -95,3 +95,7 @@ model (Settings › On-device models); recolouring works offline.
 Export · Partage · Share · Aide · What can you do.*
 
 Hold the orb to compare before/after; long-press the canvas does the same.
+
+| Enregistre cette version sous brouillon · Reviens à la version brouillon · Save this version as v1 | Named versions (any editor) |
+| Décris la photo · What do you see | Spoken description of the photo |
+| Lis la page · De quoi parle cette page · Read this page | Reads a PDF page aloud (OCR on scans) |
