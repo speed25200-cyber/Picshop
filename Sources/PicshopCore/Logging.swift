@@ -13,7 +13,7 @@ public enum PSLog {
     private static let loggers: [Category: Logger] = {
         var map: [Category: Logger] = [:]
         for category in [Category.core, .intent, .imaging, .video, .speech, .ui, .models] {
-            map[category] = Logger(subsystem: "com.picshop.app", category: category.rawValue)
+            map[category] = Logger(subsystem: "com.picshopio.picshop", category: category.rawValue)
         }
         return map
     }()

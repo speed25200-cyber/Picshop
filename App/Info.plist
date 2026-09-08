@@ -70,7 +70,7 @@
 	</array>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>com.picshop.app.export</string>
+		<string>com.picshopio.picshop.export</string>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Picshop listens to your voice commands so you can edit photos and videos hands-free. Audio never leaves your device.</string>
