@@ -259,6 +259,7 @@ final class Detector {
     let width: Int
     let height: Int
     private var instanceObservation: VNInstanceMaskObservation??
+    private var personSegmentation: [UInt8]??
 
     init(image: CGImage, maskStore: MaskStore, embedding: NLEmbedding?) {
         self.image = image
@@ -301,13 +302,62 @@ final class Detector {
         return instances
     }
 
+    /// Person segmentation of the whole image (cached), nil when nobody is in it.
+    func personMaskBytes() -> [UInt8]? {
+        if let cached = personSegmentation { return cached }
+        let segmentation = VNGeneratePersonSegmentationRequest()
+        segmentation.qualityLevel = .accurate
+        segmentation.outputPixelFormat = kCVPixelFormatType_OneComponent8
+        try? handler.perform([segmentation])
+        var result: [UInt8]?
+        if let buffer = segmentation.results?.first?.pixelBuffer {
+            let bytes = MaskStore.bytes(from: buffer, width: width, height: height)
+            if MaskStore.coverage(of: bytes) > 0.005 { result = bytes }
+        }
+        personSegmentation = .some(result)
+        return result
+    }
+
+    /// Vision's foreground instances merge an object with the person holding or
+    /// touching it (a laptop and the man typing on it). For anything that is not
+    /// a person, take the person back out of the instance so "erase the laptop"
+    /// never erases the user.
+    func withoutPeople(_ instance: Instance, keeping point: PSPoint? = nil) -> Instance {
+        guard let person = personMaskBytes() else { return instance }
+        var overlap = 0
+        var area = 0
+        for index in instance.bytes.indices {
+            if instance.bytes[index] > 127 {
+                area += 1
+                if person[index] > 127 { overlap += 1 }
+            }
+        }
+        guard area > 0 else { return instance }
+        let ratio = Double(overlap) / Double(area)
+        // Nothing to do when the person barely touches the object; the instance IS the person when it is all overlap.
+        guard ratio > 0.12, ratio < 0.985 else { return instance }
+        let grown = MaskStore.dilated(person, width: width, height: height, radius: max(2, min(width, height) / 150))
+        var bytes = instance.bytes
+        for index in bytes.indices where grown[index] > 127 { bytes[index] = 0 }
+        let remaining = MaskStore.coverage(of: bytes)
+        guard remaining > 0.0005 else { return instance }
+        if let point {
+            let x = min(width - 1, max(0, Int(point.x * Double(width))))
+            let y = min(height - 1, max(0, Int(point.y * Double(height))))
+            // The tap landed on the person: they asked for the person after all.
+            if bytes[y * width + x] < 128 { return instance }
+        }
+        return Instance(index: instance.index, bytes: bytes, box: MaskStore.boundingBox(of: bytes, width: width, height: height), area: remaining)
+    }
+
     /// Foreground instances scored against a vocabulary entry (or free text via embeddings).
     func instances(matching entry: ObjectVocabulary.Entry?, freeText: String?, near point: PSPoint? = nil) throws -> [ObjectCandidate] {
         let instances = try instanceList()
         var candidates: [ObjectCandidate] = []
-        for instance in instances {
-            if let point, !instance.box.insetBy(dx: -0.03, dy: -0.03).contains(point) { continue }
-            let crop = croppedImage(masked: instance)
+        let excludesPeople = entry?.category != .person
+        for original in instances {
+            if let point, !original.box.insetBy(dx: -0.03, dy: -0.03).contains(point) { continue }
+            let crop = croppedImage(masked: original)
             let classifications = try classify(crop)
             var score: Double = point != nil ? 0.9 : 0
             var label = entry?.label ?? (freeText ?? "object")
@@ -319,6 +369,7 @@ final class Detector {
                 if semantic.score > 0.3, let best = semantic.identifier { label = freeText.isEmpty ? best : freeText }
             }
             if point == nil, score < CandidateSelector.minimumConfidence { continue }
+            let instance = excludesPeople ? withoutPeople(original, keeping: point) : original
             let path = try saveInstanceMask(instance)
             candidates.append(ObjectCandidate(label: label, boundingBox: instance.box, confidence: min(1, score), instanceIndex: instance.index, maskPath: path))
         }

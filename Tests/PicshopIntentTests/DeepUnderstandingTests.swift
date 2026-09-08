@@ -135,6 +135,15 @@ final class DeepUnderstandingTests: XCTestCase {
         XCTAssertGreaterThan(teeth.amount?.value ?? 0, 0)
     }
 
+    func testEchoedPhraseStopsAtTheObject() {
+        let laptop = first("efface le pc portable sur cette image")
+        XCTAssertEqual(laptop.action, .removeObject)
+        XCTAssertEqual(laptop.target?.label, "laptop")
+        XCTAssertEqual(laptop.target?.originalPhrase, "le pc portable")
+        XCTAssertEqual(first("remove the lamp in this picture").target?.originalPhrase, "the lamp")
+        XCTAssertEqual(first("remove the dog on the left").target?.spatialHint, .left)
+    }
+
     func testVagueDissatisfactionBecomesAutoEnhance() {
         XCTAssertEqual(first("c'est moche").action, .autoEnhance)
         XCTAssertEqual(first("do your magic").action, .autoEnhance)

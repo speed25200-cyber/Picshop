@@ -75,6 +75,8 @@ public final class PDFEditorSession {
         public var rect: PSRect
         public var background: PSColor?
         public var draft: String
+        public var fontName: String? = nil
+        public var relativeFontSize: Double? = nil
     }
     /// Tap location on the current page (displayed, normalised) for text/image placement.
     public var lastTapPoint: PSPoint?
@@ -218,7 +220,7 @@ public final class PDFEditorSession {
                 guard let self else { return }
                 self.isProcessing = false
                 if let hit {
-                    self.textEdit = TextEdit(pageIndex: pageIndex, original: hit.text, rect: hit.rect, background: hit.background, draft: hit.text)
+                    self.textEdit = TextEdit(pageIndex: pageIndex, original: hit.text, rect: hit.rect, background: hit.background, draft: hit.text, fontName: hit.fontName, relativeFontSize: hit.relativeFontSize)
                     Haptics.tick()
                     return
                 }
@@ -234,7 +236,7 @@ public final class PDFEditorSession {
         textEdit = nil
         let text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard text != edit.original else { return }
-        let element = TextElement(text: text, fontName: "SFPro-Regular", relativeSize: 0.02, color: inkColor == .red ? .black : inkColor, alignment: .leading, style: .plain)
+        let element = TextElement(text: text, fontName: edit.fontName ?? "Helvetica", relativeSize: edit.relativeFontSize ?? 0, color: inkColor == .red ? .black : inkColor, alignment: .leading, style: .plain)
         update(text.isEmpty ? L("Erase text") : L("Edit text")) {
             $0.addMarkup(PDFMarkup(kind: .replacement(rects: [edit.rect], text: element, background: edit.background)), toPageAt: edit.pageIndex)
         }

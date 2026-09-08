@@ -95,7 +95,10 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
                     guard !bounds.isEmpty else { return nil }
                     return PDFGeometry.baseNormalized(fromPagePoints: PSRect(bounds), size: size)
                 }
-                if !rects.isEmpty { hits.append(PDFTextHit(pageIndex: index, rects: rects, text: selection.string ?? query)) }
+                if !rects.isEmpty {
+                    let face = textLayerFace(of: selection, pageHeight: size.height)
+                    hits.append(PDFTextHit(pageIndex: index, rects: rects, text: selection.string ?? query, fontName: face?.name, relativeFontSize: face?.relativeSize))
+                }
             }
         }
         if !hits.isEmpty { return hits }
@@ -103,11 +106,13 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
         let indices = pageIndex.map { [$0] } ?? Array(0..<composed.pageCount)
         for index in indices {
             guard let page = composed.page(at: index), model.pages.indices.contains(index) else { continue }
-            let text = recognizer.text(for: page, key: ocrKey(for: model, pageIndex: index))
+            let key = ocrKey(for: model, pageIndex: index)
+            let text = recognizer.text(for: page, key: key)
             for run in recognizer.matches(for: query, in: text) {
                 guard let first = run.first else { continue }
                 let rect = run.dropFirst().reduce(first.baseRect) { $0.union($1.baseRect) }
-                hits.append(PDFTextHit(pageIndex: index, rects: [rect], text: run.map(\.text).joined(separator: " "), background: first.background))
+                let face = recognizer.fontEstimate(for: run, page: page, key: key)
+                hits.append(PDFTextHit(pageIndex: index, rects: [rect], text: run.map(\.text).joined(separator: " "), background: first.background, fontName: face))
             }
         }
         return hits
@@ -119,6 +124,20 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
         /// Base (markup) space.
         public var rect: PSRect
         public var background: PSColor?
+        public var fontName: String? = nil
+        public var relativeFontSize: Double? = nil
+    }
+
+    /// Font of a text-layer selection, mapped to an installed face, with its size relative to the page height.
+    private func textLayerFace(of selection: PDFSelection, pageHeight: Double) -> (name: String, relativeSize: Double)? {
+        let attributed = selection.attributedString
+        guard let attributed, attributed.length > 0 else { return nil }
+        var found: UIFont?
+        attributed.enumerateAttribute(.font, in: NSRange(location: 0, length: attributed.length)) { value, _, stop in
+            if let font = value as? UIFont { found = font; stop.pointee = true }
+        }
+        guard let font = found, font.pointSize > 1, pageHeight > 0 else { return nil }
+        return (PDFTypography.installedName(matching: font), Double(font.pointSize) / pageHeight)
     }
 
     public func word(at displayedPoint: PSPoint, pageIndex: Int, in model: PDFDocumentModel) -> WordHit? {
@@ -129,11 +148,15 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
         let pagePoint = CGPoint(x: bounds.minX + base.x * bounds.width, y: bounds.minY + (1 - base.y) * bounds.height)
         if let selection = page.selectionForWord(at: pagePoint), let string = selection.string?.trimmingCharacters(in: .whitespacesAndNewlines), !string.isEmpty {
             let rect = selection.bounds(for: page)
-            if !rect.isEmpty { return WordHit(text: string, rect: PDFGeometry.baseNormalized(fromPagePoints: PSRect(rect), size: size), background: nil) }
+            if !rect.isEmpty {
+                let face = textLayerFace(of: selection, pageHeight: size.height)
+                return WordHit(text: string, rect: PDFGeometry.baseNormalized(fromPagePoints: PSRect(rect), size: size), background: nil, fontName: face?.name, relativeFontSize: face?.relativeSize)
+            }
         }
-        let text = recognizer.text(for: page, key: ocrKey(for: model, pageIndex: pageIndex))
+        let key = ocrKey(for: model, pageIndex: pageIndex)
+        let text = recognizer.text(for: page, key: key)
         guard let word = recognizer.word(at: displayedPoint, in: text) else { return nil }
-        return WordHit(text: word.text, rect: word.baseRect, background: word.background)
+        return WordHit(text: word.text, rect: word.baseRect, background: word.background, fontName: recognizer.fontEstimate(for: [word], page: page, key: key))
     }
 
     /// The words of a page in reading order: the text layer, or OCR for scans.

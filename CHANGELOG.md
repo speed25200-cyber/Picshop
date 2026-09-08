@@ -10,6 +10,8 @@
 - Preview rendering is coalesced: one render in flight, latest state wins, sharp frame after the interaction settles; the Metal canvas only redraws when its inputs change. Look thumbnails are cached per photo state.
 - Grammar: everyday goals (profile picture, product photo, ID photo, wallpaper, restore, night, backlit, HDR), follow-ups on the last adjustment (encore, a bit more, trop), "but / mais" contrast clauses, corrections during a clarification ("non, le chat"), skin smoothing / teeth / eyes, subjective adjectives (dull, harsh, jaunâtre, muddy…), default sky swap, vague dissatisfaction ("c'est moche").
 - Language models receive a retoucher's interpretation guide, the last-adjustment memory and twelve few-shot examples.
+- Object removal no longer takes the person along: Vision's foreground instances merge an object with whoever touches it, so non-person targets have the person segmentation subtracted before the mask is used.
+- PDF word replacement keeps the typeface: the text layer's font (mapped to an installed face) or, on scans, a face estimated from the glyph proportions and ink density; the new word is drawn as vector text at the original size and baseline instead of a free-text annotation that fell back to Times.
 
 ## 1.0.0 (build 10) — redesign
 

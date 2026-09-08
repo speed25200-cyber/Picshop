@@ -135,12 +135,18 @@ public struct PDFTextHit: Hashable, Codable, Sendable {
     public var text: String
     /// Colour of the page behind the words (sampled on scans), nil for white.
     public var background: PSColor?
+    /// Installed font name matching the original words (read from the text layer, or estimated on scans).
+    public var fontName: String?
+    /// Point size of the original text relative to the page height; nil when only the glyph box is known (scans).
+    public var relativeFontSize: Double?
 
-    public init(pageIndex: Int, rects: [PSRect], text: String, background: PSColor? = nil) {
+    public init(pageIndex: Int, rects: [PSRect], text: String, background: PSColor? = nil, fontName: String? = nil, relativeFontSize: Double? = nil) {
         self.pageIndex = pageIndex
         self.rects = rects
         self.text = text
         self.background = background
+        self.fontName = fontName
+        self.relativeFontSize = relativeFontSize
     }
 }
 

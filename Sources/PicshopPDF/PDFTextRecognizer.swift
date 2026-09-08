@@ -4,6 +4,7 @@ import PDFKit
 import Vision
 import UIKit
 import PicshopCore
+import PicshopImaging
 
 /// Reads the words of scanned pages with Vision so search, replace, highlight and
 /// tap-to-edit work on PDFs that have no text layer (photos, WhatsApp scans, faxes).
@@ -31,7 +32,29 @@ final class PDFTextRecognizer: @unchecked Sendable {
 
     private let lock = NSLock()
     private var cache: [String: PageText] = [:]
+    /// Grey render of the most recently estimated page, for ink-density measurements.
+    private var grayRender: (key: String, gray: [UInt8], width: Int, height: Int)?
     static let renderSide: CGFloat = 2200
+
+    /// Installed face that best matches a run of recognised words (see `PDFTypography`).
+    func fontEstimate(for words: [Word], page: PDFPage, key: String) -> String {
+        guard !words.isEmpty else { return PDFTypography.fallbackName }
+        let render: (key: String, gray: [UInt8], width: Int, height: Int)
+        if let cached = lock.withLock({ grayRender }), cached.key == key {
+            render = cached
+        } else {
+            guard let cg = PDFTextRecognizer.render(page: page, longestSide: PDFTextRecognizer.renderSide).cgImage else { return PDFTypography.fallbackName }
+            render = (key, ImageSupport.grayBytes(from: cg), cg.width, cg.height)
+            lock.withLock { grayRender = render }
+        }
+        let samples = words.map { word in
+            (text: word.text,
+             widthPx: CGFloat(word.displayedRect.width * Double(render.width)),
+             heightPx: CGFloat(word.displayedRect.height * Double(render.height)),
+             inkCoverage: PDFTypography.inkCoverage(of: word.displayedRect, gray: render.gray, width: render.width, height: render.height))
+        }
+        return PDFTypography.estimateFace(words: samples)
+    }
 
     /// Recognises the text on a page (cached). `key` must change whenever the page content changes.
     func text(for page: PDFPage, key: String, languages: [String] = ["fr-FR", "en-US"]) -> PageText {

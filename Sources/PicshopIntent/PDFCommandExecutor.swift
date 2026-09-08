@@ -127,7 +127,9 @@ public struct PDFCommandExecutor: Sendable {
                     let original = hit.text.isEmpty ? query : hit.text
                     if original == original.uppercased(), original != original.lowercased() { text = replacement.uppercased() }
                     else if let first = original.first, first.isUppercase { text = replacement.prefix(1).uppercased() + replacement.dropFirst() }
-                    let element = TextElement(text: text, fontName: "SFPro-Regular", relativeSize: 0.02, color: intent.color ?? .black, alignment: .leading, style: .plain)
+                    // Same face and size as the original: the text layer's font, or the estimate made on the scan.
+                    // A relative size of 0 tells the composer to fit the glyph box instead.
+                    let element = TextElement(text: text, fontName: hit.fontName ?? "Helvetica", relativeSize: hit.relativeFontSize ?? 0, color: intent.color ?? .black, alignment: .leading, style: .plain)
                     document.addMarkup(PDFMarkup(kind: .replacement(rects: hit.rects, text: element, background: hit.background)), toPageAt: hit.pageIndex)
                 }
                 document.goToPage(hits[0].pageIndex)

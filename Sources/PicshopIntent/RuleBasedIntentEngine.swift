@@ -92,10 +92,17 @@ public struct RuleBasedIntentEngine: IntentEngine {
     static let allWords: [String] = ["all", "every", "everything", "tous", "toutes", "tout", "chaque", "all the", "all of the", "tous les", "toutes les"]
 
     /// Extracts a target description from a phrase such as "the two dogs on the left".
+    /// Words that only locate the object in the picture and add nothing to its name.
+    static let trailingLocationWords: Set<String> = ["sur", "on", "in", "dans", "de", "du", "la", "le", "les", "l", "d", "cette", "ce", "cet", "this", "the", "image", "photo", "picture", "pic", "here", "ici", "la bas", "there", "from", "of", "my", "ma", "mon", "mes"]
+
     func makeTarget(from phrase: String, context: IntentContext) -> ObjectTarget? {
         let normalizedPhrase = NormalizedUtterance(phrase)
         var tokens = normalizedPhrase.tokens
         guard !tokens.isEmpty else { return nil }
+        // What the UI echoes back: the phrase without its trailing "sur cette image" / "in the photo".
+        var displayTokens = tokens
+        while let last = displayTokens.last, Self.trailingLocationWords.contains(last) { displayTokens.removeLast() }
+        let displayPhrase = displayTokens.isEmpty ? phrase : displayTokens.joined(separator: " ")
 
         var spatial: SpatialHint?
         for hint in SpatialHint.allCases {
@@ -141,7 +148,7 @@ public struct RuleBasedIntentEngine: IntentEngine {
         let cleaned = tokens.joined(separator: " ")
         if cleaned.isEmpty {
             if spatial != nil || ordinal != nil || matchesAll {
-                return ObjectTarget(label: "object", originalPhrase: phrase, spatialHint: spatial, ordinal: ordinal, matchesAll: matchesAll, attributes: attributes, point: context.lastTapPoint)
+                return ObjectTarget(label: "object", originalPhrase: displayPhrase, spatialHint: spatial, ordinal: ordinal, matchesAll: matchesAll, attributes: attributes, point: context.lastTapPoint)
             }
             return nil
         }
@@ -149,10 +156,10 @@ public struct RuleBasedIntentEngine: IntentEngine {
             let leftover = remove(phrase: match.matchedForm, from: cleaned.split(separator: " ").map(String.init))
             attributes.append(contentsOf: leftover.filter { $0.count > 2 })
             let point = match.entry.category == .generic ? context.lastTapPoint : nil
-            return ObjectTarget(label: match.entry.label, originalPhrase: phrase, spatialHint: spatial, ordinal: ordinal, matchesAll: matchesAll, attributes: attributes, point: point)
+            return ObjectTarget(label: match.entry.label, originalPhrase: displayPhrase, spatialHint: spatial, ordinal: ordinal, matchesAll: matchesAll, attributes: attributes, point: point)
         }
         // Unknown noun — keep the words; the grounding layer can still try embeddings.
-        return ObjectTarget(label: cleaned, originalPhrase: phrase, spatialHint: spatial, ordinal: ordinal, matchesAll: matchesAll, attributes: attributes, point: context.lastTapPoint)
+        return ObjectTarget(label: cleaned, originalPhrase: displayPhrase, spatialHint: spatial, ordinal: ordinal, matchesAll: matchesAll, attributes: attributes, point: context.lastTapPoint)
     }
 
     func indexOfSequence(_ words: [String], in tokens: [String]) -> Int? {

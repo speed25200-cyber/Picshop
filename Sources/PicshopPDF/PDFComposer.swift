@@ -97,19 +97,25 @@ public enum PDFComposer {
             }
             guard !element.text.isEmpty else { return annotations }
             let box = PDFGeometry.pagePoints(fromBase: first, size: pageSize).cgRect
-            // Fit the new text into the height of the original line; let it run to the right if longer.
-            let fontSize = max(4, box.height * 0.78)
-            let font = UIFont.systemFont(ofSize: fontSize, weight: element.fontName.contains("Bold") || element.fontName.contains("Semibold") ? .semibold : .regular)
+            let font: UIFont
+            let baselineFromTop: CGFloat
+            if element.relativeSize > 0 {
+                // Text layer: the size is known and the box is a full line box (ascender to descender).
+                font = PDFTypography.font(named: element.fontName, size: element.relativeSize * pageSize.height)
+                baselineFromTop = box.height + font.descender
+            } else {
+                // Scan: the box is glyph-tight; size the face so its glyphs span the same height.
+                let probe = PDFTypography.font(named: element.fontName, size: 100)
+                font = probe.withSize(PDFTypography.fontSize(fittingGlyphs: element.text, height: box.height, font: probe))
+                baselineFromTop = PDFTypography.baselineFromGlyphTop(of: element.text, font: font)
+            }
             let measured = (element.text as NSString).size(withAttributes: [.font: font])
-            let width = max(box.width, ceil(measured.width) + fontSize * 0.4)
-            let bounds = CGRect(x: box.minX - fontSize * 0.1, y: box.minY - fontSize * 0.15, width: width + fontSize * 0.2, height: max(box.height, ceil(measured.height)) + fontSize * 0.3)
-            let text = PDFAnnotation(bounds: bounds, forType: .freeText, withProperties: nil)
-            text.contents = element.text
-            text.font = font
-            text.fontColor = UIColor(cgColor: element.color.cgColor)
-            text.color = .clear
-            text.alignment = .left
-            annotations.append(text)
+            let padding = font.pointSize * 0.4
+            let lineHeight = font.ascender - font.descender
+            let bounds = CGRect(x: box.minX - padding, y: box.maxY - baselineFromTop + font.descender - padding,
+                                width: max(box.width, ceil(measured.width)) + padding * 2, height: lineHeight + padding * 2)
+            annotations.append(TextStampAnnotation(text: element.text, font: font, color: UIColor(cgColor: element.color.cgColor), bounds: bounds,
+                                                   glyphOrigin: CGPoint(x: box.minX, y: box.maxY), baselineFromTop: baselineFromTop))
             return annotations
 
         case .text(let element), .pageNumber(let element):
