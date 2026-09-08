@@ -82,18 +82,20 @@ public enum PDFComposer {
                 annotation.border = border
                 return annotation
             }
-        case .replacement(let rects, let element):
+        case .replacement(let rects, let element, let background):
             guard let first = rects.min(by: { $0.minY < $1.minY || ($0.minY == $1.minY && $0.minX < $1.minX) }) else { return [] }
+            let paper = UIColor(cgColor: (background ?? .white).cgColor)
             var annotations: [PDFAnnotation] = rects.map { rect in
                 let bounds = PDFGeometry.pagePoints(fromBase: rect.insetBy(dx: -0.002, dy: -0.002), size: pageSize).cgRect
                 let cover = PDFAnnotation(bounds: bounds, forType: .square, withProperties: nil)
-                cover.color = .white
-                cover.interiorColor = .white
+                cover.color = paper
+                cover.interiorColor = paper
                 let border = PDFBorder()
                 border.lineWidth = 0
                 cover.border = border
                 return cover
             }
+            guard !element.text.isEmpty else { return annotations }
             let box = PDFGeometry.pagePoints(fromBase: first, size: pageSize).cgRect
             // Fit the new text into the height of the original line; let it run to the right if longer.
             let fontSize = max(4, box.height * 0.78)

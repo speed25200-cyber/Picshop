@@ -238,8 +238,9 @@ public final class VideoEditorSession {
         lastPlan = plan
         if plan.isEmpty {
             Haptics.warning()
-            showToast(plan.reply ?? L("I didn't catch that."), isError: true)
-            VoiceFeedback.shared.speak(plan.reply ?? "", language: plan.language)
+            let reply = plan.reply ?? L("I didn't catch that.")
+            showToast(reply + "\n" + Replies.suggestions(for: .video, language: language), isError: true)
+            VoiceFeedback.shared.speak(reply, language: plan.language)
             return
         }
         VoiceFeedback.shared.speak(plan.reply ?? "", language: plan.language)

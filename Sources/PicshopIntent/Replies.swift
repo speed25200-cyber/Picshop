@@ -46,7 +46,9 @@ public enum Replies {
         case .underlineText: return fr ? "Souligné." : "Underlined."
         case .redactText: return fr ? "Caviardé." : "Redacted."
         case .findText: return fr ? "Je cherche « \(intent.text ?? "") »." : "Searching for “\(intent.text ?? "")”."
-        case .replaceText: return fr ? "Je remplace « \(intent.text ?? "") » par « \(intent.replacement ?? "") »." : "Replacing “\(intent.text ?? "")” with “\(intent.replacement ?? "")”."
+        case .replaceText:
+            if (intent.replacement ?? "").isEmpty { return fr ? "J'efface « \(intent.text ?? "") »." : "Erasing “\(intent.text ?? "")”." }
+            return fr ? "Je remplace « \(intent.text ?? "") » par « \(intent.replacement ?? "") »." : "Replacing “\(intent.text ?? "")” with “\(intent.replacement ?? "")”."
         case .addSignature: return fr ? "Signature ajoutée." : "Signature added."
         case .extractPage: return fr ? "Page exportée en photo." : "Page saved as a photo."
         case .addPageNumbers: return fr ? "Numéros de page ajoutés." : "Page numbers added."
@@ -87,6 +89,19 @@ public enum Replies {
         case .help: return fr ? "Dis par exemple : « efface le chien », « plus lumineux », « recadre en carré »." : "Try: “remove the dog”, “make it brighter”, “crop to square”."
         case .unknown: return fr ? "Je n'ai pas compris. Tu peux reformuler ?" : "I didn't catch that. Could you rephrase?"
         }
+    }
+
+    /// Three concrete things to try, shown when a request was not understood.
+    public static func suggestions(for mode: EditorMode, language: NormalizedUtterance.Language) -> String {
+        let fr = language == .french
+        let examples: [String]
+        switch mode {
+        case .photo: examples = fr ? ["Efface la personne à gauche", "Plus lumineux", "Fond blanc"] : ["Remove the person on the left", "Brighter", "White background"]
+        case .video: examples = fr ? ["Coupe les 3 premières secondes", "Accélère x2", "Coupe le son"] : ["Cut the first 3 seconds", "Speed up 2x", "Mute"]
+        case .pdf: examples = fr ? ["Remplace monsieur par madame", "Surligne « total »", "Signe en bas à droite"] : ["Replace invoice with receipt", "Highlight “total”", "Sign at the bottom right"]
+        }
+        let joined = examples.map { fr ? "« \($0) »" : "“\($0)”" }.joined(separator: " · ")
+        return (fr ? "Essayez : " : "Try: ") + joined
     }
 
     static func formatted(_ value: Double) -> String {

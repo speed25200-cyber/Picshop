@@ -63,6 +63,19 @@ public final class PDFEditorSession {
     public var showsImagePicker = false
     public var exportedURL: URL?
     public var searchQuery: String?
+    /// Text typed in the Text tool, placed by the next tap on empty paper.
+    public var textDraft = ""
+    /// Word being edited in place after a tap with the Text tool.
+    public var textEdit: TextEdit?
+
+    public struct TextEdit: Identifiable, Equatable {
+        public let id = UUID()
+        public var pageIndex: Int
+        public var original: String
+        public var rect: PSRect
+        public var background: PSColor?
+        public var draft: String
+    }
     /// Tap location on the current page (displayed, normalised) for text/image placement.
     public var lastTapPoint: PSPoint?
     /// Pending page index change requested by voice or the pages strip.
@@ -191,6 +204,43 @@ public final class PDFEditorSession {
         update(L("Add Text")) { $0.addMarkup(PDFMarkup(kind: .text(element)), toPageAt: pageIndex) }
     }
 
+    /// Text tool tap: an existing word opens the inline editor; empty paper places `draft` (if any).
+    public func tapText(at displayedPoint: PSPoint, pageIndex: Int, draft: String) {
+        lastTapPoint = displayedPoint
+        guard !isProcessing else { return }
+        isProcessing = true
+        processingTitle = L("Reading the page…")
+        let services = self.services
+        let document = self.document
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let hit = services.word(at: displayedPoint, pageIndex: pageIndex, in: document)
+            await MainActor.run {
+                guard let self else { return }
+                self.isProcessing = false
+                if let hit {
+                    self.textEdit = TextEdit(pageIndex: pageIndex, original: hit.text, rect: hit.rect, background: hit.background, draft: hit.text)
+                    Haptics.tick()
+                    return
+                }
+                let text = draft.trimmingCharacters(in: .whitespaces)
+                if !text.isEmpty { self.addText(text, at: displayedPoint, pageIndex: pageIndex) } else { Haptics.tick() }
+            }
+        }
+    }
+
+    /// Commits the inline editor: the original word is covered and the new text written in place.
+    public func commitTextEdit(_ newText: String) {
+        guard let edit = textEdit else { return }
+        textEdit = nil
+        let text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text != edit.original else { return }
+        let element = TextElement(text: text, fontName: "SFPro-Regular", relativeSize: 0.02, color: inkColor == .red ? .black : inkColor, alignment: .leading, style: .plain)
+        update(text.isEmpty ? L("Erase text") : L("Edit text")) {
+            $0.addMarkup(PDFMarkup(kind: .replacement(rects: [edit.rect], text: element, background: edit.background)), toPageAt: edit.pageIndex)
+        }
+        Haptics.success()
+    }
+
     public func placeSignature(at displayedPoint: PSPoint?, pageIndex: Int) {
         guard let signature = SignatureStore.currentAsset() else { showsSignatureSheet = true; return }
         guard let page = document.pages.indices.contains(pageIndex) ? document.pages[pageIndex] : nil else { return }
@@ -247,8 +297,9 @@ public final class PDFEditorSession {
         lastPlan = plan
         if plan.isEmpty {
             Haptics.warning()
-            showToast(plan.reply ?? L("I didn't catch that."), isError: true)
-            VoiceFeedback.shared.speak(plan.reply ?? "", language: plan.language)
+            let reply = plan.reply ?? L("I didn't catch that.")
+            showToast(reply + "\n" + Replies.suggestions(for: .pdf, language: language), isError: true)
+            VoiceFeedback.shared.speak(reply, language: plan.language)
             return
         }
         VoiceFeedback.shared.speak(plan.reply ?? "", language: plan.language)

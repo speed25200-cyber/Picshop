@@ -13,6 +13,7 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
     public let projectID: UUID
     private let lock = NSLock()
     private var documents: [String: PDFDocument] = [:]
+    private let recognizer = PDFTextRecognizer()
 
     public init(store: ProjectStore, projectID: UUID) {
         self.store = store
@@ -97,7 +98,55 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
                 if !rects.isEmpty { hits.append(PDFTextHit(pageIndex: index, rects: rects, text: selection.string ?? query)) }
             }
         }
+        if !hits.isEmpty { return hits }
+        // No text layer (scan, photo page): read the page with Vision.
+        let indices = pageIndex.map { [$0] } ?? Array(0..<composed.pageCount)
+        for index in indices {
+            guard let page = composed.page(at: index), model.pages.indices.contains(index) else { continue }
+            let text = recognizer.text(for: page, key: ocrKey(for: model, pageIndex: index))
+            for run in recognizer.matches(for: query, in: text) {
+                guard let first = run.first else { continue }
+                let rect = run.dropFirst().reduce(first.baseRect) { $0.union($1.baseRect) }
+                hits.append(PDFTextHit(pageIndex: index, rects: [rect], text: run.map(\.text).joined(separator: " "), background: first.background))
+            }
+        }
         return hits
+    }
+
+    /// A word under a displayed point: the PDF text layer first, then OCR for scans.
+    public struct WordHit: Sendable {
+        public var text: String
+        /// Base (markup) space.
+        public var rect: PSRect
+        public var background: PSColor?
+    }
+
+    public func word(at displayedPoint: PSPoint, pageIndex: Int, in model: PDFDocumentModel) -> WordHit? {
+        guard let composed = compose(model), let page = composed.page(at: pageIndex), model.pages.indices.contains(pageIndex) else { return nil }
+        let bounds = page.bounds(for: .mediaBox)
+        let size = PSSize(bounds.size)
+        let base = PDFGeometry.basePoint(fromDisplayed: displayedPoint, rotation: page.rotation)
+        let pagePoint = CGPoint(x: bounds.minX + base.x * bounds.width, y: bounds.minY + (1 - base.y) * bounds.height)
+        if let selection = page.selectionForWord(at: pagePoint), let string = selection.string?.trimmingCharacters(in: .whitespacesAndNewlines), !string.isEmpty {
+            let rect = selection.bounds(for: page)
+            if !rect.isEmpty { return WordHit(text: string, rect: PDFGeometry.baseNormalized(fromPagePoints: PSRect(rect), size: size), background: nil) }
+        }
+        let text = recognizer.text(for: page, key: ocrKey(for: model, pageIndex: pageIndex))
+        guard let word = recognizer.word(at: displayedPoint, in: text) else { return nil }
+        return WordHit(text: word.text, rect: word.baseRect, background: word.background)
+    }
+
+    /// Whether the page has recognisable text at all (text layer or OCR).
+    public func hasText(pageIndex: Int, in model: PDFDocumentModel) -> Bool {
+        guard let composed = compose(model), let page = composed.page(at: pageIndex) else { return false }
+        if let string = page.string, !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+        return !recognizer.text(for: page, key: ocrKey(for: model, pageIndex: pageIndex)).words.isEmpty
+    }
+
+    /// OCR cache key: the page identity, its source and rotation. Markups do not change the scan.
+    private func ocrKey(for model: PDFDocumentModel, pageIndex: Int) -> String {
+        let page = model.pages[pageIndex]
+        return "\(page.id.uuidString)-\(page.rotation)-\(page.source.hashValue)"
     }
 
     public func extractPage(_ pageIndex: Int, from model: PDFDocumentModel) async throws -> MediaAsset {

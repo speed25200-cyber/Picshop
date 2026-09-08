@@ -66,7 +66,7 @@ public struct Project: Hashable, Codable, Sendable, Identifiable {
     public static let manifestName = "project.json"
     public static let mediaDirectory = "media"
     public static let masksDirectory = "masks"
-    public static let thumbnailName = "thumbnail.jpg"
+    public static let thumbnailName = "thumbnail-2.jpg"
 }
 
 /// Errors surfaced to the UI. Every case carries a user-presentable message.

@@ -993,6 +993,22 @@
         }
       }
     },
+    "Edit text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit text"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier le texte"
+          }
+        }
+      }
+    },
     "Ellipse": {
       "localizations": {
         "en": {
@@ -1069,6 +1085,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Effacer la sélection"
+          }
+        }
+      }
+    },
+    "Erase text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase text"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer le texte"
           }
         }
       }
@@ -2097,6 +2129,38 @@
         }
       }
     },
+    "New text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New text"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau texte"
+          }
+        }
+      }
+    },
+    "New text, then tap where it goes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New text, then tap where it goes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau texte, puis touchez l'emplacement"
+          }
+        }
+      }
+    },
     "Next frame": {
       "localizations": {
         "en": {
@@ -2785,6 +2849,22 @@
         }
       }
     },
+    "Reading the page…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading the page…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lecture de la page…"
+          }
+        }
+      }
+    },
     "Ready": {
       "localizations": {
         "en": {
@@ -2989,6 +3069,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rendu de l'effet portrait…"
+          }
+        }
+      }
+    },
+    "Replace": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remplacer"
           }
         }
       }
@@ -3697,6 +3793,22 @@
         }
       }
     },
+    "Tap any word on the page to change or erase it — scans included.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap any word on the page to change or erase it — scans included."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez n'importe quel mot de la page pour le modifier ou l'effacer, scans compris."
+          }
+        }
+      }
+    },
     "Tap the canvas to place a shape. Drag to move, pinch to resize, twist to rotate.": {
       "localizations": {
         "en": {
@@ -3981,22 +4093,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Écrivez ou dites « ajoute le texte … »"
-          }
-        }
-      }
-    },
-    "Type text, then tap the page": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Type text, then tap the page"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Écrivez le texte, puis touchez la page"
           }
         }
       }

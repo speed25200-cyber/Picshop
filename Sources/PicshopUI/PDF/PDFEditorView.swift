@@ -12,7 +12,6 @@ public struct PDFEditorView: View {
     @State var session: PDFEditorSession
     @Environment(\.dismiss) private var dismiss
     @Environment(\.picshop) private var app
-    @State private var textDraft = ""
     @State private var pickedImage: PhotosPickerItem?
 
     public init(session: PDFEditorSession) {
@@ -50,6 +49,11 @@ public struct PDFEditorView: View {
         .sheet(isPresented: $session.showsHelp) { HelpSheet(mode: .pdf) }
         .sheet(isPresented: $session.showsSignatureSheet) { SignatureSheet { strokes in session.saveSignature(strokes: strokes) } }
         .sheet(isPresented: $session.showsExport) { PDFExportSheet(session: session) }
+        .sheet(item: $session.textEdit) { edit in
+            TextEditSheet(edit: edit, onCommit: { session.commitTextEdit($0) }, onCancel: { session.textEdit = nil })
+                .presentationDetents([.height(220)])
+                .presentationDragIndicator(.visible)
+        }
         .fileImporter(isPresented: $session.showsMergePicker, allowedContentTypes: [.pdf]) { result in
             if case .success(let url) = result { session.merge(from: url) }
         }
@@ -136,17 +140,21 @@ public struct PDFEditorView: View {
                 Text(L("Tap a word to highlight it, or say “surligne « total »”.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
             }
         case .text:
-            HStack(spacing: 8) {
-                TextField(L("Type text, then tap the page"), text: $textDraft)
-                    .textFieldStyle(.plain).font(PSFont.body(15)).foregroundStyle(PSTheme.textPrimary)
-                    .padding(.horizontal, 14).padding(.vertical, 10).background(PSTheme.hairline, in: Capsule())
-                Button {
-                    let text = textDraft.trimmingCharacters(in: .whitespaces)
-                    guard !text.isEmpty else { return }
-                    session.addText(text, at: session.lastTapPoint, pageIndex: session.document.currentPageIndex)
-                    textDraft = ""
-                } label: { Image(systemName: "plus").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
-                    .buttonStyle(.plain).foregroundStyle(.black).psGlass(tint: PSTheme.accent, interactive: true, shape: AnyShape(Circle()))
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    TextField(L("New text, then tap where it goes"), text: $session.textDraft)
+                        .textFieldStyle(.plain).font(PSFont.body(15)).foregroundStyle(PSTheme.textPrimary)
+                        .padding(.horizontal, 14).padding(.vertical, 10).background(PSTheme.hairline, in: Capsule())
+                    Button {
+                        let text = session.textDraft.trimmingCharacters(in: .whitespaces)
+                        guard !text.isEmpty else { return }
+                        session.addText(text, at: session.lastTapPoint, pageIndex: session.document.currentPageIndex)
+                        session.textDraft = ""
+                    } label: { Image(systemName: "plus").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
+                        .buttonStyle(.plain).foregroundStyle(.black).psGlass(tint: PSTheme.accent, interactive: true, shape: AnyShape(Circle()))
+                }
+                Text(L("Tap any word on the page to change or erase it — scans included."))
+                    .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
             }
         case .signature:
             HStack(spacing: 8) {
@@ -162,6 +170,54 @@ public struct PDFEditorView: View {
                 PanelChip(title: L("Page numbers"), symbol: "number") { Task { await session.run(EditIntent(action: .addPageNumbers)) } }
             }
         }
+    }
+}
+
+/// Inline editor for a word tapped on the page.
+struct TextEditSheet: View {
+    let edit: PDFEditorSession.TextEdit
+    let onCommit: (String) -> Void
+    let onCancel: () -> Void
+    @State private var draft: String
+    @FocusState private var focused: Bool
+
+    init(edit: PDFEditorSession.TextEdit, onCommit: @escaping (String) -> Void, onCancel: @escaping () -> Void) {
+        self.edit = edit
+        self.onCommit = onCommit
+        self.onCancel = onCancel
+        _draft = State(initialValue: edit.draft)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text(L("Edit text")).font(PSFont.headline(17)).foregroundStyle(PSTheme.textPrimary)
+                Spacer()
+                Text(edit.original).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary).lineLimit(1)
+            }
+            TextField(L("New text"), text: $draft)
+                .textFieldStyle(.plain).font(PSFont.body(17)).foregroundStyle(PSTheme.textPrimary)
+                .padding(.horizontal, 14).padding(.vertical, 12).background(PSTheme.hairline, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .focused($focused)
+                .submitLabel(.done)
+                .onSubmit { onCommit(draft) }
+            HStack(spacing: 10) {
+                Button(role: .destructive) { Haptics.warning(); onCommit("") } label: {
+                    Label(L("Erase"), systemImage: "eraser").font(PSFont.caption(13)).padding(.horizontal, 14).padding(.vertical, 9)
+                }
+                .buttonStyle(.plain).foregroundStyle(PSTheme.danger).psGlass(interactive: true)
+                Spacer()
+                Button { onCancel() } label: { Text(L("Cancel")).font(PSFont.caption(13)).padding(.horizontal, 14).padding(.vertical, 9) }
+                    .buttonStyle(.plain).foregroundStyle(PSTheme.textPrimary).psGlass(interactive: true)
+                Button { onCommit(draft) } label: { Text(L("Replace")).font(PSFont.headline(13)).padding(.horizontal, 16).padding(.vertical, 9) }
+                    .buttonStyle(.plain).foregroundStyle(.black).psGlass(tint: PSTheme.accent, interactive: true)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(PSTheme.surface.ignoresSafeArea())
+        .preferredColorScheme(.dark)
+        .onAppear { focused = true }
     }
 }
 
@@ -325,7 +381,7 @@ struct PDFViewerRepresentable: UIViewRepresentable {
                 case .signature:
                     self.session.placeSignature(at: point, pageIndex: index)
                 case .text:
-                    Haptics.tick()
+                    self.session.tapText(at: point, pageIndex: index, draft: self.session.textDraft)
                 default:
                     break
                 }

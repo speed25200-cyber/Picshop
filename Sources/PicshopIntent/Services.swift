@@ -100,11 +100,14 @@ public struct PDFTextHit: Hashable, Codable, Sendable {
     /// Normalised rectangles (top-left origin, in displayed page space).
     public var rects: [PSRect]
     public var text: String
+    /// Colour of the page behind the words (sampled on scans), nil for white.
+    public var background: PSColor?
 
-    public init(pageIndex: Int, rects: [PSRect], text: String) {
+    public init(pageIndex: Int, rects: [PSRect], text: String, background: PSColor? = nil) {
         self.pageIndex = pageIndex
         self.rects = rects
         self.text = text
+        self.background = background
     }
 }
 

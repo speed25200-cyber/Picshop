@@ -103,6 +103,8 @@ extension RuleBasedIntentEngine {
 
         // Replace words: "remplace monsieur par madame", "change X en Y", "replace X with Y".
         if let replacement = parseReplacement(u, original: original) { return [replacement] }
+        // Erase words: "efface le mot monsieur", "supprime « total » partout", "remove the word draft".
+        if let erase = parseEraseWords(u, original: original) { return [erase] }
 
         // Text markup: highlight / underline / redact / find.
         let quoted = extractQuoted(from: original)
@@ -220,6 +222,27 @@ extension RuleBasedIntentEngine {
         if Self.pageWords.contains(where: { from.lowercased().split(separator: " ").map(String.init).contains($0) }) { return nil }
         let scope: TargetScope = u.contains(["everywhere", "partout", "all", "toutes", "tous", "every", "chaque", "whole document", "tout le document", "dans tout"]) ? .all : .current
         return EditIntent(action: .replaceText, text: from, scope: scope, replacement: to)
+    }
+
+    /// "efface le mot X" → replaceText(text: X, replacement: "") which covers the words.
+    func parseEraseWords(_ u: NormalizedUtterance, original: String) -> EditIntent? {
+        let verbs = ["efface", "effacer", "supprime", "supprimer", "enleve", "enlever", "retire", "retirer", "gomme", "gommer", "erase", "remove", "delete", "wipe"]
+        guard u.contains(verbs), !u.contains(Self.pageWords), !u.contains(["signature", "image", "photo", "dessin", "drawing", "surlignage", "highlight", "annotation", "tout", "everything", "all the"]) else { return nil }
+        var target = extractQuoted(from: original)
+        if target == nil, let rest = remainder(of: u, after: verbs) {
+            let fillers: Set<String> = ["le", "la", "les", "l", "the", "mot", "mots", "word", "words", "texte", "text", "terme", "term", "toutes", "tous", "all", "every", "chaque", "occurrences", "occurrence", "de", "of", "du", "des", "partout", "everywhere", "dans", "in", "ce", "cette", "this", "document", "pdf", "sur", "on"]
+            var words = rest.split(separator: " ").map(String.init)
+            let mentionsWord = words.contains { ["mot", "mots", "word", "words", "texte", "text", "terme", "term"].contains($0) }
+            while let first = words.first, fillers.contains(first) { words.removeFirst() }
+            while let last = words.last, fillers.contains(last) { words.removeLast() }
+            // Without "the word …" or quotes, a bare "efface X" is ambiguous; require the marker.
+            guard mentionsWord, !words.isEmpty else { return nil }
+            let joined = words.joined(separator: " ")
+            target = originalSubstring(matching: joined, in: original) ?? joined
+        }
+        guard let target, !target.isEmpty else { return nil }
+        let scope: TargetScope = u.contains(["everywhere", "partout", "all", "toutes", "tous", "every", "chaque", "whole document", "tout le document"]) ? .all : .current
+        return EditIntent(action: .replaceText, text: target, scope: scope, replacement: "")
     }
 
     /// Every quoted phrase, in order of appearance.

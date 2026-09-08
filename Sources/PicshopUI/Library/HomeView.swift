@@ -18,7 +18,7 @@ public struct HomeView: View {
     public var body: some View {
         NavigationStack {
             ZStack {
-                PSTheme.canvas.ignoresSafeArea()
+                AmbientBackground().ignoresSafeArea()
                 content
             }
             .navigationTitle("PicShop")
@@ -121,16 +121,16 @@ public struct HomeView: View {
             HStack(spacing: 14) {
                 Image(systemName: systemImage)
                     .font(.system(size: prominent ? 26 : 20, weight: .semibold))
-                    .foregroundStyle(prominent ? Color.black : tint)
+                    .foregroundStyle(prominent ? Color.white : tint)
                     .frame(width: prominent ? 56 : 44, height: prominent ? 56 : 44)
-                    .background(prominent ? tint : tint.opacity(0.18), in: RoundedRectangle(cornerRadius: prominent ? 18 : 14, style: .continuous))
+                    .background(prominent ? Color.white.opacity(0.22) : tint.opacity(0.18), in: RoundedRectangle(cornerRadius: prominent ? 18 : 14, style: .continuous))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title).font(PSFont.headline(prominent ? 19 : 15)).foregroundStyle(PSTheme.textPrimary)
-                    Text(subtitle).font(PSFont.caption(prominent ? 13 : 11)).foregroundStyle(PSTheme.textSecondary).lineLimit(2)
+                    Text(subtitle).font(PSFont.caption(prominent ? 13 : 11)).foregroundStyle(prominent ? Color.white.opacity(0.8) : PSTheme.textSecondary).lineLimit(2)
                 }
                 Spacer(minLength: 0)
                 if prominent {
-                    Image(systemName: "chevron.right").font(.system(size: 14, weight: .bold)).foregroundStyle(PSTheme.textSecondary)
+                    Image(systemName: "chevron.right").font(.system(size: 14, weight: .bold)).foregroundStyle(Color.white.opacity(0.8))
                 }
             }
             .padding(.horizontal, 16)
@@ -139,7 +139,18 @@ public struct HomeView: View {
             .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
         .buttonStyle(.plain)
-        .psGlass(interactive: true, shape: AnyShape(RoundedRectangle(cornerRadius: 24, style: .continuous)))
+        .background {
+            if prominent {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(LinearGradient(colors: [Color(red: 0.36, green: 0.55, blue: 1.0), Color(red: 0.55, green: 0.42, blue: 1.0)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .overlay(alignment: .topTrailing) {
+                        Circle().fill(Color.white.opacity(0.14)).frame(width: 160, height: 160).blur(radius: 24).offset(x: 40, y: -60)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .shadow(color: Color(red: 0.36, green: 0.55, blue: 1.0).opacity(0.35), radius: 22, y: 10)
+            }
+        }
+        .modifier(GlassWhenNotProminent(prominent: prominent))
         .accessibilityLabel(title)
         .accessibilityHint(subtitle)
     }
@@ -198,14 +209,14 @@ struct ProjectCard: View {
                         }
                     }
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(PSTheme.hairline, lineWidth: 1))
-                if project.isVideo || project.isPDF {
-                    Image(systemName: project.isPDF ? "doc.text.fill" : "play.fill")
-                        .font(.caption.weight(.bold))
-                        .padding(7)
-                        .psGlass(shape: AnyShape(Circle()))
-                        .padding(8)
-                }
+                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color.white.opacity(0.10), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.45), radius: 16, y: 8)
+                Image(systemName: project.isPDF ? "doc.text.fill" : (project.isVideo ? "play.fill" : "photo.fill"))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(project.isPDF ? PSTheme.warning : (project.isVideo ? PSTheme.voice : PSTheme.accent))
+                    .padding(7)
+                    .psGlass(shape: AnyShape(Circle()))
+                    .padding(8)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(project.title).font(PSFont.headline(13)).lineLimit(1).foregroundStyle(PSTheme.textPrimary)
@@ -215,6 +226,30 @@ struct ProjectCard: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(project.title)
+    }
+}
+
+/// Deep, softly lit ground behind the library — the app should feel like a lit studio, not a void.
+struct AmbientBackground: View {
+    var body: some View {
+        ZStack {
+            Color(red: 0.03, green: 0.03, blue: 0.05)
+            RadialGradient(colors: [Color(red: 0.30, green: 0.42, blue: 0.95).opacity(0.28), .clear], center: .init(x: 0.15, y: 0.05), startRadius: 0, endRadius: 420)
+            RadialGradient(colors: [Color(red: 0.62, green: 0.40, blue: 1.0).opacity(0.18), .clear], center: .init(x: 0.95, y: 0.25), startRadius: 0, endRadius: 380)
+            RadialGradient(colors: [Color(red: 1.0, green: 0.55, blue: 0.35).opacity(0.10), .clear], center: .init(x: 0.5, y: 1.0), startRadius: 0, endRadius: 500)
+        }
+    }
+}
+
+/// Glass for the secondary hero cards; the prominent one paints its own gradient.
+struct GlassWhenNotProminent: ViewModifier {
+    let prominent: Bool
+    func body(content: Content) -> some View {
+        if prominent {
+            content
+        } else {
+            content.psGlass(interactive: true, shape: AnyShape(RoundedRectangle(cornerRadius: 24, style: .continuous)))
+        }
     }
 }
 

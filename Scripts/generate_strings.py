@@ -11,6 +11,14 @@ UI = ROOT / "Sources/PicshopUI"
 OUT = UI / "Resources/Localizable.xcstrings"
 
 FR = {
+    "Reading the page…": "Lecture de la page…",
+    "Edit text": "Modifier le texte",
+    "Erase text": "Effacer le texte",
+    "New text": "Nouveau texte",
+    "New text, then tap where it goes": "Nouveau texte, puis touchez l'emplacement",
+    "Replace": "Remplacer",
+    "Tap any word on the page to change or erase it — scans included.": "Touchez n'importe quel mot de la page pour le modifier ou l'effacer, scans compris.",
+    "Erase": "Effacer",
     "Add": "Ajouter",
     "Color": "Couleur",
     "Done.": "C'est fait.",

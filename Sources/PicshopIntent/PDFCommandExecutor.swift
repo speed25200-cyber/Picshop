@@ -114,7 +114,7 @@ public struct PDFCommandExecutor: Sendable {
             guard let query = intent.text, !query.isEmpty else {
                 return (document, ExecutionResult(outcome: .info(message: fr ? "Quel mot remplacer ?" : "Which words should I replace?")))
             }
-            guard let replacement = intent.replacement, !replacement.isEmpty else {
+            guard let replacement = intent.replacement else {
                 return (document, ExecutionResult(outcome: .info(message: fr ? "Remplacer « \(query) » par quoi ?" : "Replace “\(query)” with what?")))
             }
             do {
@@ -128,10 +128,10 @@ public struct PDFCommandExecutor: Sendable {
                     if original == original.uppercased(), original != original.lowercased() { text = replacement.uppercased() }
                     else if let first = original.first, first.isUppercase { text = replacement.prefix(1).uppercased() + replacement.dropFirst() }
                     let element = TextElement(text: text, fontName: "SFPro-Regular", relativeSize: 0.02, color: intent.color ?? .black, alignment: .leading, style: .plain)
-                    document.addMarkup(PDFMarkup(kind: .replacement(rects: hit.rects, text: element)), toPageAt: hit.pageIndex)
+                    document.addMarkup(PDFMarkup(kind: .replacement(rects: hit.rects, text: element, background: hit.background)), toPageAt: hit.pageIndex)
                 }
                 document.goToPage(hits[0].pageIndex)
-                return (document, .applied("Replace “\(query)”"))
+                return (document, .applied(replacement.isEmpty ? "Erase “\(query)”" : "Replace “\(query)”"))
             } catch {
                 return (document, .failed(errorMessage(error)))
             }

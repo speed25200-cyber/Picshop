@@ -753,8 +753,9 @@ public final class PhotoEditorSession {
         lastPlan = plan
         if plan.isEmpty {
             Haptics.warning()
-            showToast(plan.reply ?? L("I didn't catch that."), isError: true)
-            VoiceFeedback.shared.speak(plan.reply ?? "", language: plan.language)
+            let reply = plan.reply ?? L("I didn't catch that.")
+            showToast(reply + "\n" + Replies.suggestions(for: .photo, language: language), isError: true)
+            VoiceFeedback.shared.speak(reply, language: plan.language)
             return
         }
         if let clarification = plan.clarification, plan.intents.allSatisfy({ $0.action == .unknown }) {

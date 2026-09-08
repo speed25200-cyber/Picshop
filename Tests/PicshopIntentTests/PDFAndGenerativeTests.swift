@@ -86,6 +86,13 @@ final class PDFGrammarTests: XCTestCase {
         XCTAssertEqual(first("remplace le mot facture par devis").text, "facture")
         XCTAssertEqual(first("remplace le mot facture par devis").replacement, "devis")
         XCTAssertNotEqual(first("change de page").action, .replaceText)
+        let erase = first("efface le mot brouillon partout")
+        XCTAssertEqual(erase.action, .replaceText)
+        XCTAssertEqual(erase.text, "brouillon")
+        XCTAssertEqual(erase.replacement, "")
+        XCTAssertEqual(erase.scope, .all)
+        XCTAssertEqual(first("supprime « confidentiel »").replacement, "")
+        XCTAssertNotEqual(first("supprime la page 2").action, .replaceText)
     }
 
     func testTextMarkup() {

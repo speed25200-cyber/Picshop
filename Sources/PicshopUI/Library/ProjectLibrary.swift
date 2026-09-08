@@ -27,7 +27,41 @@ public final class ProjectLibrary {
     }
 
     public func thumbnail(for project: Project) -> UIImage? {
-        UIImage(contentsOfFile: store.thumbnailURL(for: project.id).path)
+        if let image = UIImage(contentsOfFile: store.thumbnailURL(for: project.id).path) { return image }
+        regenerateThumbnail(for: project)
+        return nil
+    }
+
+    private var regenerating: Set<UUID> = []
+
+    /// Projects saved by older builds have no current thumbnail: rebuild one from the
+    /// original media in the background, then refresh the grid.
+    private func regenerateThumbnail(for project: Project) {
+        guard !regenerating.contains(project.id) else { return }
+        regenerating.insert(project.id)
+        let store = self.store
+        let id = project.id
+        Task.detached(priority: .utility) {
+            switch project.content {
+            case .photo(let document):
+                if let asset = document.baseLayer?.imageAsset, let cg = try? ImageSupport.loadCGImage(at: store.url(for: asset.relativePath, in: id), maxPixelSize: 512) {
+                    ThumbnailGenerator.writeThumbnail(image: cg, projectID: id, store: store)
+                }
+            case .video(let timeline):
+                if let poster = await VideoThumbnailer(store: store, projectID: id).poster(for: timeline) {
+                    ThumbnailGenerator.writeThumbnail(image: poster, projectID: id, store: store)
+                }
+            case .pdf(let model):
+                let services = PDFEditingService(store: store, projectID: id)
+                if let cg = services.thumbnail(for: 0, in: model, height: 400)?.cgImage {
+                    ThumbnailGenerator.writeThumbnail(image: cg, projectID: id, store: store)
+                }
+            }
+            await MainActor.run { [weak self] in
+                self?.regenerating.remove(id)
+                self?.refresh()
+            }
+        }
     }
 
     public func delete(_ project: Project) {
