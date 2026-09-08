@@ -9,7 +9,7 @@ import FoundationModels
 /// Uses guided generation so the model can only produce values from our
 /// schema; the result is still validated by `IntentNormalizer` before it
 /// reaches the executor. All inference runs on device.
-@available(iOS 26.0, macOS 26.0, *)
+@available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
 public final class FoundationModelsIntentEngine: IntentEngine, @unchecked Sendable {
     public let kind: IntentEngineKind = .appleIntelligence
 
@@ -72,10 +72,10 @@ public final class FoundationModelsIntentEngine: IntentEngine, @unchecked Sendab
     }
 }
 
-@available(iOS 26.0, macOS 26.0, *)
+@available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
 @Generable(description: "One editing step for the PicShop photo/video editor.")
 struct GeneratedStep {
-    @Guide(description: "The action to perform.", .anyOf(IntentAction.allCases.map(\.rawValue)))
+    @Guide(description: "The action to perform, exactly one of the action names listed in the instructions (e.g. removeObject, adjust, applyLook, crop, split, deletePage).")
     var action: String
 
     @Guide(description: "For removeObject: canonical English noun of the thing to remove (dog, person, car, sign, wire, text, blemish, object).")
@@ -87,7 +87,7 @@ struct GeneratedStep {
     @Guide(description: "true when the user wants every matching object removed.")
     var all: Bool?
 
-    @Guide(description: "For adjust: the parameter name.", .anyOf(AdjustmentParameter.allCases.map(\.rawValue)))
+    @Guide(description: "For adjust: the parameter name (exposure, brightness, contrast, highlights, shadows, whites, blacks, saturation, vibrance, temperature, tint, sharpness, clarity, noiseReduction, vignette, grain, fade, hue, skinTone).")
     var parameter: String?
 
     @Guide(description: "relative for more/less requests, absolute for 'set to' requests.", .anyOf(["relative", "absolute"]))
@@ -96,10 +96,10 @@ struct GeneratedStep {
     @Guide(description: "Amount in percent, -100 to 100. Brighter is +20, a bit is ±10, a lot is ±40.")
     var amount: Double?
 
-    @Guide(description: "For applyLook: the look name.", .anyOf(FilterPreset.allCases.map(\.rawValue)))
+    @Guide(description: "For applyLook: the look name (original, vivid, vividWarm, vividCool, dramatic, dramaticWarm, dramaticCool, cinematic, goldenHour, tealOrange, matte, vintage, film, mono, silvertone, noir, portrait, pastel, punch, fresh).")
     var look: String?
 
-    @Guide(description: "For crop/setAspect.", .anyOf(AspectPreset.allCases.map(\.rawValue)))
+    @Guide(description: "For crop/setAspect: original, free, square, ratio4x3, ratio3x4, ratio3x2, ratio2x3, ratio16x9, ratio9x16, ratio21x9, ratio5x4, ratio4x5.")
     var aspect: String?
 
     @Guide(description: "For rotate/straighten: degrees, negative for counter-clockwise.")
@@ -111,7 +111,7 @@ struct GeneratedStep {
     @Guide(description: "For addText/editText: the exact text to show, or for addMusic the genre.")
     var text: String?
 
-    @Guide(description: "For addText: where to place it.", .anyOf(TextElement.Placement.allCases.map(\.rawValue)))
+    @Guide(description: "For addText: top, center, bottom, topLeading, topTrailing, bottomLeading or bottomTrailing.")
     var placement: String?
 
     @Guide(description: "Colour name in English (red, white, light blue...).")
@@ -132,7 +132,7 @@ struct GeneratedStep {
     @Guide(description: "Video: 1-based clip number.")
     var clipNumber: Int?
 
-    @Guide(description: "Video transition kind.", .anyOf(TransitionKind.allCases.map(\.rawValue)))
+    @Guide(description: "Video transition kind: crossDissolve, fadeToBlack, fadeToWhite, slideLeft, slideRight, wipeLeft, zoom or blur.")
     var transition: String?
 
     @Guide(description: "Video: playback speed multiplier (0.5 = slow motion, 2 = twice as fast).")
@@ -145,7 +145,7 @@ struct GeneratedStep {
     var scope: String?
 }
 
-@available(iOS 26.0, macOS 26.0, *)
+@available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
 @Generable(description: "The full plan for one spoken request.")
 struct GeneratedPlan {
     @Guide(description: "The editing steps, in order. Empty if the request isn't an edit.", .maximumCount(6))
@@ -160,6 +160,10 @@ struct GeneratedPlan {
     @Guide(description: "Language of the request.", .anyOf(["fr", "en"]))
     var language: String
 
+}
+
+@available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
+extension GeneratedPlan {
     var rawPlan: RawPlan {
         RawPlan(steps: steps.map { step in
             RawIntentStep(action: step.action, target: step.target, spatialHint: step.spatialHint, ordinal: nil, all: step.all, parameter: step.parameter,
