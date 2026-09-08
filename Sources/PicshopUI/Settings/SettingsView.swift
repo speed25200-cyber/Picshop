@@ -10,8 +10,6 @@ import PicshopSpeech
 public struct SettingsView: View {
     @Environment(\.picshop) private var app
     @Environment(\.dismiss) private var dismiss
-    @State private var modelStates: [String: ModelManager.State] = [:]
-    @State private var observerToken: UUID?
 
     public init() {}
 
@@ -31,50 +29,37 @@ public struct SettingsView: View {
         }
         .preferredColorScheme(.dark)
         .tint(PSTheme.accent)
-        .task { await observeModels() }
-        .onDisappear {
-            if let token = observerToken, let models = app?.models { Task { await models.removeObserver(token) } }
-        }
     }
 
+    /// The brain is chosen automatically; this row only shows which one is answering.
     @ViewBuilder
     private func brainSection(_ app: AppEnvironment) -> some View {
         Section {
-            ForEach(IntentEngineKind.allCases) { kind in
-                let available = app.availableEngines.contains(kind)
-                Button {
-                    guard available else { return }
-                    Haptics.tick()
-                    app.settings.preferredEngine = kind
-                    app.applyVoiceSettings()
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(kind.displayName).font(PSFont.headline(15)).foregroundStyle(available ? PSTheme.textPrimary : PSTheme.textSecondary)
-                            Text(description(for: kind, app: app)).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
-                        }
-                        Spacer()
-                        if app.settings.preferredEngine == kind, available {
-                            Image(systemName: "checkmark.circle.fill").foregroundStyle(PSTheme.accent)
-                        }
-                    }
+            HStack(spacing: 12) {
+                Image(systemName: app.activeEngine == .rules ? "bolt.fill" : "brain.head.profile")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(PSTheme.accent)
+                    .frame(width: 36, height: 36)
+                    .background(PSTheme.accent.opacity(0.16), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(app.activeEngine.displayName).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
+                    Text(description(for: app.activeEngine, app: app)).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
                 }
-                .disabled(!available)
+                Spacer()
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(PSTheme.success)
             }
         } header: {
             Text(L("AI brain"))
         } footer: {
-            Text(L("Every brain runs entirely on your iPhone. The instant grammar always runs first; the language model is consulted only for ambiguous or complex requests."))
+            Text(L("PicShop always uses the most capable brain available on this iPhone. The instant grammar answers first; the language model steps in for complex or ambiguous requests. Everything runs on device."))
         }
     }
 
     private func description(for kind: IntentEngineKind, app: AppEnvironment) -> String {
         switch kind {
-        case .rules: return L("Deterministic grammar, instant, offline. Always on.")
-        case .appleIntelligence:
-            return app.availableEngines.contains(.appleIntelligence) ? L("Apple's on-device foundation model with guided generation.") : (app.appleIntelligenceReason ?? L("Requires Apple Intelligence."))
-        case .proLocal:
-            return app.availableEngines.contains(.proLocal) ? L("Qwen3 4B through MLX — best for long multi-step commands.") : L("Download the Pro Brain model below to enable.")
+        case .rules: return app.appleIntelligenceReason ?? L("Deterministic grammar, instant, offline. Always on.")
+        case .appleIntelligence: return L("Apple's on-device foundation model with guided generation.")
+        case .proLocal: return L("Qwen3 4B through MLX — best for long multi-step commands.")
         }
     }
 
@@ -82,7 +67,7 @@ public struct SettingsView: View {
     private func modelsSection(_ app: AppEnvironment) -> some View {
         Section {
             ForEach(ModelCatalog.all) { model in
-                let state = modelStates[model.id] ?? .notInstalled
+                let state = app.modelStates[model.id] ?? .notInstalled
                 HStack(alignment: .center, spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(localizedName(model)).font(PSFont.headline(15))
@@ -97,10 +82,14 @@ public struct SettingsView: View {
                     }
                 }
             }
+            Toggle(L("Download large models automatically"), isOn: Binding(get: { app.settings.autoInstallsModels }, set: { value in
+                app.settings.autoInstallsModels = value
+                if value { Task { await app.autoInstallModels() } }
+            }))
         } header: {
             Text(L("On-device models"))
         } footer: {
-            Text(L("The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large and download from Hugging Face on demand; everything runs on your iPhone."))
+            Text(L("The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large: they download by themselves over Wi‑Fi the first time, and everything runs on your iPhone."))
         }
     }
 
@@ -129,7 +118,7 @@ public struct SettingsView: View {
         switch state {
         case .installed:
             Menu {
-                Button(role: .destructive) { Task { try? await app.models.delete(model.id); await app.refreshEngines() } } label: { Label(L("Delete"), systemImage: "trash") }
+                Button(role: .destructive) { Task { await app.delete(model) } } label: { Label(L("Delete"), systemImage: "trash") }
             } label: {
                 Label(L("Installed"), systemImage: "checkmark.circle.fill").font(PSFont.caption(13)).foregroundStyle(PSTheme.success)
             }
@@ -153,31 +142,11 @@ public struct SettingsView: View {
 
     private func install(_ model: ModelDescriptor, app: AppEnvironment) {
         Haptics.tap()
-        if model.kind == .generative, app.generativeEngineProvider == nil {
-            app.library.errorMessage = L("This build was compiled without the Stable Diffusion runtime.")
+        guard app.install(model) else {
+            app.library.errorMessage = model.kind == .generative
+                ? L("This build was compiled without the Stable Diffusion runtime.")
+                : L("This build was compiled without the MLX runtime.")
             return
-        }
-        if model.kind == .languageModel {
-            guard let installer = ProBrainInstaller.shared else {
-                app.library.errorMessage = L("This build was compiled without the MLX runtime.")
-                return
-            }
-            Task { await installer.install(model, app: app) }
-        } else {
-            Task { await app.models.install(model) }
-        }
-    }
-
-    private func observeModels() async {
-        guard let app else { return }
-        for model in ModelCatalog.all {
-            modelStates[model.id] = await app.models.state(of: model.id)
-        }
-        observerToken = await app.models.observe { id, state in
-            Task { @MainActor in
-                modelStates[id] = state
-                if case .installed = state { await app.refreshEngines() }
-            }
         }
     }
 

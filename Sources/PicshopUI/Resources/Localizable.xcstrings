@@ -49,6 +49,22 @@
         }
       }
     },
+    "Add Shape": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Shape"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter une forme"
+          }
+        }
+      }
+    },
     "Add Text": {
       "localizations": {
         "en": {
@@ -205,6 +221,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Appliquer à toutes les coupes"
+          }
+        }
+      }
+    },
+    "Arrow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrow"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flèche"
           }
         }
       }
@@ -769,18 +801,18 @@
         }
       }
     },
-    "Download the Pro Brain model below to enable.": {
+    "Download large models automatically": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Download the Pro Brain model below to enable."
+            "value": "Download large models automatically"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Téléchargez le modèle Pro Brain ci-dessous pour l'activer."
+            "value": "Télécharger les grands modèles automatiquement"
           }
         }
       }
@@ -913,6 +945,22 @@
         }
       }
     },
+    "Ellipse": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ellipse"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ellipse"
+          }
+        }
+      }
+    },
     "Erase": {
       "localizations": {
         "en": {
@@ -1025,22 +1073,6 @@
         }
       }
     },
-    "Every brain runs entirely on your iPhone. The instant grammar always runs first; the language model is consulted only for ambiguous or complex requests.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Every brain runs entirely on your iPhone. The instant grammar always runs first; the language model is consulted only for ambiguous or complex requests."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chaque cerveau fonctionne entièrement sur votre iPhone. La grammaire instantanée s'exécute toujours en premier ; le modèle de langage n'intervient que pour les demandes ambiguës ou complexes."
-          }
-        }
-      }
-    },
     "Export": {
       "localizations": {
         "en": {
@@ -1117,6 +1149,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Extraire l'image"
+          }
+        }
+      }
+    },
+    "Filled": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filled"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plein"
           }
         }
       }
@@ -1425,6 +1473,22 @@
         }
       }
     },
+    "Horizontal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Horizontal"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Horizontal"
+          }
+        }
+      }
+    },
     "I didn't catch that.": {
       "localizations": {
         "en": {
@@ -1533,6 +1597,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Installé"
+          }
+        }
+      }
+    },
+    "Installing AI models": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installing AI models"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installation des modèles IA"
           }
         }
       }
@@ -1661,6 +1741,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lumière & couleur"
+          }
+        }
+      }
+    },
+    "Line": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Line"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ligne"
           }
         }
       }
@@ -2241,6 +2337,22 @@
         }
       }
     },
+    "Perspective": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perspective"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perspective"
+          }
+        }
+      }
+    },
     "Photo": {
       "localizations": {
         "en": {
@@ -2305,6 +2417,22 @@
         }
       }
     },
+    "PicShop always uses the most capable brain available on this iPhone. The instant grammar answers first; the language model steps in for complex or ambiguous requests. Everything runs on device.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop always uses the most capable brain available on this iPhone. The instant grammar answers first; the language model steps in for complex or ambiguous requests. Everything runs on device."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop utilise toujours le cerveau le plus capable disponible sur cet iPhone. La grammaire instantanée répond en premier ; le modèle de langage intervient pour les demandes complexes ou ambiguës. Tout fonctionne sur l'appareil."
+          }
+        }
+      }
+    },
     "Pick a look, then tune its intensity.": {
       "localizations": {
         "en": {
@@ -2333,6 +2461,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choisissez une photo ou une vidéo, puis dites simplement ce que vous voulez."
+          }
+        }
+      }
+    },
+    "Pick a shape, then tap the canvas to place it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick a shape, then tap the canvas to place it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez une forme, puis touchez l'image pour la placer."
           }
         }
       }
@@ -2673,6 +2817,22 @@
         }
       }
     },
+    "Rectangle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rectangle"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rectangle"
+          }
+        }
+      }
+    },
     "Redo": {
       "localizations": {
         "en": {
@@ -2801,22 +2961,6 @@
         }
       }
     },
-    "Requires Apple Intelligence.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Requires Apple Intelligence."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nécessite Apple Intelligence."
-          }
-        }
-      }
-    },
     "Reset": {
       "localizations": {
         "en": {
@@ -2909,6 +3053,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pivoter"
+          }
+        }
+      }
+    },
+    "Rounded": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rounded"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrondi"
           }
         }
       }
@@ -3085,6 +3245,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ombre"
+          }
+        }
+      }
+    },
+    "Shapes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shapes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formes"
           }
         }
       }
@@ -3457,6 +3633,22 @@
         }
       }
     },
+    "Tap the canvas to place a shape. Drag to move, pinch to resize, twist to rotate.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the canvas to place a shape. Drag to move, pinch to resize, twist to rotate."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez l'image pour placer une forme. Glissez pour déplacer, pincez pour redimensionner, tournez pour pivoter."
+          }
+        }
+      }
+    },
     "Tap the mic and say what to change": {
       "localizations": {
         "en": {
@@ -3569,18 +3761,34 @@
         }
       }
     },
-    "The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large and download from Hugging Face on demand; everything runs on your iPhone.": {
+    "The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large: they download by themselves over Wi‑Fi the first time, and everything runs on your iPhone.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large and download from Hugging Face on demand; everything runs on your iPhone."
+            "value": "The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large: they download by themselves over Wi‑Fi the first time, and everything runs on your iPhone."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "La gomme et l'agrandisseur sont livrés avec l'app. Le remplissage génératif et le Pro Brain sont volumineux et se téléchargent depuis Hugging Face à la demande ; tout fonctionne sur votre iPhone."
+            "value": "La gomme et l'upscaler sont livrés avec l'app. Le Remplissage génératif et le Pro Brain sont volumineux : ils se téléchargent seuls en Wi‑Fi la première fois, et tout fonctionne sur votre iPhone."
+          }
+        }
+      }
+    },
+    "Thickness": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thickness"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Épaisseur"
           }
         }
       }
@@ -3837,6 +4045,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Version"
+          }
+        }
+      }
+    },
+    "Vertical": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vertical"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vertical"
           }
         }
       }

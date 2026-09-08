@@ -126,18 +126,14 @@ public enum ImageSupport {
         }
     }
 
-    /// Writes a CIImage through the shared context.
+    /// Writes a CIImage. The image is rasterised through `createCGImage` — the same
+    /// path the canvas uses — so files and previews are guaranteed to match
+    /// (orientation, colour space, alpha).
     public static func write(_ image: CIImage, to url: URL, type: UTType = .jpeg, quality: Double = 0.92, context: CIContext = RenderContext.export) throws {
-        let extent = image.extent.integral
-        let options: [CIImageRepresentationOption: Any] = [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: quality]
-        switch type {
-        case .png:
-            try context.writePNGRepresentation(of: image, to: url, format: .RGBA8, colorSpace: RenderContext.colorSpace, options: [:])
-        case .heic:
-            try context.writeHEIFRepresentation(of: image, to: url, format: .RGBA8, colorSpace: RenderContext.colorSpace, options: options)
-        default:
-            try context.writeJPEGRepresentation(of: image.cropped(to: extent), to: url, colorSpace: RenderContext.colorSpace, options: options)
+        guard let cg = cgImage(from: image, context: context) else {
+            throw PicshopError.exportFailed("cannot rasterise \(url.lastPathComponent)")
         }
+        try write(cg, to: url, type: type, quality: quality)
     }
 
     /// Creates a single-channel 8-bit grayscale CGImage from raw bytes.

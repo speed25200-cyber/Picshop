@@ -30,12 +30,14 @@ public struct RawIntentStep: Codable, Sendable, Equatable {
     public var speed: Double?
     public var choiceIndex: Int?
     public var scope: String?
+    /// For replaceText: the new words.
+    public var replacement: String?
 
     public init(action: String, target: String? = nil, spatialHint: String? = nil, ordinal: Int? = nil, all: Bool? = nil, parameter: String? = nil,
                 amountMode: String? = nil, amount: Double? = nil, look: String? = nil, aspect: String? = nil, degrees: Double? = nil, flipAxis: String? = nil,
                 text: String? = nil, placement: String? = nil, color: String? = nil, background: String? = nil, startSeconds: Double? = nil,
                 endSeconds: Double? = nil, seconds: Double? = nil, clipNumber: Int? = nil, transition: String? = nil, speed: Double? = nil,
-                choiceIndex: Int? = nil, scope: String? = nil) {
+                choiceIndex: Int? = nil, scope: String? = nil, replacement: String? = nil) {
         self.action = action
         self.target = target
         self.spatialHint = spatialHint
@@ -60,6 +62,7 @@ public struct RawIntentStep: Codable, Sendable, Equatable {
         self.speed = speed
         self.choiceIndex = choiceIndex
         self.scope = scope
+        self.replacement = replacement
     }
 }
 
@@ -121,6 +124,7 @@ public enum IntentNormalizer {
         if let degrees = step.degrees { intent.degrees = degrees }
         if let axis = step.flipAxis?.lowercased() { intent.flipAxis = axis.hasPrefix("v") ? .vertical : .horizontal }
         if let text = step.text, !text.isEmpty { intent.text = text }
+        if let replacement = step.replacement, !replacement.isEmpty { intent.replacement = replacement }
         if let placement = step.placement { intent.placement = TextElement.Placement(rawValue: placement) ?? RuleBasedIntentEngine.placementPhrases[placement.normalizedForMatching] }
         if let color = step.color { intent.color = PSColor.named(color) ?? PSColor(hex: color) }
         if let background = step.background?.lowercased() {

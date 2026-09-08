@@ -76,7 +76,8 @@ public enum LLMResponseParser {
                                  text: string("text"), placement: string("placement"), color: string("color") ?? string("colour"), background: string("background"),
                                  startSeconds: double("startSeconds") ?? double("start"), endSeconds: double("endSeconds") ?? double("end"),
                                  seconds: double("seconds") ?? double("time"), clipNumber: int("clipNumber") ?? int("clip"), transition: string("transition"),
-                                 speed: double("speed"), choiceIndex: int("choiceIndex") ?? int("index"), scope: string("scope"))
+                                 speed: double("speed"), choiceIndex: int("choiceIndex") ?? int("index"), scope: string("scope"),
+                                 replacement: string("replacement") ?? string("newText") ?? string("with"))
         }
         return RawPlan(steps: steps, reply: object["reply"] as? String, clarification: object["clarification"] as? String, language: object["language"] as? String)
     }

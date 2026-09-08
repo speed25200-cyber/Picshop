@@ -44,7 +44,7 @@ public enum IntentPrompt {
         - addText: text (verbatim, keep the user's language and casing), placement (\(placementList)), color; editText/removeText
         - upscale (amount 2|3|4), denoise, sharpen, relight
         - generativeFill: target (region to replace, optional) + text (what to generate, in English); recolor: target + color ("make the car red")
-        - PDF ONLY: deletePage/rotatePage(degrees)/movePage(choiceIndex = destination)/duplicatePage/insertBlankPage/goToPage (clipNumber = page number, -1 = last), highlightText/underlineText/redactText/findText (text), addSignature, extractPage, addPageNumbers, mergeDocument
+        - PDF ONLY: deletePage/rotatePage(degrees)/movePage(choiceIndex = destination)/duplicatePage/insertBlankPage/goToPage (clipNumber = page number, -1 = last), highlightText/underlineText/redactText/findText (text), replaceText (text = words to replace, replacement = new words; "remplace monsieur par madame"), addSignature, extractPage, addPageNumbers, mergeDocument
         - undo, redo, revert, compare, zoom, export, share, help, confirm, cancel
         - VIDEO ONLY: split (seconds), trim (startSeconds,endSeconds = part to KEEP), deleteRange (startSeconds,endSeconds = part to REMOVE), deleteClip (clipNumber 1-based), setSpeed (speed multiplier: 0.5 slow motion, 2 fast), reverse, mute, unmute, setVolume (amount), addTransition (transition: \(transitionList), scope "all" for every cut), removeTransition, addMusic (text: genre), removeMusic, extractFrame (seconds), seek (seconds), play, pause, duplicateClip, moveClip (clipNumber, choiceIndex = destination 1-based), stabilize, freezeFrame
         Several requests in one sentence become several steps, in order. \

@@ -90,12 +90,43 @@ public actor HybridIntentRouter {
             return first
         }
 
-        if let llmPlan, !llmPlan.isEmpty || llmPlan.needsClarification {
-            lastResolvedEngine = llmPlan.engine
-            return merge(fast: fast, llm: llmPlan)
+        if let llmPlan {
+            let checked = Self.validated(llmPlan, for: context)
+            if !checked.isEmpty || checked.needsClarification {
+                lastResolvedEngine = checked.engine
+                return merge(fast: fast, llm: checked)
+            }
+            // The model answered with something this editor cannot do: prefer the
+            // grammar, and otherwise explain rather than executing a wrong plan.
+            if fast.isEmpty, checked.reply != nil {
+                lastResolvedEngine = checked.engine
+                return checked
+            }
         }
         lastResolvedEngine = .rules
         return fast
+    }
+
+    /// Drops every step the current editor cannot execute (a photo action inside
+    /// a PDF, a timeline action on a photo…). Language models occasionally answer
+    /// from the wrong mode; the executor must never see those steps.
+    static func validated(_ plan: EditPlan, for context: IntentContext) -> EditPlan {
+        let allowed = plan.intents.filter { $0.action.isAllowed(in: context.mode) }
+        guard allowed.count != plan.intents.count else { return plan }
+        var result = plan
+        result.intents = allowed
+        if allowed.isEmpty || allowed.allSatisfy({ $0.action == .unknown }) {
+            let french = (plan.language ?? context.preferredLanguage ?? "").hasPrefix("fr")
+            result.intents = [EditIntent(action: .unknown, confidence: 0)]
+            result.confidence = 0
+            result.clarification = nil
+            switch context.mode {
+            case .photo: result.reply = french ? "Cette commande n'existe pas pour une photo." : "That command isn't available for a photo."
+            case .video: result.reply = french ? "Cette commande n'existe pas pour une vidéo." : "That command isn't available for a video."
+            case .pdf: result.reply = french ? "Cette commande n'existe pas pour un PDF." : "That command isn't available for a PDF."
+            }
+        }
+        return result
     }
 
     /// Prefers the LLM plan but keeps precise values from the grammar when the
@@ -119,6 +150,22 @@ public actor HybridIntentRouter {
         }
         merged.confidence = max(fast.confidence, llm.confidence)
         return merged
+    }
+}
+
+extension IntentAction {
+    /// Whether an executor exists for this action in the given editor.
+    public func isAllowed(in mode: EditorMode) -> Bool {
+        switch mode {
+        case .photo: return !isVideoOnly && !isPDFOnly
+        case .video: return !isPhotoOnly && !isPDFOnly
+        case .pdf:
+            if isPDFOnly || isMeta { return true }
+            switch self {
+            case .addText, .removeText, .export, .share, .revert: return true
+            default: return false
+            }
+        }
     }
 }
 

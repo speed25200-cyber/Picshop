@@ -58,7 +58,7 @@ struct PhotoCanvasView: View {
             .contentShape(Rectangle())
             .gesture(canvasGesture(frame: frame), including: session.isCropping ? .subviews : .all)
             .simultaneousGesture(compareGesture)
-            .simultaneousGesture(textRotationGesture, including: session.activeTool == .text ? .all : .none)
+            .simultaneousGesture(textRotationGesture, including: session.manipulatesOverlays ? .all : .none)
             .onChange(of: isPressing) { _, pressing in
                 if session.activeTool != .erase, session.activeTool != .precise, session.activeTool != .text, !session.isCropping {
                     session.showsOriginal = pressing
@@ -151,14 +151,14 @@ struct PhotoCanvasView: View {
     private func canvasGesture(frame: CGRect) -> some Gesture {
         let magnify = MagnifyGesture()
             .onChanged { value in
-                if session.activeTool == .text, let id = session.manipulatedTextLayerID ?? session.document.selectedLayer.flatMap({ $0.isText ? $0.id : nil }) {
+                if session.manipulatesOverlays, let id = session.manipulatedTextLayerID ?? session.selectedOverlayLayerID {
                     if session.manipulatedTextLayerID == nil {
                         session.beginTextInteraction(id)
-                        textSizeStart = session.document.layers.first(where: { $0.id == id })?.textElement?.relativeSize ?? 0.06
+                        textSizeStart = session.document.layers.first(where: { $0.id == id }).flatMap { session.overlayGeometry(for: $0)?.size } ?? 0.06
                     }
-                    if let element = session.document.layers.first(where: { $0.id == id })?.textElement {
+                    if let layer = session.document.layers.first(where: { $0.id == id }), let geometry = session.overlayGeometry(for: layer) {
                         let target = textSizeStart * Double(value.magnification)
-                        session.updateManipulatedText(scale: target / max(0.001, element.relativeSize))
+                        session.updateManipulatedText(scale: target / max(0.001, geometry.size))
                     }
                 } else {
                     zoom = min(8, max(0.5, steadyZoom * value.magnification))
@@ -177,13 +177,13 @@ struct PhotoCanvasView: View {
             .onChanged { value in
                 let point = normalized(value.location, in: frame)
                 cursor = value.location
-                if session.activeTool == .text, session.pendingClarification == nil {
+                if session.manipulatesOverlays, session.pendingClarification == nil {
                     if textDragStart == nil {
-                        guard let start = normalized(value.startLocation, in: frame), let layer = session.textLayer(at: start) else {
+                        guard let start = normalized(value.startLocation, in: frame), let layer = session.overlayLayer(at: start) else {
                             if zoom > 1 { offset = CGSize(width: steadyOffset.width + value.translation.width, height: steadyOffset.height + value.translation.height) }
                             return
                         }
-                        textDragStart = layer.textElement?.center
+                        textDragStart = session.overlayGeometry(for: layer)?.center
                         session.beginTextInteraction(layer.id)
                     }
                     guard let origin = textDragStart else { return }
@@ -223,8 +223,10 @@ struct PhotoCanvasView: View {
             .onEnded { value in
                 if let point = normalized(value.location, in: frame) {
                     Haptics.tap()
-                    if session.activeTool == .text, let layer = session.textLayer(at: point) {
+                    if session.manipulatesOverlays, let layer = session.overlayLayer(at: point) {
                         session.selectLayer(layer.id)
+                    } else if session.activeTool == .shapes {
+                        session.addShape(session.shapeKindToAdd, at: point)
                     } else {
                         session.tapCanvas(at: point)
                     }
@@ -237,10 +239,10 @@ struct PhotoCanvasView: View {
     private var textRotationGesture: some Gesture {
         RotateGesture(minimumAngleDelta: .degrees(2))
             .onChanged { value in
-                guard let id = session.manipulatedTextLayerID ?? session.document.selectedLayer.flatMap({ $0.isText ? $0.id : nil }) else { return }
+                guard session.manipulatesOverlays, let id = session.manipulatedTextLayerID ?? session.selectedOverlayLayerID else { return }
                 if session.manipulatedTextLayerID == nil {
                     session.beginTextInteraction(id)
-                    textRotationStart = session.document.layers.first(where: { $0.id == id })?.textElement?.rotation ?? 0
+                    textRotationStart = session.document.layers.first(where: { $0.id == id }).flatMap { session.overlayGeometry(for: $0)?.rotation } ?? 0
                 }
                 session.updateManipulatedText(rotation: textRotationStart + value.rotation.degrees)
             }
@@ -268,12 +270,11 @@ struct PhotoCanvasView: View {
         let showsGrid = zoom >= 6 && session.activeTool == .precise
         let cloneSource = session.activeTool == .precise && session.preciseMode == .clone ? session.cloneSource : nil
         let brushRadiusPoints = CGFloat(session.activeTool == .precise ? session.pixelBrushRadius : session.brushRadius) * max(frame.width, frame.height)
-        let textBoxes: [(UUID, PSRect, Double, Bool)] = session.activeTool == .text
-            ? session.document.textLayers.compactMap { layer -> (UUID, PSRect, Double, Bool)? in
-                guard let bounds = session.textBounds(for: layer) else { return nil }
-                return (layer.id, bounds, layer.textElement?.rotation ?? 0, session.document.selectedLayerID == layer.id)
-            }
-            : []
+        let overlayLayers = session.activeTool == .text ? session.document.textLayers : (session.activeTool == .shapes ? session.document.shapeLayers : [])
+        let textBoxes: [(UUID, PSRect, Double, Bool)] = overlayLayers.compactMap { layer -> (UUID, PSRect, Double, Bool)? in
+            guard let bounds = session.overlayBounds(for: layer), let geometry = session.overlayGeometry(for: layer) else { return nil }
+            return (layer.id, bounds, geometry.rotation, session.document.selectedLayerID == layer.id)
+        }
         Canvas { context, _ in
             // Pixel grid (loupe) when zoomed far in.
             if showsGrid {

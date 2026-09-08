@@ -115,6 +115,7 @@ public struct PhotoDocument: Hashable, Codable, Sendable, Identifiable {
     }
 
     public var textLayers: [Layer] { layers.filter(\.isText) }
+    public var shapeLayers: [Layer] { layers.filter(\.isShape) }
 
     /// Aspect ratio of the current canvas.
     public var aspectRatio: Double { canvasSize.aspectRatio }

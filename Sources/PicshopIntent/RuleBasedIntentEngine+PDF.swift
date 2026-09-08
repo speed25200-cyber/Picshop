@@ -101,6 +101,9 @@ extension RuleBasedIntentEngine {
             return [EditIntent(action: .extractPage, index: page)]
         }
 
+        // Replace words: "remplace monsieur par madame", "change X en Y", "replace X with Y".
+        if let replacement = parseReplacement(u, original: original) { return [replacement] }
+
         // Text markup: highlight / underline / redact / find.
         let quoted = extractQuoted(from: original)
         let markupVerbs: [(String, [String])] = [
@@ -171,5 +174,63 @@ extension RuleBasedIntentEngine {
             return [Int(first.value), Int(second.value)]
         }
         return Array(Int(first.value)...Int(second.value))
+    }
+
+    // MARK: Replace text
+
+    static let replaceTextVerbs = ["remplace", "remplacer", "remplaces", "replace", "substitue", "substituer", "change", "changer", "changes", "modifie", "modifier", "swap", "corrige", "corriger", "renomme", "rename"]
+
+    /// "remplace X par Y" → replaceText(text: X, replacement: Y). Quotes win; otherwise
+    /// the words after the verb are split on the first connector (par / with / by / en / to).
+    func parseReplacement(_ u: NormalizedUtterance, original: String) -> EditIntent? {
+        guard u.contains(Self.replaceTextVerbs) else { return nil }
+        var from: String?
+        var to: String?
+        let quoted = allQuoted(from: original)
+        if quoted.count >= 2 {
+            from = quoted[0]
+            to = quoted[1]
+        } else if let rest = remainder(of: u, after: Self.replaceTextVerbs) {
+            let padded = " " + rest + " "
+            let connectors = [" par ", " with ", " by ", " en ", " into ", " to ", " avec ", " pour ", " contre "]
+            var best: (Range<String.Index>, String)?
+            for connector in connectors {
+                if let range = padded.range(of: connector), best == nil || range.lowerBound < best!.0.lowerBound { best = (range, connector) }
+            }
+            guard let (range, _) = best else { return nil }
+            let fillers: Set<String> = ["le", "la", "les", "l", "the", "mot", "mots", "word", "words", "texte", "text", "terme", "term", "toutes", "tous", "all", "every", "chaque", "occurrences", "occurrence", "de", "of", "du", "des", "partout", "everywhere", "dans", "in", "ce", "cette", "this", "document", "pdf", "sur", "on", "page", "cette page"]
+            func clean(_ slice: Substring) -> String {
+                var words = slice.split(separator: " ").map(String.init)
+                while let first = words.first, fillers.contains(first) { words.removeFirst() }
+                while let last = words.last, fillers.contains(last) { words.removeLast() }
+                return words.joined(separator: " ")
+            }
+            let a = clean(padded[..<range.lowerBound])
+            let b = clean(padded[range.upperBound...])
+            guard !a.isEmpty, !b.isEmpty else { return nil }
+            from = originalSubstring(matching: a, in: original) ?? a
+            to = originalSubstring(matching: b, in: original) ?? b
+            if quoted.count == 1 {
+                // One quoted phrase: it is whichever side it matches.
+                if u.remainder(after: Self.replaceTextVerbs)?.hasPrefix(NormalizedUtterance.normalize(quoted[0])) == true { from = quoted[0] } else { to = quoted[0] }
+            }
+        }
+        guard let from, let to, !from.isEmpty, !to.isEmpty, from.lowercased() != to.lowercased() else { return nil }
+        // "change la page en paysage" and friends belong to other rules.
+        if Self.pageWords.contains(where: { from.lowercased().split(separator: " ").map(String.init).contains($0) }) { return nil }
+        let scope: TargetScope = u.contains(["everywhere", "partout", "all", "toutes", "tous", "every", "chaque", "whole document", "tout le document", "dans tout"]) ? .all : .current
+        return EditIntent(action: .replaceText, text: from, scope: scope, replacement: to)
+    }
+
+    /// Every quoted phrase, in order of appearance.
+    func allQuoted(from original: String) -> [String] {
+        let pattern = "\"([^\"]+)\"|“([^”]+)”|«\\s*([^»]+?)\\s*»|'([^']{2,})'"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        return regex.matches(in: original, range: NSRange(original.startIndex..., in: original)).compactMap { match in
+            for group in 1..<match.numberOfRanges {
+                if let range = Range(match.range(at: group), in: original) { return String(original[range]).trimmingCharacters(in: .whitespaces) }
+            }
+            return nil
+        }
     }
 }

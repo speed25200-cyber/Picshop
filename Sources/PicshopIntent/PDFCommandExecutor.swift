@@ -110,6 +110,32 @@ public struct PDFCommandExecutor: Sendable {
                 return (document, .failed(errorMessage(error)))
             }
 
+        case .replaceText:
+            guard let query = intent.text, !query.isEmpty else {
+                return (document, ExecutionResult(outcome: .info(message: fr ? "Quel mot remplacer ?" : "Which words should I replace?")))
+            }
+            guard let replacement = intent.replacement, !replacement.isEmpty else {
+                return (document, ExecutionResult(outcome: .info(message: fr ? "Remplacer « \(query) » par quoi ?" : "Replace “\(query)” with what?")))
+            }
+            do {
+                var hits = try await services.findText(query, in: document, pageIndex: intent.scope == .all ? nil : current)
+                if hits.isEmpty, intent.scope != .all { hits = try await services.findText(query, in: document, pageIndex: nil) }
+                guard !hits.isEmpty else { return (document, .failed(fr ? "« \(query) » introuvable." : "“\(query)” not found.")) }
+                for hit in hits {
+                    // Keep the case pattern of the original word ("Monsieur" → "Madame", "MONSIEUR" → "MADAME").
+                    var text = replacement
+                    let original = hit.text.isEmpty ? query : hit.text
+                    if original == original.uppercased(), original != original.lowercased() { text = replacement.uppercased() }
+                    else if let first = original.first, first.isUppercase { text = replacement.prefix(1).uppercased() + replacement.dropFirst() }
+                    let element = TextElement(text: text, fontName: "SFPro-Regular", relativeSize: 0.02, color: intent.color ?? .black, alignment: .leading, style: .plain)
+                    document.addMarkup(PDFMarkup(kind: .replacement(rects: hit.rects, text: element)), toPageAt: hit.pageIndex)
+                }
+                document.goToPage(hits[0].pageIndex)
+                return (document, .applied("Replace “\(query)”"))
+            } catch {
+                return (document, .failed(errorMessage(error)))
+            }
+
         case .addSignature:
             guard let signature = await services.signatureAsset() else {
                 return (document, ExecutionResult(outcome: .info(message: fr ? "Dessine ta signature." : "Draw your signature."), effects: [.message("signature")]))

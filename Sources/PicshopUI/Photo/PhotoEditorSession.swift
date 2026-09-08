@@ -14,7 +14,7 @@ import PicshopSpeech
 @Observable
 public final class PhotoEditorSession {
     public enum Tool: String, CaseIterable, Identifiable {
-        case adjust, looks, erase, precise, cutout, crop, text, layers
+        case adjust, looks, erase, precise, cutout, crop, text, shapes, layers
         public var id: String { rawValue }
         var title: String {
             switch self {
@@ -25,6 +25,7 @@ public final class PhotoEditorSession {
             case .cutout: return L("Cutout")
             case .crop: return L("Crop")
             case .text: return L("Text")
+            case .shapes: return L("Shapes")
             case .layers: return L("Layers")
             }
         }
@@ -37,6 +38,7 @@ public final class PhotoEditorSession {
             case .cutout: return "person.crop.rectangle"
             case .crop: return "crop.rotate"
             case .text: return "textformat"
+            case .shapes: return "square.on.circle"
             case .layers: return "square.3.layers.3d"
             }
         }
@@ -89,10 +91,17 @@ public final class PhotoEditorSession {
     public var cropRect: PSRect?
     public var cropAspect: AspectPreset = .free
     public var straightenPreview: Double = 0 { didSet { if straightenPreview != oldValue { requestPreview(interactive: true) } } }
+    /// Perspective correction previewed live in the crop tool (-1…1 each).
+    public var perspectiveHorizontal: Double = 0 { didSet { if perspectiveHorizontal != oldValue { requestPreview(interactive: true) } } }
+    public var perspectiveVertical: Double = 0 { didSet { if perspectiveVertical != oldValue { requestPreview(interactive: true) } } }
+    /// Whether the crop tool has any pending geometry change.
+    public var hasPendingGeometry: Bool { cropRect != .unit || straightenPreview != 0 || perspectiveHorizontal != 0 || perspectiveVertical != 0 }
     /// Brush circle shown at the canvas centre while the size dial is dragged.
     public var showsBrushPreview = false
-    /// Text layer being dragged / pinched on the canvas.
+    /// Text or shape layer being dragged / pinched on the canvas.
     public var manipulatedTextLayerID: UUID?
+    /// Shape kind added by the next tap on the canvas, when the Shapes tool is open.
+    public var shapeKindToAdd: ShapeElement.Kind = .rectangle
     public var selectedParameter: AdjustmentParameter = .exposure
     public var brushRadius: Double = 0.03
     public var brushStrokes: [BrushStroke] = []
@@ -194,6 +203,7 @@ public final class PhotoEditorSession {
         renderTask?.cancel()
         var document = self.document
         if straightenPreview != 0 { document.apply(.straighten(degrees: straightenPreview)) }
+        if perspectiveHorizontal != 0 || perspectiveVertical != 0 { document.apply(.perspective(horizontal: perspectiveHorizontal, vertical: perspectiveVertical)) }
         let showsOriginal = self.showsOriginal
         let side: Double = interactive ? 1280 : 2048
         interactiveRendering = interactive
@@ -308,6 +318,9 @@ public final class PhotoEditorSession {
         if activeTool == .text, document.selectedLayer?.isText != true, let last = document.textLayers.last {
             selectLayer(last.id)
         }
+        if activeTool == .shapes, document.selectedLayer?.isShape != true, let last = document.shapeLayers.last {
+            selectLayer(last.id)
+        }
     }
 
     // MARK: - Crop & straighten
@@ -324,12 +337,16 @@ public final class PhotoEditorSession {
         cropAspect = .free
         cropRect = .unit
         straightenPreview = 0
+        perspectiveHorizontal = 0
+        perspectiveVertical = 0
     }
 
     public func cancelCrop() {
         cropRect = nil
         cropAspect = .free
         straightenPreview = 0
+        perspectiveHorizontal = 0
+        perspectiveVertical = 0
     }
 
     /// Largest centred rectangle with the preset's ratio, in normalised coordinates.
@@ -353,12 +370,18 @@ public final class PhotoEditorSession {
             document.apply(.straighten(degrees: straightenPreview))
             labels.append(L("Straighten"))
         }
+        if abs(perspectiveHorizontal) > 0.005 || abs(perspectiveVertical) > 0.005 {
+            document.apply(.perspective(horizontal: perspectiveHorizontal, vertical: perspectiveVertical))
+            labels.append(L("Perspective"))
+        }
         let clamped = rect.clampedToUnit()
         if clamped.width < 0.999 || clamped.height < 0.999 || clamped.minX > 0.001 || clamped.minY > 0.001 {
             document.apply(.crop(clamped))
             labels.append(L("Crop"))
         }
         straightenPreview = 0
+        perspectiveHorizontal = 0
+        perspectiveVertical = 0
         cropRect = nil
         cropAspect = .free
         guard !labels.isEmpty else { requestPreview(); return }
@@ -401,14 +424,73 @@ public final class PhotoEditorSession {
         return nil
     }
 
+    /// Normalised, unrotated bounds of a shape layer as rendered.
+    public func shapeBounds(for layer: Layer) -> PSRect? {
+        guard let shape = layer.shapeElement else { return nil }
+        let width = shape.relativeSize.width * layer.transform.scale
+        let height = shape.relativeSize.height * layer.transform.scale
+        return PSRect(x: layer.transform.center.x - width / 2, y: layer.transform.center.y - height / 2, width: width, height: height)
+    }
+
+    /// Topmost shape layer under a point.
+    public func shapeLayer(at point: PSPoint) -> Layer? {
+        for layer in document.layers.reversed() where layer.isShape && layer.isVisible {
+            if let bounds = shapeBounds(for: layer), bounds.insetBy(dx: -0.02, dy: -0.02).contains(point) { return layer }
+        }
+        return nil
+    }
+
+    /// Whether the active tool moves overlays (text or shapes) with canvas gestures.
+    public var manipulatesOverlays: Bool { activeTool == .text || activeTool == .shapes }
+
+    /// Text or shape layer under a point, depending on the active tool.
+    public func overlayLayer(at point: PSPoint) -> Layer? {
+        switch activeTool {
+        case .text: return textLayer(at: point)
+        case .shapes: return shapeLayer(at: point)
+        default: return nil
+        }
+    }
+
+    /// Bounds of an overlay layer (text or shape) for selection handles and hit testing.
+    public func overlayBounds(for layer: Layer) -> PSRect? {
+        layer.isText ? textBounds(for: layer) : shapeBounds(for: layer)
+    }
+
+    /// Centre, size and rotation of an overlay layer, in a tool-agnostic form.
+    public func overlayGeometry(for layer: Layer) -> (center: PSPoint, size: Double, rotation: Double)? {
+        if let element = layer.textElement { return (element.center, element.relativeSize, element.rotation) }
+        if layer.isShape { return (layer.transform.center, layer.transform.scale, layer.transform.rotation) }
+        return nil
+    }
+
+    /// Selected overlay of the active tool, if any.
+    public var selectedOverlayLayerID: UUID? {
+        guard let layer = document.selectedLayer else { return nil }
+        switch activeTool {
+        case .text: return layer.isText ? layer.id : nil
+        case .shapes: return layer.isShape ? layer.id : nil
+        default: return nil
+        }
+    }
+
     public func beginTextInteraction(_ layerID: UUID) {
         manipulatedTextLayerID = layerID
         if document.selectedLayerID != layerID { selectLayer(layerID) }
-        history.beginTransaction(label: "Move Text")
+        history.beginTransaction(label: document.layers.first(where: { $0.id == layerID })?.isShape == true ? "Move Shape" : "Move Text")
     }
 
+    /// Moves, scales (relative factor) or rotates the manipulated text or shape layer.
     public func updateManipulatedText(center: PSPoint? = nil, scale: Double? = nil, rotation: Double? = nil) {
         guard let id = manipulatedTextLayerID else { return }
+        if document.layers.first(where: { $0.id == id })?.isShape == true {
+            updateLayer(id) { layer in
+                if let center { layer.transform.center = PSPoint(x: center.x.clamped(to: 0...1), y: center.y.clamped(to: 0...1)) }
+                if let scale { layer.transform.scale = (layer.transform.scale * scale).clamped(to: 0.05...4) }
+                if let rotation { layer.transform.rotation = rotation }
+            }
+            return
+        }
         updateText(layerID: id) { element in
             if let center { element.center = PSPoint(x: center.x.clamped(to: 0...1), y: center.y.clamped(to: 0...1)) }
             if let scale { element.relativeSize = (element.relativeSize * scale).clamped(to: 0.015...0.4) }
@@ -434,6 +516,38 @@ public final class PhotoEditorSession {
 
     public func addText(_ text: String) {
         Task { await run(EditIntent(action: .addText, text: text, placement: .bottom)) }
+    }
+
+    /// Adds a shape layer centred at `center` (or in the middle of the canvas) and selects it.
+    public func addShape(_ kind: ShapeElement.Kind, at center: PSPoint? = nil) {
+        let aspect = max(0.2, document.aspectRatio)
+        var shape = ShapeElement(kind: kind, fill: .white)
+        switch kind {
+        case .line, .arrow:
+            shape.relativeSize = PSSize(width: 0.45, height: 0.08 * aspect)
+            shape.strokeWidth = 0.012
+        case .ellipse:
+            shape.relativeSize = PSSize(width: 0.3, height: 0.3 * aspect)
+        default:
+            shape.relativeSize = PSSize(width: 0.36, height: 0.24 * aspect)
+        }
+        let layer = Layer(name: kind.displayName, content: .shape(shape), transform: LayerTransform(center: center ?? PSPoint(x: 0.5, y: 0.5)))
+        var document = self.document
+        document.addLayer(layer)
+        document.selectedLayerID = layer.id
+        commit(document, label: L("Add Shape"))
+        Haptics.tick()
+    }
+
+    public func updateShape(layerID: UUID, _ body: (inout ShapeElement) -> Void) {
+        var document = self.document
+        document.update(layerID: layerID) { layer in
+            guard var shape = layer.shapeElement else { return }
+            body(&shape)
+            layer.shapeElement = shape
+        }
+        history.commit(document, label: "Edit Shape")
+        requestPreview(interactive: true)
     }
 
     public func updateText(layerID: UUID, _ body: (inout TextElement) -> Void) {

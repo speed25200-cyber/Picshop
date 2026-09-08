@@ -27,6 +27,16 @@ public enum BlendMode: String, Codable, Sendable, CaseIterable, Identifiable {
 public struct ShapeElement: Hashable, Codable, Sendable {
     public enum Kind: String, Codable, Sendable, CaseIterable {
         case rectangle, roundedRectangle, ellipse, line, arrow
+
+        public var displayName: String {
+            switch self {
+            case .rectangle: return "Rectangle"
+            case .roundedRectangle: return "Rounded"
+            case .ellipse: return "Ellipse"
+            case .line: return "Line"
+            case .arrow: return "Arrow"
+            }
+        }
     }
 
     public var kind: Kind
@@ -93,6 +103,21 @@ public struct Layer: Hashable, Codable, Sendable, Identifiable {
     public var isText: Bool {
         if case .text = content { return true }
         return false
+    }
+
+    public var isShape: Bool {
+        if case .shape = content { return true }
+        return false
+    }
+
+    public var shapeElement: ShapeElement? {
+        get {
+            if case .shape(let shape) = content { return shape }
+            return nil
+        }
+        set {
+            if let newValue { content = .shape(newValue) }
+        }
     }
 
     public var imageAsset: MediaAsset? {

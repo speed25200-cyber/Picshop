@@ -20,6 +20,7 @@ struct PhotoToolPanel: View {
             case .cutout: CutoutPanel(session: session)
             case .crop: CropPanel(session: session)
             case .text: TextPanel(session: session)
+            case .shapes: ShapesPanel(session: session)
             case .layers: LayersPanel(session: session)
             }
         }
@@ -365,6 +366,8 @@ struct CutoutPanel: View {
 
 struct CropPanel: View {
     @Bindable var session: PhotoEditorSession
+    private enum Geometry { case straighten, vertical, horizontal }
+    @State private var geometry: Geometry = .straighten
     private let presets: [AspectPreset] = [.free, .original, .square, .ratio4x5, .ratio9x16, .ratio3x4, .ratio4x3, .ratio16x9, .ratio3x2, .ratio21x9]
 
     var body: some View {
@@ -379,12 +382,25 @@ struct CropPanel: View {
                 }
                 .padding(.horizontal, 2)
             }
-            DialSlider(value: $session.straightenPreview, range: -20...20, neutral: 0, label: L("Straighten"), units: 80, format: { String(format: "%.1f°", $0) })
+            HStack(spacing: 6) {
+                PanelChip(title: L("Straighten"), symbol: "level", isActive: geometry == .straighten) { geometry = .straighten }
+                PanelChip(title: L("Vertical"), symbol: "perspective", isActive: geometry == .vertical) { geometry = .vertical }
+                PanelChip(title: L("Horizontal"), symbol: "trapezoid.and.line.horizontal", isActive: geometry == .horizontal) { geometry = .horizontal }
+                Spacer()
+            }
+            switch geometry {
+            case .straighten:
+                DialSlider(value: $session.straightenPreview, range: -20...20, neutral: 0, label: L("Straighten"), units: 80, format: { String(format: "%.1f°", $0) })
+            case .vertical:
+                DialSlider(value: $session.perspectiveVertical, range: -1...1, neutral: 0, label: L("Vertical"), units: 60, format: { String(format: "%.0f", $0 * 100) })
+            case .horizontal:
+                DialSlider(value: $session.perspectiveHorizontal, range: -1...1, neutral: 0, label: L("Horizontal"), units: 60, format: { String(format: "%.0f", $0 * 100) })
+            }
             HStack(spacing: 8) {
                 IconChip(title: L("Rotate"), symbol: "rotate.right") { session.rotateQuarterTurn() }
                 IconChip(title: L("Flip"), symbol: "arrow.left.and.right.righttriangle.left.righttriangle.right") { session.flipHorizontally() }
                 IconChip(title: L("Auto level"), symbol: "level") { session.autoLevel() }
-                IconChip(title: L("Reset"), symbol: "arrow.counterclockwise", isEnabled: session.cropRect != .unit || session.straightenPreview != 0) { session.beginCrop() }
+                IconChip(title: L("Reset"), symbol: "arrow.counterclockwise", isEnabled: session.hasPendingGeometry) { session.beginCrop(); geometry = .straighten }
                 Spacer()
             }
         }
@@ -480,6 +496,96 @@ struct TextPanel: View {
 }
 
 // MARK: - Layers
+
+struct ShapesPanel: View {
+    @Bindable var session: PhotoEditorSession
+    private let colors: [PSColor] = [.white, .black, .yellow, .orange, .red, .pink, .purple, .blue, .teal, .green]
+
+    private var selectedShapeLayer: Layer? {
+        if let layer = session.document.selectedLayer, layer.isShape { return layer }
+        return session.document.shapeLayers.last
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(ShapeElement.Kind.allCases, id: \.self) { kind in
+                        PanelChip(title: kindName(kind), symbol: symbol(kind), isActive: session.shapeKindToAdd == kind) {
+                            session.shapeKindToAdd = kind
+                            session.addShape(kind)
+                        }
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+            if let layer = selectedShapeLayer, let shape = layer.shapeElement {
+                HStack(spacing: 8) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(colors, id: \.self) { color in
+                                ColorSwatch(color: color, isSelected: (shape.stroke != nil && shape.kind != .line && shape.kind != .arrow ? shape.stroke : shape.fill) == color, size: 24) {
+                                    session.updateShape(layerID: layer.id) { element in
+                                        if element.stroke != nil, element.kind != .line, element.kind != .arrow { element.stroke = color } else { element.fill = color }
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 2)
+                    }
+                    if shape.kind != .line, shape.kind != .arrow {
+                        PanelChip(title: shape.stroke == nil ? L("Filled") : L("Outline"), symbol: shape.stroke == nil ? "square.fill" : "square", isActive: shape.stroke != nil) {
+                            session.updateShape(layerID: layer.id) { element in
+                                if element.stroke == nil {
+                                    element.stroke = element.fill
+                                    element.fill = .clear
+                                    element.strokeWidth = max(element.strokeWidth, 0.008)
+                                } else {
+                                    element.fill = element.stroke ?? .white
+                                    element.stroke = nil
+                                }
+                            }
+                        }
+                    }
+                    Button(role: .destructive) { Haptics.warning(); session.removeLayer(layer.id) } label: { Image(systemName: "trash").font(.system(size: 14, weight: .semibold)).frame(width: 34, height: 34) }
+                        .buttonStyle(.plain).foregroundStyle(PSTheme.danger).psGlass(interactive: true, shape: AnyShape(Circle()))
+                        .accessibilityLabel(L("Delete"))
+                }
+                if shape.stroke != nil || shape.kind == .line || shape.kind == .arrow {
+                    DialSlider(value: Binding(get: { shape.strokeWidth * 1000 }, set: { value in session.updateShape(layerID: layer.id) { $0.strokeWidth = value / 1000 } }),
+                               range: 2...40, neutral: 8, label: L("Thickness"), units: 38, format: { String(format: "%.0f", $0) })
+                }
+                DialSlider(value: Binding(get: { layer.opacity * 100 }, set: { value in session.updateLayer(layer.id) { $0.opacity = value / 100 } }),
+                           range: 0...100, neutral: 100, label: L("Opacity"), units: 50, format: { String(format: "%.0f%%", $0) })
+                Text(L("Tap the canvas to place a shape. Drag to move, pinch to resize, twist to rotate."))
+                    .font(PSFont.caption(11)).foregroundStyle(PSTheme.textSecondary)
+            } else {
+                Text(L("Pick a shape, then tap the canvas to place it."))
+                    .font(PSFont.caption(11)).foregroundStyle(PSTheme.textSecondary)
+            }
+        }
+    }
+
+    private func kindName(_ kind: ShapeElement.Kind) -> String {
+        switch kind {
+        case .rectangle: return L("Rectangle")
+        case .roundedRectangle: return L("Rounded")
+        case .ellipse: return L("Ellipse")
+        case .line: return L("Line")
+        case .arrow: return L("Arrow")
+        }
+    }
+
+    private func symbol(_ kind: ShapeElement.Kind) -> String {
+        switch kind {
+        case .rectangle: return "rectangle"
+        case .roundedRectangle: return "rectangle.roundedtop"
+        case .ellipse: return "oval"
+        case .line: return "line.diagonal"
+        case .arrow: return "arrow.up.right"
+        }
+    }
+}
 
 struct LayersPanel: View {
     @Bindable var session: PhotoEditorSession

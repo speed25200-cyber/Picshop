@@ -10,6 +10,8 @@ public struct PDFMarkup: Hashable, Codable, Sendable, Identifiable {
         case underline(rects: [PSRect], color: PSColor)
         case strikeout(rects: [PSRect], color: PSColor)
         case redaction(rects: [PSRect])
+        /// Covers the original words and writes new text in their place.
+        case replacement(rects: [PSRect], text: TextElement)
         case text(TextElement)
         case image(MediaAsset, frame: PSRect)
         case signature(MediaAsset, frame: PSRect)
@@ -34,6 +36,7 @@ public struct PDFMarkup: Hashable, Codable, Sendable, Identifiable {
         case .underline: return "Underline"
         case .strikeout: return "Strikethrough"
         case .redaction: return "Redaction"
+        case .replacement(_, let element): return "Replace with “\(element.text)”"
         case .text(let element): return "Text “\(element.text)”"
         case .image: return "Image"
         case .signature: return "Signature"

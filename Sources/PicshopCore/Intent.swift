@@ -69,6 +69,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     case underlineText
     case redactText
     case findText
+    case replaceText
     case addSignature
     case extractPage
     case addPageNumbers
@@ -100,7 +101,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
 
     public var isPDFOnly: Bool {
         switch self {
-        case .deletePage, .rotatePage, .movePage, .duplicatePage, .insertBlankPage, .goToPage, .highlightText, .underlineText, .redactText, .findText,
+        case .deletePage, .rotatePage, .movePage, .duplicatePage, .insertBlankPage, .goToPage, .highlightText, .underlineText, .redactText, .findText, .replaceText,
              .addSignature, .extractPage, .addPageNumbers, .mergeDocument:
             return true
         default:
@@ -248,12 +249,14 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
     public var index: Int?
     public var scope: TargetScope
     public var confidence: Double
+    /// Replacement text for `replaceText`.
+    public var replacement: String?
 
     public init(id: UUID = UUID(), action: IntentAction, target: ObjectTarget? = nil, parameter: AdjustmentParameter? = nil,
                 amount: AmountSpec? = nil, look: FilterPreset? = nil, aspect: AspectPreset? = nil, degrees: Double? = nil,
                 flipAxis: FlipAxis? = nil, text: String? = nil, placement: TextElement.Placement? = nil, color: PSColor? = nil,
                 background: BackgroundSpec? = nil, timeRange: TimeSpan? = nil, time: Double? = nil, clipIndex: Int? = nil,
-                transition: TransitionKind? = nil, index: Int? = nil, scope: TargetScope = .current, confidence: Double = 1) {
+                transition: TransitionKind? = nil, index: Int? = nil, scope: TargetScope = .current, confidence: Double = 1, replacement: String? = nil) {
         self.id = id
         self.action = action
         self.target = target
@@ -274,6 +277,7 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         self.index = index
         self.scope = scope
         self.confidence = confidence
+        self.replacement = replacement
     }
 
     /// Short human description shown in the command feedback chip.
@@ -317,6 +321,7 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .underlineText: return "Underline “\(text ?? "")”"
         case .redactText: return "Redact “\(text ?? "")”"
         case .findText: return "Find “\(text ?? "")”"
+        case .replaceText: return "Replace “\(text ?? "")” with “\(replacement ?? "")”"
         case .addSignature: return "Add signature"
         case .extractPage: return "Extract page"
         case .addPageNumbers: return "Page numbers"

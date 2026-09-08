@@ -46,6 +46,7 @@ public enum Replies {
         case .underlineText: return fr ? "Souligné." : "Underlined."
         case .redactText: return fr ? "Caviardé." : "Redacted."
         case .findText: return fr ? "Je cherche « \(intent.text ?? "") »." : "Searching for “\(intent.text ?? "")”."
+        case .replaceText: return fr ? "Je remplace « \(intent.text ?? "") » par « \(intent.replacement ?? "") »." : "Replacing “\(intent.text ?? "")” with “\(intent.replacement ?? "")”."
         case .addSignature: return fr ? "Signature ajoutée." : "Signature added."
         case .extractPage: return fr ? "Page exportée en photo." : "Page saved as a photo."
         case .addPageNumbers: return fr ? "Numéros de page ajoutés." : "Page numbers added."

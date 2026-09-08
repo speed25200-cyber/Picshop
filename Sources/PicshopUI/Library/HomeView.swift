@@ -68,6 +68,11 @@ public struct HomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 heroActions
+                if let app, let progress = app.modelInstallProgress {
+                    ModelInstallBanner(progress: progress)
+                        .padding(.horizontal, 20)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
                 if let library = app?.library, !library.projects.isEmpty {
                     Text(L("Recent"))
                         .font(PSFont.headline(20))
@@ -183,16 +188,16 @@ struct ProjectCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .topTrailing) {
-                Group {
-                    if let thumbnail {
-                        Image(uiImage: thumbnail).resizable().scaledToFill()
-                    } else {
-                        PSTheme.surfaceElevated
+                Color.clear
+                    .aspectRatio(4 / 5, contentMode: .fit)
+                    .overlay {
+                        if let thumbnail {
+                            Image(uiImage: thumbnail).resizable().scaledToFill()
+                        } else {
+                            PSTheme.surfaceElevated
+                        }
                     }
-                }
-                .frame(maxWidth: .infinity)
-                .aspectRatio(4 / 5, contentMode: .fill)
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(PSTheme.hairline, lineWidth: 1))
                 if project.isVideo || project.isPDF {
                     Image(systemName: project.isPDF ? "doc.text.fill" : "play.fill")
@@ -210,6 +215,25 @@ struct ProjectCard: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(project.title)
+    }
+}
+
+/// Quiet progress row shown while the large models download themselves.
+struct ModelInstallBanner: View {
+    let progress: Double
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.down.circle.fill").font(.system(size: 18, weight: .semibold)).foregroundStyle(PSTheme.accent)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L("Installing AI models")).font(PSFont.headline(13)).foregroundStyle(PSTheme.textPrimary)
+                ProgressView(value: progress).tint(PSTheme.accent)
+            }
+            Text("\(Int((progress * 100).rounded()))%").font(PSFont.mono(12)).foregroundStyle(PSTheme.textSecondary)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .psGlass(shape: AnyShape(RoundedRectangle(cornerRadius: 18, style: .continuous)))
+        .accessibilityElement(children: .combine)
     }
 }
 

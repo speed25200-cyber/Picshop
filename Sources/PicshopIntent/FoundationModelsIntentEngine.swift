@@ -111,6 +111,9 @@ struct GeneratedStep {
     @Guide(description: "For addText/editText: the exact text to show, or for addMusic the genre.")
     var text: String?
 
+    @Guide(description: "For replaceText: the new words that replace `text`.")
+    var replacement: String?
+
     @Guide(description: "For addText: top, center, bottom, topLeading, topTrailing, bottomLeading or bottomTrailing.")
     var placement: String?
 
@@ -170,7 +173,7 @@ extension GeneratedPlan {
                           amountMode: step.amountMode, amount: step.amount, look: step.look, aspect: step.aspect, degrees: step.degrees, flipAxis: step.flipAxis,
                           text: step.text, placement: step.placement, color: step.color, background: step.background, startSeconds: step.startSeconds,
                           endSeconds: step.endSeconds, seconds: step.seconds, clipNumber: step.clipNumber, transition: step.transition, speed: step.speed,
-                          choiceIndex: step.choiceIndex, scope: step.scope)
+                          choiceIndex: step.choiceIndex, scope: step.scope, replacement: step.replacement)
         }, reply: reply, clarification: clarification, language: language)
     }
 }

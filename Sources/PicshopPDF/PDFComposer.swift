@@ -82,6 +82,34 @@ public enum PDFComposer {
                 annotation.border = border
                 return annotation
             }
+        case .replacement(let rects, let element):
+            guard let first = rects.min(by: { $0.minY < $1.minY || ($0.minY == $1.minY && $0.minX < $1.minX) }) else { return [] }
+            var annotations: [PDFAnnotation] = rects.map { rect in
+                let bounds = PDFGeometry.pagePoints(fromBase: rect.insetBy(dx: -0.002, dy: -0.002), size: pageSize).cgRect
+                let cover = PDFAnnotation(bounds: bounds, forType: .square, withProperties: nil)
+                cover.color = .white
+                cover.interiorColor = .white
+                let border = PDFBorder()
+                border.lineWidth = 0
+                cover.border = border
+                return cover
+            }
+            let box = PDFGeometry.pagePoints(fromBase: first, size: pageSize).cgRect
+            // Fit the new text into the height of the original line; let it run to the right if longer.
+            let fontSize = max(4, box.height * 0.78)
+            let font = UIFont.systemFont(ofSize: fontSize, weight: element.fontName.contains("Bold") || element.fontName.contains("Semibold") ? .semibold : .regular)
+            let measured = (element.text as NSString).size(withAttributes: [.font: font])
+            let width = max(box.width, ceil(measured.width) + fontSize * 0.4)
+            let bounds = CGRect(x: box.minX - fontSize * 0.1, y: box.minY - fontSize * 0.15, width: width + fontSize * 0.2, height: max(box.height, ceil(measured.height)) + fontSize * 0.3)
+            let text = PDFAnnotation(bounds: bounds, forType: .freeText, withProperties: nil)
+            text.contents = element.text
+            text.font = font
+            text.fontColor = UIColor(cgColor: element.color.cgColor)
+            text.color = .clear
+            text.alignment = .left
+            annotations.append(text)
+            return annotations
+
         case .text(let element), .pageNumber(let element):
             let fontSize = element.relativeSize * pageSize.height
             let font = UIFont.systemFont(ofSize: fontSize, weight: element.fontName.contains("Bold") || element.fontName.contains("Semibold") ? .semibold : .regular)

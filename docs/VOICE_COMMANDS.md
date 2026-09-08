@@ -84,6 +84,7 @@ model (Settings › On-device models); recolouring works offline.
 | Tourne la page · Rotate page 2 left · Rotate all pages | Rotate |
 | Déplace la page 4 au début · Move this page to the end · Duplique la page · Insère une page blanche | Reorder / duplicate / insert |
 | Surligne « total » · Highlight the word invoice everywhere · Souligne « date » · Caviarde le nom · Cherche facture | Text markup & search |
+| Remplace monsieur par madame · Change « total » en « montant » partout · Replace invoice with receipt | Replace words (covers the original, writes the new text in place) |
 | Signe en bas à droite · Add my signature · Ajoute le texte « Approuvé » en haut | Signature & text |
 | Extrais la page en photo · Ajoute des numéros de page · Fusionne avec un autre PDF | Page tools |
 

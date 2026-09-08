@@ -70,6 +70,24 @@ final class PDFGrammarTests: XCTestCase {
         XCTAssertEqual(first("supprime la signature").text, "signature")
     }
 
+    func testReplaceText() {
+        let simple = first("remplace monsieur par madame")
+        XCTAssertEqual(simple.action, .replaceText)
+        XCTAssertEqual(simple.text, "monsieur")
+        XCTAssertEqual(simple.replacement, "madame")
+        let cased = first("Change Monsieur par Madame")
+        XCTAssertEqual(cased.text, "Monsieur")
+        XCTAssertEqual(cased.replacement, "Madame")
+        let quoted = first("replace \"total\" with \"sum\" everywhere")
+        XCTAssertEqual(quoted.action, .replaceText)
+        XCTAssertEqual(quoted.text, "total")
+        XCTAssertEqual(quoted.replacement, "sum")
+        XCTAssertEqual(quoted.scope, .all)
+        XCTAssertEqual(first("remplace le mot facture par devis").text, "facture")
+        XCTAssertEqual(first("remplace le mot facture par devis").replacement, "devis")
+        XCTAssertNotEqual(first("change de page").action, .replaceText)
+    }
+
     func testTextMarkup() {
         let highlight = first("surligne « montant total »")
         XCTAssertEqual(highlight.action, .highlightText)

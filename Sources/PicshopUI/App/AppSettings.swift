@@ -12,7 +12,6 @@ import PicshopVideo
 public final class AppSettings {
     private let defaults = UserDefaults.standard
 
-    public var preferredEngine: IntentEngineKind { didSet { defaults.set(preferredEngine.rawValue, forKey: "engine") } }
     public var voiceMode: VoiceController.Mode { didSet { defaults.set(voiceMode.rawValue, forKey: "voiceMode") } }
     /// "auto", "fr" or "en".
     public var voiceLanguage: String { didSet { defaults.set(voiceLanguage, forKey: "voiceLanguage") } }
@@ -21,11 +20,11 @@ public final class AppSettings {
     public var photoExportFormat: ExportOptions.Format { didSet { defaults.set(photoExportFormat.rawValue, forKey: "photoFormat") } }
     public var videoExportQuality: VideoExportOptions.Quality { didSet { defaults.set(videoExportQuality.rawValue, forKey: "videoQuality") } }
     public var hasCompletedOnboarding: Bool { didSet { defaults.set(hasCompletedOnboarding, forKey: "onboarded") } }
-    public var modelBaseURL: String { didSet { defaults.set(modelBaseURL, forKey: "picshop.modelBaseURL") } }
+    /// Large models (Generative Fill, Pro Brain) download by themselves over Wi‑Fi.
+    public var autoInstallsModels: Bool { didSet { defaults.set(autoInstallsModels, forKey: "autoInstallsModels") } }
     public var showsVoiceTranscript: Bool { didSet { defaults.set(showsVoiceTranscript, forKey: "showsTranscript") } }
 
     public init() {
-        preferredEngine = IntentEngineKind(rawValue: defaults.string(forKey: "engine") ?? "") ?? .appleIntelligence
         voiceMode = VoiceController.Mode(rawValue: defaults.string(forKey: "voiceMode") ?? "") ?? .tapToTalk
         voiceLanguage = defaults.string(forKey: "voiceLanguage") ?? "auto"
         speaksReplies = (defaults.object(forKey: "speaksReplies") as? Bool) ?? false
@@ -33,10 +32,19 @@ public final class AppSettings {
         photoExportFormat = ExportOptions.Format(rawValue: defaults.string(forKey: "photoFormat") ?? "") ?? .heic
         videoExportQuality = VideoExportOptions.Quality(rawValue: defaults.string(forKey: "videoQuality") ?? "") ?? .high
         hasCompletedOnboarding = defaults.bool(forKey: "onboarded")
-        modelBaseURL = defaults.string(forKey: "picshop.modelBaseURL") ?? ""
+        autoInstallsModels = (defaults.object(forKey: "autoInstallsModels") as? Bool) ?? true
         showsVoiceTranscript = (defaults.object(forKey: "showsTranscript") as? Bool) ?? true
         VoiceFeedback.shared.isEnabled = speaksReplies
         Haptics.isEnabled = hapticsEnabled
+    }
+
+    /// Models the user removed on purpose are not re-downloaded automatically.
+    public func setAutoInstallSkipped(_ skipped: Bool, for modelID: String) {
+        defaults.set(skipped, forKey: "skipAutoInstall.\(modelID)")
+    }
+
+    public func isAutoInstallSkipped(_ modelID: String) -> Bool {
+        defaults.bool(forKey: "skipAutoInstall.\(modelID)")
     }
 
     /// Locale used for speech recognition.

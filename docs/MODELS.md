@@ -34,8 +34,8 @@ A user-installed copy in `Application Support/Models/<id>/` takes precedence ove
 
 ## Generative Fill (Stable Diffusion)
 
-Generate the project with `xcodegen generate --spec project-pro.yml` (adds Apple's [`ml-stable-diffusion`](https://github.com/apple/ml-stable-diffusion) package). Settings › On-device models downloads the
-`split_einsum/compiled` folder of `apple/coreml-stable-diffusion-v1-5` file by file from Hugging Face
+Generate the project with `xcodegen generate --spec project-pro.yml` (adds Apple's [`ml-stable-diffusion`](https://github.com/apple/ml-stable-diffusion) package). The app downloads the
+`split_einsum/compiled` folder of `apple/coreml-stable-diffusion-v1-5` file by file from Hugging Face, by itself over Wi‑Fi on first launch (progress on the Home screen; Settings › On-device models can retry or delete it)
 (`TextEncoder.mlmodelc`, `Unet.mlmodelc`, `VAEDecoder.mlmodelc`, `VAEEncoder.mlmodelc`, `merges.txt`, `vocab.json`). The engine runs masked image-to-image on a
 512 px crop around the selection; the pipeline composites the result back inside the mask only.
 
