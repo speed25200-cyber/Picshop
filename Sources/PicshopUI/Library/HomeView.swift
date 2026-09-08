@@ -136,6 +136,9 @@ public struct HomeView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
+            Text(Date.now, format: .dateTime.weekday(.wide).day().month(.wide))
+                .font(PSFont.caption(12)).textCase(.uppercase).tracking(0.8)
+                .foregroundStyle(PSTheme.textTertiary)
             Text("PicShop").font(PSFont.display(40)).foregroundStyle(PSTheme.textPrimary).tracking(-1.4)
             Text(L("Photos, videos and PDFs. Just say it."))
                 .font(PSFont.body(15)).foregroundStyle(PSTheme.textSecondary)
@@ -198,24 +201,30 @@ public struct HomeView: View {
             Haptics.confirm()
             action()
         } label: {
-            HStack(spacing: 14) {
-                Image(systemName: systemImage)
-                    .font(.system(size: prominent ? 26 : 20, weight: .semibold))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(prominent ? Color.white : tint)
-                    .frame(width: prominent ? 56 : 44, height: prominent ? 56 : 44)
-                    .background(prominent ? Color.white.opacity(0.22) : tint.opacity(0.18), in: RoundedRectangle(cornerRadius: prominent ? 18 : 14, style: .continuous))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(PSFont.headline(prominent ? 19 : 15)).foregroundStyle(PSTheme.textPrimary)
-                    Text(subtitle).font(PSFont.caption(prominent ? 13 : 11)).foregroundStyle(prominent ? Color.white.opacity(0.8) : PSTheme.textSecondary).lineLimit(2)
-                }
-                Spacer(minLength: 0)
+            Group {
                 if prominent {
-                    Image(systemName: "chevron.right").font(.system(size: 14, weight: .bold)).foregroundStyle(Color.white.opacity(0.8))
+                    HStack(spacing: 14) {
+                        heroIcon(systemImage, tint: tint, prominent: true)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(title).font(PSFont.headline(19)).foregroundStyle(PSTheme.textPrimary)
+                            Text(subtitle).font(PSFont.caption(13)).foregroundStyle(Color.white.opacity(0.8)).lineLimit(2)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right").font(.system(size: 14, weight: .bold)).foregroundStyle(Color.white.opacity(0.8))
+                    }
+                } else {
+                    // Secondary cards stack vertically so the subtitle never wraps into the icon.
+                    VStack(alignment: .leading, spacing: 12) {
+                        heroIcon(systemImage, tint: tint, prominent: false)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(title).font(PSFont.headline(16)).foregroundStyle(PSTheme.textPrimary)
+                            Text(subtitle).font(PSFont.caption(11.5)).foregroundStyle(PSTheme.textSecondary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, prominent ? 18 : 14)
+            .padding(.vertical, prominent ? 18 : 16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
@@ -223,6 +232,16 @@ public struct HomeView: View {
         .modifier(HeroSurface(prominent: prominent))
         .accessibilityLabel(title)
         .accessibilityHint(subtitle)
+    }
+
+    private func heroIcon(_ systemImage: String, tint: Color, prominent: Bool) -> some View {
+        Image(systemName: systemImage)
+            .font(.system(size: prominent ? 26 : 20, weight: .semibold))
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(prominent ? Color.white : tint)
+            .frame(width: prominent ? 56 : 44, height: prominent ? 56 : 44)
+            .background(prominent ? Color.white.opacity(0.22) : tint.opacity(0.18), in: RoundedRectangle(cornerRadius: prominent ? 18 : 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: prominent ? 18 : 14, style: .continuous).strokeBorder(prominent ? Color.white.opacity(0.25) : tint.opacity(0.35), lineWidth: 1))
     }
 
     private func projectGrid(_ projects: [Project]) -> some View {

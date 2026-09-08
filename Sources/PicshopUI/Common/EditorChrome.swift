@@ -123,11 +123,20 @@ struct ToolDock<Tool: Identifiable & Hashable>: View {
     @Namespace private var indicator
     @Environment(\.psEffects) private var effects
 
-    private let itemWidth: CGFloat = 64
+    private let preferredItemWidth: CGFloat = 64
+    private let minimumItemWidth: CGFloat = 54
     private let itemSpacing: CGFloat = 2
+
+    /// Items shrink down to `minimumItemWidth` so a five-tool dock fits an iPhone
+    /// without scrolling; only longer docks scroll.
+    private func itemWidth(in available: CGFloat) -> CGFloat {
+        let fitting = (available - 12 - CGFloat(max(0, tools.count - 1)) * itemSpacing) / CGFloat(max(1, tools.count))
+        return min(preferredItemWidth, max(minimumItemWidth, fitting))
+    }
 
     var body: some View {
         GeometryReader { proxy in
+            let itemWidth = itemWidth(in: proxy.size.width)
             let scrolls = CGFloat(tools.count) * (itemWidth + itemSpacing) + 12 > proxy.size.width
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: itemSpacing) {
