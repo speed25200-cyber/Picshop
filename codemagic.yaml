@@ -45,7 +45,7 @@ definitions:
         python3 Scripts/convert_models.py all --out App/Models || true
         ls -la App/Models || true
     - &generate
-      name: Generate Xcode project (Pro: MLX + Stable Diffusion runtimes)
+      name: "Generate Xcode project (Pro — MLX + Stable Diffusion)"
       script: |
         set -e
         xcodegen generate --spec project-pro.yml
