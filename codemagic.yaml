@@ -12,7 +12,8 @@
 #                          The bundle ID, certificate and provisioning profile are created in the
 #                          developer portal automatically when missing. An app record with bundle ID
 #                          com.picshop.app must exist in App Store Connect for the TestFlight upload.
-#   picshop-unsigned    — build + tests + unsigned archive, no Apple credentials needed.
+#   picshop-build       — runs on every push: tests + simulator build + unsigned archive,
+#                          no Apple credentials needed.
 definitions:
   env: &env
     xcode: latest
@@ -70,14 +71,8 @@ workflows:
       app_store_connect: app_store_connect
     environment: *env
     cache: *cache
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: "*"
-          include: true
-          source: true
-      cancel_previous_builds: true
+    # Started manually (Start new build → PicShop → TestFlight) once the App Store Connect
+    # integration exists; every push is compiled by the "picshop-build" workflow below.
     scripts:
       - *toolchain
       - *generate
@@ -138,14 +133,15 @@ workflows:
         # beta_groups:
         #   - Testeurs internes
 
-  picshop-unsigned:
-    name: PicShop (unsigned check)
+  picshop-build:
+    name: PicShop (build check)
     max_build_duration: 90
     instance_type: mac_mini_m2
     environment: *env
     cache: *cache
     triggering:
       events:
+        - push
         - pull_request
       branch_patterns:
         - pattern: "*"
