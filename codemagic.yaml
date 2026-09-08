@@ -35,6 +35,11 @@ definitions:
         xcodebuild -version
         swift --version
         brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+        # Xcode 26 ships the Metal compiler as a downloadable component; mlx-swift compiles Metal kernels.
+        if ! xcrun metal --version >/dev/null 2>&1; then
+          xcodebuild -downloadComponent MetalToolchain
+          xcrun metal --version
+        fi
         # mlx-swift ships a build-tool plugin; trust package plugins and macros on this CI machine.
         defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidatation -bool YES
         defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES
