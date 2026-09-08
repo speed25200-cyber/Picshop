@@ -43,7 +43,7 @@ public struct HomeView: View {
                 AmbientBackground().ignoresSafeArea()
                 content
             }
-            .navigationTitle("PicShop")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(.hidden, for: .navigationBar)
