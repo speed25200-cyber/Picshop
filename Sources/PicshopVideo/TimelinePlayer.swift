@@ -15,31 +15,26 @@ public final class TimelinePlayer {
     public private(set) var duration: Double = 0
     public private(set) var isReady = false
 
-    private var timeObserver: Any?
+    private let observers: PlaybackObservers
     private var builder: CompositionBuilder
     private var buildTask: Task<Void, Never>?
-    private var endObserver: NSObjectProtocol?
     private var lastBuiltHash: Int?
 
     public init(store: ProjectStore, projectID: UUID) {
         builder = CompositionBuilder(store: store, projectID: projectID)
         player.actionAtItemEnd = .pause
         player.automaticallyWaitsToMinimizeStalling = false
-        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 60), queue: .main) { [weak self] time in
+        observers = PlaybackObservers(player: player)
+        observers.time = player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 60), queue: .main) { [weak self] time in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.currentTime = CMTimeGetSeconds(time)
                 self.isPlaying = self.player.timeControlStatus == .playing
             }
         }
-        endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: nil, queue: .main) { [weak self] _ in
+        observers.end = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in self?.isPlaying = false }
         }
-    }
-
-    deinit {
-        if let timeObserver { player.removeTimeObserver(timeObserver) }
-        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
     }
 
     /// Rebuilds the player item if the timeline changed. Keeps the playhead.
@@ -98,4 +93,21 @@ public final class TimelinePlayer {
         await seek(to: currentTime + Double(frames) / max(1, frameRate))
     }
 }
+/// Owns the AVPlayer observation tokens so they can be released from a
+/// nonisolated `deinit` without touching main-actor state.
+private final class PlaybackObservers: @unchecked Sendable {
+    let player: AVPlayer
+    var time: Any?
+    var end: NSObjectProtocol?
+
+    init(player: AVPlayer) {
+        self.player = player
+    }
+
+    deinit {
+        if let time { player.removeTimeObserver(time) }
+        if let end { NotificationCenter.default.removeObserver(end) }
+    }
+}
+
 #endif

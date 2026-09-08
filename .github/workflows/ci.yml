@@ -41,6 +41,7 @@ jobs:
           swift --version
       - name: Build every module (collect all errors)
         run: |
+          set -o pipefail
           status=0
           for target in PicshopCore PicshopIntent PicshopImaging PicshopVideo PicshopSpeech PicshopPDF PicshopUI; do
             echo "::group::swift build --target $target"
