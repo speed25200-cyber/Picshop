@@ -162,7 +162,7 @@ public final class VideoEditorSession {
         if parts[1] == "save" {
             let name = requested.isEmpty ? "v\(versions.count + 1)" : requested
             versions.removeAll { $0.name.lowercased() == name.lowercased() }
-            versions.append((name, document))
+            versions.append((name, timeline))
             showToast(String(format: L("Version “%@” saved"), name))
             Haptics.success()
         } else if parts[1] == "restore" {
