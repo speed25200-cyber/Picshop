@@ -444,7 +444,7 @@ struct CropOverlay: View {
                         }
                 )
         }
-        .animation(.interactiveSpring, value: rect)
+        .animation(.interactiveSpring(), value: rect)
     }
 
     private func viewRect(_ r: PSRect) -> CGRect {
