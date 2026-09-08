@@ -9,6 +9,6 @@ if ! command -v xcodegen >/dev/null 2>&1; then
 fi
 
 python3 Scripts/generate_strings.py
-python3 Scripts/generate_icon.py >/dev/null
+python3 -c "import PIL, numpy" 2>/dev/null && python3 Scripts/generate_icon.py >/dev/null || echo "note: pip install pillow numpy to regenerate the icon (committed PNGs are used otherwise)"
 xcodegen generate
 echo "✓ PicShop.xcodeproj generated. Open it, pick your team, run on an iPhone 17 Pro (iOS 26)."
