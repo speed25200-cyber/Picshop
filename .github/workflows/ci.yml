@@ -129,6 +129,22 @@ jobs:
         run: |
           sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
           xcodebuild -version
+      - name: Cache converted Core ML models
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/picshop-models
+          key: picshop-models-${{ hashFiles('Scripts/convert_models.py') }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Convert neural models (LaMa, Real-ESRGAN)
+        run: |
+          if ! ls -d ~/Library/Caches/picshop-models/packages/*/*.mlpackage >/dev/null 2>&1; then
+            python3 -m pip install --quiet --upgrade pip
+            python3 -m pip install --quiet "torch==2.5.1" "coremltools==8.2" "numpy<2.3"
+          fi
+          python3 Scripts/convert_models.py all --out App/Models || true
+          ls -la App/Models || true
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project (pro)

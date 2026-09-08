@@ -49,12 +49,11 @@ targets:
           - "**/*.md"
           - "Models/**"
       # Core ML packages produced by Scripts/convert_models.py (compiled into the bundle by Xcode).
-      - path: App/Models/lama-inpainting.mlpackage
-        type: file
+      # Only the packages present at generation time are referenced, so a build without them still works.
+      - path: App/Models
         optional: true
-      - path: App/Models/realesrgan-x4.mlpackage
-        type: file
-        optional: true
+        excludes:
+          - ".gitkeep"
     dependencies:
       - package: PicshopKit
         product: PicshopUI
