@@ -164,8 +164,6 @@ public struct SettingsView: View {
                 Text("English").tag("en")
             }
             Toggle(L("Speak replies"), isOn: Binding(get: { app.settings.speaksReplies }, set: { app.settings.speaksReplies = $0 }))
-            Toggle(L("Show transcript"), isOn: Binding(get: { app.settings.showsVoiceTranscript }, set: { app.settings.showsVoiceTranscript = $0 }))
-            Toggle(L("Haptics"), isOn: Binding(get: { app.settings.hapticsEnabled }, set: { app.settings.hapticsEnabled = $0 }))
         }
     }
 

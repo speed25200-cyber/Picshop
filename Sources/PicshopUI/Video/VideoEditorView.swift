@@ -81,18 +81,25 @@ public struct VideoEditorView: View {
     private var bottomArea: some View {
         VStack(spacing: 8) {
             if let tool = session.activeTool {
-                ToolPanelContainer(title: tool.title, symbol: tool.symbol, onClose: { session.activeTool = nil }) {
+                let group = VideoEditorSession.Tool.groups.first { $0.contains(tool) }
+                let grouped = (group?.tools.count ?? 1) > 1
+                ToolPanelContainer(title: grouped ? group?.title ?? tool.title : tool.title, symbol: grouped ? group?.symbol ?? tool.symbol : tool.symbol,
+                                   onClose: { session.activeTool = nil },
+                                   modes: grouped ? AnyView(ModeSegments(modes: group?.tools ?? [], selection: $session.activeTool, title: { $0.title }, symbol: { $0.symbol })) : nil) {
                     VideoToolPanel(session: session, tool: tool)
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             if let app {
-                VoiceBar(voice: app.voice, isBusy: session.isProcessing, busyTitle: session.processingTitle,
-                         transcript: session.transcript, plan: session.lastPlan, clarification: session.pendingClarification,
-                         showsTranscript: app.settings.showsVoiceTranscript,
-                         onChoose: { session.choose(candidateIndex: $0) }, onChooseAll: { session.chooseAllCandidates() }, onCancel: { session.cancelClarification() })
+                VoiceStrip(voice: app.voice, isBusy: session.isProcessing, busyTitle: session.processingTitle,
+                           transcript: session.transcript, plan: session.lastPlan, clarification: session.pendingClarification,
+                           showsHint: session.activeTool == nil,
+                           onChoose: { session.choose(candidateIndex: $0) }, onChooseAll: { session.chooseAllCandidates() }, onCancel: { session.cancelClarification() })
             }
-            ToolDock(tools: VideoEditorSession.Tool.allCases, selection: $session.activeTool, title: { $0.title }, symbol: { $0.symbol })
+            HStack(spacing: 8) {
+                GroupedToolDock(groups: VideoEditorSession.Tool.groups, selection: $session.activeTool)
+                if let app { MicButton(voice: app.voice, isBusy: session.isProcessing) }
+            }
         }
         .padding(.horizontal, 10)
         .padding(.top, 4)
@@ -213,6 +220,19 @@ struct VideoExportSheet: View {
         }
         .preferredColorScheme(.dark)
         .presentationDetents([.medium, .large])
+    }
+}
+
+extension VideoEditorSession.Tool {
+    /// Dock entries, grouped by purpose. Sub-modes appear as segments in the panel.
+    static var groups: [ToolGroup<VideoEditorSession.Tool>] {
+        [
+            ToolGroup(id: "cut", title: L("Cut"), symbol: "scissors", tools: [.cut, .speed, .frame]),
+            ToolGroup(id: "color", title: L("Color"), symbol: "camera.filters", tools: [.adjust, .looks]),
+            ToolGroup(id: "audio", title: L("Audio"), symbol: "speaker.wave.2", tools: [.audio]),
+            ToolGroup(id: "text", title: L("Text"), symbol: "textformat", tools: [.text]),
+            ToolGroup(id: "transitions", title: L("Transitions"), symbol: "square.stack.3d.down.right", tools: [.transitions]),
+        ]
     }
 }
 #endif

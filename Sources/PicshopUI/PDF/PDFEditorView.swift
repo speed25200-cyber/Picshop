@@ -70,21 +70,29 @@ public struct PDFEditorView: View {
     private var bottomArea: some View {
         VStack(spacing: 8) {
             if let tool = session.activeTool {
-                ToolPanelContainer(title: tool.title, symbol: tool.symbol, onClose: { session.activeTool = nil }) {
+                let group = PDFEditorSession.Tool.groups.first { $0.contains(tool) }
+                let grouped = (group?.tools.count ?? 1) > 1
+                ToolPanelContainer(title: grouped ? group?.title ?? tool.title : tool.title, symbol: grouped ? group?.symbol ?? tool.symbol : tool.symbol,
+                                   onClose: { session.activeTool = nil },
+                                   modes: grouped ? AnyView(ModeSegments(modes: group?.tools ?? [], selection: $session.activeTool, title: { $0.title }, symbol: { $0.symbol })) : nil) {
                     toolPanel(tool)
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             if let app {
-                VoiceBar(voice: app.voice, isBusy: session.isProcessing, busyTitle: session.processingTitle,
-                         transcript: session.transcript, plan: session.lastPlan, clarification: session.pendingClarification,
-                         showsTranscript: app.settings.showsVoiceTranscript,
-                         onChoose: { _ in }, onChooseAll: {}, onCancel: { session.pendingClarification = nil })
+                VoiceStrip(voice: app.voice, isBusy: session.isProcessing, busyTitle: session.processingTitle,
+                           transcript: session.transcript, plan: session.lastPlan, clarification: session.pendingClarification,
+                           showsHint: session.activeTool == nil,
+                           onChoose: { _ in }, onChooseAll: {}, onCancel: { session.pendingClarification = nil })
             }
-            ToolDock(tools: PDFEditorSession.Tool.allCases, selection: $session.activeTool, title: { $0.title }, symbol: { $0.symbol }) { tool in
-                if tool == .signature, SignatureStore.currentAsset() == nil { session.showsSignatureSheet = true }
-                if tool == .image { session.showsImagePicker = true }
+            HStack(spacing: 8) {
+                GroupedToolDock(groups: PDFEditorSession.Tool.groups, selection: $session.activeTool)
+                if let app { MicButton(voice: app.voice, isBusy: session.isProcessing) }
             }
+        }
+        .onChange(of: session.activeTool) { _, tool in
+            if tool == .signature, SignatureStore.currentAsset() == nil { session.showsSignatureSheet = true }
+            if tool == .image { session.showsImagePicker = true }
         }
         .padding(.horizontal, 10)
         .padding(.top, 4)
@@ -420,6 +428,17 @@ struct PDFExportSheet: View {
         }
         .preferredColorScheme(.dark)
         .presentationDetents([.medium])
+    }
+}
+
+extension PDFEditorSession.Tool {
+    /// Dock entries, grouped by purpose. Sub-modes appear as segments in the panel.
+    static var groups: [ToolGroup<PDFEditorSession.Tool>] {
+        [
+            ToolGroup(id: "pages", title: L("Pages"), symbol: "doc.on.doc", tools: [.pages]),
+            ToolGroup(id: "markup", title: L("Mark up"), symbol: "highlighter", tools: [.highlight, .draw]),
+            ToolGroup(id: "add", title: L("Add"), symbol: "plus.square.on.square", tools: [.text, .signature, .image]),
+        ]
     }
 }
 #endif

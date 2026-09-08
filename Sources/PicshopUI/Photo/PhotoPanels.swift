@@ -6,12 +6,36 @@ import PicshopIntent
 import PicshopImaging
 
 /// Contextual panel for the active tool.
+extension PhotoEditorSession.Tool {
+    /// Dock entries, grouped by purpose. Sub-modes appear as segments in the panel.
+    static var groups: [ToolGroup<PhotoEditorSession.Tool>] {
+        [
+            ToolGroup(id: "retouch", title: L("Retouch"), symbol: "slider.horizontal.3", tools: [.adjust, .looks]),
+            ToolGroup(id: "magic", title: L("Magic"), symbol: "wand.and.stars", tools: [.erase, .cutout, .precise]),
+            ToolGroup(id: "crop", title: L("Crop"), symbol: "crop.rotate", tools: [.crop]),
+            ToolGroup(id: "add", title: L("Add"), symbol: "plus.square.on.square", tools: [.text, .shapes]),
+            ToolGroup(id: "layers", title: L("Layers"), symbol: "square.3.layers.3d", tools: [.layers]),
+        ]
+    }
+}
+
 struct PhotoToolPanel: View {
     @Bindable var session: PhotoEditorSession
     let tool: PhotoEditorSession.Tool
 
+    private var group: ToolGroup<PhotoEditorSession.Tool>? {
+        PhotoEditorSession.Tool.groups.first { $0.contains(tool) }
+    }
+
+    private var modes: AnyView? {
+        guard let group, group.tools.count > 1 else { return nil }
+        return AnyView(ModeSegments(modes: group.tools, selection: $session.activeTool, title: { $0.title }, symbol: { $0.symbol }))
+    }
+
     var body: some View {
-        ToolPanelContainer(title: tool.title, symbol: tool.symbol, onClose: { session.activeTool = nil }, trailing: trailing) {
+        ToolPanelContainer(title: group.map { $0.tools.count > 1 ? $0.title : tool.title } ?? tool.title,
+                           symbol: group.map { $0.tools.count > 1 ? $0.symbol : tool.symbol } ?? tool.symbol,
+                           onClose: { session.activeTool = nil }, trailing: trailing, modes: modes) {
             switch tool {
             case .adjust: AdjustPanel(session: session)
             case .looks: LooksPanel(session: session)

@@ -60,12 +60,15 @@ public struct PhotoEditorView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             if let app {
-                VoiceBar(voice: app.voice, isBusy: session.isProcessing, busyTitle: session.processingTitle,
-                         transcript: session.transcript, plan: session.lastPlan, clarification: session.pendingClarification,
-                         showsTranscript: app.settings.showsVoiceTranscript,
-                         onChoose: { session.choose(candidateIndex: $0) }, onChooseAll: { session.chooseAllCandidates() }, onCancel: { session.cancelClarification() })
+                VoiceStrip(voice: app.voice, isBusy: session.isProcessing, busyTitle: session.processingTitle,
+                           transcript: session.transcript, plan: session.lastPlan, clarification: session.pendingClarification,
+                           showsHint: session.activeTool == nil,
+                           onChoose: { session.choose(candidateIndex: $0) }, onChooseAll: { session.chooseAllCandidates() }, onCancel: { session.cancelClarification() })
             }
-            ToolDock(tools: PhotoEditorSession.Tool.allCases, selection: $session.activeTool, title: { $0.title }, symbol: { $0.symbol })
+            HStack(spacing: 8) {
+                GroupedToolDock(groups: PhotoEditorSession.Tool.groups, selection: $session.activeTool)
+                if let app { MicButton(voice: app.voice, isBusy: session.isProcessing) }
+            }
         }
         .padding(.horizontal, 10)
         .padding(.top, 8)

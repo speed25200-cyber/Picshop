@@ -11,6 +11,12 @@ UI = ROOT / "Sources/PicshopUI"
 OUT = UI / "Resources/Localizable.xcstrings"
 
 FR = {
+    "Add": "Ajouter",
+    "Color": "Couleur",
+    "Done.": "C'est fait.",
+    "Magic": "Magie",
+    "Mark up": "Annoter",
+    "Retouch": "Retouche",
     "Add Shape": "Ajouter une forme",
     "Arrow": "Flèche",
     "Download large models automatically": "Télécharger les grands modèles automatiquement",

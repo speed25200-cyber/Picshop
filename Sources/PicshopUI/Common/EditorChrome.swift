@@ -141,11 +141,86 @@ struct ToolDock<Tool: Identifiable & Hashable>: View {
 }
 
 /// Glass panel that hosts the active tool's controls, with a small header.
+/// A dock entry that opens one panel with several sub-modes (segments in the
+/// panel header). Tools are grouped by purpose so the dock stays short.
+struct ToolGroup<Tool: Hashable & Identifiable>: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let symbol: String
+    let tools: [Tool]
+
+    static func == (lhs: ToolGroup, rhs: ToolGroup) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+
+    func contains(_ tool: Tool?) -> Bool { tool.map { tools.contains($0) } ?? false }
+}
+
+/// Dock showing tool groups; the selection stays a plain tool so the rest of
+/// the editor is unaware of grouping. Each group remembers its last sub-mode.
+struct GroupedToolDock<Tool: Hashable & Identifiable>: View {
+    let groups: [ToolGroup<Tool>]
+    @Binding var selection: Tool?
+    @State private var lastTool: [String: Tool] = [:]
+
+    var body: some View {
+        ToolDock(tools: groups, selection: groupSelection, title: { $0.title }, symbol: { $0.symbol })
+            .onChange(of: selection) { _, tool in
+                if let tool, let group = groups.first(where: { $0.contains(tool) }) { lastTool[group.id] = tool }
+            }
+    }
+
+    private var groupSelection: Binding<ToolGroup<Tool>?> {
+        Binding(
+            get: { groups.first { $0.contains(selection) } },
+            set: { group in
+                guard let group else { selection = nil; return }
+                selection = lastTool[group.id] ?? group.tools.first
+            }
+        )
+    }
+}
+
+/// Segmented sub-mode picker shown in a panel header.
+struct ModeSegments<Mode: Hashable & Identifiable>: View {
+    let modes: [Mode]
+    @Binding var selection: Mode?
+    var title: (Mode) -> String
+    var symbol: (Mode) -> String
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(modes) { mode in
+                let isActive = selection == mode
+                Button {
+                    Haptics.tap()
+                    withAnimation(.spring(duration: 0.28, bounce: 0.1)) { selection = mode }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: symbol(mode)).font(.system(size: 11, weight: .bold))
+                        Text(title(mode)).font(PSFont.caption(12)).lineLimit(1).minimumScaleFactor(0.85)
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 7)
+                    .frame(maxWidth: .infinity)
+                    .background(isActive ? PSTheme.accent : Color.clear, in: Capsule())
+                    .foregroundStyle(isActive ? Color.black : PSTheme.textPrimary)
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isActive ? [.isSelected] : [])
+            }
+        }
+        .padding(3)
+        .background(PSTheme.hairline, in: Capsule())
+    }
+}
+
 struct ToolPanelContainer<Content: View>: View {
     var title: String
     var symbol: String
     var onClose: () -> Void
     var trailing: AnyView? = nil
+    /// Sub-mode segments (see `ModeSegments`) rendered under the title.
+    var modes: AnyView? = nil
     @ViewBuilder var content: () -> Content
 
     var body: some View {
@@ -164,6 +239,7 @@ struct ToolPanelContainer<Content: View>: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(L("Close"))
             }
+            if let modes { modes }
             content()
         }
         .padding(.horizontal, 14)
@@ -280,19 +356,23 @@ struct DialSlider: View {
 
 /// The voice control: a microphone button, the live transcript / last reply,
 /// and the clarification choices when the assistant needs an answer.
-struct VoiceBar: View {
+/// Slim status line above the dock. It only appears when there is something to
+/// say — listening, working, a reply, a question — so an open tool panel sits
+/// directly on the dock the rest of the time.
+struct VoiceStrip: View {
     @Bindable var voice: VoiceController
     var isBusy: Bool
     var busyTitle: String = ""
     var transcript: String
     var plan: EditPlan?
     var clarification: ClarificationRequest?
-    var showsTranscript: Bool
+    /// Shown while nothing else is going on (typically when no tool is open).
+    var showsHint: Bool
     var onChoose: (Int) -> Void
     var onChooseAll: () -> Void
     var onCancel: () -> Void
 
-    @State private var pressing = false
+    @State private var replyVisible = false
 
     var body: some View {
         VStack(spacing: 8) {
@@ -300,81 +380,101 @@ struct VoiceBar: View {
                 ClarificationCard(request: clarification, onChoose: onChoose, onChooseAll: onChooseAll, onCancel: onCancel)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            HStack(spacing: 12) {
-                micButton
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(primaryText)
-                        .font(PSFont.body(14))
-                        .foregroundStyle(voice.isListening ? PSTheme.textPrimary : (isBusy ? PSTheme.accent : PSTheme.textPrimary))
-                        .lineLimit(2)
-                        .contentTransition(.interpolate)
-                    if let secondary = secondaryText {
-                        Text(secondary).font(PSFont.caption(11)).foregroundStyle(PSTheme.textSecondary).lineLimit(1)
+            if let text = statusText {
+                HStack(spacing: 10) {
+                    if voice.isListening {
+                        Image(systemName: "waveform")
+                            .symbolEffect(.variableColor.iterative, isActive: true)
+                            .foregroundStyle(PSTheme.voice)
+                    } else if isBusy {
+                        ProgressView().tint(PSTheme.accent).controlSize(.small)
+                    } else if isUnavailable {
+                        Image(systemName: "mic.slash").foregroundStyle(PSTheme.danger)
+                    } else if replyVisible, plan != nil {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(PSTheme.success)
+                    } else {
+                        Image(systemName: "mic.fill").foregroundStyle(PSTheme.voice)
+                    }
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(text)
+                            .font(PSFont.body(14))
+                            .foregroundStyle(isBusy ? PSTheme.accent : PSTheme.textPrimary)
+                            .lineLimit(2)
+                            .contentTransition(.interpolate)
+                        if replyVisible, !voice.isListening, !isBusy, !transcript.isEmpty {
+                            Text("“\(transcript)”").font(PSFont.caption(11)).foregroundStyle(PSTheme.textSecondary).lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    if replyVisible, !voice.isListening, !isBusy, let plan, !transcript.isEmpty {
+                        Text(plan.engine.displayName)
+                            .font(PSFont.caption(10)).foregroundStyle(PSTheme.textSecondary)
+                            .padding(.horizontal, 7).padding(.vertical, 3).background(PSTheme.hairline, in: Capsule())
                     }
                 }
-                Spacer(minLength: 0)
-                if voice.isListening {
-                    Image(systemName: "waveform")
-                        .symbolEffect(.variableColor.iterative, isActive: true)
-                        .foregroundStyle(PSTheme.voice)
-                } else if isBusy {
-                    ProgressView().tint(PSTheme.accent).controlSize(.small)
-                } else if let plan, showsTranscript, !transcript.isEmpty {
-                    Text(plan.engine.displayName)
-                        .font(PSFont.caption(10)).foregroundStyle(PSTheme.textSecondary)
-                        .padding(.horizontal, 7).padding(.vertical, 3).background(PSTheme.hairline, in: Capsule())
-                }
-            }
-            .padding(.leading, 6).padding(.trailing, 14).padding(.vertical, 6)
-            .psGlass(shape: AnyShape(RoundedRectangle(cornerRadius: 28, style: .continuous)))
-            .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .onTapGesture {
-                guard voice.mode != .pushToTalk else { return }
-                Haptics.confirm()
-                voice.toggle()
+                .padding(.horizontal, 14).padding(.vertical, 9)
+                .psGlass(shape: AnyShape(RoundedRectangle(cornerRadius: 20, style: .continuous)))
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.spring(duration: 0.3), value: voice.isListening)
         .animation(.spring(duration: 0.3), value: clarification?.id)
         .animation(.spring(duration: 0.3), value: isBusy)
+        .animation(.spring(duration: 0.3), value: replyVisible)
+        .task(id: transcript) {
+            guard !transcript.isEmpty else { replyVisible = false; return }
+            replyVisible = true
+            try? await Task.sleep(for: .seconds(7))
+            guard !Task.isCancelled else { return }
+            replyVisible = false
+        }
     }
 
-    private var primaryText: String {
+    private var isUnavailable: Bool {
+        if case .unavailable = voice.state { return true }
+        return false
+    }
+
+    private var statusText: String? {
         if voice.isListening { return voice.partialTranscript.isEmpty ? L("Listening…") : voice.partialTranscript }
         if isBusy { return busyTitle.isEmpty ? L("Working…") : busyTitle }
-        if case .unavailable = voice.state { return L("Voice unavailable — check microphone access in Settings.") }
-        if showsTranscript, !transcript.isEmpty, let reply = plan?.reply, !reply.isEmpty { return reply }
-        return voice.mode == .pushToTalk ? L("Hold the mic and say what to change") : L("Tap the mic and say what to change")
-    }
-
-    private var secondaryText: String? {
-        if voice.isListening || isBusy { return nil }
-        if showsTranscript, !transcript.isEmpty { return "“\(transcript)”" }
+        if isUnavailable { return L("Voice unavailable — check microphone access in Settings.") }
+        if replyVisible, !transcript.isEmpty { return plan?.reply?.isEmpty == false ? plan?.reply : L("Done.") }
+        if showsHint { return voice.mode == .pushToTalk ? L("Hold the mic and say what to change") : L("Tap the mic and say what to change") }
         return nil
     }
+}
 
-    private var micButton: some View {
+/// The voice button that lives at the trailing end of the dock.
+struct MicButton: View {
+    @Bindable var voice: VoiceController
+    var isBusy: Bool
+
+    @State private var pressing = false
+
+    var body: some View {
         ZStack {
             Circle()
                 .stroke(PSTheme.voice.opacity(0.35), lineWidth: 2)
-                .frame(width: 44, height: 44)
-                .scaleEffect(voice.isListening ? 1.25 + CGFloat(voice.level) * 0.6 : 1)
+                .frame(width: 52, height: 52)
+                .scaleEffect(voice.isListening ? 1.2 + CGFloat(voice.level) * 0.5 : 1)
                 .opacity(voice.isListening ? 1 : 0)
                 .animation(.spring(duration: 0.2), value: voice.level)
             Circle()
                 .fill(PSTheme.voiceGradient)
-                .frame(width: 44, height: 44)
-                .shadow(color: PSTheme.voice.opacity(voice.isListening ? 0.7 : 0.3), radius: voice.isListening ? 14 : 6)
+                .frame(width: 52, height: 52)
+                .shadow(color: PSTheme.voice.opacity(voice.isListening ? 0.7 : 0.35), radius: voice.isListening ? 16 : 8)
                 .overlay {
                     Image(systemName: micSymbol)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 21, weight: .semibold))
                         .foregroundStyle(.white)
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .scaleEffect(pressing ? 0.9 : 1)
                 .animation(.spring(duration: 0.2), value: pressing)
         }
-        .frame(width: 48, height: 48)
+        .frame(width: 62, height: 62)
+        .psGlass(shape: AnyShape(Circle()))
         .contentShape(Circle())
         .gesture(
             DragGesture(minimumDistance: 0)

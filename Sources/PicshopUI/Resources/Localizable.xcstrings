@@ -33,6 +33,22 @@
         }
       }
     },
+    "Add": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter"
+          }
+        }
+      }
+    },
     "Add Music": {
       "localizations": {
         "en": {
@@ -577,6 +593,22 @@
         }
       }
     },
+    "Color": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Color"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couleur"
+          }
+        }
+      }
+    },
     "Contiguous": {
       "localizations": {
         "en": {
@@ -781,6 +813,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "OK"
+          }
+        }
+      }
+    },
+    "Done.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "C'est fait."
           }
         }
       }
@@ -1393,22 +1441,6 @@
         }
       }
     },
-    "Haptics": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Haptics"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Retours haptiques"
-          }
-        }
-      }
-    },
     "Help": {
       "localizations": {
         "en": {
@@ -1809,6 +1841,22 @@
         }
       }
     },
+    "Magic": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Magic"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Magie"
+          }
+        }
+      }
+    },
     "Magic wand": {
       "localizations": {
         "en": {
@@ -1821,6 +1869,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Baguette magique"
+          }
+        }
+      }
+    },
+    "Mark up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark up"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annoter"
           }
         }
       }
@@ -2977,6 +3041,22 @@
         }
       }
     },
+    "Retouch": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retouch"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retouche"
+          }
+        }
+      }
+    },
     "Retouch, erase, restyle": {
       "localizations": {
         "en": {
@@ -3293,22 +3373,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Partager le dernier export"
-          }
-        }
-      }
-    },
-    "Show transcript": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show transcript"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Afficher la transcription"
           }
         }
       }
