@@ -41,7 +41,7 @@ Generate the project with `xcodegen generate --spec project-pro.yml` (adds Apple
 
 ## Pro Brain (MLX)
 
-The app target links [`mlx-swift-examples`](https://github.com/ml-explore/mlx-swift-examples) (see
+The app target links [`mlx-swift-lm`](https://github.com/ml-explore/mlx-swift-lm) (see
 `project.yml`). `App/ProBrain/MLXIntentEngine.swift` downloads `mlx-community/Qwen3-4B-4bit` through
 the MLX hub client on first use (≈2.5 GB) and plans commands with the same JSON schema as the other
 engines. To ship without it, generate with `project.yml` instead of `project-pro.yml`; the file is
