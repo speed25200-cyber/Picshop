@@ -5,6 +5,7 @@ import Observation
 import PicshopCore
 import PicshopIntent
 import PicshopPDF
+import PicshopImaging
 import PicshopSpeech
 
 /// State and behaviour of the PDF editor.
@@ -97,7 +98,7 @@ public final class PDFEditorSession {
     public func save() {
         app.library.save(Project(id: projectID, content: .pdf(document), createdAt: document.createdAt, modifiedAt: Date()))
         if let image = services.thumbnail(for: 0, in: document, height: 400)?.cgImage {
-            PicshopImaging.ThumbnailGenerator.writeThumbnail(image: image, projectID: projectID, store: app.store)
+            ThumbnailGenerator.writeThumbnail(image: image, projectID: projectID, store: app.store)
         }
     }
 
@@ -109,7 +110,7 @@ public final class PDFEditorSession {
     var intentContext: IntentContext {
         IntentContext(mode: .pdf, pendingClarification: pendingClarification, lastTapPoint: lastTapPoint, canUndo: history.canUndo, canRedo: history.canRedo,
                       preferredLanguage: app.settings.languageHint, pageCount: document.pageCount, currentPage: document.currentPageIndex + 1,
-                      hasSignature: SignatureStore.currentAsset() != nil)
+                      hasSignature: FileManager.default.fileExists(atPath: SignatureStore.fileURL.path))
     }
 
     /// Total rotation of the page as displayed (original + edits).
@@ -158,7 +159,8 @@ public final class PDFEditorSession {
         guard document.currentPageIndex != index, document.pages.indices.contains(index) else { return }
         var document = self.document
         document.goToPage(index)
-        history.commit(document, label: "Page")
+        history.replacePresent(document)
+        requestedPageIndex = index
     }
 
     // MARK: Direct edits

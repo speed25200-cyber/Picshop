@@ -82,6 +82,11 @@ public struct EditHistory<State: Hashable & Sendable>: Sendable {
         return entry.label
     }
 
+    /// Replaces the present state without creating an undo step (view-only state such as the current page).
+    public mutating func replacePresent(_ state: State) {
+        present = state
+    }
+
     /// Replaces the present state without recording history (used for loads).
     public mutating func reset(to state: State) {
         past.removeAll()

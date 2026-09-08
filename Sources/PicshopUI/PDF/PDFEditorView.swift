@@ -232,7 +232,7 @@ struct PageThumbnail: View {
             if let image { Image(uiImage: image).resizable().scaledToFit() } else { PSTheme.surfaceElevated }
         }
         .task(id: session.document.pages[index].hashValue) {
-            image = session.services.thumbnail(for: index, in: session.document, height: 96)
+            if let page = session.composed?.page(at: index) { image = session.services.thumbnail(page: page, height: 96) }
         }
     }
 }
@@ -262,20 +262,29 @@ struct PDFViewerRepresentable: UIViewRepresentable {
     }
 
     func updateUIView(_ view: PDFView, context: Context) {
+        context.coordinator.isSyncing = true
+        defer { context.coordinator.isSyncing = false }
         if view.document !== session.composed {
             let current = session.document.currentPageIndex
+            let scale = view.scaleFactor
+            let wasAutoScaling = view.autoScales
             view.document = session.composed
+            if !wasAutoScaling, scale > 0 { view.scaleFactor = scale }
             if let page = session.composed?.page(at: current) { view.go(to: page) }
+            context.coordinator.appliedQuery = nil
         }
         if let requested = session.requestedPageIndex, let document = view.document, let page = document.page(at: requested), view.currentPage !== page {
             view.go(to: page)
         }
-        if let query = session.searchQuery, let document = view.document {
-            let selections = document.findString(query, withOptions: [.caseInsensitive])
-            view.highlightedSelections = selections
-            if let first = selections.first { view.go(to: first) }
-        } else {
-            view.highlightedSelections = nil
+        if session.searchQuery != context.coordinator.appliedQuery {
+            context.coordinator.appliedQuery = session.searchQuery
+            if let query = session.searchQuery, let document = view.document {
+                let selections = document.findString(query, withOptions: [.caseInsensitive])
+                view.highlightedSelections = selections
+                if let first = selections.first { view.go(to: first) }
+            } else {
+                view.highlightedSelections = nil
+            }
         }
         // Pan is only for drawing; otherwise let the scroll view scroll.
         context.coordinator.pan?.isEnabled = session.activeTool == .draw
@@ -284,9 +293,12 @@ struct PDFViewerRepresentable: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(session: session) }
 
+    @MainActor
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var session: PDFEditorSession
         var pan: UIPanGestureRecognizer?
+        var isSyncing = false
+        var appliedQuery: String?
         private var currentPoints: [PSPoint] = []
         private var drawingPage: PDFPage?
 
@@ -297,21 +309,20 @@ struct PDFViewerRepresentable: UIViewRepresentable {
         }
 
         @objc func pageChanged(_ notification: Notification) {
-            guard let view = notification.object as? PDFView, let page = view.currentPage, let document = view.document else { return }
+            guard !isSyncing, let view = notification.object as? PDFView, let page = view.currentPage, let document = view.document else { return }
             let index = document.index(for: page)
             Task { @MainActor in self.session.viewerDidShowPage(index) }
         }
 
         /// Normalised, displayed (top-left) coordinates of a view point on a page.
+        /// `convert(_:to:)` yields unrotated page space (same space as `bounds(for:)`),
+        /// so the point is mapped to base space first and then rotated for display.
         func normalized(_ location: CGPoint, in view: PDFView) -> (PDFPage, PSPoint)? {
             guard let page = view.page(for: location, nearest: true) else { return nil }
             let pagePoint = view.convert(location, to: page)
             let bounds = page.bounds(for: .mediaBox)
-            // `convert(_:to:)` returns coordinates in the page's rotated display space with bottom-left origin.
-            let displayBounds = page.rotation % 180 != 0 ? CGRect(x: 0, y: 0, width: bounds.height, height: bounds.width) : bounds
-            let x = (pagePoint.x - displayBounds.minX) / displayBounds.width
-            let y = 1 - (pagePoint.y - displayBounds.minY) / displayBounds.height
-            return (page, PSPoint(x: Double(x), y: Double(y)))
+            let base = PSPoint(x: Double((pagePoint.x - bounds.minX) / bounds.width), y: Double(1 - (pagePoint.y - bounds.minY) / bounds.height))
+            return (page, PDFGeometry.displayedPoint(fromBase: base, rotation: page.rotation))
         }
 
         @objc func handleTap(_ recognizer: UITapGestureRecognizer) {

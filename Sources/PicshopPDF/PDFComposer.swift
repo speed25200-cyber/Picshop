@@ -3,6 +3,7 @@ import Foundation
 import PDFKit
 import UIKit
 import PicshopCore
+import PicshopImaging
 
 /// Builds a PDFKit document from a `PDFDocumentModel`: page order, rotation
 /// and every markup as a real PDF annotation, so exports are standard PDFs.

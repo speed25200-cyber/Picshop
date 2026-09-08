@@ -38,9 +38,29 @@ public final class StableDiffusionFillEngine: GenerativeFillEngine, @unchecked S
     }
 
     public func generate(rgba: [UInt8], mask: [UInt8], width: Int, height: Int, prompt: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [UInt8] {
+        try await Task.detached(priority: .userInitiated) { [self] in
+            try self.generateSync(rgba: rgba, mask: mask, width: width, height: height, prompt: prompt, progress: progress)
+        }.value
+    }
+
+    /// Pads the crop to a square (edge-extended) so the network never sees a stretched image.
+    private func squared(_ image: CGImage) -> (CGImage, CGRect)? {
+        let side = max(image.width, image.height)
+        guard let context = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        let origin = CGPoint(x: (side - image.width) / 2, y: (side - image.height) / 2)
+        // Edge extension: draw the image stretched to the full square first, then the true image centred.
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+        context.draw(image, in: CGRect(origin: origin, size: CGSize(width: image.width, height: image.height)))
+        guard let result = context.makeImage() else { return nil }
+        return (result, CGRect(origin: origin, size: CGSize(width: image.width, height: image.height)))
+    }
+
+    private func generateSync(rgba: [UInt8], mask: [UInt8], width: Int, height: Int, prompt: String, progress: @escaping @Sendable (Double) -> Void) throws -> [UInt8] {
         let pipeline = try loadedPipeline()
         guard let source = ImageSupport.rgbaImage(width: width, height: height, bytes: rgba),
-              let square = ImageSupport.resized(source, to: CGSize(width: 512, height: 512)) else {
+              let (padded, contentRect) = squared(source),
+              let square = ImageSupport.resized(padded, to: CGSize(width: 512, height: 512)) else {
             throw PicshopError.renderFailed("generative input")
         }
         var configuration = StableDiffusionPipeline.Configuration(prompt: prompt)
@@ -56,7 +76,10 @@ public final class StableDiffusionFillEngine: GenerativeFillEngine, @unchecked S
             progress(Double(state.step) / steps)
             return !Task.isCancelled
         }
-        guard let generated = images.compactMap({ $0 }).first, let resized = ImageSupport.resized(generated, to: CGSize(width: width, height: height)) else {
+        guard let generated = images.compactMap({ $0 }).first,
+              let paddedBack = ImageSupport.resized(generated, to: CGSize(width: padded.width, height: padded.height)),
+              let cropped = paddedBack.cropping(to: contentRect),
+              let resized = ImageSupport.resized(cropped, to: CGSize(width: width, height: height)) else {
             throw PicshopError.renderFailed("generation produced no image")
         }
         var output = ImageSupport.rgbaBytes(from: resized)

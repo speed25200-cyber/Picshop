@@ -61,7 +61,7 @@ final class PDFGrammarTests: XCTestCase {
         XCTAssertEqual(two.map(\.index), [2, 5])
         let after = first("déplace cette page après la page 6")
         XCTAssertEqual(after.action, .movePage)
-        XCTAssertEqual(after.clipIndex, 7)
+        XCTAssertEqual(after.clipIndex, 6, "page 3 moved after page 6 lands at position 6 once removed")
         XCTAssertEqual(first("envoie la page 2 à la fin").action, .movePage)
         XCTAssertEqual(first("ajoute une page vide à la fin").action, .insertBlankPage)
         XCTAssertEqual(first("page 7").index, 7)

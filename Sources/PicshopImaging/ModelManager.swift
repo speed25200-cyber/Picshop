@@ -222,42 +222,70 @@ public actor ModelManager {
 }
 
 enum ModelDownloader {
+    /// Downloads to a temporary file with progress, using a download task so large
+    /// archives never pass through memory.
     static func download(_ url: URL, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
-        let (bytes, response) = try await URLSession.shared.bytes(from: url)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw PicshopError.modelUnavailable("download failed (\((response as? HTTPURLResponse)?.statusCode ?? 0))")
-        }
-        let expected = Double(http.expectedContentLength)
-        let destination = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".zip")
-        FileManager.default.createFile(atPath: destination.path, contents: nil)
-        let handle = try FileHandle(forWritingTo: destination)
-        defer { try? handle.close() }
-        var buffer = Data()
-        buffer.reserveCapacity(1 << 20)
-        var received = 0.0
-        var lastReport = Date()
-        for try await byte in bytes {
-            buffer.append(byte)
-            if buffer.count >= (1 << 20) {
-                try handle.write(contentsOf: buffer)
-                received += Double(buffer.count)
-                buffer.removeAll(keepingCapacity: true)
-                if expected > 0, Date().timeIntervalSince(lastReport) > 0.2 {
-                    lastReport = Date()
-                    progress(min(0.99, received / expected))
-                }
-                try Task.checkCancellation()
+        let delegate = DownloadDelegate(progress: progress)
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate() }
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                delegate.continuation = continuation
+                let task = session.downloadTask(with: url)
+                delegate.task = task
+                task.resume()
             }
+        } onCancel: {
+            delegate.task?.cancel()
         }
-        if !buffer.isEmpty { try handle.write(contentsOf: buffer) }
-        progress(1)
-        return destination
     }
 
-    /// Minimal zip extraction using Foundation's file coordination is not
-    /// available on iOS, so archives are unpacked with `Process`-free logic:
-    /// the server is expected to serve *uncompressed* zip (store) archives
-    /// produced by `Scripts/package_models.sh`, which this reader supports.
+    final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+        let progress: @Sendable (Double) -> Void
+        var continuation: CheckedContinuation<URL, Error>?
+        var task: URLSessionDownloadTask?
+        private let lock = NSLock()
+
+        init(progress: @escaping @Sendable (Double) -> Void) {
+            self.progress = progress
+        }
+
+        private func finish(_ result: Result<URL, Error>) {
+            lock.lock()
+            let continuation = self.continuation
+            self.continuation = nil
+            lock.unlock()
+            continuation?.resume(with: result)
+        }
+
+        func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+            guard totalBytesExpectedToWrite > 0 else { return }
+            progress(min(0.99, Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)))
+        }
+
+        func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+            if let http = downloadTask.response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                finish(.failure(PicshopError.modelUnavailable("download failed (\(http.statusCode))")))
+                return
+            }
+            let destination = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".zip")
+            do {
+                try? FileManager.default.removeItem(at: destination)
+                try FileManager.default.moveItem(at: location, to: destination)
+                progress(1)
+                finish(.success(destination))
+            } catch {
+                finish(.failure(error))
+            }
+        }
+
+        func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+            if let error { finish(.failure(error)) }
+        }
+    }
+
+    /// Unpacks a zip produced by `Scripts/package_models.sh` (stored or deflated entries),
+    /// streaming each entry to disk.
     static func unzip(_ archive: URL, into directory: URL) throws -> URL {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let data = try Data(contentsOf: archive, options: .mappedIfSafe)
@@ -313,13 +341,14 @@ enum StoredZipReader {
                 try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
             } else {
                 try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-                let contents: Data
                 switch method {
-                case 0: contents = Data(payload)
-                case 8: contents = try Inflate.decompress(Data(payload), expectedSize: uncompressedSize)
-                default: throw PicshopError.modelUnavailable("unsupported zip method \(method)")
+                case 0:
+                    try payload.write(to: target)
+                case 8:
+                    try Inflate.decompressToFile(payload, expectedSize: uncompressedSize, to: target)
+                default:
+                    throw PicshopError.modelUnavailable("unsupported zip method \(method)")
                 }
-                try contents.write(to: target)
             }
             offset = dataStart + compressedSize
         }

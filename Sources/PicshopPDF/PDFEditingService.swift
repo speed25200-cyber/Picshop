@@ -130,8 +130,15 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
         return render(page: page, longestSide: height * 1.5)
     }
 
+    public func thumbnail(page: PDFPage, height: CGFloat = 160) -> UIImage {
+        render(page: page, longestSide: height * 1.5)
+    }
+
     // MARK: Export
 
+    /// Exports a flattened PDF: page content stays vector/text, every markup
+    /// (including image and signature stamps, which have no appearance stream
+    /// through PDFKit) is drawn into the page.
     public func export(_ model: PDFDocumentModel) throws -> URL {
         guard let composed = compose(model) else { throw PicshopError.exportFailed("compose") }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("exports", isDirectory: true)
@@ -139,7 +146,24 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
         let name = model.title.replacingOccurrences(of: "/", with: "-")
         let url = directory.appendingPathComponent("\(name).pdf")
         try? FileManager.default.removeItem(at: url)
-        guard composed.write(to: url) else { throw PicshopError.exportFailed("write pdf") }
+        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 595, height: 842))
+        try renderer.writePDF(to: url) { context in
+            for index in 0..<composed.pageCount {
+                guard let page = composed.page(at: index) else { continue }
+                let box = page.bounds(for: .mediaBox)
+                let rotated = page.rotation % 180 != 0
+                let size = rotated ? CGSize(width: box.height, height: box.width) : box.size
+                context.beginPage(withBounds: CGRect(origin: .zero, size: size), pageInfo: [:])
+                let cg = context.cgContext
+                cg.saveGState()
+                // UIKit PDF contexts are top-left; PDFKit draws in bottom-left page space.
+                cg.translateBy(x: 0, y: size.height)
+                cg.scaleBy(x: 1, y: -1)
+                cg.concatenate(page.transform(for: .mediaBox))
+                page.draw(with: .mediaBox, to: cg)
+                cg.restoreGState()
+            }
+        }
         return url
     }
 

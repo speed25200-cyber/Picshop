@@ -21,7 +21,8 @@ extension RuleBasedIntentEngine {
             return [EditIntent(action: .goToPage, index: -1)]
         }
         // "page 7" on its own.
-        if u.tokens.count <= 3, let page, u.contains(Self.pageWords), !u.contains(Self.removeVerbs) {
+        if let page, u.tokens.count <= 3, let first = u.tokens.first,
+           Self.pageWords.contains(first) || ["la", "le", "the", "a", "to"].contains(first), !u.contains(Self.removeVerbs) {
             return [EditIntent(action: .goToPage, index: page)]
         }
         if u.contains(["go to page", "va a la page", "vas a la page", "aller a la page", "ouvre la page", "open page", "montre la page", "show page", "show me page", "affiche la page", "jump to page", "page numero"]), let page {
@@ -64,7 +65,9 @@ extension RuleBasedIntentEngine {
             if destination == nil, let rest = remainder(of: u, after: ["to position", "en position", "at position", "after page", "apres la page", "before page", "avant la page", "to page", "a la page", "en", "to", "vers"]),
                let number = NumberWords.firstNumber(in: rest.split(separator: " ").map(String.init)) {
                 var value = Int(number.value)
-                if u.contains(["after page", "apres la page"]) { value += 1 }
+                let source = page ?? context.currentPage
+                if u.contains(["after page", "apres la page"]), source > value { value += 1 }
+                if u.contains(["before page", "avant la page"]), source < value { value -= 1 }
                 destination = value
             }
             intent.clipIndex = destination
