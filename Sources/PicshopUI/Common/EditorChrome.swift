@@ -494,7 +494,16 @@ struct VoiceStrip: View {
                 ClarificationCard(request: clarification, onChoose: onChoose, onChooseAll: onChooseAll, onCancel: onCancel)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            if let text = statusText {
+            if isIdleHint, let text = statusText {
+                // Nothing is happening: a small centred capsule instead of a full-width card, so the picture keeps the room.
+                HStack(spacing: 7) {
+                    Image(systemName: "mic.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(PSTheme.voice)
+                    Text(text).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary).lineLimit(1)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .psGlass()
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            } else if let text = statusText {
                 HStack(spacing: 10) {
                     statusIcon
                         .frame(width: 20)
@@ -553,6 +562,11 @@ struct VoiceStrip: View {
     private var isUnavailable: Bool {
         if case .unavailable = voice.state { return true }
         return false
+    }
+
+    /// True when the strip only shows the "tap the mic" hint.
+    private var isIdleHint: Bool {
+        showsHint && !voice.isListening && !isBusy && !isUnavailable && !(replyVisible && !transcript.isEmpty)
     }
 
     private var statusText: String? {

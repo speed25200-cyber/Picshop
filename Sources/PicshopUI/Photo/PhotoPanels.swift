@@ -255,24 +255,41 @@ struct LooksPanel: View {
                         let active = (session.document.baseLayer?.edits.resolvedLook?.preset ?? .original) == preset
                         Button {
                             Haptics.tick()
-                            session.applyLook(preset, intensity: intensity)
+                            withAnimation(PSMotion.standard) { session.applyLook(preset, intensity: intensity) }
                         } label: {
-                            VStack(spacing: 5) {
+                            VStack(spacing: 6) {
+                                let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 ZStack {
                                     if let image = thumbnails[preset] {
                                         Image(uiImage: image).resizable().scaledToFill()
+                                            .transition(.opacity)
                                     } else {
                                         PSTheme.surfaceElevated
+                                        ProgressView().tint(PSTheme.textTertiary).controlSize(.mini)
                                     }
                                 }
-                                .frame(width: 60, height: 60)
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(active ? PSTheme.accent : .clear, lineWidth: 2.5))
-                                Text(localizedName(preset)).font(PSFont.caption(10)).foregroundStyle(active ? PSTheme.accent : PSTheme.textSecondary).lineLimit(1)
+                                .frame(width: 68, height: 68)
+                                .clipShape(shape)
+                                .overlay(shape.strokeBorder(Color.white.opacity(active ? 0 : 0.08), lineWidth: 1))
+                                .overlay {
+                                    if active {
+                                        shape.strokeBorder(PSTheme.accentGradient, lineWidth: 2.5)
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundStyle(.white, PSTheme.accent)
+                                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                                            .padding(4)
+                                            .transition(.scale.combined(with: .opacity))
+                                    }
+                                }
+                                .scaleEffect(active ? 1.04 : 1)
+                                Text(localizedName(preset)).font(PSFont.caption(10.5)).fontWeight(active ? .semibold : .medium)
+                                    .foregroundStyle(active ? PSTheme.textPrimary : PSTheme.textSecondary).lineLimit(1)
                             }
-                            .frame(width: 64)
+                            .frame(width: 72)
+                            .animation(PSMotion.quick, value: active)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PSPressStyle())
                     }
                 }
                 .padding(.horizontal, 2)
