@@ -214,6 +214,8 @@ struct VideoExportSheet: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(AmbientBackground().ignoresSafeArea())
             .navigationTitle(L("Export"))
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("Done")) { dismiss() } } }
             .onAppear { quality = app?.settings.videoExportQuality ?? .high }
