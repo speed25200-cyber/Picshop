@@ -44,10 +44,9 @@ definitions:
       name: Package tests
       script: |
         set -e
-        # Only the platform-independent modules are tested here; the Apple-only modules are
-        # compiled for real by the xcodebuild steps below.
-        swift build --target PicshopCoreTests --target PicshopIntentTests
-        swift test --skip-build --filter 'PicshopCoreTests|PicshopIntentTests'
+        # `swift test` builds the whole package test bundle (a per-target build does not produce
+        # the .xctest), then runs the platform-independent suites.
+        swift test --filter 'PicshopCoreTests|PicshopIntentTests|PicshopImagingTests'
     - &resolve
       name: Resolve dependencies
       script: |
