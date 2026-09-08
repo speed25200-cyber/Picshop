@@ -134,6 +134,18 @@ FR = {
     "Ready": "Prêt", "Real-ESRGAN upscaler for sharp enlargements.": "Agrandisseur Real-ESRGAN pour des agrandissements nets.",
     "Stable Diffusion: “replace the sky with a sunset”, “add a hat”.": "Stable Diffusion : « remplace le ciel par un coucher de soleil », « ajoute un chapeau ».",
     "Super resolution ×4": "Super résolution ×4",
+    # Performance / thermal budget and canvas compare (UI redesign)
+    "Automatic follows the iPhone's temperature: previews shrink and glow effects pause before the frame rate drops, and heavy AI work waits until the phone cools down. Exports are always full quality.": "Automatique suit la température de l'iPhone : les aperçus rétrécissent et les effets lumineux se mettent en pause avant que la fluidité baisse, et les traitements IA lourds attendent que le téléphone refroidisse. Les exports sont toujours en pleine qualité.",
+    "Before": "Avant", "Best quality": "Qualité maximale", "Compare with original": "Comparer avec l'original", "Cool": "Froid", "Cool & battery": "Fraîcheur & batterie",
+    "Full quality previews at the display's refresh rate.": "Aperçus pleine qualité au rythme de l'écran.", "Hold to see the original photo.": "Maintenez pour voir la photo d'origine.",
+    "Hot": "Chaud", "Lighter previews and no glow, to cool down.": "Aperçus allégés et sans halo, pour refroidir.", "Low Power Mode": "Mode économie d'énergie",
+    "Minimal rendering until the iPhone cools down.": "Rendu minimal jusqu'à ce que l'iPhone refroidisse.", "Performance": "Performance",
+    "PicShop is rendering lighter previews to keep your iPhone cool.": "PicShop affiche des aperçus allégés pour garder votre iPhone au frais.", "Rendering": "Rendu",
+    "Slightly lighter previews; effects unchanged.": "Aperçus légèrement allégés ; effets inchangés.",
+    "The iPhone is too hot for generation right now. Let it cool for a moment.": "L'iPhone est trop chaud pour générer maintenant. Laissez-le refroidir un instant.",
+    "Very hot": "Très chaud", "Warm": "Tiède",
+    "Goals": "Objectifs", "Follow-ups": "Suivis", "Portrait": "Portrait",
+
     "The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large and download from Hugging Face on demand; everything runs on your iPhone.": "La gomme et l'agrandisseur sont livrés avec l'app. Le remplissage génératif et le Pro Brain sont volumineux et se téléchargent depuis Hugging Face à la demande ; tout fonctionne sur votre iPhone.",
 }
 

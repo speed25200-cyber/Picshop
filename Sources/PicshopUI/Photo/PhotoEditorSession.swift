@@ -1,5 +1,6 @@
 #if canImport(SwiftUI) && canImport(CoreImage) && canImport(UIKit)
 import SwiftUI
+import UIKit
 import CoreImage
 import Observation
 import PicshopCore
@@ -135,9 +136,22 @@ public final class PhotoEditorSession {
     public var isVoiceReady = false
 
     private var renderTask: Task<Void, Never>?
-    private var interactiveRendering = false
+    /// Parameter and direction of the most recent adjustment, so "a bit more" / "encore un peu" can refer to it.
+    public private(set) var lastAdjustment: (parameter: AdjustmentParameter, direction: Int)?
     private var toastTask: Task<Void, Never>?
     private var isConfigured = false
+    /// Look thumbnails rendered for the current photo state (see `LooksPanel`).
+    public var lookThumbnails: (key: String, images: [FilterPreset: UIImage])?
+    /// Changes whenever the base photo's pixels change (crop, erase, look…), invalidating the thumbnails.
+    public var lookThumbnailKey: String {
+        let operations = document.baseLayer?.edits.operations.filter { operation in
+            switch operation.kind {
+            case .adjust, .adjustments, .toneCurve, .look, .autoEnhance: return false
+            default: return true
+            }
+        } ?? []
+        return operations.map(\.id.uuidString).joined(separator: "|") + "@\(Int(app.performance.thumbnailSide))"
+    }
 
     public init(document: PhotoDocument, projectID: UUID, app: AppEnvironment) {
         self.projectID = projectID
@@ -193,35 +207,78 @@ public final class PhotoEditorSession {
         IntentContext(mode: .photo, currentAdjustments: document.activeAdjustments, hasSelection: document.selectedLayer?.isText == true,
                       selectedIndex: document.selectedLayerID.flatMap { document.index(of: $0) }, clipCount: 0, textLayerCount: document.textLayers.count,
                       pendingClarification: pendingClarification, lastTapPoint: lastTapPoint, canUndo: history.canUndo, canRedo: history.canRedo,
-                      preferredLanguage: app.settings.languageHint)
+                      preferredLanguage: app.settings.languageHint, lastParameter: lastAdjustment?.parameter, lastAdjustmentDirection: lastAdjustment?.direction ?? 0)
     }
 
     // MARK: - Rendering
 
+    /// Renders the document for the canvas.
+    ///
+    /// Interactive requests (dial drags) are coalesced: at most one render is in
+    /// flight, and a request that arrives while one is running only marks the
+    /// preview dirty, so the renderer always draws the latest state instead of
+    /// queuing a frame per tick. Sizes come from the performance governor, so a
+    /// hot phone renders smaller previews before it drops frames.
     public func requestPreview(interactive: Bool = false) {
-        guard let renderer else { return }
-        renderTask?.cancel()
+        guard renderer != nil else { return }
+        if interactive {
+            dirtyInteractive = true
+            if isRendering { return }
+            renderLoop(interactive: true)
+        } else {
+            renderTask?.cancel()
+            dirtyInteractive = false
+            renderLoop(interactive: false)
+        }
+    }
+
+    private var dirtyInteractive = false
+    private var renderGeneration = 0
+
+    private func previewDocument() -> PhotoDocument {
         var document = self.document
         if straightenPreview != 0 { document.apply(.straighten(degrees: straightenPreview)) }
         if perspectiveHorizontal != 0 || perspectiveVertical != 0 { document.apply(.perspective(horizontal: perspectiveHorizontal, vertical: perspectiveVertical)) }
-        let showsOriginal = self.showsOriginal
-        let side: Double = interactive ? 1280 : 2048
-        interactiveRendering = interactive
+        return document
+    }
+
+    private func renderLoop(interactive: Bool) {
+        guard let renderer else { return }
+        let governor = app.performance
+        renderGeneration += 1
+        let generation = renderGeneration
         renderTask = Task { [weak self] in
-            self?.isRendering = true
-            defer { self?.isRendering = false }
-            do {
-                let image = try await renderer.render(document, options: PhotoRenderer.Options(targetLongestSide: side, showOriginal: showsOriginal, allowExpensiveWork: true))
-                guard !Task.isCancelled else { return }
-                self?.preview = image
-                if interactive {
-                    // Follow up with a sharper frame once the interaction settles.
-                    try? await Task.sleep(for: .milliseconds(350))
+            guard let self else { return }
+            isRendering = true
+            defer { if renderGeneration == generation { isRendering = false } }
+            var interactive = interactive
+            while !Task.isCancelled {
+                dirtyInteractive = false
+                let document = previewDocument()
+                let side = interactive ? governor.interactivePreviewSide : governor.previewLongestSide
+                let options = PhotoRenderer.Options(targetLongestSide: side, showOriginal: showsOriginal, allowExpensiveWork: true)
+                do {
+                    let image = try await renderer.render(document, options: options)
                     guard !Task.isCancelled else { return }
-                    self?.requestPreview(interactive: false)
+                    preview = image
+                } catch {
+                    PSLog.error("preview failed: \(error)", category: .ui)
                 }
-            } catch {
-                PSLog.error("preview failed: \(error)", category: .ui)
+                if interactive {
+                    // Give the display a chance to present before the next frame.
+                    try? await Task.sleep(for: governor.interactiveRenderInterval)
+                    guard !Task.isCancelled else { return }
+                    if dirtyInteractive { continue }
+                    // Interaction settled: follow up with the sharp frame.
+                    try? await Task.sleep(for: governor.settleDelay)
+                    guard !Task.isCancelled else { return }
+                    if dirtyInteractive { continue }
+                    interactive = false
+                } else if dirtyInteractive {
+                    interactive = true
+                } else {
+                    return
+                }
             }
         }
     }
@@ -271,8 +328,10 @@ public final class PhotoEditorSession {
     public func setAdjustment(_ parameter: AdjustmentParameter, value: Double) {
         var document = self.document
         guard let layerID = document.activeImageLayerID else { return }
+        let previous = document.activeAdjustments[parameter]
         document.update(layerID: layerID) { $0.edits.setAdjustment(parameter, value: value) }
         history.commit(document, label: parameter.englishName)
+        if abs(value - previous) > 0.0005 { lastAdjustment = (parameter, value > previous ? 1 : -1) }
         requestPreview(interactive: true)
     }
 
@@ -658,6 +717,10 @@ public final class PhotoEditorSession {
             showToast(L("Install Generative Fill in Settings › On-device models to use prompts."), isError: true)
             return
         }
+        guard app.performance.allowsHeavyWork else {
+            showToast(L("The iPhone is too hot for generation right now. Let it cool for a moment."), isError: true)
+            return
+        }
         if let mask = selectionMask {
             Task {
                 isProcessing = true
@@ -779,6 +842,10 @@ public final class PhotoEditorSession {
             showToast(L("Install Generative Fill in Settings › On-device models to use prompts."), isError: true)
             return .failed(message: "no generative engine")
         }
+        if [.generativeFill, .upscale].contains(intent.action), !app.performance.allowsHeavyWork {
+            showToast(L("The iPhone is too hot for generation right now. Let it cool for a moment."), isError: true)
+            return .failed(message: "thermal")
+        }
         if [.removeObject, .removeBackground, .blurBackground, .replaceBackground, .upscale, .selectiveAdjust, .chooseCandidate, .straighten, .generativeFill, .recolor].contains(intent.action) {
             isProcessing = true
             processingTitle = intent.action == .chooseCandidate ? L("Erasing…") : processingLabel(for: intent)
@@ -787,6 +854,19 @@ public final class PhotoEditorSession {
         let context = intentContext
         let (updated, result) = await executor.execute(intent, on: document, context: context)
         handle(result, updatedDocument: updated, intent: intent)
+        if case .applied = result.outcome, intent.action == .adjust || intent.action == .selectiveAdjust, let parameter = intent.parameter {
+            let direction: Int
+            if let amount = intent.amount {
+                switch amount.mode {
+                case .relative: direction = amount.value >= 0 ? 1 : -1
+                case .absolute: direction = amount.value >= context.currentAdjustments[parameter] ? 1 : -1
+                case .multiplier: direction = amount.value >= 1 ? 1 : -1
+                }
+            } else {
+                direction = 1
+            }
+            lastAdjustment = (parameter, direction)
+        }
         return result.outcome
     }
 

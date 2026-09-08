@@ -6,7 +6,7 @@ import PicshopImaging
 import PicshopVideo
 import PicshopSpeech
 
-/// Preferences: AI brain, models, voice, feedback, export.
+/// Preferences: AI brain, models, performance, voice, feedback, export.
 public struct SettingsView: View {
     @Environment(\.picshop) private var app
     @Environment(\.dismiss) private var dismiss
@@ -19,6 +19,7 @@ public struct SettingsView: View {
                 if let app {
                     brainSection(app)
                     modelsSection(app)
+                    performanceSection(app)
                     voiceSection(app)
                     exportSection(app)
                     aboutSection
@@ -40,6 +41,7 @@ public struct SettingsView: View {
             HStack(spacing: 12) {
                 Image(systemName: app.activeEngine == .rules ? "bolt.fill" : "brain.head.profile")
                     .font(.system(size: 18, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(PSTheme.accent)
                     .frame(width: 36, height: 36)
                     .background(PSTheme.accent.opacity(0.16), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -152,6 +154,50 @@ public struct SettingsView: View {
         }
     }
 
+    /// Thermal / battery budget: what the phone is doing right now and how PicShop should react.
+    @ViewBuilder
+    private func performanceSection(_ app: AppEnvironment) -> some View {
+        Section {
+            HStack(spacing: 12) {
+                Image(systemName: app.performance.statusSymbol)
+                    .font(.system(size: 18, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(app.performance.statusTint)
+                    .frame(width: 36, height: 36)
+                    .background(app.performance.statusTint.opacity(0.16), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .contentTransition(.symbolEffect(.replace))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(app.performance.statusTitle).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
+                    Text(tierDescription(app.performance.tier)).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                }
+                Spacer()
+                Text("\(Int(app.performance.previewLongestSide)) px").font(PSFont.mono(11)).foregroundStyle(PSTheme.textTertiary)
+            }
+            .animation(PSMotion.quick, value: app.performance.tier)
+            Picker(L("Rendering"), selection: Binding(get: { app.settings.performancePreference }, set: { value in
+                app.settings.performancePreference = value
+                app.applyPerformanceSettings()
+            })) {
+                Text(L("Automatic")).tag(PerformanceGovernor.Preference.automatic)
+                Text(L("Best quality")).tag(PerformanceGovernor.Preference.quality)
+                Text(L("Cool & battery")).tag(PerformanceGovernor.Preference.efficiency)
+            }
+        } header: {
+            Text(L("Performance"))
+        } footer: {
+            Text(L("Automatic follows the iPhone's temperature: previews shrink and glow effects pause before the frame rate drops, and heavy AI work waits until the phone cools down. Exports are always full quality."))
+        }
+    }
+
+    private func tierDescription(_ tier: PerformanceGovernor.Tier) -> String {
+        switch tier {
+        case .full: return L("Full quality previews at the display's refresh rate.")
+        case .balanced: return L("Slightly lighter previews; effects unchanged.")
+        case .conserve: return L("Lighter previews and no glow, to cool down.")
+        case .critical: return L("Minimal rendering until the iPhone cools down.")
+        }
+    }
+
     @ViewBuilder
     private func voiceSection(_ app: AppEnvironment) -> some View {
         Section(L("Voice")) {
@@ -166,6 +212,7 @@ public struct SettingsView: View {
                 Text("English").tag("en")
             }
             Toggle(L("Speak replies"), isOn: Binding(get: { app.settings.speaksReplies }, set: { app.settings.speaksReplies = $0 }))
+            Toggle(L("Haptics"), isOn: Binding(get: { app.settings.hapticsEnabled }, set: { app.settings.hapticsEnabled = $0 }))
         }
     }
 

@@ -3,7 +3,9 @@ import SwiftUI
 import PhotosUI
 import PicshopCore
 
-/// Project library: the first screen.
+/// Project library: the first screen. A large title, one hero action, two
+/// secondary ones, then the recents grid — the same rhythm as Apple's own
+/// media apps, on a quiet lit ground.
 public struct HomeView: View {
     @Environment(\.picshop) private var app
     @State private var pickedItem: PhotosPickerItem?
@@ -13,6 +15,7 @@ public struct HomeView: View {
     @State private var showsPicker = false
     @State private var showsPDFPicker = false
     @State private var filter: LibraryFilter = .all
+    @Namespace private var filterIndicator
 
     enum LibraryFilter: String, CaseIterable, Identifiable {
         case all, photos, videos, pdfs
@@ -49,7 +52,7 @@ public struct HomeView: View {
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showsSettings = true } label: { Image(systemName: "gearshape") }
+                    Button { Haptics.tap(); showsSettings = true } label: { Image(systemName: "gearshape.fill").symbolRenderingMode(.hierarchical) }
                         .accessibilityLabel(L("Settings"))
                 }
             }
@@ -90,48 +93,28 @@ public struct HomeView: View {
     @ViewBuilder
     private var content: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("PicShop").font(PSFont.display(38)).foregroundStyle(PSTheme.textPrimary).tracking(-1.2)
-                    Text(L("Photos, videos and PDFs. Just say it."))
-                        .font(PSFont.body(15)).foregroundStyle(PSTheme.textSecondary)
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 4)
+            VStack(alignment: .leading, spacing: PSSpacing.xLarge) {
+                header
                 heroActions
                 if let app, let progress = app.modelInstallProgress {
                     ModelInstallBanner(progress: progress)
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, PSSpacing.page)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                if let app, app.performance.tier >= .conserve {
+                    ThermalBanner(governor: app.performance)
+                        .padding(.horizontal, PSSpacing.page)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 if let library = app?.library, !library.projects.isEmpty {
                     let shown = library.projects.filter(filter.matches)
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(L("Recent")).font(PSFont.title(22)).foregroundStyle(PSTheme.textPrimary).tracking(-0.4)
-                            Text("\(shown.count)").font(PSFont.mono(12)).foregroundStyle(PSTheme.textTertiary)
-                            Spacer()
-                        }
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 6) {
-                                ForEach(LibraryFilter.allCases) { item in
-                                    Button {
-                                        Haptics.tick()
-                                        withAnimation(.snappy) { filter = item }
-                                    } label: {
-                                        Text(item.title).font(PSFont.caption(12)).padding(.horizontal, 12).padding(.vertical, 7)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .foregroundStyle(filter == item ? Color.white : PSTheme.textSecondary)
-                                    .background(Color.white.opacity(filter == item ? 0 : 0.06), in: Capsule())
-                                    .psActivePill(Capsule(), isActive: filter == item, glow: false)
-                                }
-                            }
-                        }
+                    VStack(alignment: .leading, spacing: PSSpacing.medium) {
+                        SectionTitle(title: L("Recent"), count: shown.count)
+                        filterRow
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, PSSpacing.page)
                     if shown.isEmpty {
-                        Text(L("Nothing here yet.")).font(PSFont.body(14)).foregroundStyle(PSTheme.textTertiary).padding(.horizontal, 20)
+                        Text(L("Nothing here yet.")).font(PSFont.body(14)).foregroundStyle(PSTheme.textTertiary).padding(.horizontal, PSSpacing.page)
                     } else {
                         projectGrid(shown)
                     }
@@ -139,8 +122,11 @@ public struct HomeView: View {
                     emptyState
                 }
             }
-            .padding(.vertical, 12)
+            .padding(.vertical, PSSpacing.medium)
+            .animation(PSMotion.standard, value: app?.modelInstallProgress == nil)
+            .animation(PSMotion.standard, value: app?.performance.tier)
         }
+        .scrollIndicators(.hidden)
         .overlay {
             if app?.library.isImporting == true {
                 ProgressHUD(title: L("Importing…"))
@@ -148,14 +134,51 @@ public struct HomeView: View {
         }
     }
 
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("PicShop").font(PSFont.display(40)).foregroundStyle(PSTheme.textPrimary).tracking(-1.4)
+            Text(L("Photos, videos and PDFs. Just say it."))
+                .font(PSFont.body(15)).foregroundStyle(PSTheme.textSecondary)
+        }
+        .padding(.horizontal, PSSpacing.page)
+        .padding(.top, 4)
+    }
+
+    private var filterRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(LibraryFilter.allCases) { item in
+                    let isActive = filter == item
+                    Button {
+                        Haptics.tick()
+                        withAnimation(PSMotion.standard) { filter = item }
+                    } label: {
+                        Text(item.title).font(PSFont.caption(12)).padding(.horizontal, 12).padding(.vertical, 7)
+                            .foregroundStyle(isActive ? Color.white : PSTheme.textSecondary)
+                            .background {
+                                if isActive {
+                                    Capsule().fill(PSTheme.accentGradient).overlay(Capsule().fill(PSTheme.accentHighlight))
+                                        .matchedGeometryEffect(id: "filter", in: filterIndicator)
+                                } else {
+                                    Capsule().fill(Color.white.opacity(0.06))
+                                }
+                            }
+                    }
+                    .buttonStyle(PSPressStyle())
+                    .accessibilityAddTraits(isActive ? [.isSelected] : [])
+                }
+            }
+        }
+    }
+
     private var heroActions: some View {
         PSGlassContainer(spacing: 14) {
-            VStack(spacing: 12) {
+            VStack(spacing: PSSpacing.medium) {
                 heroCard(title: L("New Photo"), subtitle: L("Retouch, erase, restyle"), systemImage: "photo.on.rectangle.angled", tint: PSTheme.accent, prominent: true) {
                     pickerFilter = .images
                     showsPicker = true
                 }
-                HStack(spacing: 12) {
+                HStack(spacing: PSSpacing.medium) {
                     heroCard(title: L("New Video"), subtitle: L("Cut, clean up, grade"), systemImage: "film.stack", tint: PSTheme.voice) {
                         pickerFilter = .videos
                         showsPicker = true
@@ -165,7 +188,7 @@ public struct HomeView: View {
                     }
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, PSSpacing.page)
         }
     }
 
@@ -177,6 +200,7 @@ public struct HomeView: View {
             HStack(spacing: 14) {
                 Image(systemName: systemImage)
                     .font(.system(size: prominent ? 26 : 20, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(prominent ? Color.white : tint)
                     .frame(width: prominent ? 56 : 44, height: prominent ? 56 : 44)
                     .background(prominent ? Color.white.opacity(0.22) : tint.opacity(0.18), in: RoundedRectangle(cornerRadius: prominent ? 18 : 14, style: .continuous))
@@ -193,46 +217,39 @@ public struct HomeView: View {
             .padding(.vertical, prominent ? 18 : 14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .modifier(HeroSurface(prominent: prominent))
         }
-        .buttonStyle(.plain)
-        .background {
-            if prominent {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(LinearGradient(colors: [Color(red: 0.36, green: 0.55, blue: 1.0), Color(red: 0.55, green: 0.42, blue: 1.0)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .overlay(alignment: .topTrailing) {
-                        Circle().fill(Color.white.opacity(0.14)).frame(width: 160, height: 160).blur(radius: 24).offset(x: 40, y: -60)
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                    .shadow(color: Color(red: 0.36, green: 0.55, blue: 1.0).opacity(0.35), radius: 22, y: 10)
-            }
-        }
-        .modifier(GlassWhenNotProminent(prominent: prominent))
+        .buttonStyle(PSPressStyle(scale: 0.975))
         .accessibilityLabel(title)
         .accessibilityHint(subtitle)
     }
 
     private func projectGrid(_ projects: [Project]) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 16) {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: PSSpacing.medium), GridItem(.flexible(), spacing: PSSpacing.medium)], spacing: PSSpacing.large) {
             ForEach(projects) { project in
-                ProjectCard(project: project, thumbnail: app?.library.thumbnail(for: project))
-                    .onTapGesture {
-                        Haptics.tap()
-                        openProject = project
-                    }
-                    .contextMenu {
-                        Button { app?.library.duplicate(project) } label: { Label(L("Duplicate"), systemImage: "plus.square.on.square") }
-                        Button(role: .destructive) { app?.library.delete(project) } label: { Label(L("Delete"), systemImage: "trash") }
-                    }
+                Button {
+                    Haptics.tap()
+                    openProject = project
+                } label: {
+                    ProjectCard(project: project, thumbnail: app?.library.thumbnail(for: project))
+                }
+                .buttonStyle(PSPressStyle(scale: 0.97))
+                .contextMenu {
+                    Button { app?.library.duplicate(project) } label: { Label(L("Duplicate"), systemImage: "plus.square.on.square") }
+                    Button(role: .destructive) { app?.library.delete(project) } label: { Label(L("Delete"), systemImage: "trash") }
+                }
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, PSSpacing.page)
+        .animation(PSMotion.standard, value: projects.map(\.id))
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             Image(systemName: "waveform.and.mic")
                 .font(.system(size: 44, weight: .light))
                 .foregroundStyle(PSTheme.voiceGradient)
+                .symbolRenderingMode(.hierarchical)
             Text(L("Pick a photo or video, then just say what you want."))
                 .font(PSFont.body(16))
                 .multilineTextAlignment(.center)
@@ -248,9 +265,49 @@ public struct HomeView: View {
     }
 }
 
+/// The prominent card paints a mesh gradient; the others are glass.
+struct HeroSurface: ViewModifier {
+    let prominent: Bool
+    @Environment(\.psEffects) private var effects
+
+    func body(content: Content) -> some View {
+        if prominent {
+            let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
+            content
+                .background {
+                    ZStack {
+                        HeroMesh()
+                        shape.fill(LinearGradient(colors: [Color.white.opacity(0.18), .clear], startPoint: .top, endPoint: .center))
+                    }
+                }
+                .overlay(shape.strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
+                .clipShape(shape)
+                .shadow(color: PSTheme.accent.opacity(effects == .rich ? 0.35 : 0), radius: 22, y: 10)
+        } else {
+            content.psCard(cornerRadius: 24)
+        }
+    }
+}
+
+/// Static mesh gradient used behind hero surfaces (GPU-cheap, no blur).
+struct HeroMesh: View {
+    var body: some View {
+        if #available(iOS 18.0, *) {
+            MeshGradient(width: 3, height: 3, points: [
+                [0.0, 0.0], [0.5, 0.0], [1.0, 0.0],
+                [0.0, 0.5], [0.42, 0.55], [1.0, 0.5],
+                [0.0, 1.0], [0.5, 1.0], [1.0, 1.0],
+            ], colors: PSTheme.heroMesh)
+        } else {
+            LinearGradient(colors: [PSTheme.heroMesh[0], PSTheme.heroMesh[4], PSTheme.heroMesh[8]], startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
+    }
+}
+
 struct ProjectCard: View {
     let project: Project
     let thumbnail: UIImage?
+    @Environment(\.psEffects) private var effects
 
     private var tint: Color { project.isPDF ? PSTheme.warning : (project.isVideo ? PSTheme.voice : PSTheme.accent) }
 
@@ -291,32 +348,22 @@ struct ProjectCard: View {
             }
             .clipShape(shape)
             .overlay(shape.strokeBorder(PSTheme.strokeGradient, lineWidth: 1))
-            .shadow(color: .black.opacity(0.5), radius: 18, y: 10)
+            .shadow(color: .black.opacity(effects == .rich ? 0.5 : 0), radius: 18, y: 10)
+            .contentShape(shape)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(project.title)
     }
 }
 
 /// Deep, softly lit ground behind the library — the app should feel like a lit studio, not a void.
+/// Three static radial washes: no blur, no animation, one GPU pass.
 struct AmbientBackground: View {
     var body: some View {
         ZStack {
-            Color(red: 0.03, green: 0.03, blue: 0.05)
-            RadialGradient(colors: [Color(red: 0.30, green: 0.42, blue: 0.95).opacity(0.28), .clear], center: .init(x: 0.15, y: 0.05), startRadius: 0, endRadius: 420)
+            PSTheme.ink
+            RadialGradient(colors: [Color(red: 0.24, green: 0.44, blue: 0.98).opacity(0.28), .clear], center: .init(x: 0.15, y: 0.05), startRadius: 0, endRadius: 420)
             RadialGradient(colors: [Color(red: 0.62, green: 0.40, blue: 1.0).opacity(0.18), .clear], center: .init(x: 0.95, y: 0.25), startRadius: 0, endRadius: 380)
             RadialGradient(colors: [Color(red: 1.0, green: 0.55, blue: 0.35).opacity(0.10), .clear], center: .init(x: 0.5, y: 1.0), startRadius: 0, endRadius: 500)
-        }
-    }
-}
-
-/// Glass for the secondary hero cards; the prominent one paints its own gradient.
-struct GlassWhenNotProminent: ViewModifier {
-    let prominent: Bool
-    func body(content: Content) -> some View {
-        if prominent {
-            content
-        } else {
-            content.psCard(cornerRadius: 24)
         }
     }
 }
@@ -327,12 +374,31 @@ struct ModelInstallBanner: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "arrow.down.circle.fill").font(.system(size: 18, weight: .semibold)).foregroundStyle(PSTheme.accent)
+            Image(systemName: "arrow.down.circle.fill").font(.system(size: 18, weight: .semibold)).foregroundStyle(PSTheme.accent).symbolRenderingMode(.hierarchical)
             VStack(alignment: .leading, spacing: 4) {
                 Text(L("Installing AI models")).font(PSFont.headline(13)).foregroundStyle(PSTheme.textPrimary)
                 ProgressView(value: progress).tint(PSTheme.accent)
             }
-            Text("\(Int((progress * 100).rounded()))%").font(PSFont.mono(12)).foregroundStyle(PSTheme.textSecondary)
+            Text("\(Int((progress * 100).rounded()))%").font(PSFont.mono(12)).foregroundStyle(PSTheme.textSecondary).contentTransition(.numericText())
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .psCard(cornerRadius: 18, shadow: false)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Shown when the phone is hot: explains why previews look softer for a moment.
+struct ThermalBanner: View {
+    let governor: PerformanceGovernor
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: governor.statusSymbol).font(.system(size: 18, weight: .semibold)).foregroundStyle(governor.statusTint).symbolRenderingMode(.hierarchical)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(governor.statusTitle).font(PSFont.headline(13)).foregroundStyle(PSTheme.textPrimary)
+                Text(L("PicShop is rendering lighter previews to keep your iPhone cool.")).font(PSFont.caption(11)).foregroundStyle(PSTheme.textSecondary)
+            }
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
         .psCard(cornerRadius: 18, shadow: false)

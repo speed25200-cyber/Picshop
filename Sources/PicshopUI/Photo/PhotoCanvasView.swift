@@ -1,5 +1,6 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
+import UIKit
 import CoreImage
 import PicshopCore
 import PicshopImaging
@@ -9,6 +10,8 @@ struct MetalCanvasRepresentable: UIViewRepresentable {
     var image: CIImage?
     var overlay: CIImage?
     var frame: CGRect
+    var maxFrameRate: Int = 120
+    var maxContentScale: CGFloat = UIScreen.main.scale
 
     func makeUIView(context: Context) -> MetalCanvasView {
         let view = MetalCanvasView()
@@ -16,11 +19,16 @@ struct MetalCanvasRepresentable: UIViewRepresentable {
         return view
     }
 
+    /// SwiftUI calls this for every state change in the editor; only touch the
+    /// Metal view (and trigger a GPU pass) when something it draws changed.
     func updateUIView(_ view: MetalCanvasView, context: Context) {
-        view.image = image
-        view.overlay = overlay
-        view.imageFrame = frame
-        view.setNeedsDisplay()
+        var dirty = false
+        if view.image !== image { view.image = image; dirty = true }
+        if view.overlay !== overlay { view.overlay = overlay; dirty = true }
+        if view.imageFrame != frame { view.imageFrame = frame; dirty = true }
+        if view.maxFrameRate != maxFrameRate { view.maxFrameRate = maxFrameRate }
+        if view.maxContentScale != maxContentScale { view.maxContentScale = maxContentScale }
+        if dirty { view.setNeedsDisplay() }
     }
 }
 
@@ -48,13 +56,21 @@ struct PhotoCanvasView: View {
             let frame = imageFrame(in: container)
             ZStack {
                 PSTheme.canvas
-                MetalCanvasRepresentable(image: session.preview, overlay: session.selectionPreview, frame: frame)
+                MetalCanvasRepresentable(image: session.preview, overlay: session.selectionPreview, frame: frame,
+                                         maxFrameRate: session.app.performance.maxFrameRate, maxContentScale: session.app.performance.maxContentScale)
                 overlays(frame: frame, container: container)
                     .allowsHitTesting(false)
                 if let rect = session.cropRect {
                     CropOverlay(frame: frame, rect: Binding(get: { rect }, set: { session.cropRect = $0 }), aspect: cropAspectValue)
                 }
+                if session.activeTool == nil, session.history.canUndo, !session.isProcessing, session.pendingClarification == nil {
+                    CompareButton(isShowingOriginal: session.showsOriginal) { session.showsOriginal = $0 }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .padding(12)
+                        .transition(.scale(scale: 0.8, anchor: .bottomTrailing).combined(with: .opacity))
+                }
             }
+            .animation(PSMotion.standard, value: session.activeTool == nil && session.history.canUndo && !session.isProcessing)
             .contentShape(Rectangle())
             .gesture(canvasGesture(frame: frame), including: session.isCropping ? .subviews : .all)
             .simultaneousGesture(compareGesture)

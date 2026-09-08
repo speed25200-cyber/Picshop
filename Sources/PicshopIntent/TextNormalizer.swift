@@ -130,9 +130,10 @@ public enum UtteranceSegmenter {
         "and then", "et ensuite", "et puis", "et apres", "and after that", "et aussi", "and also", "et en plus",
         "apres la page", "after page", "after the page", "avant la page", "before page", "before the page", "apres le clip", "after clip", "after the clip",
         "avant le clip", "before clip", "before the clip", "apres la personne", "apres le", "apres la", "after the",
+        "everything but", "all but", "anything but", "nothing but", "tout sauf", "everyone but",
     ]
 
-    static let separators: [String] = [" puis ", " ensuite ", " apres ca ", " apres ", " then ", " and then ", " et aussi ", " and also ", " et ", " and ", " , ", " ; "]
+    static let separators: [String] = [" puis ", " ensuite ", " apres ca ", " apres ", " then ", " and then ", " et aussi ", " and also ", " mais ", " but ", " et ", " and ", " , ", " ; "]
 
     public static func segments(of normalizedText: String) -> [String] {
         var text = " " + normalizedText + " "

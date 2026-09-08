@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0 — fluid UI, thermal budget, deeper understanding
+
+- Design system rebuilt around Apple's rhythm: system-blue accent, concentric radii, one motion vocabulary (`PSMotion`), press feedback on every control, SF Symbols with hierarchical rendering.
+- Editor chrome: the dock's active pill and the panel segments slide between entries; tool panels get a grabber and close with a swipe down; hold-to-compare button on the canvas; Dynamic-Island-shaped toasts; ring progress HUD.
+- Home: mesh-gradient hero card (no blur passes), sliding filter capsules, thermal banner; onboarding icons on the same mesh.
+- Adjust panel: Light / Colour / Detail / Effects families with a sliding segment and a dot on families that were touched.
+- Performance governor: thermal state, Low Power Mode and a Settings › Performance preference drive preview size, interactive size, settle delay, frame-rate cap, drawable scale, glow/shadow effects and whether heavy neural work may start.
+- Preview rendering is coalesced: one render in flight, latest state wins, sharp frame after the interaction settles; the Metal canvas only redraws when its inputs change. Look thumbnails are cached per photo state.
+- Grammar: everyday goals (profile picture, product photo, ID photo, wallpaper, restore, night, backlit, HDR), follow-ups on the last adjustment (encore, a bit more, trop), "but / mais" contrast clauses, corrections during a clarification ("non, le chat"), skin smoothing / teeth / eyes, subjective adjectives (dull, harsh, jaunâtre, muddy…), default sky swap, vague dissatisfaction ("c'est moche").
+- Language models receive a retoucher's interpretation guide, the last-adjustment memory and twelve few-shot examples.
+
 ## 1.0.0 (build 10) — redesign
 
 - Editors rebuilt on a shared shell: full-bleed canvas, top bar and controls in the safe area (window insets as fallback), OLED black.

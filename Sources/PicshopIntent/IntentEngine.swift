@@ -31,11 +31,17 @@ public struct IntentContext: Sendable {
     public var currentPage: Int
     /// Whether a signature has been saved on this device.
     public var hasSignature: Bool
+    /// The parameter the user changed last (by voice or by dial), so bare follow-ups
+    /// such as "a bit more", "encore", "trop" can refer to it.
+    public var lastParameter: AdjustmentParameter?
+    /// +1 / -1 direction of that last change, 0 when unknown.
+    public var lastAdjustmentDirection: Int
 
     public init(mode: EditorMode, currentAdjustments: Adjustments = .neutral, hasSelection: Bool = false, selectedIndex: Int? = nil,
                 clipCount: Int = 0, textLayerCount: Int = 0, playheadSeconds: Double = 0, timelineDuration: Double = 0, frameRate: Double = 30,
                 pendingClarification: ClarificationRequest? = nil, lastTapPoint: PSPoint? = nil, canUndo: Bool = false, canRedo: Bool = false,
-                preferredLanguage: String? = nil, pageCount: Int = 0, currentPage: Int = 1, hasSignature: Bool = false) {
+                preferredLanguage: String? = nil, pageCount: Int = 0, currentPage: Int = 1, hasSignature: Bool = false,
+                lastParameter: AdjustmentParameter? = nil, lastAdjustmentDirection: Int = 0) {
         self.mode = mode
         self.currentAdjustments = currentAdjustments
         self.hasSelection = hasSelection
@@ -53,6 +59,8 @@ public struct IntentContext: Sendable {
         self.pageCount = pageCount
         self.currentPage = currentPage
         self.hasSignature = hasSignature
+        self.lastParameter = lastParameter
+        self.lastAdjustmentDirection = lastAdjustmentDirection
     }
 
     public static let photo = IntentContext(mode: .photo)

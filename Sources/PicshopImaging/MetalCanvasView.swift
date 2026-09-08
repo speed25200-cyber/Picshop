@@ -29,6 +29,22 @@ public final class MetalCanvasView: MTKView {
 
     public var backgroundClearColor = MTLClearColor(red: 0.04, green: 0.04, blue: 0.05, alpha: 1)
 
+    /// Caps the drawable resolution: 3× panels render at 2× when the phone is hot.
+    public var maxContentScale: CGFloat = UIScreen.main.scale {
+        didSet {
+            let scale = min(UIScreen.main.scale, max(1, maxContentScale))
+            if contentScaleFactor != scale {
+                contentScaleFactor = scale
+                setNeedsDisplay()
+            }
+        }
+    }
+
+    /// Frame-rate ceiling; drawing is on demand, so this only bounds bursts of redraws.
+    public var maxFrameRate: Int = 120 {
+        didSet { preferredFramesPerSecond = max(30, maxFrameRate) }
+    }
+
     public init() {
         let device = MTLCreateSystemDefaultDevice()
         commandQueue = device?.makeCommandQueue()
@@ -40,7 +56,9 @@ public final class MetalCanvasView: MTKView {
         clearColor = backgroundClearColor
         isOpaque = true
         autoResizeDrawable = true
+        presentsWithTransaction = false
         contentScaleFactor = UIScreen.main.scale
+        preferredFramesPerSecond = max(60, UIScreen.main.maximumFramesPerSecond)
     }
 
     @available(*, unavailable)

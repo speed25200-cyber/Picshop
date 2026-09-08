@@ -95,19 +95,88 @@ private extension PhotoEditorSession {
 struct AdjustPanel: View {
     @Bindable var session: PhotoEditorSession
     @State private var value: Double = 0
+    @State private var group: Family = .light
+    @Namespace private var groupIndicator
 
-    private let parameters: [AdjustmentParameter] = AdjustmentParameter.lightGroup + AdjustmentParameter.colorGroup + AdjustmentParameter.detailGroup + AdjustmentParameter.effectsGroup
+    /// Photos-style families of parameters; the segment slides between them.
+    enum Family: String, CaseIterable, Identifiable {
+        case light, color, detail, effects
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .light: return L("Light")
+            case .color: return L("Colour")
+            case .detail: return L("Detail")
+            case .effects: return L("Effects")
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .light: return "sun.max"
+            case .color: return "paintpalette"
+            case .detail: return "circle.dotted.and.circle"
+            case .effects: return "sparkles"
+            }
+        }
+        var parameters: [AdjustmentParameter] {
+            switch self {
+            case .light: return AdjustmentParameter.lightGroup
+            case .color: return AdjustmentParameter.colorGroup
+            case .detail: return AdjustmentParameter.detailGroup
+            case .effects: return AdjustmentParameter.effectsGroup
+            }
+        }
+        static func containing(_ parameter: AdjustmentParameter) -> Family {
+            allCases.first { $0.parameters.contains(parameter) } ?? .light
+        }
+    }
 
     var body: some View {
         VStack(spacing: 8) {
+            HStack(spacing: 2) {
+                ForEach(Family.allCases) { item in
+                    let isActive = group == item
+                    let touched = item.parameters.contains { abs(session.adjustmentValue($0)) > 0.0005 }
+                    Button {
+                        Haptics.tick()
+                        withAnimation(PSMotion.standard) {
+                            group = item
+                            if !item.parameters.contains(session.selectedParameter), let first = item.parameters.first {
+                                session.selectedParameter = first
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: item.symbol).font(.system(size: 11, weight: .bold))
+                            Text(item.title).font(PSFont.caption(12)).lineLimit(1).minimumScaleFactor(0.8)
+                            if touched && !isActive { Circle().fill(PSTheme.accent).frame(width: 5, height: 5) }
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 7)
+                        .frame(maxWidth: .infinity)
+                        .background {
+                            if isActive {
+                                Capsule().fill(PSTheme.accentGradient).overlay(Capsule().fill(PSTheme.accentHighlight))
+                                    .matchedGeometryEffect(id: "group", in: groupIndicator)
+                            }
+                        }
+                        .foregroundStyle(isActive ? Color.white : PSTheme.textSecondary)
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(PSPressStyle(scale: 0.97))
+                    .accessibilityAddTraits(isActive ? [.isSelected] : [])
+                }
+            }
+            .padding(3)
+            .background(Color.black.opacity(0.28), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(parameters) { parameter in
+                HStack(spacing: 6) {
+                    ForEach(group.parameters) { parameter in
                         let active = session.selectedParameter == parameter
                         let current = session.adjustmentValue(parameter)
                         Button {
                             Haptics.tick()
-                            session.selectedParameter = parameter
+                            withAnimation(PSMotion.quick) { session.selectedParameter = parameter }
                             value = current
                         } label: {
                             VStack(spacing: 5) {
@@ -115,24 +184,28 @@ struct AdjustPanel: View {
                                     Circle().stroke(PSTheme.hairline, lineWidth: 3)
                                     Circle()
                                         .trim(from: 0, to: CGFloat(min(1, abs(current))))
-                                        .stroke(active ? Color.black : PSTheme.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                                        .stroke(active ? Color.white : PSTheme.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                                         .rotationEffect(.degrees(-90))
                                         .scaleEffect(x: current < 0 ? -1 : 1)
+                                        .animation(PSMotion.numeric, value: current)
                                     Image(systemName: parameter.symbolName).font(.system(size: 15, weight: .semibold))
                                 }
                                 .frame(width: 40, height: 40)
                                 Text(localizedName(parameter)).font(PSFont.caption(10)).lineLimit(1).minimumScaleFactor(0.8)
                             }
-                            .foregroundStyle(active ? Color.black : PSTheme.textPrimary)
+                            .foregroundStyle(active ? Color.white : PSTheme.textPrimary)
                             .frame(width: 66, height: 64)
-                            .background(active ? PSTheme.accent : Color.clear, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .psActivePill(RoundedRectangle(cornerRadius: 16, style: .continuous), isActive: active, glow: false)
+                            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PSPressStyle())
                         .accessibilityLabel(localizedName(parameter))
+                        .accessibilityValue(String(Int((current * 100).rounded())))
                     }
                 }
                 .padding(.horizontal, 2)
             }
+            .scrollBounceBehavior(.basedOnSize)
             DialSlider(value: $value, range: session.selectedParameter.range, neutral: 0, label: localizedName(session.selectedParameter)) { editing in
                 if editing { session.beginSliderInteraction(session.selectedParameter) } else { session.endSliderInteraction() }
             }
@@ -141,7 +214,11 @@ struct AdjustPanel: View {
                     session.setAdjustment(session.selectedParameter, value: newValue)
                 }
             }
-            .onChange(of: session.selectedParameter) { _, parameter in value = session.adjustmentValue(parameter) }
+            .onChange(of: session.selectedParameter) { _, parameter in
+                value = session.adjustmentValue(parameter)
+                let owner = Family.containing(parameter)
+                if owner != group { withAnimation(PSMotion.standard) { group = owner } }
+            }
             .onChange(of: session.history.present.modifiedAt) { _, _ in
                 let current = session.adjustmentValue(session.selectedParameter)
                 if abs(current - value) > 0.0005 { value = current }
@@ -156,7 +233,10 @@ struct AdjustPanel: View {
                 }
             }
         }
-        .onAppear { value = session.adjustmentValue(session.selectedParameter) }
+        .onAppear {
+            value = session.adjustmentValue(session.selectedParameter)
+            group = Family.containing(session.selectedParameter)
+        }
     }
 }
 
@@ -209,14 +289,26 @@ struct LooksPanel: View {
         .task { await renderThumbnails() }
     }
 
+    /// Thumbnails are rendered once per photo state and kept on the session, so
+    /// reopening the panel costs nothing and a hot phone renders them smaller.
     private func renderThumbnails() async {
-        guard let renderer = session.renderer, let base = try? await renderer.renderBase(session.document, options: PhotoRenderer.Options(targetLongestSide: 160, allowExpensiveWork: false)) else { return }
+        if let cached = session.lookThumbnails, cached.key == session.lookThumbnailKey {
+            thumbnails = cached.images
+            return
+        }
+        let side = session.app.performance.thumbnailSide
+        guard let renderer = session.renderer, let base = try? await renderer.renderBase(session.document, options: PhotoRenderer.Options(targetLongestSide: side, allowExpensiveWork: false)) else { return }
+        let key = session.lookThumbnailKey
+        var rendered: [FilterPreset: UIImage] = [:]
         for preset in FilterPreset.gallery {
             let adjusted = AdjustmentPipeline.apply(preset.recipe, toneCurve: preset.toneCurve, to: base, scale: 0.05)
             if let cg = ImageSupport.cgImage(from: adjusted) {
-                thumbnails[preset] = UIImage(cgImage: cg)
+                rendered[preset] = UIImage(cgImage: cg)
+                thumbnails[preset] = rendered[preset]
             }
+            await Task.yield()
         }
+        session.lookThumbnails = (key, rendered)
     }
 }
 

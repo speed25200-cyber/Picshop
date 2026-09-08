@@ -129,6 +129,17 @@ AI operations that change pixels over time render a new file through `VideoTrans
 
 The rendered file replaces the clip's `renderAsset`; the original stays in the package for undo.
 
+## Fluidity and thermal budget
+
+`PerformanceGovernor` (`PicshopUI/App`) observes `ProcessInfo.thermalState`, Low Power Mode and Reduce Motion, combines
+them with the user's Settings › Performance preference into a `Tier` (full · balanced · conserve · critical), and derives the
+render budget every screen reads: preview and interactive preview sizes, the settle delay before the sharp frame, the
+interactive render interval, the Metal canvas frame-rate cap and drawable scale, and a `PSEffectsLevel` environment value
+that removes glow and drop shadows (and finally glass) before any layout changes. `PhotoEditorSession.requestPreview`
+coalesces interactive renders (at most one in flight, latest state wins) and `MetalCanvasRepresentable` only redraws when
+the image, overlay or frame changed. Heavy neural work (generative fill, upscaling, automatic model installs) waits while
+the tier is critical.
+
 ## Concurrency
 
 - Documents and intents are `Sendable` values; `PhotoRenderer`, `ModelManager`, `VideoThumbnailer`

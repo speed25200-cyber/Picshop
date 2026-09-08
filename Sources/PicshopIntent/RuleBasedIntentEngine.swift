@@ -60,6 +60,8 @@ public struct RuleBasedIntentEngine: IntentEngine {
         if context.mode == .photo, let describe = parseDescribe(u) { return [describe] }
         if context.mode == .pdf { return parsePDF(u, original: original, context: context) }
         if context.mode == .video, let video = parseVideo(u, context: context) { return video }
+        if context.mode == .photo, let goal = parseGoal(u, context: context) { return goal }
+        if context.mode == .photo, let portrait = parsePortrait(u) { return [portrait] }
         if context.mode == .photo, let generative = parseGenerative(u, original: original, context: context) { return [generative] }
         if let background = parseBackground(u) { return [background] }
         if let removal = parseRemoveObject(u, context: context) { return [removal] }
@@ -70,6 +72,7 @@ public struct RuleBasedIntentEngine: IntentEngine {
         if let look = parseLook(u) { return [look] }
         if let resolution = parseResolution(u) { return [resolution] }
         if let adjust = parseAdjust(u, context: context) { return [adjust] }
+        if let followUp = parseFollowUp(u, context: context) { return [followUp] }
         if let layer = parseLayer(u, context: context) { return [layer] }
         return [EditIntent(action: .unknown, confidence: 0)]
     }
@@ -176,7 +179,12 @@ public struct RuleBasedIntentEngine: IntentEngine {
     // MARK: - Clarification replies
 
     func parseCandidateChoice(_ u: NormalizedUtterance, pending: ClarificationRequest, context: IntentContext) -> EditIntent? {
-        if u.contains(["cancel", "annule", "laisse tomber", "never mind", "nevermind", "forget it", "non", "no", "aucun", "aucune", "none", "stop", "oublie"]) {
+        // "non, le chat" names another object: that is a correction, not a cancellation.
+        let restated = makeTarget(from: u.text, context: context)
+        let restatedKnown = restated.flatMap { ObjectVocabulary.entry(forLabel: $0.label) }.map { $0.category != .generic } ?? false
+        let pendingLabel = pending.pendingIntent.target?.label
+        if u.contains(["cancel", "annule", "laisse tomber", "never mind", "nevermind", "forget it", "non", "no", "aucun", "aucune", "none", "stop", "oublie"]),
+           !restatedKnown || restated?.label == pendingLabel {
             return EditIntent(action: .cancel)
         }
         if u.contains(["both", "les deux", "all", "tous", "toutes", "all of them", "everyone", "tout le monde", "everything"]) {
@@ -203,9 +211,17 @@ public struct RuleBasedIntentEngine: IntentEngine {
             return intent
         }
         // Re-stated target with attributes: "le chien noir" → pass through as a refined target.
-        if let target = makeTarget(from: u.text, context: context), target.label == pending.pendingIntent.target?.label, (!target.attributes.isEmpty || target.spatialHint != nil) {
+        if let target = restated, target.label == pendingLabel, (!target.attributes.isEmpty || target.spatialHint != nil) {
             var intent = EditIntent(action: .chooseCandidate, confidence: 0.8)
             intent.target = target
+            return intent
+        }
+        // A different object: redo the pending command on it ("non, le chat", "the lamp instead").
+        if let target = restated, restatedKnown, target.label != pendingLabel {
+            var intent = pending.pendingIntent
+            intent.id = UUID()
+            intent.target = target
+            intent.confidence = 0.85
             return intent
         }
         return nil
@@ -218,7 +234,7 @@ public struct RuleBasedIntentEngine: IntentEngine {
             return EditIntent(action: .help)
         }
         let hasTime = TimeExpressions.firstTime(in: u.tokens, frameRate: context.frameRate) != nil
-        if u.contains(["undo", "annule", "annuler", "annule ca", "reviens en arriere", "revenir en arriere", "retourne en arriere", "retour en arriere", "go back", "oops", "undo that", "undo the last", "annule la derniere", "non pas ca", "pas ca", "revert that", "annule le dernier", "step back"]) && !u.contains(["annule tout", "undo everything", "undo all"]) && !(context.mode == .video && hasTime) {
+        if u.contains(["undo", "annule", "annuler", "annule ca", "reviens en arriere", "revenir en arriere", "retourne en arriere", "retour en arriere", "go back", "oops", "undo that", "undo the last", "annule la derniere", "non pas ca", "pas ca", "revert that", "annule le dernier", "step back", "annule ce que tu viens de faire", "undo what you just did", "revert the last change", "cancel the last change", "enleve ce que tu viens de faire", "remets comme avant", "put it back", "c etait mieux avant", "it was better before"]) && !u.contains(["annule tout", "undo everything", "undo all"]) && !(context.mode == .video && hasTime) {
             return EditIntent(action: .undo)
         }
         if u.contains(["redo", "retablis", "retablir", "refais", "refaire", "redo that", "remets ce que", "restore that"]) {
@@ -329,6 +345,14 @@ public struct RuleBasedIntentEngine: IntentEngine {
 
     static let replaceVerbs: [String] = ["remplace", "remplacer", "replace", "change", "changer", "transforme", "transformer", "turn", "swap", "convertis", "convert", "mets", "put"]
 
+    /// What to generate when the user names a region but not its replacement.
+    static let defaultGenerativePrompts: [String: String] = [
+        "sky": "a clear blue sky with soft white clouds",
+        "cloud": "a clear blue sky",
+        "grass": "lush green grass",
+        "water": "calm clear water",
+    ]
+
     func parseGenerative(_ u: NormalizedUtterance, original: String, context: IntentContext) -> EditIntent? {
         // "remplace le ciel par un coucher de soleil" / "replace the sky with a sunset" / "turn the car into a boat"
         let connectors = ["par", "with", "into", "en", "to", "by"]
@@ -356,6 +380,11 @@ public struct RuleBasedIntentEngine: IntentEngine {
                 if let target = makeTarget(from: subject, context: context) {
                     return EditIntent(action: .generativeFill, target: target, text: prompt, confidence: 0.85)
                 }
+            } else if let target = makeTarget(from: rest, context: context), let prompt = Self.defaultGenerativePrompts[target.label], target.attributes.isEmpty,
+                      ParameterVocabulary.match(in: NormalizedUtterance(rest)) == nil, AmountParser.sign(in: NormalizedUtterance(rest)) == 0,
+                      !NormalizedUtterance(rest).contains(["text", "texte", "titre", "title", "filter", "filtre", "look", "music", "musique", "couleur", "color", "colour"]) {
+                // "change le ciel" / "replace the sky": no replacement said, use a sensible default.
+                return EditIntent(action: .generativeFill, target: target, text: prompt, confidence: 0.8)
             }
         }
         // "rends la voiture rouge" / "make the car red" / "colore les murs en bleu"
@@ -394,6 +423,108 @@ public struct RuleBasedIntentEngine: IntentEngine {
             return intent
         }
         return nil
+    }
+
+    // MARK: - Goals ("make it a profile picture", "photo produit", "restore this old photo")
+
+    static let cropWords: [String] = ["crop", "recadre", "recadrer", "recadrage", "format", "ratio", "aspect"]
+
+    /// Everyday goals become the sequence of edits a retoucher would do. The
+    /// result is deterministic and confident, so it never waits for a model.
+    func parseGoal(_ u: NormalizedUtterance, context: IntentContext) -> [EditIntent]? {
+        let identity = ["photo d identite", "id photo", "passport photo", "photo passeport", "passport", "photo pour passeport", "visa photo", "identity photo", "photo identite", "photo pour visa"]
+        let product = ["photo produit", "product photo", "product shot", "product picture", "product image", "e commerce", "ecommerce", "vinted", "leboncoin", "ebay", "etsy", "amazon", "pour vendre", "to sell", "for sale", "shop listing", "listing photo", "fiche produit", "catalogue", "catalog"]
+        let headshot = ["linkedin", "headshot", "pour mon cv", "for my resume", "for my cv", "photo cv", "photo pro"]
+        let profile = ["photo de profil", "photo de profile", "profile picture", "profile photo", "profile pic", "avatar", "pour mon profil", "for my profile", "pfp"]
+        let professional = ["professionnel", "professionnelle", "professional", "corporate"]
+        let wallpaper = ["fond d ecran", "wallpaper", "lock screen", "ecran de verrouillage", "ecran d accueil", "home screen"]
+        let restore = ["restaure", "restaurer", "restore", "vieille photo", "old photo", "ancienne photo", "photo ancienne", "photo abimee", "damaged photo", "faded photo", "old picture", "vieux cliche", "photo scannee", "scanned photo", "photo numerisee"]
+        let night = ["photo de nuit", "prise de nuit", "taken at night", "night shot", "night photo", "low light", "faible lumiere", "basse lumiere", "trop sombre pour voir", "too dark to see", "on ne voit rien", "can t see anything"]
+        let backlit = ["contre jour", "backlit", "backlight", "against the light", "sujet trop sombre", "subject is too dark", "subject too dark", "visage trop sombre", "face is too dark", "face too dark"]
+        let hdr = ["hdr", "effet hdr", "hdr look", "high dynamic range"]
+        let aesthetic = ["aesthetic", "esthetique", "tendance", "trendy", "pinterest", "vsco"]
+
+        var intents: [EditIntent] = []
+        if u.contains(identity) {
+            intents = [EditIntent(action: .replaceBackground, color: .white, background: .color(.white)), EditIntent(action: .crop, aspect: .ratio3x4)]
+        } else if u.contains(product) {
+            intents = [EditIntent(action: .replaceBackground, color: .white, background: .color(.white)), EditIntent(action: .autoEnhance, amount: .absolute(0.7))]
+        } else if u.contains(headshot) || u.contains(profile) {
+            intents = [EditIntent(action: .autoEnhance, amount: .absolute(0.7)), EditIntent(action: .crop, aspect: .square)]
+        } else if u.contains(professional) {
+            intents = [EditIntent(action: .autoEnhance, amount: .absolute(0.7))]
+        } else if u.contains(wallpaper) {
+            intents = [EditIntent(action: .crop, aspect: .ratio9x16)]
+        } else if u.contains(restore) {
+            intents = [EditIntent(action: .autoEnhance, amount: .absolute(0.8)),
+                       EditIntent(action: .adjust, parameter: .noiseReduction, amount: .relative(0.4)),
+                       EditIntent(action: .adjust, parameter: .sharpness, amount: .relative(0.2))]
+        } else if u.contains(backlit) {
+            intents = [EditIntent(action: .adjust, parameter: .shadows, amount: .relative(0.4)), EditIntent(action: .adjust, parameter: .highlights, amount: .relative(-0.2))]
+        } else if u.contains(night) {
+            intents = [EditIntent(action: .adjust, parameter: .brightness, amount: .relative(0.2)),
+                       EditIntent(action: .adjust, parameter: .shadows, amount: .relative(0.3)),
+                       EditIntent(action: .adjust, parameter: .noiseReduction, amount: .relative(0.3))]
+        } else if u.contains(hdr) {
+            intents = [EditIntent(action: .adjust, parameter: .shadows, amount: .relative(0.35)),
+                       EditIntent(action: .adjust, parameter: .highlights, amount: .relative(-0.35)),
+                       EditIntent(action: .adjust, parameter: .clarity, amount: .relative(0.3))]
+        } else if u.contains(aesthetic) {
+            intents = [EditIntent(action: .applyLook, amount: .absolute(0.8), look: .matte)]
+        }
+        guard !intents.isEmpty else { return nil }
+        if u.contains(Self.cropWords) {
+            // "crop for my profile picture" only wants the frame.
+            let crops = intents.filter { $0.action == .crop }
+            return crops.isEmpty ? nil : crops
+        }
+        return intents
+    }
+
+    // MARK: - Portrait retouching
+
+    static let skinSmoothingPhrases: [String] = ["smooth the skin", "smooth skin", "smooth out the skin", "skin smoothing", "soften the skin", "soften skin", "smooth my skin", "skin retouch", "beauty retouch", "beautify",
+                                                 "lisse la peau", "lisser la peau", "adoucis la peau", "adoucir la peau", "peau plus lisse", "peau plus douce", "retouche la peau", "lisse ma peau", "adoucis ma peau", "retouche beaute", "gomme les rides", "efface les rides", "remove the wrinkles", "remove wrinkles"]
+
+    /// "lisse la peau" → a gentle noise reduction masked to the face.
+    func parsePortrait(_ u: NormalizedUtterance) -> EditIntent? {
+        guard u.contains(Self.skinSmoothingPhrases) else { return nil }
+        let magnitude = AmountParser.magnitude(in: u)
+        let amount = magnitude.explicitNumber.map { abs($0) } ?? (magnitude.qualifier == .slight ? 0.3 : magnitude.qualifier == .strong ? 0.8 : 0.5)
+        let phrase = u.language == .french ? "la peau" : "the skin"
+        return EditIntent(action: .selectiveAdjust, target: ObjectTarget(label: "face", originalPhrase: phrase), parameter: .noiseReduction, amount: .relative(amount), confidence: 0.9)
+    }
+
+    // MARK: - Follow-ups ("encore un peu", "a bit more", "trop", "less")
+
+    static let followUpAgainWords: [String] = ["encore", "again", "pareil", "same", "same again", "continue", "once more", "one more time", "une fois de plus", "refais pareil", "more of that", "plus encore", "recommence", "idem"]
+    static let followUpTooWords: [String] = ["trop", "too much", "too far", "way too much", "overdone", "c est trop", "that s too much", "beaucoup trop", "excessif", "too strong", "trop fort"]
+    static let followUpNotEnoughWords: [String] = ["pas assez", "not enough", "insuffisant", "plus que ca", "more than that", "plus fort", "stronger", "harder", "encore plus", "davantage"]
+    static let followUpFunctionWords: Set<String> = ["ca", "c", "est", "it", "s", "un", "une", "peu", "encore", "again", "trop", "too", "much", "more", "less", "plus", "moins", "pas", "assez", "enough", "bit", "little", "lot", "beaucoup", "way", "far", "fort", "forte", "stronger", "harder", "same", "pareil", "continue", "once", "one", "time", "fois", "de", "que", "that", "overdone", "excessif", "davantage", "legerement", "slightly", "tres", "very", "really", "vraiment", "petit", "chouia", "poil", "tad", "touch", "ok", "okay", "oui", "yes", "hmm", "euh", "encore", "idem", "recommence", "refais", "insuffisant", "strong", "a", "the", "this", "et", "and", "now", "maintenant", "please", "stp", "svp", "merci", "thanks"]
+
+    /// A bare amount word after an adjustment refers to that adjustment.
+    func parseFollowUp(_ u: NormalizedUtterance, context: IntentContext) -> EditIntent? {
+        guard let parameter = context.lastParameter else { return nil }
+        let leftovers = u.tokens.filter { !Self.followUpFunctionWords.contains($0) && !ObjectVocabulary.fillerWords.contains($0) && Double($0) == nil && NumberWords.parse([$0], at: 0) == nil }
+        guard leftovers.isEmpty else { return nil }
+        let last = context.lastAdjustmentDirection == 0 ? 1 : context.lastAdjustmentDirection
+        let tooMuch = u.contains(Self.followUpTooWords)
+        let direction: Int
+        if tooMuch {
+            direction = -last
+        } else if u.contains(Self.followUpNotEnoughWords) || u.contains(Self.followUpAgainWords) {
+            direction = last
+        } else {
+            let sign = AmountParser.sign(in: u)
+            guard sign != 0 else { return nil }
+            direction = sign
+        }
+        let magnitude = AmountParser.magnitude(in: u)
+        var step = tooMuch ? 0.12 : 0.15
+        if magnitude.qualifier == .slight { step = 0.1 }
+        if magnitude.qualifier == .strong { step = 0.3 }
+        if let number = magnitude.explicitNumber { step = abs(number) }
+        return EditIntent(action: .adjust, parameter: parameter, amount: .relative(step * Double(direction)), confidence: 0.85)
     }
 
     // MARK: - Object removal
@@ -438,7 +569,7 @@ public struct RuleBasedIntentEngine: IntentEngine {
     // MARK: - Auto enhance
 
     func parseAutoEnhance(_ u: NormalizedUtterance) -> EditIntent? {
-        guard u.contains(["auto enhance", "auto", "automatique", "automatic", "enhance", "enhance it", "enhance the photo", "enhance the picture", "enhance the video", "ameliore", "ameliorer", "ameliore la photo", "ameliore l image", "ameliore la video", "improve", "improve it", "improve the photo", "fix it", "fix the photo", "fix the picture", "fix the lighting", "corrige", "corrige la photo", "corrige la lumiere", "corrige les couleurs", "fix the colors", "fix the colours", "magic", "magique", "baguette magique", "magic wand", "make it better", "make it look better", "make it nicer", "make it beautiful", "rends la plus belle", "rends la plus jolie", "embellis", "embellir", "optimise", "optimize", "optimise la photo", "retouche automatique", "auto retouch", "sublime", "sublimer", "one tap", "make it pop", "fais la briller", "rends la meilleure", "mets la en valeur", "arrange la photo", "arrange ca", "touch up", "touch it up", "retouche", "retoucher", "quick fix", "auto fix", "autofix", "smart enhance", "enhance colors", "enhance colours"]) else { return nil }
+        guard u.contains(["auto enhance", "auto", "automatique", "automatic", "enhance", "enhance it", "enhance the photo", "enhance the picture", "enhance the video", "ameliore", "ameliorer", "ameliore la photo", "ameliore l image", "ameliore la video", "improve", "improve it", "improve the photo", "fix it", "fix the photo", "fix the picture", "fix the lighting", "corrige", "corrige la photo", "corrige la lumiere", "corrige les couleurs", "fix the colors", "fix the colours", "magic", "magique", "baguette magique", "magic wand", "make it better", "make it look better", "make it nicer", "make it beautiful", "rends la plus belle", "rends la plus jolie", "embellis", "embellir", "optimise", "optimize", "optimise la photo", "retouche automatique", "auto retouch", "sublime", "sublimer", "one tap", "make it pop", "fais la briller", "rends la meilleure", "mets la en valeur", "arrange la photo", "arrange ca", "touch up", "touch it up", "retouche", "retoucher", "quick fix", "auto fix", "autofix", "smart enhance", "enhance colors", "enhance colours", "c est moche", "it looks bad", "looks bad", "ca rend mal", "pas terrible", "not great", "make it nice", "make it look nice", "make it look good", "fix this", "fix this photo", "repare la photo", "ameliore ca", "ameliore tout", "fais quelque chose", "do something", "do your magic", "fais ta magie", "surprise me", "surprends moi", "rends la belle", "make it better", "make this better", "fais mieux", "fais au mieux", "do your best", "help me with this photo", "aide moi avec cette photo", "c est pas top", "meh"]) else { return nil }
         let magnitude = AmountParser.magnitude(in: u)
         let strength: Double = magnitude.qualifier == .slight ? 0.5 : magnitude.qualifier == .strong ? 1.0 : 0.8
         return EditIntent(action: .autoEnhance, amount: .absolute(magnitude.explicitNumber ?? strength))

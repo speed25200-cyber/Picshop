@@ -34,6 +34,41 @@ When PicShop asks *"Which one?"*, answer with **« celle de gauche »**, **"the 
 Amounts: **un peu / a bit** (±10), default (±20), **beaucoup / a lot** (±40), **à fond / max**, numbers in
 percent, **+15**, **-20**.
 
+Subjective words work too: *it looks dull · c'est terne · washed out · too harsh · lumière dure · jaunâtre · bluish ·
+muddy · gloomy · the lighting is off*. Two wishes in one breath: *plus chaud mais moins de contraste · brighter but less
+saturated*.
+
+## Follow-ups
+
+After any adjustment (by voice or by dial), a bare amount refers to it: *encore un peu · a bit more · less · trop ·
+too much · beaucoup plus · pas assez*. *Trop* undoes part of the last change; *encore* repeats it. When PicShop asks
+*"Which one?"*, naming another object is a correction, not a cancellation: *non, le chat · the lamp instead*.
+
+## Goals
+
+Say what the photo is for and PicShop does what a retoucher would:
+
+| Say | Does |
+|---|---|
+| Photo de profil · Profile picture · Avatar · LinkedIn · Headshot | Auto-enhance, then crop square |
+| Photo produit · Product photo · Pour Vinted / eBay / Leboncoin · To sell | White background, then auto-enhance |
+| Photo d'identité · Passport photo · ID photo | White background, then crop 3:4 |
+| Fond d'écran · Wallpaper · Lock screen | Crop 9:16 |
+| Restaure cette vieille photo · Restore this old photo · Faded photo | Auto-enhance, noise reduction, sharpen |
+| Photo de nuit · Low light · On ne voit rien | Brightness, shadows, noise reduction |
+| Contre-jour · Backlit · Le visage est trop sombre | Shadows up, highlights down |
+| Effet HDR | Shadows up, highlights down, clarity |
+| Rends-la esthétique · Make it aesthetic | Matte look |
+| C'est moche · Fix it · Do your magic · Fais quelque chose | Auto-enhance |
+
+Add *recadre / crop* to a goal to keep only its framing (*crop it for my profile picture*).
+
+## Portrait
+
+*Lisse la peau · Smooth the skin · Adoucis un peu la peau · Blanchis les dents · Whiten the teeth · Éclaircis les yeux ·
+Brighten the eyes · Efface les rides · Enlève les imperfections.* Skin smoothing is a masked noise reduction on the face;
+teeth and eyes are selective brightness.
+
 ## Looks
 
 *Noir et blanc · Black and white · Apply the cinematic look · Filtre heure dorée · Vintage · Teal and orange ·
@@ -71,8 +106,8 @@ Paris au centre · Make the text bigger · Change le texte en Hello · Mets le t
 
 ## Generative & recolor
 
-*Remplace le ciel par un coucher de soleil · Turn the car into a boat · Ajoute un chapeau sur la personne · Génère un dragon
-(after tapping where) · Change the shirt to red · Rends la voiture bleue.* Generative prompts need the optional Stable Diffusion
+*Remplace le ciel par un coucher de soleil · Change le ciel (a clear blue sky by default) · Turn the car into a boat ·
+Ajoute un chapeau sur la personne · Génère un dragon (after tapping where) · Change the shirt to red · Rends la voiture bleue.* Generative prompts need the optional Stable Diffusion
 model (Settings › On-device models); recolouring works offline.
 
 ## PDF

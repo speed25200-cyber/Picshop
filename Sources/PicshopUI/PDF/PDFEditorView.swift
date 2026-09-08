@@ -81,7 +81,7 @@ public struct PDFEditorView: View {
                                    modes: grouped ? AnyView(ModeSegments(modes: group?.tools ?? [], selection: $session.activeTool, title: { $0.title }, symbol: { $0.symbol })) : nil) {
                     toolPanel(tool)
                 }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .transition(.move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.98, anchor: .bottom)))
             }
             if let app {
                 VoiceStrip(voice: app.voice, isBusy: session.isProcessing, busyTitle: session.processingTitle,
@@ -101,8 +101,8 @@ public struct PDFEditorView: View {
         .padding(.horizontal, 10)
         .padding(.top, 4)
         .padding(.bottom, 4)
-        .background(PSTheme.canvas.ignoresSafeArea(edges: .bottom))
-        .animation(.spring(duration: 0.32, bounce: 0.12), value: session.activeTool)
+        .psDockBackground()
+        .animation(PSMotion.standard, value: session.activeTool)
     }
 
     @ViewBuilder

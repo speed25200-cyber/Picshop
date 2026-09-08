@@ -321,6 +321,22 @@
         }
       }
     },
+    "Automatic follows the iPhone's temperature: previews shrink and glow effects pause before the frame rate drops, and heavy AI work waits until the phone cools down. Exports are always full quality.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic follows the iPhone's temperature: previews shrink and glow effects pause before the frame rate drops, and heavy AI work waits until the phone cools down. Exports are always full quality."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatique suit la température de l'iPhone : les aperçus rétrécissent et les effets lumineux se mettent en pause avant que la fluidité baisse, et les traitements IA lourds attendent que le téléphone refroidisse. Les exports sont toujours en pleine qualité."
+          }
+        }
+      }
+    },
     "Background colour": {
       "localizations": {
         "en": {
@@ -349,6 +365,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bandeau"
+          }
+        }
+      }
+    },
+    "Before": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avant"
+          }
+        }
+      }
+    },
+    "Best quality": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Best quality"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualité maximale"
           }
         }
       }
@@ -609,6 +657,38 @@
         }
       }
     },
+    "Colour": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colour"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couleur"
+          }
+        }
+      }
+    },
+    "Compare with original": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare with original"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comparer avec l'original"
+          }
+        }
+      }
+    },
     "Contiguous": {
       "localizations": {
         "en": {
@@ -637,6 +717,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Contrôle"
+          }
+        }
+      }
+    },
+    "Cool": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cool"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Froid"
+          }
+        }
+      }
+    },
+    "Cool & battery": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cool & battery"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fraîcheur & batterie"
           }
         }
       }
@@ -781,6 +893,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Décrivez ce qu'il faut générer…"
+          }
+        }
+      }
+    },
+    "Detail": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detail"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Détail"
           }
         }
       }
@@ -1005,6 +1133,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modifier le texte"
+          }
+        }
+      }
+    },
+    "Effects": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effects"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effets"
           }
         }
       }
@@ -1281,6 +1425,22 @@
         }
       }
     },
+    "Follow-ups": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Follow-ups"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suivis"
+          }
+        }
+      }
+    },
     "Format": {
       "localizations": {
         "en": {
@@ -1325,6 +1485,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arrêt sur image"
+          }
+        }
+      }
+    },
+    "Full quality previews at the display's refresh rate.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full quality previews at the display's refresh rate."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aperçus pleine qualité au rythme de l'écran."
           }
         }
       }
@@ -1441,6 +1617,22 @@
         }
       }
     },
+    "Goals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Goals"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Objectifs"
+          }
+        }
+      }
+    },
     "Gradient": {
       "localizations": {
         "en": {
@@ -1469,6 +1661,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mains libres"
+          }
+        }
+      }
+    },
+    "Haptics": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haptics"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retours haptiques"
           }
         }
       }
@@ -1521,6 +1729,22 @@
         }
       }
     },
+    "Hold to see the original photo.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold to see the original photo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maintenez pour voir la photo d'origine."
+          }
+        }
+      }
+    },
     "Hold to talk": {
       "localizations": {
         "en": {
@@ -1549,6 +1773,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Horizontal"
+          }
+        }
+      }
+    },
+    "Hot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaud"
           }
         }
       }
@@ -1793,6 +2033,22 @@
         }
       }
     },
+    "Light": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Light"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lumière"
+          }
+        }
+      }
+    },
     "Light & colour": {
       "localizations": {
         "en": {
@@ -1805,6 +2061,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lumière & couleur"
+          }
+        }
+      }
+    },
+    "Lighter previews and no glow, to cool down.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lighter previews and no glow, to cool down."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aperçus allégés et sans halo, pour refroidir."
           }
         }
       }
@@ -1869,6 +2141,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Looks"
+          }
+        }
+      }
+    },
+    "Low Power Mode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Low Power Mode"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mode économie d'énergie"
           }
         }
       }
@@ -1981,6 +2269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Milieu"
+          }
+        }
+      }
+    },
+    "Minimal rendering until the iPhone cools down.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minimal rendering until the iPhone cools down."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rendu minimal jusqu'à ce que l'iPhone refroidisse."
           }
         }
       }
@@ -2529,6 +2833,22 @@
         }
       }
     },
+    "Performance": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Performance"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Performance"
+          }
+        }
+      }
+    },
     "Perspective": {
       "localizations": {
         "en": {
@@ -2657,6 +2977,22 @@
         }
       }
     },
+    "PicShop is rendering lighter previews to keep your iPhone cool.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop is rendering lighter previews to keep your iPhone cool."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop affiche des aperçus allégés pour garder votre iPhone au frais."
+          }
+        }
+      }
+    },
     "Pick a look, then tune its intensity.": {
       "localizations": {
         "en": {
@@ -2781,6 +3117,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lecture"
+          }
+        }
+      }
+    },
+    "Portrait": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portrait"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portrait"
           }
         }
       }
@@ -3149,6 +3501,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Retirer la musique"
+          }
+        }
+      }
+    },
+    "Rendering": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rendering"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rendu"
           }
         }
       }
@@ -3633,6 +4001,22 @@
         }
       }
     },
+    "Slightly lighter previews; effects unchanged.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slightly lighter previews; effects unchanged."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aperçus légèrement allégés ; effets inchangés."
+          }
+        }
+      }
+    },
     "Slow motion keeps every frame; time-lapse drops them. Audio follows the speed.": {
       "localizations": {
         "en": {
@@ -4049,6 +4433,22 @@
         }
       }
     },
+    "The iPhone is too hot for generation right now. Let it cool for a moment.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The iPhone is too hot for generation right now. Let it cool for a moment."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'iPhone est trop chaud pour générer maintenant. Laissez-le refroidir un instant."
+          }
+        }
+      }
+    },
     "Thickness": {
       "localizations": {
         "en": {
@@ -4353,6 +4753,22 @@
         }
       }
     },
+    "Very hot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Very hot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Très chaud"
+          }
+        }
+      }
+    },
     "Video": {
       "localizations": {
         "en": {
@@ -4461,6 +4877,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Volume"
+          }
+        }
+      }
+    },
+    "Warm": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warm"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tiède"
           }
         }
       }

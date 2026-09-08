@@ -27,12 +27,18 @@ public struct OnboardingView: View {
                         VStack(spacing: 18) {
                             Image(systemName: item.0)
                                 .font(.system(size: 44, weight: .medium))
+                                .symbolRenderingMode(.hierarchical)
                                 .foregroundStyle(.white)
                                 .frame(width: 112, height: 112)
-                                .background(RoundedRectangle(cornerRadius: 30, style: .continuous).fill(PSTheme.voiceGradient))
+                                .background {
+                                    let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
+                                    HeroMesh().clipShape(shape)
+                                        .overlay(shape.fill(LinearGradient(colors: [Color.white.opacity(0.2), .clear], startPoint: .top, endPoint: .center)))
+                                }
                                 .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).strokeBorder(Color.white.opacity(0.35), lineWidth: 1))
-                                .shadow(color: PSTheme.voice.opacity(0.5), radius: 30, y: 14)
+                                .shadow(color: PSTheme.voice.opacity(0.45), radius: 30, y: 14)
                                 .padding(.bottom, 12)
+                                .symbolEffect(.bounce, value: page == index)
                             Text(item.1).font(PSFont.display(32)).foregroundStyle(PSTheme.textPrimary).multilineTextAlignment(.center).tracking(-0.8)
                             Text(item.2).font(PSFont.body(16)).foregroundStyle(PSTheme.textSecondary).multilineTextAlignment(.center).padding(.horizontal, 28)
                         }
@@ -69,20 +75,24 @@ public struct OnboardingView: View {
             Task { await request() }
         } label: {
             HStack {
-                Image(systemName: symbol).frame(width: 26)
+                Image(systemName: symbol).frame(width: 26).symbolRenderingMode(.hierarchical)
                 Text(title).font(PSFont.headline(15))
                 Spacer()
-                Image(systemName: granted ? "checkmark.circle.fill" : "circle").foregroundStyle(granted ? PSTheme.success : PSTheme.textSecondary)
+                Image(systemName: granted ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(granted ? PSTheme.success : PSTheme.textSecondary)
+                    .contentTransition(.symbolEffect(.replace))
             }
             .foregroundStyle(PSTheme.textPrimary)
             .padding(.horizontal, 16).padding(.vertical, 12)
+            .psCard(cornerRadius: 18, shadow: false)
         }
-        .buttonStyle(.plain)
-        .psCard(cornerRadius: 18, shadow: false)
+        .buttonStyle(PSPressStyle(scale: 0.98))
+        .animation(PSMotion.quick, value: granted)
     }
 }
 
-/// Chooses between onboarding and the library.
+/// Chooses between onboarding and the library, and feeds the performance
+/// budget into the environment so every surface can adapt to heat.
 public struct RootView: View {
     let environment: AppEnvironment
 
@@ -99,6 +109,7 @@ public struct RootView: View {
             }
         }
         .environment(\.picshop, environment)
+        .environment(\.psEffects, environment.performance.effectsLevel)
         .animation(.easeInOut, value: environment.settings.hasCompletedOnboarding)
     }
 }

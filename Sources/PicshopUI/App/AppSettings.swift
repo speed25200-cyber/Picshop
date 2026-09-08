@@ -23,6 +23,8 @@ public final class AppSettings {
     /// Large models (Generative Fill, Pro Brain) download by themselves over Wi‑Fi.
     public var autoInstallsModels: Bool { didSet { defaults.set(autoInstallsModels, forKey: "autoInstallsModels") } }
     public var showsVoiceTranscript: Bool { didSet { defaults.set(showsVoiceTranscript, forKey: "showsTranscript") } }
+    /// Settings › Performance: follow the thermal state, favour quality, or favour a cool phone.
+    public var performancePreference: PerformanceGovernor.Preference { didSet { defaults.set(performancePreference.rawValue, forKey: "performancePreference") } }
 
     public init() {
         voiceMode = VoiceController.Mode(rawValue: defaults.string(forKey: "voiceMode") ?? "") ?? .tapToTalk
@@ -34,6 +36,7 @@ public final class AppSettings {
         hasCompletedOnboarding = defaults.bool(forKey: "onboarded")
         autoInstallsModels = (defaults.object(forKey: "autoInstallsModels") as? Bool) ?? true
         showsVoiceTranscript = (defaults.object(forKey: "showsTranscript") as? Bool) ?? true
+        performancePreference = PerformanceGovernor.Preference(rawValue: defaults.string(forKey: "performancePreference") ?? "") ?? .automatic
         VoiceFeedback.shared.isEnabled = speaksReplies
         Haptics.isEnabled = hapticsEnabled
     }

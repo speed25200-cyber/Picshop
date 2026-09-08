@@ -1,7 +1,8 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
 
-/// Blocking progress overlay for long operations.
+/// Blocking progress overlay for long operations: a small glass tile in the
+/// centre, the rest of the screen dimmed but still visible.
 struct ProgressHUD: View {
     var title: String
     var progress: Double? = nil
@@ -9,44 +10,54 @@ struct ProgressHUD: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.35).ignoresSafeArea()
+            Color.black.opacity(0.3).ignoresSafeArea()
             VStack(spacing: 14) {
-                if let progress {
-                    ProgressView(value: progress)
-                        .progressViewStyle(.linear)
-                        .tint(PSTheme.accent)
-                        .frame(width: 180)
-                    Text("\(Int(progress * 100))%").font(PSFont.mono()).foregroundStyle(PSTheme.textSecondary)
-                } else {
-                    ProgressView().tint(PSTheme.textPrimary)
+                ZStack {
+                    Circle().stroke(PSTheme.hairline, lineWidth: 4).frame(width: 46, height: 46)
+                    if let progress {
+                        Circle()
+                            .trim(from: 0, to: CGFloat(max(0.02, min(1, progress))))
+                            .stroke(PSTheme.accentGradient, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                            .frame(width: 46, height: 46)
+                            .animation(PSMotion.numeric, value: progress)
+                        Text("\(Int(progress * 100))").font(PSFont.mono(12)).foregroundStyle(PSTheme.textPrimary).contentTransition(.numericText())
+                    } else {
+                        ProgressView().tint(PSTheme.textPrimary).controlSize(.regular)
+                    }
                 }
-                Text(title).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
+                Text(title).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary).multilineTextAlignment(.center).lineLimit(2)
                 if let onCancel {
                     Button(L("Cancel"), action: onCancel).font(PSFont.caption(13)).foregroundStyle(PSTheme.textSecondary)
                 }
             }
-            .padding(24)
-            .psGlassPanel(cornerRadius: 24)
+            .padding(.horizontal, 26)
+            .padding(.vertical, 22)
+            .frame(minWidth: 168)
+            .psCard(cornerRadius: PSRadius.panel)
         }
-        .transition(.opacity)
+        .transition(.opacity.combined(with: .scale(scale: 0.98)))
     }
 }
 
-/// Transient message at the top of the editor.
+/// Transient message at the top of the editor, shaped like a Dynamic Island pill.
 struct ToastView: View {
     let text: String
     var systemImage: String = "checkmark.circle.fill"
     var tint: Color = PSTheme.success
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: systemImage).foregroundStyle(tint)
-            Text(text).font(PSFont.body(14)).foregroundStyle(PSTheme.textPrimary).lineLimit(2)
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(tint)
+                .symbolRenderingMode(.hierarchical)
+            Text(text).font(PSFont.body(14)).foregroundStyle(PSTheme.textPrimary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .psGlass()
-        .transition(.move(edge: .top).combined(with: .opacity))
+        .padding(.vertical, 11)
+        .psCard(cornerRadius: 24, shadow: true)
+        .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92, anchor: .top)))
     }
 }
 
@@ -72,6 +83,22 @@ struct ParameterSlider: View {
                 if !editing { Haptics.tick() }
             }
             .tint(PSTheme.accent)
+        }
+    }
+}
+
+/// Section title used on the library and settings screens.
+struct SectionTitle: View {
+    let title: String
+    var count: Int? = nil
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(title).font(PSFont.title(22)).foregroundStyle(PSTheme.textPrimary).tracking(-0.4)
+            if let count {
+                Text("\(count)").font(PSFont.mono(12)).foregroundStyle(PSTheme.textTertiary).contentTransition(.numericText())
+            }
+            Spacer()
         }
     }
 }

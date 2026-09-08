@@ -12,7 +12,10 @@ struct HelpSheet: View {
     private var sections: [(String, [String])] {
         var result: [(String, [String])] = [
             (L("Erase & cut out"), ["Efface le chien à gauche", "Remove the person in the background", "Enlève toutes les voitures", "Remove the background", "Mets un fond blanc", "Blur the background"]),
-            (L("Light & colour"), ["Plus lumineux", "Make it warmer", "Augmente le contraste de 20", "Less saturation", "Réduis le bruit", "Set exposure to -10"]),
+            (L("Light & colour"), ["Plus lumineux", "Make it warmer", "Augmente le contraste de 20", "Less saturation", "Réduis le bruit", "Set exposure to -10", "C'est un peu jaunâtre", "It looks dull", "Plus chaud mais moins de contraste"]),
+            (L("Goals"), ["Transforme-la en photo de profil", "Product photo for Vinted", "Photo d'identité", "Restore this old photo", "C'est une photo de nuit", "Mets-la en fond d'écran", "C'est moche, fais quelque chose"]),
+            (L("Follow-ups"), ["Encore un peu", "A bit more", "Trop", "Less", "Non, le chat"]),
+            (L("Portrait"), ["Lisse la peau", "Whiten the teeth", "Éclaircis les yeux", "Floute l'arrière-plan", "Lumière de studio"]),
             (L("Looks"), ["Noir et blanc", "Apply the cinematic look", "Filtre heure dorée", "Enlève le filtre"]),
             (L("Frame"), ["Recadre en carré", "Crop for Instagram story", "Tourne de 90 degrés", "Straighten", "Retourne horizontalement"]),
             (L("Text"), ["Ajoute le texte « Été 2026 » en haut", "Add text saying Hello in yellow", "Make the text bigger", "Remove the text"]),

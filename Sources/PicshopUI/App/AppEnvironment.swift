@@ -17,6 +17,8 @@ public final class AppEnvironment {
     public let router: HybridIntentRouter
     public let voice: VoiceController
     public let models: ModelManager
+    /// Thermal / battery aware render and animation budget.
+    public let performance: PerformanceGovernor
     /// Engines available on this device (refreshed on launch and after model installs).
     public private(set) var availableEngines: [IntentEngineKind] = [.rules]
     /// The brain currently answering voice commands: the best one available, chosen automatically.
@@ -36,6 +38,9 @@ public final class AppEnvironment {
         store = ProjectStore(rootURL: root)
         library = ProjectLibrary(store: store)
         models = ModelManager.shared
+        let performance = PerformanceGovernor()
+        performance.preference = settings.performancePreference
+        self.performance = performance
         router = HybridIntentRouter(preferredEngine: .appleIntelligence)
         voice = VoiceController(locale: settings.voiceLocale)
         voice.mode = settings.voiceMode
@@ -123,7 +128,7 @@ public final class AppEnvironment {
             default: continue
             }
         }
-        guard !toInstall.isEmpty, await NetworkPath.isUnmetered() else { return }
+        guard !toInstall.isEmpty, performance.allowsHeavyWork, await NetworkPath.isUnmetered() else { return }
         for model in toInstall { install(model) }
     }
 
@@ -138,6 +143,10 @@ public final class AppEnvironment {
         }
         guard !active.isEmpty else { return nil }
         return active.reduce(0, +) / Double(active.count)
+    }
+
+    public func applyPerformanceSettings() {
+        performance.preference = settings.performancePreference
     }
 
     public func applyVoiceSettings() {

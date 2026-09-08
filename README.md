@@ -50,6 +50,18 @@ Three "brains" are available in Settings, all on device:
 
 Model output is validated against the app vocabulary before execution; hallucinated actions or values are dropped.
 
+The grammar reads intent, not only words: everyday goals (*photo de profil*, *product photo for Vinted*, *restore this old
+photo*), follow-ups on the last adjustment (*encore un peu*, *too much*), contrast clauses (*brighter but less saturated*),
+corrections while PicShop is asking which object (*non, le chat*) and subjective adjectives (*dull*, *jaunâtre*, *harsh*).
+See [docs/VOICE_COMMANDS.md](docs/VOICE_COMMANDS.md).
+
+## Fluidity and heat
+
+A `PerformanceGovernor` turns the thermal state, Low Power Mode and the Settings › Performance preference into one render
+budget: preview size, interactive size, settle delay, frame-rate cap, drawable scale, glow and shadow effects, and whether
+heavy neural work may start. Previews are coalesced (one render in flight, latest state wins) and the Metal canvas only
+redraws when its inputs change, so a hot phone renders smaller frames before it drops any.
+
 ## Requirements
 
 - Xcode 26, iOS 26 SDK. Runs on iPhone 15 Pro and later; tuned for iPhone 17 Pro.
@@ -64,7 +76,7 @@ open Picshop.xcodeproj        # set your team, run on device
 The platform-independent engine (documents, timeline, intent parsing, PatchMatch) builds and tests anywhere Swift runs:
 
 ```bash
-swift test                    # 101 tests, ~1 s
+swift test                    # ~115 tests, ~1 s
 ```
 
 ## Project layout
