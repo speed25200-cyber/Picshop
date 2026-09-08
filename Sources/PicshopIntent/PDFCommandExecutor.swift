@@ -139,7 +139,21 @@ public struct PDFCommandExecutor: Sendable {
                 document.touch()
                 return (document, .applied("Clear Markups"))
             }
-            guard let last = document.pages[current].markups.last else { return (document, .failed(fr ? "Rien à supprimer sur cette page." : "Nothing to remove on this page.")) }
+            func matches(_ markup: PDFMarkup) -> Bool {
+                guard let kind = intent.text else { return true }
+                switch (kind, markup.kind) {
+                case ("signature", .signature), ("highlight", .highlight), ("highlight", .underline), ("highlight", .strikeout), ("ink", .ink), ("text", .text), ("image", .image), ("pageNumber", .pageNumber): return true
+                default: return false
+                }
+            }
+            if intent.text == "pageNumber" {
+                for index in document.pages.indices { document.pages[index].markups.removeAll { if case .pageNumber = $0.kind { return true } else { return false } } }
+                document.touch()
+                return (document, .applied("Remove Page Numbers"))
+            }
+            let candidatesOnPage = document.pages[current].markups.filter(matches)
+            let anywhere = document.allMarkups.filter { matches($0.markup) }
+            guard let last = candidatesOnPage.last ?? anywhere.last?.markup else { return (document, .failed(fr ? "Rien à supprimer." : "Nothing to remove.")) }
             document.removeMarkup(id: last.id)
             return (document, .applied("Remove \(last.label)"))
 
@@ -153,7 +167,7 @@ public struct PDFCommandExecutor: Sendable {
             }
 
         case .mergeDocument:
-            return (document, .effect(.message("merge"), label: ""))
+            return (document, .effect(.message(intent.text == "image" ? "image" : "merge"), label: ""))
 
         case .undo: return (document, .effect(.undo, label: ""))
         case .redo: return (document, .effect(.redo, label: ""))

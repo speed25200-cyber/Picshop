@@ -233,7 +233,7 @@ public struct RuleBasedIntentEngine: IntentEngine {
         if u.contains(["export", "exporte", "exporter", "save", "sauvegarde", "sauvegarder", "enregistre", "enregistrer", "download", "telecharge", "save it", "save the photo", "save the video", "enregistre la photo", "enregistre la video", "save to photos", "save to camera roll", "enregistre dans photos"]) && !u.contains(["frame", "image", "capture"]) {
             return EditIntent(action: .export)
         }
-        if u.contains(["share", "partage", "partager", "send it", "envoie", "envoyer", "share it", "partage la photo", "partage la video", "airdrop", "send to"]) {
+        if u.contains(["share", "partage", "partager", "send it", "envoie", "envoyer", "share it", "partage la photo", "partage la video", "airdrop", "send to"]) && !(context.mode == .pdf && u.contains(Self.pageWords)) {
             return EditIntent(action: .share)
         }
         if u.contains(["zoom in", "zoom avant", "zoome", "zoom", "agrandis la vue", "rapproche", "closer", "zoom out", "zoom arriere", "dezoome", "eloigne", "fit to screen", "fit", "ajuste a l ecran", "vue d ensemble", "show everything", "montre tout", "zoom sur", "zoom on"]) {

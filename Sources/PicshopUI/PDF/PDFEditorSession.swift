@@ -293,6 +293,7 @@ public final class PDFEditorSession {
             case .message(let message):
                 if message == "signature" { showsSignatureSheet = true }
                 else if message == "merge" { showsMergePicker = true }
+                else if message == "image" { showsImagePicker = true }
                 else if message.hasPrefix("find:") { searchQuery = String(message.dropFirst(5)) }
             case .cancel: pendingClarification = nil
             default: break

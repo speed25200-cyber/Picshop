@@ -17,8 +17,12 @@ extension RuleBasedIntentEngine {
         if u.contains(["first page", "premiere page", "au debut", "to the beginning", "start of the document", "debut du document"]) && !u.contains(Self.removeVerbs + ["move", "deplace", "rotate", "tourne"]) {
             return [EditIntent(action: .goToPage, index: 1)]
         }
-        if u.contains(["last page", "derniere page", "a la fin", "to the end", "end of the document", "fin du document"]) && !u.contains(Self.removeVerbs + ["move", "deplace", "rotate", "tourne"]) {
+        if u.contains(["last page", "derniere page", "a la fin", "to the end", "end of the document", "fin du document"]) && !u.contains(Self.removeVerbs + ["move", "deplace", "rotate", "tourne", "envoie", "ajoute", "add", "insere", "insert", "vide", "blank", "blanche", "nouvelle", "new"]) {
             return [EditIntent(action: .goToPage, index: -1)]
+        }
+        // "page 7" on its own.
+        if u.tokens.count <= 3, let page, u.contains(Self.pageWords), !u.contains(Self.removeVerbs) {
+            return [EditIntent(action: .goToPage, index: page)]
         }
         if u.contains(["go to page", "va a la page", "vas a la page", "aller a la page", "ouvre la page", "open page", "montre la page", "show page", "show me page", "affiche la page", "jump to page", "page numero"]), let page {
             return [EditIntent(action: .goToPage, index: page)]
@@ -33,8 +37,15 @@ extension RuleBasedIntentEngine {
                 }
                 return [EditIntent(action: .deletePage, index: page, scope: scope)]
             }
-            if u.contains(["signature", "annotation", "annotations", "surlignage", "highlight", "highlights", "drawing", "dessin", "dessins", "markup", "markups", "text", "texte", "numeros", "numbers", "everything", "tout"]) {
-                return [EditIntent(action: .removeText, text: u.contains(["everything", "tout", "all", "toutes", "tous"]) ? "all" : nil)]
+            if u.contains(["signature", "annotation", "annotations", "surlignage", "surlignages", "highlight", "highlights", "drawing", "dessin", "dessins", "markup", "markups", "text", "texte", "numeros", "numbers", "everything", "tout", "trait", "image", "photo"]) {
+                let kind: String? = u.contains(["everything", "tout", "all", "toutes", "tous"]) ? "all"
+                    : u.contains(["signature"]) ? "signature"
+                    : u.contains(["surlignage", "surlignages", "highlight", "highlights"]) ? "highlight"
+                    : u.contains(["drawing", "dessin", "dessins", "trait"]) ? "ink"
+                    : u.contains(["text", "texte"]) ? "text"
+                    : u.contains(["image", "photo"]) ? "image"
+                    : u.contains(["numeros", "numbers"]) ? "pageNumber" : nil
+                return [EditIntent(action: .removeText, text: kind)]
             }
         }
         if u.contains(["rotate", "tourne", "tourner", "pivote", "pivoter", "fais pivoter", "turn", "en paysage", "en portrait", "to landscape", "to portrait", "a l envers", "upside down"]) {
@@ -45,12 +56,12 @@ extension RuleBasedIntentEngine {
             let scope: TargetScope = u.contains(["all", "toutes les pages", "tout le document", "every page", "whole document", "the document"]) ? .all : .current
             return [EditIntent(action: .rotatePage, degrees: degrees, index: page, scope: scope)]
         }
-        if u.contains(["move", "deplace", "deplacer", "bouge", "mets la page", "put page", "put the page", "place la page", "reorder", "swap"]) && u.contains(Self.pageWords) {
+        if u.contains(["move", "deplace", "deplacer", "bouge", "mets la page", "put page", "put the page", "place la page", "reorder", "swap", "envoie", "send"]) && u.contains(Self.pageWords) {
             var intent = EditIntent(action: .movePage, index: page)
             var destination: Int?
             if u.contains(["beginning", "start", "debut", "first", "en premier", "au debut"]) { destination = 1 }
             if u.contains(["end", "fin", "last", "en dernier", "a la fin"]) { destination = -1 }
-            if let rest = remainder(of: u, after: ["to position", "en position", "at position", "after page", "apres la page", "before page", "avant la page", "to page", "a la page", "en", "to", "vers"]),
+            if destination == nil, let rest = remainder(of: u, after: ["to position", "en position", "at position", "after page", "apres la page", "before page", "avant la page", "to page", "a la page", "en", "to", "vers"]),
                let number = NumberWords.firstNumber(in: rest.split(separator: " ").map(String.init)) {
                 var value = Int(number.value)
                 if u.contains(["after page", "apres la page"]) { value += 1 }
@@ -74,7 +85,11 @@ extension RuleBasedIntentEngine {
         if u.contains(["merge", "fusionne", "fusionner", "combine", "assemble", "join with", "append", "ajoute un autre pdf", "add another pdf", "attach"]) {
             return [EditIntent(action: .mergeDocument)]
         }
-        if u.contains(["signature", "signe", "signer", "sign here", "sign the", "sign this", "sign it", "ma signature", "my signature"]) {
+        if u.contains(["insere une photo", "insere une image", "ajoute une photo", "ajoute une image", "insert a photo", "insert an image", "add a photo", "add a picture", "add an image", "mets une photo", "put a photo"]) {
+            return [EditIntent(action: .mergeDocument, text: "image")]
+        }
+        let findVerbs = ["find", "search", "cherche", "chercher", "recherche", "trouve", "trouver", "look for", "where is", "ou est"]
+        if u.contains(["signature", "signe", "signer", "sign here", "sign the", "sign this", "sign it", "ma signature", "my signature"]) && !u.contains(findVerbs) {
             var intent = EditIntent(action: .addSignature, index: page)
             intent.placement = placement(in: u) ?? .bottomTrailing
             return [intent]
@@ -96,7 +111,7 @@ extension RuleBasedIntentEngine {
             var query = quoted
             if query == nil, let rest = remainder(of: u, after: verbs) {
                 var words = rest.split(separator: " ").map(String.init)
-                words = words.filter { !["the", "word", "words", "le", "la", "les", "mot", "mots", "phrase", "sentence", "texte", "text", "en", "jaune", "yellow", "in", "on", "sur", "cette", "this", "page", "tous", "toutes", "all", "every", "chaque", "occurrences", "occurrence", "for", "pour"].contains($0) }
+                words = words.filter { !["the", "word", "words", "le", "la", "les", "mot", "mots", "phrase", "sentence", "texte", "text", "en", "jaune", "yellow", "in", "on", "sur", "cette", "this", "page", "tous", "toutes", "all", "every", "chaque", "occurrences", "occurrence", "for", "pour", "partout", "everywhere", "and", "et"].contains($0) && PSColor.named($0) == nil }
                 let joined = words.joined(separator: " ")
                 if !joined.isEmpty { query = originalSubstring(matching: joined, in: original) ?? joined }
             }

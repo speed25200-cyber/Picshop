@@ -128,6 +128,8 @@ public enum UtteranceSegmenter {
     static let protectedPhrases: [String] = [
         "noir et blanc", "black and white", "teal and orange", "teal et orange", "rock and roll", "light and airy", "bright and clean", "avant apres", "before and after", "before after", "avant et apres",
         "and then", "et ensuite", "et puis", "et apres", "and after that", "et aussi", "and also", "et en plus",
+        "apres la page", "after page", "after the page", "avant la page", "before page", "before the page", "apres le clip", "after clip", "after the clip",
+        "avant le clip", "before clip", "before the clip", "apres la personne", "apres le", "apres la", "after the",
     ]
 
     static let separators: [String] = [" puis ", " ensuite ", " apres ca ", " apres ", " then ", " and then ", " et aussi ", " and also ", " et ", " and ", " , ", " ; "]
@@ -150,12 +152,23 @@ public enum UtteranceSegmenter {
         for separator in separators {
             parts = parts.flatMap { $0.components(separatedBy: separator) }
         }
-        return parts.map { part in
+        let cleaned = parts.map { part in
             var restored = part
             for (token, phrase) in placeholders {
                 restored = restored.replacingOccurrences(of: token, with: phrase)
             }
             return restored.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
         }.filter { !$0.isEmpty }
+        // Re-join "pages 2" + "5" style splits: a numeric tail followed by a numeric head is one list.
+        var merged: [String] = []
+        for segment in cleaned {
+            if let last = merged.last, let lastWord = last.split(separator: " ").last, let firstWord = segment.split(separator: " ").first,
+               Double(lastWord) != nil, Double(firstWord) != nil {
+                merged[merged.count - 1] = last + " and " + segment
+            } else {
+                merged.append(segment)
+            }
+        }
+        return merged
     }
 }

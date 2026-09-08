@@ -57,6 +57,17 @@ final class PDFGrammarTests: XCTestCase {
         XCTAssertEqual(first("fusionne avec un autre pdf").action, .mergeDocument)
         XCTAssertEqual(first("extrais la page 2 en photo").action, .extractPage)
         XCTAssertEqual(first("extrais la page 2 en photo").index, 2)
+        let two = engine.parse("delete pages 2 and 5", context: context).intents
+        XCTAssertEqual(two.map(\.index), [2, 5])
+        let after = first("déplace cette page après la page 6")
+        XCTAssertEqual(after.action, .movePage)
+        XCTAssertEqual(after.clipIndex, 7)
+        XCTAssertEqual(first("envoie la page 2 à la fin").action, .movePage)
+        XCTAssertEqual(first("ajoute une page vide à la fin").action, .insertBlankPage)
+        XCTAssertEqual(first("page 7").index, 7)
+        XCTAssertEqual(first("insère une photo").action, .mergeDocument)
+        XCTAssertEqual(first("insère une photo").text, "image")
+        XCTAssertEqual(first("supprime la signature").text, "signature")
     }
 
     func testTextMarkup() {
@@ -69,6 +80,10 @@ final class PDFGrammarTests: XCTestCase {
         XCTAssertEqual(first("caviarde le nom").action, .redactText)
         XCTAssertEqual(first("cherche facture").action, .findText)
         XCTAssertEqual(first("cherche facture").text, "facture")
+        XCTAssertEqual(first("trouve le mot signature").action, .findText)
+        let green = first("surligne en vert le mot total")
+        XCTAssertEqual(green.text, "total")
+        XCTAssertEqual(green.color, .green)
         XCTAssertEqual(first("signe en bas à droite").action, .addSignature)
         XCTAssertEqual(first("signe en bas à droite").placement, .bottomTrailing)
         XCTAssertEqual(first("add my signature").action, .addSignature)
