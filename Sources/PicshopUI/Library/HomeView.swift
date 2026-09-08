@@ -331,6 +331,17 @@ struct ProjectCard: View {
 
     private var tint: Color { project.isPDF ? PSTheme.warning : (project.isVideo ? PSTheme.voice : PSTheme.accent) }
 
+    /// Duration, page count or pixel size, depending on the project type.
+    private var meta: String {
+        switch project.content {
+        case .photo(let document): return "\(Int(document.canvasSize.width)) × \(Int(document.canvasSize.height))"
+        case .video(let timeline):
+            let total = Int(max(0, timeline.duration).rounded())
+            return String(format: "%d:%02d", total / 60, total % 60)
+        case .pdf(let document): return String(format: L("%d pages"), document.pageCount)
+        }
+    }
+
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         Color.clear
@@ -346,25 +357,34 @@ struct ProjectCard: View {
                 }
             }
             .overlay(alignment: .bottom) {
-                // Scrim so the title reads on any picture.
-                LinearGradient(colors: [.clear, .black.opacity(0.05), .black.opacity(0.72)], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 96)
+                // Scrim so the title reads on any picture: long and soft, like the Photos memories tiles.
+                LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black.opacity(0.18), location: 0.45), .init(color: .black.opacity(0.78), location: 1)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 120)
             }
             .overlay(alignment: .bottomLeading) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(project.title).font(PSFont.headline(13)).lineLimit(1).foregroundStyle(.white)
-                    Text(project.modifiedAt, format: .relative(presentation: .named)).font(PSFont.caption(10.5)).foregroundStyle(.white.opacity(0.7))
+                    HStack(spacing: 5) {
+                        Text(project.modifiedAt, format: .relative(presentation: .named))
+                        Text("·")
+                        Text(meta)
+                    }
+                    .font(PSFont.caption(10.5)).foregroundStyle(.white.opacity(0.72)).lineLimit(1)
                 }
                 .padding(.horizontal, 12).padding(.bottom, 10)
             }
             .overlay(alignment: .topTrailing) {
-                Image(systemName: project.isPDF ? "doc.text.fill" : (project.isVideo ? "play.fill" : "photo.fill"))
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 24, height: 24)
-                    .background(Circle().fill(tint.opacity(0.9)))
-                    .overlay(Circle().strokeBorder(Color.white.opacity(0.35), lineWidth: 1))
-                    .padding(8)
+                HStack(spacing: 4) {
+                    Image(systemName: project.isPDF ? "doc.text.fill" : (project.isVideo ? "play.fill" : "photo.fill"))
+                        .font(.system(size: 9, weight: .bold))
+                    if project.isVideo { Text(meta).font(PSFont.mono(10)) }
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, project.isVideo ? 8 : 0)
+                .frame(minWidth: 24, minHeight: 24)
+                .background(Capsule().fill(tint.opacity(0.92)))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.35), lineWidth: 1))
+                .padding(8)
             }
             .clipShape(shape)
             .overlay(shape.strokeBorder(PSTheme.strokeGradient, lineWidth: 1))

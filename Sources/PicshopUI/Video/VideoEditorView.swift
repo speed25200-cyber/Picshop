@@ -65,9 +65,14 @@ public struct VideoEditorView: View {
         .persistentSystemOverlays(.hidden)
     }
 
+    @State private var scrubStart: Double?
+
+    /// Transport row. Dragging horizontally anywhere on the row scrubs the
+    /// playhead (a second per 120 pt, with frame-fine control at slow speed).
     private var transportBar: some View {
         HStack(spacing: 14) {
             Text(timecode(session.player.currentTime)).font(PSFont.mono(12)).foregroundStyle(PSTheme.textSecondary).frame(width: 64, alignment: .leading)
+                .contentTransition(.numericText())
             Spacer()
             GlassIconButton("backward.frame", label: L("Previous frame"), size: 34) { Task { await session.player.step(frames: -1, frameRate: session.timeline.frameRate) } }
             GlassIconButton(session.player.isPlaying ? "pause.fill" : "play.fill", label: session.player.isPlaying ? L("Pause") : L("Play"), tint: PSTheme.accent, isActive: true, size: 44) { session.player.togglePlayback() }
@@ -76,6 +81,23 @@ public struct VideoEditorView: View {
             Text(timecode(session.timeline.duration)).font(PSFont.mono(12)).foregroundStyle(PSTheme.textSecondary).frame(width: 64, alignment: .trailing)
         }
         .padding(.horizontal, 20).padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 12)
+                .onChanged { value in
+                    if scrubStart == nil {
+                        scrubStart = session.player.currentTime
+                        Haptics.soft()
+                    }
+                    guard let start = scrubStart else { return }
+                    let target = (start + Double(value.translation.width) / 120).clamped(to: 0...max(0, session.timeline.duration))
+                    Task { await session.player.seek(to: target) }
+                }
+                .onEnded { _ in
+                    scrubStart = nil
+                    Haptics.tick()
+                }
+        )
     }
 
     private var bottomArea: some View {
