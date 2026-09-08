@@ -35,10 +35,23 @@ definitions:
         xcodebuild -version
         swift --version
         brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
-        # Xcode 26 ships the Metal compiler as a downloadable component; mlx-swift compiles Metal kernels.
-        if ! xcrun metal --version >/dev/null 2>&1; then
-          xcodebuild -downloadComponent MetalToolchain
-          xcrun metal --version
+        # Xcode 26 ships the Metal compiler as a downloadable component; mlx-swift (Pro Brain) compiles
+        # Metal kernels. Try every install path; if none works, build with Stable Diffusion only.
+        metal_ok() { xcrun -sdk iphoneos metal --version >/dev/null 2>&1; }
+        if ! metal_ok; then
+          sudo xcodebuild -runFirstLaunch || true
+          xcodebuild -downloadComponent MetalToolchain || true
+        fi
+        if ! metal_ok; then
+          DMG="$(find /System/Library/AssetsV2/com_apple_MobileAsset_MetalToolchain -name '*.dmg' 2>/dev/null | head -1)"
+          if [ -n "$DMG" ]; then sudo xcodebuild -importComponentFromPath "$DMG" || true; fi
+        fi
+        if metal_ok; then
+          echo "Metal toolchain: $(xcrun -sdk iphoneos metal --version | head -1)"
+          echo "PICSHOP_SPEC=project-pro.yml" >> "$CM_ENV"
+        else
+          echo "Metal toolchain unavailable on this machine: building with Stable Diffusion, without the MLX Pro Brain."
+          echo "PICSHOP_SPEC=project-sd.yml" >> "$CM_ENV"
         fi
         # mlx-swift ships a build-tool plugin; trust package plugins and macros on this CI machine.
         defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidatation -bool YES
@@ -53,10 +66,11 @@ definitions:
         python3 Scripts/convert_models.py all --out App/Models || true
         ls -la App/Models || true
     - &generate
-      name: "Generate Xcode project (Pro — MLX + Stable Diffusion)"
+      name: "Generate Xcode project (Pro when Metal is available)"
       script: |
         set -e
-        xcodegen generate --spec project-pro.yml
+        echo "spec: ${PICSHOP_SPEC:-project.yml}"
+        xcodegen generate --spec "${PICSHOP_SPEC:-project.yml}"
         ls -d *.xcodeproj
     - &tests
       name: Package tests

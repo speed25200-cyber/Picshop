@@ -158,7 +158,11 @@ public struct SettingsView: View {
             return
         }
         if model.kind == .languageModel {
-            Task { await ProBrainInstaller.shared?.install(model, app: app) }
+            guard let installer = ProBrainInstaller.shared else {
+                app.library.errorMessage = L("This build was compiled without the MLX runtime.")
+                return
+            }
+            Task { await installer.install(model, app: app) }
         } else {
             Task { await app.models.install(model) }
         }

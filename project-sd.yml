@@ -1,0 +1,14 @@
+# PicShop spec with the Core ML Stable Diffusion runtime only (no MLX).
+# Used automatically by CI when the machine has no Metal Toolchain to compile MLX kernels.
+#   xcodegen generate --spec project-sd.yml
+include:
+  - project.yml
+packages:
+  StableDiffusion:
+    url: https://github.com/apple/ml-stable-diffusion
+    from: "1.1.0"
+targets:
+  PicShop:
+    dependencies:
+      - package: StableDiffusion
+        product: StableDiffusion

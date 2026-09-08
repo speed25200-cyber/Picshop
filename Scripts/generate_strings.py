@@ -84,6 +84,7 @@ FR = {
     "Tap an object to erase it, paint over it, or say “efface le poteau à droite”.": "Touchez un objet pour l'effacer, peignez dessus, ou dites « efface le poteau à droite ».",
     "Tap the mic and say what to change": "Touchez le micro et dites quoi changer", "Text & logos": "Texte & logos", "Vehicles": "Véhicules",
     "Voice unavailable — check microphone access in Settings.": "Voix indisponible — vérifiez l'accès au micro dans Réglages.",
+    "This build was compiled without the MLX runtime.": "Cette version a été compilée sans le moteur MLX.",
     "animals": "les animaux", "people": "les personnes", "text": "le texte", "vehicles": "les véhicules",
     "Generative Fill": "Remplissage génératif", "Included in the app": "Inclus dans l'app",
     "LaMa network for clean object removal on complex backgrounds.": "Réseau LaMa pour une suppression d'objets propre sur les fonds complexes.",

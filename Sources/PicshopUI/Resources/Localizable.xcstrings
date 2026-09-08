@@ -3585,6 +3585,22 @@
         }
       }
     },
+    "This build was compiled without the MLX runtime.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This build was compiled without the MLX runtime."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette version a été compilée sans le moteur MLX."
+          }
+        }
+      }
+    },
     "This build was compiled without the Stable Diffusion runtime.": {
       "localizations": {
         "en": {
