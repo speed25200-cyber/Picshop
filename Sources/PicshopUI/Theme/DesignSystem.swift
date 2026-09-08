@@ -12,11 +12,20 @@ public enum PSTheme {
     public static let warning = Color(red: 1.0, green: 0.62, blue: 0.2)
     public static let danger = Color(red: 1.0, green: 0.32, blue: 0.3)
     public static let canvas = Color.black
+    /// Deep ground behind non-canvas screens (library, settings, onboarding).
+    public static let ink = Color(red: 0.03, green: 0.03, blue: 0.05)
     public static let surface = Color(red: 0.09, green: 0.09, blue: 0.11)
     public static let surfaceElevated = Color(red: 0.14, green: 0.14, blue: 0.17)
     public static let textPrimary = Color.white
     public static let textSecondary = Color.white.opacity(0.62)
+    public static let textTertiary = Color.white.opacity(0.4)
     public static let hairline = Color.white.opacity(0.08)
+    /// Edge light on cards: brighter at the top, fading down.
+    public static let strokeGradient = LinearGradient(colors: [Color.white.opacity(0.22), Color.white.opacity(0.05)], startPoint: .top, endPoint: .bottom)
+    /// Sheen laid over card surfaces.
+    public static let sheen = LinearGradient(colors: [Color.white.opacity(0.07), Color.white.opacity(0.0)], startPoint: .top, endPoint: .bottom)
+    /// Active-state fill for docks, segments and chips.
+    public static let accentGradient = LinearGradient(colors: [Color(red: 0.42, green: 0.6, blue: 1.0), Color(red: 0.58, green: 0.45, blue: 1.0)], startPoint: .topLeading, endPoint: .bottomTrailing)
 
     public static let cornerRadius: CGFloat = 22
     public static let panelRadius: CGFloat = 28
@@ -25,10 +34,12 @@ public enum PSTheme {
     public static let voiceGradient = LinearGradient(colors: [Color(red: 0.36, green: 0.55, blue: 1.0), Color(red: 0.72, green: 0.4, blue: 1.0), Color(red: 1.0, green: 0.45, blue: 0.6)], startPoint: .topLeading, endPoint: .bottomTrailing)
 }
 
+/// SF Pro for titles and body (tight, editorial), SF Rounded only for small labels.
 public enum PSFont {
-    public static func title(_ size: CGFloat = 28) -> Font { .system(size: size, weight: .bold, design: .rounded) }
-    public static func headline(_ size: CGFloat = 17) -> Font { .system(size: size, weight: .semibold, design: .rounded) }
-    public static func body(_ size: CGFloat = 15) -> Font { .system(size: size, weight: .regular, design: .rounded) }
+    public static func display(_ size: CGFloat = 34) -> Font { .system(size: size, weight: .heavy, design: .default) }
+    public static func title(_ size: CGFloat = 28) -> Font { .system(size: size, weight: .bold, design: .default) }
+    public static func headline(_ size: CGFloat = 17) -> Font { .system(size: size, weight: .semibold, design: .default) }
+    public static func body(_ size: CGFloat = 15) -> Font { .system(size: size, weight: .regular, design: .default) }
     public static func caption(_ size: CGFloat = 12) -> Font { .system(size: size, weight: .medium, design: .rounded) }
     public static func mono(_ size: CGFloat = 13) -> Font { .system(size: size, weight: .medium, design: .monospaced) }
 }

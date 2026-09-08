@@ -54,24 +54,36 @@ struct EditorTopBar: View {
         HStack(spacing: 8) {
             GlassIconButton("xmark", label: L("Close"), size: 40, action: onClose)
             VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
+                Text(title).font(PSFont.headline(16)).foregroundStyle(PSTheme.textPrimary).lineLimit(1).tracking(-0.2)
                 if let subtitle {
-                    Text(subtitle).font(PSFont.caption(11)).foregroundStyle(PSTheme.textSecondary).lineLimit(1)
+                    Text(subtitle).font(PSFont.mono(11)).foregroundStyle(PSTheme.textTertiary).lineLimit(1)
                         .contentTransition(.numericText())
                 }
             }
-            .padding(.leading, 2)
+            .padding(.leading, 4)
             Spacer(minLength: 4)
-            PSGlassContainer(spacing: 6) {
-                HStack(spacing: 6) {
-                    GlassIconButton("arrow.uturn.backward", label: L("Undo"), size: 40, action: onUndo)
-                        .disabled(!canUndo).opacity(canUndo ? 1 : 0.35)
-                    GlassIconButton("arrow.uturn.forward", label: L("Redo"), size: 40, action: onRedo)
-                        .disabled(!canRedo).opacity(canRedo ? 1 : 0.35)
+            HStack(spacing: 0) {
+                Button { Haptics.tap(); onUndo() } label: {
+                    Image(systemName: "arrow.uturn.backward").font(.system(size: 15, weight: .semibold)).frame(width: 40, height: 40)
                 }
+                .buttonStyle(.plain).disabled(!canUndo).foregroundStyle(canUndo ? PSTheme.textPrimary : PSTheme.textTertiary)
+                .accessibilityLabel(L("Undo"))
+                Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 18)
+                Button { Haptics.tap(); onRedo() } label: {
+                    Image(systemName: "arrow.uturn.forward").font(.system(size: 15, weight: .semibold)).frame(width: 40, height: 40)
+                }
+                .buttonStyle(.plain).disabled(!canRedo).foregroundStyle(canRedo ? PSTheme.textPrimary : PSTheme.textTertiary)
+                .accessibilityLabel(L("Redo"))
             }
+            .psCard(cornerRadius: 20, shadow: false)
             GlassIconButton("questionmark", label: L("Help"), size: 40, action: onHelp)
-            GlassIconButton("square.and.arrow.up", label: L("Export"), tint: PSTheme.accent, isActive: true, size: 40, action: onExport)
+            Button { Haptics.confirm(); onExport() } label: {
+                Image(systemName: "square.and.arrow.up").font(.system(size: 15, weight: .bold)).foregroundStyle(.white).frame(width: 40, height: 40)
+            }
+            .buttonStyle(.plain)
+            .background(Circle().fill(PSTheme.accentGradient).overlay(Circle().fill(LinearGradient(colors: [Color.white.opacity(0.3), .clear], startPoint: .top, endPoint: .center))))
+            .shadow(color: PSTheme.accent.opacity(0.45), radius: 10, y: 4)
+            .accessibilityLabel(L("Export"))
         }
         .padding(.horizontal, 12)
         .padding(.top, 6)
@@ -111,9 +123,9 @@ struct ToolDock<Tool: Identifiable & Hashable>: View {
                                     .frame(height: 22)
                                 Text(title(tool)).font(PSFont.caption(10.5)).lineLimit(1).minimumScaleFactor(0.8)
                             }
-                            .foregroundStyle(isActive ? Color.black : PSTheme.textPrimary)
+                            .foregroundStyle(isActive ? Color.white : PSTheme.textSecondary)
                             .frame(width: 64, height: 54)
-                            .background(isActive ? PSTheme.accent : Color.clear, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .psActivePill(RoundedRectangle(cornerRadius: 16, style: .continuous), isActive: isActive)
                             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
                         .buttonStyle(.plain)
@@ -136,7 +148,7 @@ struct ToolDock<Tool: Identifiable & Hashable>: View {
             }
         }
         .frame(height: 62)
-        .psGlass(shape: AnyShape(RoundedRectangle(cornerRadius: 26, style: .continuous)))
+        .psCard(cornerRadius: 26)
     }
 }
 
@@ -201,8 +213,8 @@ struct ModeSegments<Mode: Hashable & Identifiable>: View {
                     }
                     .padding(.horizontal, 10).padding(.vertical, 7)
                     .frame(maxWidth: .infinity)
-                    .background(isActive ? PSTheme.accent : Color.clear, in: Capsule())
-                    .foregroundStyle(isActive ? Color.black : PSTheme.textPrimary)
+                    .psActivePill(Capsule(), isActive: isActive, glow: false)
+                    .foregroundStyle(isActive ? Color.white : PSTheme.textSecondary)
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -210,7 +222,8 @@ struct ModeSegments<Mode: Hashable & Identifiable>: View {
             }
         }
         .padding(3)
-        .background(PSTheme.hairline, in: Capsule())
+        .background(Color.black.opacity(0.28), in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 }
 
@@ -225,16 +238,22 @@ struct ToolPanelContainer<Content: View>: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: symbol).font(.system(size: 13, weight: .bold)).foregroundStyle(PSTheme.accent)
-                Text(title).font(PSFont.headline(14)).foregroundStyle(PSTheme.textPrimary)
+            HStack(spacing: 10) {
+                Image(systemName: symbol)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 26, height: 26)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(PSTheme.accentGradient))
+                    .shadow(color: PSTheme.accent.opacity(0.35), radius: 6, y: 2)
+                Text(title).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary).tracking(-0.2)
                 Spacer()
                 if let trailing { trailing }
                 Button {
                     Haptics.tap()
                     onClose()
                 } label: {
-                    Image(systemName: "chevron.down").font(.system(size: 12, weight: .bold)).foregroundStyle(PSTheme.textSecondary).frame(width: 28, height: 28)
+                    Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold)).foregroundStyle(PSTheme.textSecondary).frame(width: 28, height: 28)
+                        .background(Color.white.opacity(0.08), in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(L("Close"))
@@ -243,9 +262,9 @@ struct ToolPanelContainer<Content: View>: View {
             content()
         }
         .padding(.horizontal, 14)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
-        .psGlassPanel(cornerRadius: 24)
+        .padding(.top, 12)
+        .padding(.bottom, 14)
+        .psCard(cornerRadius: 26)
     }
 }
 
@@ -305,6 +324,7 @@ struct DialSlider: View {
                     var marker = Path()
                     marker.move(to: CGPoint(x: centerX, y: 0))
                     marker.addLine(to: CGPoint(x: centerX, y: size.height))
+                    context.addFilter(.shadow(color: PSTheme.accent.opacity(0.8), radius: 4))
                     context.stroke(marker, with: .color(PSTheme.accent), lineWidth: 2.5)
                 }
                 .contentShape(Rectangle())
@@ -412,8 +432,8 @@ struct VoiceStrip: View {
                             .padding(.horizontal, 7).padding(.vertical, 3).background(PSTheme.hairline, in: Capsule())
                     }
                 }
-                .padding(.horizontal, 14).padding(.vertical, 9)
-                .psGlass(shape: AnyShape(RoundedRectangle(cornerRadius: 20, style: .continuous)))
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .psCard(cornerRadius: 20, shadow: false)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -474,7 +494,7 @@ struct MicButton: View {
                 .animation(.spring(duration: 0.2), value: pressing)
         }
         .frame(width: 62, height: 62)
-        .psGlass(shape: AnyShape(Circle()))
+        .background(Circle().fill(Color.black.opacity(0.35)).overlay(Circle().strokeBorder(PSTheme.strokeGradient, lineWidth: 1)))
         .contentShape(Circle())
         .gesture(
             DragGesture(minimumDistance: 0)
@@ -542,8 +562,8 @@ struct ClarificationCard: View {
                             onChoose(index)
                         } label: {
                             HStack(spacing: 6) {
-                                Text("\(index + 1)").font(PSFont.headline(12)).foregroundStyle(.black)
-                                    .frame(width: 20, height: 20).background(PSTheme.accent, in: Circle())
+                                Text("\(index + 1)").font(PSFont.headline(12)).foregroundStyle(.white)
+                                    .frame(width: 20, height: 20).background(Circle().fill(PSTheme.accentGradient))
                                 Text(candidate.spokenDescription).font(PSFont.caption(13)).foregroundStyle(PSTheme.textPrimary)
                             }
                             .padding(.horizontal, 10).padding(.vertical, 6)
@@ -553,10 +573,10 @@ struct ClarificationCard: View {
                     }
                     if request.candidates.count > 1 {
                         Button { Haptics.confirm(); onChooseAll() } label: {
-                            Label(L("All"), systemImage: "checkmark.circle").font(PSFont.caption(13)).foregroundStyle(.black).padding(.horizontal, 10).padding(.vertical, 6)
+                            Label(L("All"), systemImage: "checkmark.circle").font(PSFont.caption(13)).foregroundStyle(.white).padding(.horizontal, 10).padding(.vertical, 6)
                         }
                         .buttonStyle(.plain)
-                        .psGlass(tint: PSTheme.accent, interactive: true)
+                        .psAccentFill(Capsule(), glow: false)
                     }
                 }
             }
@@ -584,8 +604,10 @@ struct PanelChip: View {
             .font(PSFont.caption(13)).padding(.horizontal, 12).padding(.vertical, 9)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(isActive || tint != nil ? Color.black : PSTheme.textPrimary)
-        .psGlass(tint: isActive ? PSTheme.accent : tint, interactive: true)
+        .foregroundStyle(isActive || tint != nil ? Color.white : PSTheme.textPrimary)
+        .psGlass(tint: nil, interactive: true)
+        .psActivePill(Capsule(), isActive: isActive || tint != nil, glow: tint != nil)
+        .overlay(Capsule().strokeBorder(Color.white.opacity(isActive || tint != nil ? 0 : 0.1), lineWidth: 1))
         .disabled(!isEnabled)
         .opacity(isEnabled ? 1 : 0.45)
     }
@@ -606,9 +628,11 @@ struct IconChip: View {
                 Image(systemName: symbol).font(.system(size: 16, weight: .semibold)).frame(height: 20)
                 Text(title).font(PSFont.caption(10)).lineLimit(1).minimumScaleFactor(0.8)
             }
-            .foregroundStyle(isActive ? Color.black : (tint ?? PSTheme.textPrimary))
+            .foregroundStyle(isActive ? Color.white : (tint ?? PSTheme.textPrimary))
             .frame(width: 66, height: 48)
-            .background(isActive ? PSTheme.accent : PSTheme.hairline, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(Color.white.opacity(isActive ? 0 : 0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.white.opacity(isActive ? 0 : 0.08), lineWidth: 1))
+            .psActivePill(RoundedRectangle(cornerRadius: 14, style: .continuous), isActive: isActive, glow: false)
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)

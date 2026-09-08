@@ -2225,6 +2225,22 @@
         }
       }
     },
+    "Nothing here yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing here yet."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien ici pour l'instant."
+          }
+        }
+      }
+    },
     "OK": {
       "localizations": {
         "en": {
@@ -2349,6 +2365,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "PDF prêt à partager"
+          }
+        }
+      }
+    },
+    "PDFs": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDFs"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDF"
           }
         }
       }
@@ -2557,6 +2589,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Format photo"
+          }
+        }
+      }
+    },
+    "Photos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos"
+          }
+        }
+      }
+    },
+    "Photos, videos and PDFs. Just say it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos, videos and PDFs. Just say it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos, vidéos et PDF. Dites-le, c'est fait."
           }
         }
       }
@@ -4317,6 +4381,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qualité vidéo"
+          }
+        }
+      }
+    },
+    "Videos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Videos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vidéos"
           }
         }
       }

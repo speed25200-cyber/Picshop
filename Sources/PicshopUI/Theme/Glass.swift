@@ -15,7 +15,44 @@ public extension View {
 
     @ViewBuilder
     func psGlassPanel(cornerRadius: CGFloat = PSTheme.panelRadius) -> some View {
-        psGlass(shape: AnyShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)))
+        psCard(cornerRadius: cornerRadius)
+    }
+
+    /// Layered surface: glass, a top sheen, a lit edge and a soft drop shadow.
+    /// The look of every panel, dock and card in the app.
+    func psCard(cornerRadius: CGFloat = PSTheme.panelRadius, shadow: Bool = true) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return self
+            .background {
+                ZStack {
+                    if #available(iOS 26.0, *) {
+                        Color.clear.glassEffect(.regular, in: shape)
+                    } else {
+                        shape.fill(.ultraThinMaterial)
+                    }
+                    shape.fill(PSTheme.sheen)
+                }
+            }
+            .overlay(shape.strokeBorder(PSTheme.strokeGradient, lineWidth: 1))
+            .clipShape(shape)
+            .shadow(color: .black.opacity(shadow ? 0.35 : 0), radius: 18, y: 10)
+    }
+
+    /// Solid accent fill for primary actions: gradient, top highlight, glow.
+    func psAccentFill<S: Shape>(_ shape: S, glow: Bool = true) -> some View {
+        background(shape.fill(PSTheme.accentGradient).overlay(shape.fill(LinearGradient(colors: [Color.white.opacity(0.28), .clear], startPoint: .top, endPoint: .center))))
+            .shadow(color: PSTheme.accent.opacity(glow ? 0.4 : 0), radius: 10, y: 4)
+    }
+
+    /// Gradient pill with a glow, for the selected state of docks and chips.
+    func psActivePill<S: Shape>(_ shape: S, isActive: Bool, glow: Bool = true) -> some View {
+        background {
+            if isActive {
+                shape.fill(PSTheme.accentGradient)
+                    .overlay(shape.fill(LinearGradient(colors: [Color.white.opacity(0.25), .clear], startPoint: .top, endPoint: .center)))
+                    .shadow(color: PSTheme.accent.opacity(glow ? 0.45 : 0), radius: 10, y: 4)
+            }
+        }
     }
 }
 
@@ -71,12 +108,13 @@ public struct GlassIconButton: View {
         } label: {
             Image(systemName: systemName)
                 .font(.system(size: size * 0.4, weight: .semibold))
-                .foregroundStyle(isActive ? Color.black : PSTheme.textPrimary)
+                .foregroundStyle(isActive ? Color.white : PSTheme.textPrimary)
                 .frame(width: size, height: size)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .psGlass(tint: isActive ? (tint ?? PSTheme.accent) : nil, interactive: true, shape: AnyShape(Circle()))
+        .psGlass(tint: nil, interactive: true, shape: AnyShape(Circle()))
+        .psActivePill(Circle(), isActive: isActive)
         .accessibilityLabel(label)
     }
 }
@@ -99,10 +137,11 @@ public struct GlassChip: View {
             Text(text)
         }
         .font(PSFont.caption(13))
-        .foregroundStyle(tint == nil ? PSTheme.textPrimary : Color.black)
+        .foregroundStyle(tint == nil ? PSTheme.textPrimary : Color.white)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .psGlass(tint: tint)
+        .psGlass(tint: nil)
+        .psActivePill(Capsule(), isActive: tint != nil, glow: false)
     }
 }
 
@@ -111,10 +150,11 @@ public struct PrimaryButtonStyle: ButtonStyle {
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(PSFont.headline())
-            .foregroundStyle(.black)
-            .padding(.vertical, 14)
+            .foregroundStyle(.white)
+            .padding(.vertical, 15)
             .frame(maxWidth: .infinity)
-            .background(PSTheme.accent, in: Capsule())
+            .background(Capsule().fill(PSTheme.accentGradient).overlay(Capsule().fill(LinearGradient(colors: [Color.white.opacity(0.25), .clear], startPoint: .top, endPoint: .center))))
+            .shadow(color: PSTheme.accent.opacity(0.4), radius: 14, y: 6)
             .opacity(configuration.isPressed ? 0.8 : 1)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.spring(duration: 0.25), value: configuration.isPressed)

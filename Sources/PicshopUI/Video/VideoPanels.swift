@@ -172,7 +172,7 @@ struct VideoTextPanel: View {
                     .padding(.horizontal, 14).padding(.vertical, 10).background(PSTheme.hairline, in: Capsule())
                     .submitLabel(.done).onSubmit(commit)
                 Button(action: commit) { Image(systemName: "plus").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
-                    .buttonStyle(.plain).foregroundStyle(.black).psGlass(tint: PSTheme.accent, interactive: true, shape: AnyShape(Circle()))
+                    .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Circle())
             }
             if let overlay = session.timeline.overlays.last(where: { $0.textElement != nil }), let element = overlay.textElement {
                 HStack(spacing: 8) {

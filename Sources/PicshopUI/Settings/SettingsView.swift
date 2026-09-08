@@ -24,6 +24,8 @@ public struct SettingsView: View {
                     aboutSection
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(AmbientBackground().ignoresSafeArea())
             .navigationTitle(L("Settings"))
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { dismiss() } } }
         }

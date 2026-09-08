@@ -11,6 +11,11 @@ UI = ROOT / "Sources/PicshopUI"
 OUT = UI / "Resources/Localizable.xcstrings"
 
 FR = {
+    "Photos, videos and PDFs. Just say it.": "Photos, vidéos et PDF. Dites-le, c'est fait.",
+    "Photos": "Photos",
+    "Videos": "Vidéos",
+    "PDFs": "PDF",
+    "Nothing here yet.": "Rien ici pour l'instant.",
     "Version “%@” saved": "Version « %@ » enregistrée",
     "No saved version yet. Say “save this version as …”.": "Aucune version enregistrée. Dites « enregistre cette version sous … ».",
     "No version named “%@”": "Aucune version nommée « %@ »",

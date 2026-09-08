@@ -61,14 +61,14 @@ struct PhotoToolPanel: View {
                 Button { session.commitCrop() } label: {
                     Text(L("Done")).font(PSFont.headline(13)).padding(.horizontal, 14).padding(.vertical, 7)
                 }
-                .buttonStyle(.plain).foregroundStyle(.black).psGlass(tint: PSTheme.accent, interactive: true)
+                .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Capsule())
             })
         case .erase:
             return session.brushStrokes.isEmpty ? nil : AnyView(
                 Button { Haptics.confirm(); session.commitBrushErase() } label: {
                     Label(L("Erase painted area"), systemImage: "sparkles").font(PSFont.headline(13)).padding(.horizontal, 12).padding(.vertical, 7)
                 }
-                .buttonStyle(.plain).foregroundStyle(.black).psGlass(tint: PSTheme.accent, interactive: true)
+                .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Capsule())
             )
         default:
             return nil
@@ -290,7 +290,7 @@ struct PrecisePanel: View {
                         .padding(.horizontal, 14).padding(.vertical, 9).background(PSTheme.hairline, in: Capsule())
                         .submitLabel(.go).onSubmit { session.generateInSelection(session.generativePrompt) }
                     Button { session.generateInSelection(session.generativePrompt) } label: { Image(systemName: "sparkles").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
-                        .buttonStyle(.plain).foregroundStyle(.black).psGlass(tint: PSTheme.accent, interactive: true, shape: AnyShape(Circle()))
+                        .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Circle())
                         .disabled(session.generativePrompt.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 HStack {
@@ -457,7 +457,7 @@ struct TextPanel: View {
                     .submitLabel(.done)
                     .onSubmit(commit)
                 Button(action: commit) { Image(systemName: "plus").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
-                    .buttonStyle(.plain).foregroundStyle(.black).psGlass(tint: PSTheme.accent, interactive: true, shape: AnyShape(Circle()))
+                    .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Circle())
                     .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityLabel(L("Add Text"))
             }

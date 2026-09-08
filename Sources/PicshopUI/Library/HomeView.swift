@@ -12,6 +12,28 @@ public struct HomeView: View {
     @State private var pickerFilter: PHPickerFilter = .images
     @State private var showsPicker = false
     @State private var showsPDFPicker = false
+    @State private var filter: LibraryFilter = .all
+
+    enum LibraryFilter: String, CaseIterable, Identifiable {
+        case all, photos, videos, pdfs
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .all: return L("All")
+            case .photos: return L("Photos")
+            case .videos: return L("Videos")
+            case .pdfs: return L("PDFs")
+            }
+        }
+        func matches(_ project: Project) -> Bool {
+            switch self {
+            case .all: return true
+            case .photos: return !project.isVideo && !project.isPDF
+            case .videos: return project.isVideo
+            case .pdfs: return project.isPDF
+            }
+        }
+    }
 
     public init() {}
 
@@ -22,7 +44,9 @@ public struct HomeView: View {
                 content
             }
             .navigationTitle("PicShop")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showsSettings = true } label: { Image(systemName: "gearshape") }
@@ -67,6 +91,13 @@ public struct HomeView: View {
     private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("PicShop").font(PSFont.display(38)).foregroundStyle(PSTheme.textPrimary).tracking(-1.2)
+                    Text(L("Photos, videos and PDFs. Just say it."))
+                        .font(PSFont.body(15)).foregroundStyle(PSTheme.textSecondary)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
                 heroActions
                 if let app, let progress = app.modelInstallProgress {
                     ModelInstallBanner(progress: progress)
@@ -74,11 +105,36 @@ public struct HomeView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 if let library = app?.library, !library.projects.isEmpty {
-                    Text(L("Recent"))
-                        .font(PSFont.headline(20))
-                        .foregroundStyle(PSTheme.textPrimary)
-                        .padding(.horizontal, 20)
-                    projectGrid(library.projects)
+                    let shown = library.projects.filter(filter.matches)
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(L("Recent")).font(PSFont.title(22)).foregroundStyle(PSTheme.textPrimary).tracking(-0.4)
+                            Text("\(shown.count)").font(PSFont.mono(12)).foregroundStyle(PSTheme.textTertiary)
+                            Spacer()
+                        }
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(LibraryFilter.allCases) { item in
+                                    Button {
+                                        Haptics.tick()
+                                        withAnimation(.snappy) { filter = item }
+                                    } label: {
+                                        Text(item.title).font(PSFont.caption(12)).padding(.horizontal, 12).padding(.vertical, 7)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(filter == item ? Color.white : PSTheme.textSecondary)
+                                    .background(Color.white.opacity(filter == item ? 0 : 0.06), in: Capsule())
+                                    .psActivePill(Capsule(), isActive: filter == item, glow: false)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    if shown.isEmpty {
+                        Text(L("Nothing here yet.")).font(PSFont.body(14)).foregroundStyle(PSTheme.textTertiary).padding(.horizontal, 20)
+                    } else {
+                        projectGrid(shown)
+                    }
                 } else {
                     emptyState
                 }
@@ -196,36 +252,48 @@ struct ProjectCard: View {
     let project: Project
     let thumbnail: UIImage?
 
+    private var tint: Color { project.isPDF ? PSTheme.warning : (project.isVideo ? PSTheme.voice : PSTheme.accent) }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .topTrailing) {
-                Color.clear
-                    .aspectRatio(4 / 5, contentMode: .fit)
-                    .overlay {
-                        if let thumbnail {
-                            Image(uiImage: thumbnail).resizable().scaledToFill()
-                        } else {
-                            PSTheme.surfaceElevated
-                        }
+        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+        Color.clear
+            .aspectRatio(4 / 5, contentMode: .fit)
+            .overlay {
+                if let thumbnail {
+                    Image(uiImage: thumbnail).resizable().scaledToFill()
+                } else {
+                    ZStack {
+                        PSTheme.surfaceElevated
+                        Image(systemName: project.isPDF ? "doc.text" : (project.isVideo ? "film" : "photo")).font(.system(size: 28, weight: .light)).foregroundStyle(PSTheme.textTertiary)
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color.white.opacity(0.10), lineWidth: 1))
-                    .shadow(color: .black.opacity(0.45), radius: 16, y: 8)
+                }
+            }
+            .overlay(alignment: .bottom) {
+                // Scrim so the title reads on any picture.
+                LinearGradient(colors: [.clear, .black.opacity(0.05), .black.opacity(0.72)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 96)
+            }
+            .overlay(alignment: .bottomLeading) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(project.title).font(PSFont.headline(13)).lineLimit(1).foregroundStyle(.white)
+                    Text(project.modifiedAt, format: .relative(presentation: .named)).font(PSFont.caption(10.5)).foregroundStyle(.white.opacity(0.7))
+                }
+                .padding(.horizontal, 12).padding(.bottom, 10)
+            }
+            .overlay(alignment: .topTrailing) {
                 Image(systemName: project.isPDF ? "doc.text.fill" : (project.isVideo ? "play.fill" : "photo.fill"))
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(project.isPDF ? PSTheme.warning : (project.isVideo ? PSTheme.voice : PSTheme.accent))
-                    .padding(7)
-                    .psGlass(shape: AnyShape(Circle()))
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(tint.opacity(0.9)))
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.35), lineWidth: 1))
                     .padding(8)
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(project.title).font(PSFont.headline(13)).lineLimit(1).foregroundStyle(PSTheme.textPrimary)
-                Text(project.modifiedAt, format: .relative(presentation: .named)).font(PSFont.caption(11)).foregroundStyle(PSTheme.textSecondary)
-            }
-            .padding(.horizontal, 4)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(project.title)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(PSTheme.strokeGradient, lineWidth: 1))
+            .shadow(color: .black.opacity(0.5), radius: 18, y: 10)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(project.title)
     }
 }
 
@@ -248,7 +316,7 @@ struct GlassWhenNotProminent: ViewModifier {
         if prominent {
             content
         } else {
-            content.psGlass(interactive: true, shape: AnyShape(RoundedRectangle(cornerRadius: 24, style: .continuous)))
+            content.psCard(cornerRadius: 24)
         }
     }
 }
@@ -267,7 +335,7 @@ struct ModelInstallBanner: View {
             Text("\(Int((progress * 100).rounded()))%").font(PSFont.mono(12)).foregroundStyle(PSTheme.textSecondary)
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
-        .psGlass(shape: AnyShape(RoundedRectangle(cornerRadius: 18, style: .continuous)))
+        .psCard(cornerRadius: 18, shadow: false)
         .accessibilityElement(children: .combine)
     }
 }

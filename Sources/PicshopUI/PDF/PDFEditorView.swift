@@ -151,7 +151,7 @@ public struct PDFEditorView: View {
                         session.addText(text, at: session.lastTapPoint, pageIndex: session.document.currentPageIndex)
                         session.textDraft = ""
                     } label: { Image(systemName: "plus").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
-                        .buttonStyle(.plain).foregroundStyle(.black).psGlass(tint: PSTheme.accent, interactive: true, shape: AnyShape(Circle()))
+                        .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Circle())
                 }
                 Text(L("Tap any word on the page to change or erase it — scans included."))
                     .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
@@ -210,7 +210,7 @@ struct TextEditSheet: View {
                 Button { onCancel() } label: { Text(L("Cancel")).font(PSFont.caption(13)).padding(.horizontal, 14).padding(.vertical, 9) }
                     .buttonStyle(.plain).foregroundStyle(PSTheme.textPrimary).psGlass(interactive: true)
                 Button { onCommit(draft) } label: { Text(L("Replace")).font(PSFont.headline(13)).padding(.horizontal, 16).padding(.vertical, 9) }
-                    .buttonStyle(.plain).foregroundStyle(.black).psGlass(tint: PSTheme.accent, interactive: true)
+                    .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Capsule())
             }
         }
         .padding(20)
@@ -283,7 +283,7 @@ struct PDFViewerRepresentable: UIViewRepresentable {
         view.autoScales = true
         view.displayMode = .singlePageContinuous
         view.displayDirection = .vertical
-        view.backgroundColor = UIColor(PSTheme.canvas)
+        view.backgroundColor = UIColor(red: 0.05, green: 0.05, blue: 0.07, alpha: 1)
         view.pageShadowsEnabled = true
         view.isUserInteractionEnabled = true
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))

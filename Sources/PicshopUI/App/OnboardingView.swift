@@ -20,16 +20,20 @@ public struct OnboardingView: View {
 
     public var body: some View {
         ZStack {
-            PSTheme.canvas.ignoresSafeArea()
+            AmbientBackground().ignoresSafeArea()
             VStack(spacing: 28) {
                 TabView(selection: $page) {
                     ForEach(Array(pages.enumerated()), id: \.offset) { index, item in
                         VStack(spacing: 18) {
                             Image(systemName: item.0)
-                                .font(.system(size: 64, weight: .light))
-                                .foregroundStyle(PSTheme.voiceGradient)
-                                .padding(.bottom, 8)
-                            Text(item.1).font(PSFont.title(30)).foregroundStyle(PSTheme.textPrimary).multilineTextAlignment(.center)
+                                .font(.system(size: 44, weight: .medium))
+                                .foregroundStyle(.white)
+                                .frame(width: 112, height: 112)
+                                .background(RoundedRectangle(cornerRadius: 30, style: .continuous).fill(PSTheme.voiceGradient))
+                                .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).strokeBorder(Color.white.opacity(0.35), lineWidth: 1))
+                                .shadow(color: PSTheme.voice.opacity(0.5), radius: 30, y: 14)
+                                .padding(.bottom, 12)
+                            Text(item.1).font(PSFont.display(32)).foregroundStyle(PSTheme.textPrimary).multilineTextAlignment(.center).tracking(-0.8)
                             Text(item.2).font(PSFont.body(16)).foregroundStyle(PSTheme.textSecondary).multilineTextAlignment(.center).padding(.horizontal, 28)
                         }
                         .tag(index)
@@ -74,7 +78,7 @@ public struct OnboardingView: View {
             .padding(.horizontal, 16).padding(.vertical, 12)
         }
         .buttonStyle(.plain)
-        .psGlass(interactive: true, shape: AnyShape(RoundedRectangle(cornerRadius: 18, style: .continuous)))
+        .psCard(cornerRadius: 18, shadow: false)
     }
 }
 
