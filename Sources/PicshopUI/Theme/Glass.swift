@@ -137,7 +137,6 @@ public struct PSPressStyle: ButtonStyle {
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? scale : 1)
-            .opacity(configuration.isPressed ? 0.82 : 1)
             .animation(PSMotion.quick, value: configuration.isPressed)
     }
 }

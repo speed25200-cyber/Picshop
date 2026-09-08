@@ -171,25 +171,26 @@ public struct HomeView: View {
         }
     }
 
+    /// The cards are deliberately not wrapped in a `GlassEffectContainer`: the
+    /// container merges nested glass into one layer and samples the cards'
+    /// own content into the blur.
     private var heroActions: some View {
-        PSGlassContainer(spacing: 14) {
-            VStack(spacing: PSSpacing.medium) {
-                heroCard(title: L("New Photo"), subtitle: L("Retouch, erase, restyle"), systemImage: "photo.on.rectangle.angled", tint: PSTheme.accent, prominent: true) {
-                    pickerFilter = .images
+        VStack(spacing: PSSpacing.medium) {
+            heroCard(title: L("New Photo"), subtitle: L("Retouch, erase, restyle"), systemImage: "photo.on.rectangle.angled", tint: PSTheme.accent, prominent: true) {
+                pickerFilter = .images
+                showsPicker = true
+            }
+            HStack(spacing: PSSpacing.medium) {
+                heroCard(title: L("New Video"), subtitle: L("Cut, clean up, grade"), systemImage: "film.stack", tint: PSTheme.voice) {
+                    pickerFilter = .videos
                     showsPicker = true
                 }
-                HStack(spacing: PSSpacing.medium) {
-                    heroCard(title: L("New Video"), subtitle: L("Cut, clean up, grade"), systemImage: "film.stack", tint: PSTheme.voice) {
-                        pickerFilter = .videos
-                        showsPicker = true
-                    }
-                    heroCard(title: L("New PDF"), subtitle: L("Sign, mark up, reorder"), systemImage: "doc.richtext", tint: PSTheme.warning) {
-                        showsPDFPicker = true
-                    }
+                heroCard(title: L("New PDF"), subtitle: L("Sign, mark up, reorder"), systemImage: "doc.richtext", tint: PSTheme.warning) {
+                    showsPDFPicker = true
                 }
             }
-            .padding(.horizontal, PSSpacing.page)
         }
+        .padding(.horizontal, PSSpacing.page)
     }
 
     private func heroCard(title: String, subtitle: String, systemImage: String, tint: Color, prominent: Bool = false, action: @escaping () -> Void) -> some View {
@@ -217,9 +218,9 @@ public struct HomeView: View {
             .padding(.vertical, prominent ? 18 : 14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .modifier(HeroSurface(prominent: prominent))
         }
-        .buttonStyle(PSPressStyle(scale: 0.975))
+        .buttonStyle(PSPressStyle(scale: 0.985))
+        .modifier(HeroSurface(prominent: prominent))
         .accessibilityLabel(title)
         .accessibilityHint(subtitle)
     }
