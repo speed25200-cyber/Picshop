@@ -1,49 +1,42 @@
 # On-device models
 
-PicShop works out of the box with Apple's built-in models:
+PicShop ships with everything it needs; nothing has to be configured.
 
-| Capability | Built in | Optional upgrade |
-|---|---|---|
-| Speech → text | `SpeechAnalyzer` (iOS 26) / `SFSpeechRecognizer` on-device | — |
-| Command planning | Instant grammar + Apple Intelligence foundation model | **Pro Brain** — Qwen3 4B 4-bit via MLX |
-| Segmentation & detection | Vision (instance masks, people, animals, text, saliency, classification) | — |
-| Object removal | `PatchMatchCore` (exemplar-based, CPU) | **LaMa** large-mask inpainting (Core ML) |
-| Upscaling | Lanczos + edge-aware sharpening | **Real-ESRGAN ×4** (Core ML) |
+| Capability | Built in | Shipped in the app | On demand |
+|---|---|---|---|
+| Speech → text | `SpeechAnalyzer` (iOS 26) / `SFSpeechRecognizer` on-device | — | — |
+| Command planning | Instant grammar + Apple Intelligence foundation model | — | **Pro Brain** — Qwen3 4B 4-bit via MLX (Hugging Face) |
+| Segmentation & detection | Vision (instance masks, people, animals, text, saliency, classification) | — | — |
+| Object removal | `PatchMatchCore` (exemplar-based, CPU) | **LaMa** large-mask inpainting (Core ML) | — |
+| Upscaling | Lanczos + edge-aware sharpening | **Real-ESRGAN ×4** (Core ML) | — |
+| Generative fill | — | — | **Stable Diffusion** compiled resources (Hugging Face) |
 
-Optional models are downloaded from **Settings › On-device models** and stored in
-`Application Support/Models/<id>/`. They are never bundled with the app, keeping the download small.
+## Models shipped in the app
 
-## Hosting the Core ML archives
+`Scripts/convert_models.py` downloads the public weights (Real-ESRGAN x4plus from its GitHub
+release, big-lama as the TorchScript export of simple-lama-inpainting), converts them with
+coremltools to fp16 ML programs and writes `App/Models/*.mlpackage`. XcodeGen lists those packages
+as optional sources, Xcode compiles them into `<id>.mlmodelc`, and `ModelManager.bundledModelURL`
+finds them at runtime. Both CI pipelines (GitHub Actions and Codemagic) run the script before
+generating the project and cache the result in `~/Library/Caches/picshop-models`.
 
-1. Convert the networks on a Mac (needs `torch`, `coremltools>=8`, and the upstream repositories):
+```bash
+python3 -m pip install "torch==2.5.1" "coremltools==8.2"
+python3 Scripts/convert_models.py all --out App/Models
+```
 
-   ```bash
-   python3 Scripts/convert_models.py lama   --weights path/to/big-lama/models/best.ckpt --out build/models
-   python3 Scripts/convert_models.py esrgan --weights path/to/RealESRGAN_x4plus.pth         --out build/models
-   ```
+A user-installed copy in `Application Support/Models/<id>/` takes precedence over the bundled one.
 
-2. Package them as *stored* zip archives (the app ships a dependency-free zip reader that supports
-   stored and deflated entries):
+## Hosting your own archives (optional)
 
-   ```bash
-   Scripts/package_models.sh build/models out
-   # → out/lama-inpainting.zip, out/realesrgan-x4.zip
-   ```
-
-3. Upload `out/*.zip` to any static host and point the app at it, either in `App/Info.plist`
-   (`PICSHOP_MODEL_BASE_URL`) or at runtime in **Settings › Model server**. The catalogue
-   (`ModelCatalog`) resolves `<base>/<id>.zip`.
-
-`CoreMLImageModel` reads input names, sizes and pixel formats from the model description, so models
-converted at other resolutions or with different feature names work without code changes. Inputs may be
-`ImageType` or `MultiArray (1,C,H,W)`; outputs may be images or float arrays in 0…1 or 0…255.
+`ModelCatalog` still resolves `<PICSHOP_MODEL_BASE_URL>/<id>.zip` when that key is set in
+`App/Info.plist` (stored zip archives, see `Scripts/package_models.sh`).
 
 ## Generative Fill (Stable Diffusion)
 
-Generate the project with `xcodegen generate --spec project-pro.yml` (adds Apple's [`ml-stable-diffusion`](https://github.com/apple/ml-stable-diffusion) package) and host the compiled resources as `sd-generative-fill.zip`: a zip of a folder containing
-`TextEncoder.mlmodelc`, `Unet.mlmodelc` (or `UnetChunk1/2.mlmodelc`), `VAEDecoder.mlmodelc`,
-`VAEEncoder.mlmodelc`, `merges.txt`, `vocab.json` — e.g. the `split_einsum/compiled` folder of
-`apple/coreml-stable-diffusion-2-1-base` on Hugging Face. The engine runs masked image-to-image on a
+Generate the project with `xcodegen generate --spec project-pro.yml` (adds Apple's [`ml-stable-diffusion`](https://github.com/apple/ml-stable-diffusion) package). Settings › On-device models downloads the
+`split_einsum/compiled` folder of `apple/coreml-stable-diffusion-v1-5` file by file from Hugging Face
+(`TextEncoder.mlmodelc`, `Unet.mlmodelc`, `VAEDecoder.mlmodelc`, `VAEEncoder.mlmodelc`, `merges.txt`, `vocab.json`). The engine runs masked image-to-image on a
 512 px crop around the selection; the pipeline composites the result back inside the mask only.
 
 ## Pro Brain (MLX)

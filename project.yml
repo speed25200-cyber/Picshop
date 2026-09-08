@@ -47,6 +47,14 @@ targets:
       - path: App
         excludes:
           - "**/*.md"
+          - "Models/**"
+      # Core ML packages produced by Scripts/convert_models.py (compiled into the bundle by Xcode).
+      - path: App/Models/lama-inpainting.mlpackage
+        type: file
+        optional: true
+      - path: App/Models/realesrgan-x4.mlpackage
+        type: file
+        optional: true
     dependencies:
       - package: PicshopKit
         product: PicshopUI

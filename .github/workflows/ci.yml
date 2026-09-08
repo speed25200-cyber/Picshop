@@ -74,6 +74,22 @@ jobs:
           if ! xcrun simctl list runtimes | grep -q "iOS 26"; then
             sudo xcodebuild -downloadPlatform iOS
           fi
+      - name: Cache converted Core ML models
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/picshop-models
+          key: picshop-models-${{ hashFiles('Scripts/convert_models.py') }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Convert neural models (LaMa, Real-ESRGAN)
+        run: |
+          if ! ls -d ~/Library/Caches/picshop-models/packages/*/*.mlpackage >/dev/null 2>&1; then
+            python3 -m pip install --quiet --upgrade pip
+            python3 -m pip install --quiet "torch==2.5.1" "coremltools==8.2" "numpy<2.3"
+          fi
+          python3 Scripts/convert_models.py all --out App/Models || true
+          ls -la App/Models || true
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
@@ -101,5 +117,38 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: xcodebuild-logs
+          path: "*.log"
+          if-no-files-found: ignore
+
+  pro-build:
+    name: Pro app build (MLX + Stable Diffusion, Xcode 26)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project (pro)
+        run: xcodegen generate --spec project-pro.yml
+      - name: Resolve packages
+        run: xcodebuild -resolvePackageDependencies -project PicShop.xcodeproj -scheme PicShop -skipPackagePluginValidation
+      - name: Build (iOS device, Release)
+        run: |
+          set -o pipefail
+          xcodebuild build -project PicShop.xcodeproj -scheme PicShop \
+            -destination 'generic/platform=iOS' -configuration Release \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -skipPackagePluginValidation -IDEBuildingContinueBuildingAfterErrors=YES 2>&1 | tee build-pro.log | grep -E "error:|BUILD" || true
+          grep -q "BUILD SUCCEEDED" build-pro.log
+      - name: Errors
+        if: failure()
+        run: grep -E "error:" build-pro.log | sort -u || true
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-pro-logs
           path: "*.log"
           if-no-files-found: ignore

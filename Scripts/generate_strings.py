@@ -85,6 +85,14 @@ FR = {
     "Tap the mic and say what to change": "Touchez le micro et dites quoi changer", "Text & logos": "Texte & logos", "Vehicles": "Véhicules",
     "Voice unavailable — check microphone access in Settings.": "Voix indisponible — vérifiez l'accès au micro dans Réglages.",
     "animals": "les animaux", "people": "les personnes", "text": "le texte", "vehicles": "les véhicules",
+    "Generative Fill": "Remplissage génératif", "Included in the app": "Inclus dans l'app",
+    "LaMa network for clean object removal on complex backgrounds.": "Réseau LaMa pour une suppression d'objets propre sur les fonds complexes.",
+    "Neural eraser": "Gomme neuronale", "Pro Brain": "Pro Brain",
+    "Qwen3 4B language model for long, multi-step voice commands.": "Modèle de langage Qwen3 4B pour les commandes vocales longues, en plusieurs étapes.",
+    "Ready": "Prêt", "Real-ESRGAN upscaler for sharp enlargements.": "Agrandisseur Real-ESRGAN pour des agrandissements nets.",
+    "Stable Diffusion: “replace the sky with a sunset”, “add a hat”.": "Stable Diffusion : « remplace le ciel par un coucher de soleil », « ajoute un chapeau ».",
+    "Super resolution ×4": "Super résolution ×4",
+    "The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large and download from Hugging Face on demand; everything runs on your iPhone.": "La gomme et l'agrandisseur sont livrés avec l'app. Le remplissage génératif et le Pro Brain sont volumineux et se téléchargent depuis Hugging Face à la demande ; tout fonctionne sur votre iPhone.",
 }
 
 def main():

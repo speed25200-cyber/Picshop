@@ -83,25 +83,44 @@ public struct SettingsView: View {
         Section {
             ForEach(ModelCatalog.all) { model in
                 let state = modelStates[model.id] ?? .notInstalled
-                HStack(alignment: .center) {
+                HStack(alignment: .center, spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(model.displayName).font(PSFont.headline(15))
-                        Text(model.summary).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
-                        Text("\(model.sizeMB) MB").font(PSFont.mono(11)).foregroundStyle(PSTheme.textSecondary)
+                        Text(localizedName(model)).font(PSFont.headline(15))
+                        Text(localizedSummary(model)).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                        Text(ModelManager.isBundled(model.id) ? L("Included in the app") : "\(model.sizeMB) MB").font(PSFont.mono(11)).foregroundStyle(PSTheme.textSecondary)
                     }
                     Spacer()
-                    modelControl(model, state: state, app: app)
+                    if ModelManager.isBundled(model.id) {
+                        Label(L("Ready"), systemImage: "checkmark.seal.fill").font(PSFont.caption(13)).foregroundStyle(PSTheme.success)
+                    } else {
+                        modelControl(model, state: state, app: app)
+                    }
                 }
-            }
-            HStack {
-                Text(L("Model server"))
-                TextField("https://…", text: Binding(get: { app.settings.modelBaseURL }, set: { app.settings.modelBaseURL = $0 }))
-                    .textInputAutocapitalization(.never).autocorrectionDisabled().font(PSFont.mono(12)).multilineTextAlignment(.trailing)
             }
         } header: {
             Text(L("On-device models"))
         } footer: {
-            Text(L("Neural models improve object removal and upscaling. Without them, PicShop uses its built-in PatchMatch engine — see docs/MODELS.md to host the archives."))
+            Text(L("The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large and download from Hugging Face on demand; everything runs on your iPhone."))
+        }
+    }
+
+    private func localizedName(_ model: ModelDescriptor) -> String {
+        switch model.id {
+        case "lama-inpainting": return L("Neural eraser")
+        case "realesrgan-x4": return L("Super resolution ×4")
+        case "sd-generative-fill": return L("Generative Fill")
+        case "qwen3-4b-4bit": return L("Pro Brain")
+        default: return model.displayName
+        }
+    }
+
+    private func localizedSummary(_ model: ModelDescriptor) -> String {
+        switch model.id {
+        case "lama-inpainting": return L("LaMa network for clean object removal on complex backgrounds.")
+        case "realesrgan-x4": return L("Real-ESRGAN upscaler for sharp enlargements.")
+        case "sd-generative-fill": return L("Stable Diffusion: “replace the sky with a sunset”, “add a hat”.")
+        case "qwen3-4b-4bit": return L("Qwen3 4B language model for long, multi-step voice commands.")
+        default: return model.summary
         }
     }
 

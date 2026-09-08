@@ -11,7 +11,7 @@ public enum PSTheme {
     public static let success = Color(red: 0.3, green: 0.85, blue: 0.5)
     public static let warning = Color(red: 1.0, green: 0.62, blue: 0.2)
     public static let danger = Color(red: 1.0, green: 0.32, blue: 0.3)
-    public static let canvas = Color(red: 0.04, green: 0.04, blue: 0.05)
+    public static let canvas = Color.black
     public static let surface = Color(red: 0.09, green: 0.09, blue: 0.11)
     public static let surfaceElevated = Color(red: 0.14, green: 0.14, blue: 0.17)
     public static let textPrimary = Color.white

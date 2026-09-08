@@ -1,5 +1,6 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
+import UIKit
 import PicshopCore
 import PicshopIntent
 import PicshopSpeech
@@ -13,11 +14,27 @@ struct EditorChrome<Canvas: View, Top: View, Bottom: View>: View {
     @ViewBuilder var bottom: () -> Bottom
 
     var body: some View {
-        canvas()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .safeAreaInset(edge: .top, spacing: 0) { top() }
-            .safeAreaInset(edge: .bottom, spacing: 0) { bottom() }
-            .background(PSTheme.canvas.ignoresSafeArea())
+        GeometryReader { proxy in
+            // Presented editors occasionally receive zero safe-area insets from SwiftUI; the
+            // window always knows the real status bar / home indicator geometry.
+            let window = WindowInsets.current
+            let extraTop = max(0, window.top - proxy.safeAreaInsets.top)
+            let extraBottom = max(0, window.bottom - proxy.safeAreaInsets.bottom)
+            canvas()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .safeAreaInset(edge: .top, spacing: 0) { top().padding(.top, extraTop) }
+                .safeAreaInset(edge: .bottom, spacing: 0) { bottom().padding(.bottom, extraBottom) }
+        }
+        .background(PSTheme.canvas.ignoresSafeArea())
+    }
+}
+
+/// Safe-area insets of the key window (status bar, Dynamic Island, home indicator).
+enum WindowInsets {
+    @MainActor static var current: UIEdgeInsets {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let window = scenes.flatMap(\.windows).first { $0.isKeyWindow } ?? scenes.first?.windows.first
+        return window?.safeAreaInsets ?? .zero
     }
 }
 

@@ -23,10 +23,29 @@ public struct ModelDescriptor: Identifiable, Hashable, Sendable {
     public var remoteURL: URL?
     /// Hugging Face repository for MLX language models.
     public var huggingFaceID: String?
+    /// Hugging Face repository + folder holding compiled Core ML resources (downloaded file by file).
+    public var huggingFaceFolder: HuggingFaceFolder?
+    /// Ships inside the app bundle as `<id>.mlmodelc` (converted at build time).
+    public var isBundledByDefault: Bool
 
-    public init(id: String, displayName: String, summary: String, kind: Kind, sizeMB: Int, remoteURL: URL? = nil, huggingFaceID: String? = nil) {
+    public struct HuggingFaceFolder: Hashable, Sendable {
+        public var repository: String
+        public var path: String
+        public var revision: String
+
+        public init(repository: String, path: String, revision: String = "main") {
+            self.repository = repository
+            self.path = path
+            self.revision = revision
+        }
+    }
+
+    public init(id: String, displayName: String, summary: String, kind: Kind, sizeMB: Int, remoteURL: URL? = nil, huggingFaceID: String? = nil,
+                huggingFaceFolder: HuggingFaceFolder? = nil, isBundledByDefault: Bool = false) {
         self.id = id
         self.displayName = displayName
+        self.huggingFaceFolder = huggingFaceFolder
+        self.isBundledByDefault = isBundledByDefault
         self.summary = summary
         self.kind = kind
         self.sizeMB = sizeMB
@@ -35,24 +54,26 @@ public struct ModelDescriptor: Identifiable, Hashable, Sendable {
     }
 }
 
-/// The models Picshop knows how to use. Core ML archives are served from
-/// `PICSHOP_MODEL_BASE_URL` (Info.plist) — see docs/MODELS.md for producing
-/// them with `Scripts/convert_models.py`.
+/// The models Picshop knows how to use. The Core ML eraser and upscaler are
+/// converted at build time and shipped inside the app; the larger runtimes are
+/// fetched straight from Hugging Face on demand. An optional
+/// `PICSHOP_MODEL_BASE_URL` (Info.plist or Settings) can still serve `<id>.zip` archives.
 public enum ModelCatalog {
     public static var baseURL: URL? {
-        if let override = UserDefaults.standard.string(forKey: "picshop.modelBaseURL"), let url = URL(string: override) { return url }
-        if let value = Bundle.main.object(forInfoDictionaryKey: "PICSHOP_MODEL_BASE_URL") as? String, let url = URL(string: value) { return url }
+        if let override = UserDefaults.standard.string(forKey: "picshop.modelBaseURL"), !override.isEmpty, let url = URL(string: override) { return url }
+        if let value = Bundle.main.object(forInfoDictionaryKey: "PICSHOP_MODEL_BASE_URL") as? String, !value.isEmpty, let url = URL(string: value) { return url }
         return nil
     }
 
     public static var all: [ModelDescriptor] {
         [
             ModelDescriptor(id: "lama-inpainting", displayName: "Neural Eraser (LaMa)", summary: "Large-mask inpainting network for cleaner object removal on complex backgrounds.",
-                            kind: .inpainting, sizeMB: 205, remoteURL: baseURL?.appendingPathComponent("lama-inpainting.zip")),
+                            kind: .inpainting, sizeMB: 100, remoteURL: baseURL?.appendingPathComponent("lama-inpainting.zip"), isBundledByDefault: true),
             ModelDescriptor(id: "realesrgan-x4", displayName: "Super Resolution (Real-ESRGAN ×4)", summary: "Neural upscaler for sharper enlargements.",
-                            kind: .superResolution, sizeMB: 67, remoteURL: baseURL?.appendingPathComponent("realesrgan-x4.zip")),
+                            kind: .superResolution, sizeMB: 33, remoteURL: baseURL?.appendingPathComponent("realesrgan-x4.zip"), isBundledByDefault: true),
             ModelDescriptor(id: "sd-generative-fill", displayName: "Generative Fill (Stable Diffusion)", summary: "Text-guided replacement: “remplace le ciel par un coucher de soleil”, “add a hat”.",
-                            kind: .generative, sizeMB: 1900, remoteURL: baseURL?.appendingPathComponent("sd-generative-fill.zip")),
+                            kind: .generative, sizeMB: 1900, remoteURL: baseURL?.appendingPathComponent("sd-generative-fill.zip"),
+                            huggingFaceFolder: ModelDescriptor.HuggingFaceFolder(repository: "apple/coreml-stable-diffusion-v1-5", path: "split_einsum/compiled")),
             ModelDescriptor(id: "qwen3-4b-4bit", displayName: "Pro Brain (Qwen3 4B)", summary: "Larger on-device language model for complex, multi-step voice commands.",
                             kind: .languageModel, sizeMB: 2500, huggingFaceID: "mlx-community/Qwen3-4B-4bit"),
         ]
@@ -90,12 +111,24 @@ public actor ModelManager {
         rootURL.appendingPathComponent(id, isDirectory: true)
     }
 
-    /// Compiled model URL if installed.
+    /// Compiled model URL: a user-installed copy first, otherwise the copy shipped in the app bundle.
     public func compiledModelURL(for id: String) -> URL? {
         let directory = directory(for: id)
-        guard let contents = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return nil }
-        return contents.first { $0.pathExtension == "mlmodelc" }
+        if let contents = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil),
+           let compiled = contents.first(where: { $0.pathExtension == "mlmodelc" }) {
+            return compiled
+        }
+        return Self.bundledModelURL(for: id)
     }
+
+    /// The model compiled into the app bundle at build time, if any.
+    public nonisolated static func bundledModelURL(for id: String) -> URL? {
+        if let url = Bundle.main.url(forResource: id, withExtension: "mlmodelc") { return url }
+        if let url = Bundle.main.url(forResource: id, withExtension: "mlmodelc", subdirectory: "Models") { return url }
+        return nil
+    }
+
+    public nonisolated static func isBundled(_ id: String) -> Bool { bundledModelURL(for: id) != nil }
 
     public func isInstalled(_ id: String) -> Bool {
         if let descriptor = ModelCatalog.descriptor(id: id), descriptor.kind == .languageModel {
@@ -161,11 +194,15 @@ public actor ModelManager {
         set(.notInstalled, for: id)
     }
 
-    /// Downloads and compiles a Core ML model archive.
+    /// Downloads and compiles a Core ML model archive, or fetches a Hugging Face folder.
     public func install(_ descriptor: ModelDescriptor) {
         guard activeTasks[descriptor.id] == nil, !isInstalled(descriptor.id) else { return }
+        if descriptor.remoteURL == nil, let folder = descriptor.huggingFaceFolder {
+            installHuggingFaceFolder(descriptor, folder: folder)
+            return
+        }
         guard let remote = descriptor.remoteURL else {
-            set(.failed("No download server configured. Set PICSHOP_MODEL_BASE_URL — see docs/MODELS.md."), for: descriptor.id)
+            set(.failed(descriptor.isBundledByDefault ? "This build was made without the model. Update the app." : "No download source for this model."), for: descriptor.id)
             return
         }
         set(.downloading(progress: 0), for: descriptor.id)
@@ -200,6 +237,55 @@ public actor ModelManager {
                 try FileManager.default.moveItem(at: compiled, to: destination)
                 try? FileManager.default.removeItem(at: unpacked)
                 try? FileManager.default.removeItem(at: archive)
+                await self.set(.installed, for: descriptor.id)
+            } catch is CancellationError {
+                await self.set(.notInstalled, for: descriptor.id)
+            } catch {
+                PSLog.error("model install failed: \(error)", category: .models)
+                await self.set(.failed(error.localizedDescription), for: descriptor.id)
+            }
+            await self.clearTask(descriptor.id)
+        }
+        activeTasks[descriptor.id] = task
+    }
+
+    /// Downloads every file of a Hugging Face folder (compiled Stable Diffusion resources)
+    /// into `<id>/resources`, with byte-accurate progress.
+    private func installHuggingFaceFolder(_ descriptor: ModelDescriptor, folder: ModelDescriptor.HuggingFaceFolder) {
+        set(.downloading(progress: 0), for: descriptor.id)
+        let task = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let entries = try await HuggingFaceHub.listFiles(repository: folder.repository, path: folder.path, revision: folder.revision)
+                guard !entries.isEmpty else { throw PicshopError.modelUnavailable("empty folder on Hugging Face") }
+                let total = max(1, entries.reduce(0) { $0 + $1.size })
+                var done: Int64 = 0
+                let directory = await self.directory(for: descriptor.id)
+                let staging = directory.appendingPathComponent("staging", isDirectory: true)
+                try? FileManager.default.removeItem(at: staging)
+                try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+                for entry in entries {
+                    try Task.checkCancellation()
+                    let relative = String(entry.path.dropFirst(folder.path.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                    let destination = staging.appendingPathComponent(relative)
+                    try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    let url = HuggingFaceHub.fileURL(repository: folder.repository, path: entry.path, revision: folder.revision)
+                    let base = done
+                    let temporary = try await ModelDownloader.download(url) { fraction in
+                        let bytes = base + Int64(fraction * Double(entry.size))
+                        Task { await self.set(.downloading(progress: Double(bytes) / Double(total)), for: descriptor.id) }
+                    }
+                    try? FileManager.default.removeItem(at: destination)
+                    try FileManager.default.moveItem(at: temporary, to: destination)
+                    done += entry.size
+                }
+                await self.set(.compiling, for: descriptor.id)
+                let resources = directory.appendingPathComponent("resources", isDirectory: true)
+                try? FileManager.default.removeItem(at: resources)
+                try FileManager.default.moveItem(at: staging, to: resources)
+                guard await self.resourcesURL(for: descriptor.id) != nil else {
+                    throw PicshopError.modelUnavailable("Unet.mlmodelc missing after download")
+                }
                 await self.set(.installed, for: descriptor.id)
             } catch is CancellationError {
                 await self.set(.notInstalled, for: descriptor.id)
@@ -311,6 +397,37 @@ enum ModelDownloader {
             return url
         }
         throw PicshopError.modelUnavailable("no .mlpackage in archive")
+    }
+}
+
+/// Minimal Hugging Face Hub client: folder listing and file URLs.
+enum HuggingFaceHub {
+    struct Entry: Decodable {
+        var type: String
+        var path: String
+        var size: Int64?
+    }
+
+    struct File: Sendable {
+        var path: String
+        var size: Int64
+    }
+
+    /// Lists every file under a folder (recursively).
+    static func listFiles(repository: String, path: String, revision: String) async throws -> [File] {
+        var components = URLComponents(string: "https://huggingface.co/api/models/\(repository)/tree/\(revision)/\(path)")!
+        components.queryItems = [URLQueryItem(name: "recursive", value: "true")]
+        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw PicshopError.modelUnavailable("Hugging Face listing failed (\(http.statusCode))")
+        }
+        let entries = try JSONDecoder().decode([Entry].self, from: data)
+        return entries.filter { $0.type == "file" }.map { File(path: $0.path, size: $0.size ?? 0) }
+    }
+
+    static func fileURL(repository: String, path: String, revision: String) -> URL {
+        let escaped = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
+        return URL(string: "https://huggingface.co/\(repository)/resolve/\(revision)/\(escaped)")!
     }
 }
 

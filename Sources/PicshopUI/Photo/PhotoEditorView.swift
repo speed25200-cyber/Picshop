@@ -19,7 +19,7 @@ public struct PhotoEditorView: View {
             PhotoCanvasView(session: session)
         } top: {
             EditorTopBar(
-                title: session.document.title.isEmpty ? L("Photo") : session.document.title,
+                title: L("Photo"),
                 subtitle: "\(Int(session.document.canvasSize.width)) × \(Int(session.document.canvasSize.height))",
                 canUndo: session.history.canUndo, canRedo: session.history.canRedo,
                 onClose: { session.teardown(); dismiss() },

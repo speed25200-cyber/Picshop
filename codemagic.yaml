@@ -26,6 +26,7 @@ definitions:
     cache_paths:
       - $HOME/Library/Caches/org.swift.swiftpm
       - $HOME/Library/Developer/Xcode/DerivedData
+      - $HOME/Library/Caches/picshop-models
   scripts:
     - &toolchain
       name: Toolchain
@@ -34,6 +35,15 @@ definitions:
         xcodebuild -version
         swift --version
         brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+    - &models
+      name: Convert neural models (LaMa, Real-ESRGAN)
+      script: |
+        if ! ls -d "$HOME/Library/Caches/picshop-models/packages"/*/*.mlpackage >/dev/null 2>&1; then
+          python3 -m pip install --quiet --upgrade pip
+          python3 -m pip install --quiet "torch==2.5.1" "coremltools==8.2" "numpy<2.3"
+        fi
+        python3 Scripts/convert_models.py all --out App/Models || true
+        ls -la App/Models || true
     - &generate
       name: Generate Xcode project
       script: |
@@ -77,6 +87,7 @@ workflows:
     # integration exists; every push is compiled by the "picshop-build" workflow below.
     scripts:
       - *toolchain
+      - *models
       - *generate
       - *tests
       - name: Signing files
@@ -135,6 +146,7 @@ workflows:
       cancel_previous_builds: true
     scripts:
       - *toolchain
+      - *models
       - *generate
       - *tests
       - *resolve

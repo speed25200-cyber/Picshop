@@ -31,7 +31,7 @@ public struct HomeView: View {
             }
             .sheet(isPresented: $showsSettings) { SettingsView() }
             .fullScreenCover(item: $openProject) { project in
-                EditorHost(project: project)
+                if let app { EditorHost(project: project, app: app) }
             }
             .photosPicker(isPresented: $showsPicker, selection: $pickedItem, matching: pickerFilter, photoLibrary: .shared())
             .fileImporter(isPresented: $showsPDFPicker, allowedContentTypes: [.pdf]) { result in
@@ -198,35 +198,32 @@ struct ProjectCard: View {
     }
 }
 
-/// Routes a project to the right editor. Sessions are created once per presentation.
+/// Routes a project to the right editor. The session is created once, when the
+/// cover is presented, so the editor is the first and only content of the cover.
 struct EditorHost: View {
-    let project: Project
-    @Environment(\.picshop) private var app
-    @Environment(\.dismiss) private var dismiss
-    @State private var photoSession: PhotoEditorSession?
-    @State private var videoSession: VideoEditorSession?
-    @State private var pdfSession: PDFEditorSession?
+    enum Session {
+        case photo(PhotoEditorSession)
+        case video(VideoEditorSession)
+        case pdf(PDFEditorSession)
+    }
+
+    @State private var session: Session
+
+    init(project: Project, app: AppEnvironment) {
+        let session: Session
+        switch project.content {
+        case .photo(let document): session = .photo(PhotoEditorSession(document: document, projectID: project.id, app: app))
+        case .video(let timeline): session = .video(VideoEditorSession(timeline: timeline, projectID: project.id, app: app))
+        case .pdf(let document): session = .pdf(PDFEditorSession(document: document, projectID: project.id, app: app))
+        }
+        _session = State(initialValue: session)
+    }
 
     var body: some View {
-        Group {
-            if let photoSession {
-                PhotoEditorView(session: photoSession)
-            } else if let videoSession {
-                VideoEditorView(session: videoSession)
-            } else if let pdfSession {
-                PDFEditorView(session: pdfSession)
-            } else {
-                PSTheme.canvas.ignoresSafeArea()
-            }
-        }
-        .onAppear {
-            guard let app, photoSession == nil, videoSession == nil, pdfSession == nil else { return }
-            switch project.content {
-            case .photo(let document): photoSession = PhotoEditorSession(document: document, projectID: project.id, app: app)
-            case .video(let timeline): videoSession = VideoEditorSession(timeline: timeline, projectID: project.id, app: app)
-            case .pdf(let document): pdfSession = PDFEditorSession(document: document, projectID: project.id, app: app)
-            }
-            if app == nil { dismiss() }
+        switch session {
+        case .photo(let session): PhotoEditorView(session: session)
+        case .video(let session): VideoEditorView(session: session)
+        case .pdf(let session): PDFEditorView(session: session)
         }
     }
 }

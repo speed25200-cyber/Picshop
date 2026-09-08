@@ -1265,6 +1265,22 @@
         }
       }
     },
+    "Generative Fill": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generative Fill"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remplissage génératif"
+          }
+        }
+      }
+    },
     "Generative Fill model not installed — see Settings.": {
       "localizations": {
         "en": {
@@ -1457,6 +1473,22 @@
         }
       }
     },
+    "Included in the app": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Included in the app"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inclus dans l'app"
+          }
+        }
+      }
+    },
     "Insert photo": {
       "localizations": {
         "en": {
@@ -1533,6 +1565,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dites-le, c'est tout"
+          }
+        }
+      }
+    },
+    "LaMa network for clean object removal on complex backgrounds.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LaMa network for clean object removal on complex backgrounds."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réseau LaMa pour une suppression d'objets propre sur les fonds complexes."
           }
         }
       }
@@ -1745,22 +1793,6 @@
         }
       }
     },
-    "Model server": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Model server"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Serveur de modèles"
-          }
-        }
-      }
-    },
     "Move": {
       "localizations": {
         "en": {
@@ -1841,18 +1873,18 @@
         }
       }
     },
-    "Neural models improve object removal and upscaling. Without them, PicShop uses its built-in PatchMatch engine — see docs/MODELS.md to host the archives.": {
+    "Neural eraser": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Neural models improve object removal and upscaling. Without them, PicShop uses its built-in PatchMatch engine — see docs/MODELS.md to host the archives."
+            "value": "Neural eraser"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les modèles neuronaux améliorent la suppression d'objets et l'agrandissement. Sans eux, PicShop utilise son moteur PatchMatch intégré — voir docs/MODELS.md pour héberger les archives."
+            "value": "Gomme neuronale"
           }
         }
       }
@@ -2465,6 +2497,22 @@
         }
       }
     },
+    "Pro Brain": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro Brain"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro Brain"
+          }
+        }
+      }
+    },
     "Pro tools, zero friction": {
       "localizations": {
         "en": {
@@ -2497,6 +2545,22 @@
         }
       }
     },
+    "Qwen3 4B language model for long, multi-step voice commands.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qwen3 4B language model for long, multi-step voice commands."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modèle de langage Qwen3 4B pour les commandes vocales longues, en plusieurs étapes."
+          }
+        }
+      }
+    },
     "Qwen3 4B through MLX — best for long multi-step commands.": {
       "localizations": {
         "en": {
@@ -2509,6 +2573,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qwen3 4B via MLX — idéal pour les commandes longues en plusieurs étapes."
+          }
+        }
+      }
+    },
+    "Ready": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ready"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prêt"
+          }
+        }
+      }
+    },
+    "Real-ESRGAN upscaler for sharp enlargements.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Real-ESRGAN upscaler for sharp enlargements."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agrandisseur Real-ESRGAN pour des agrandissements nets."
           }
         }
       }
@@ -3249,6 +3345,22 @@
         }
       }
     },
+    "Stable Diffusion: “replace the sky with a sunset”, “add a hat”.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stable Diffusion: “replace the sky with a sunset”, “add a hat”."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stable Diffusion : « remplace le ciel par un coucher de soleil », « ajoute un chapeau »."
+          }
+        }
+      }
+    },
     "Start editing": {
       "localizations": {
         "en": {
@@ -3293,6 +3405,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Redresser"
+          }
+        }
+      }
+    },
+    "Super resolution ×4": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Super resolution ×4"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Super résolution ×4"
           }
         }
       }
@@ -3437,6 +3565,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Durée du texte"
+          }
+        }
+      }
+    },
+    "The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large and download from Hugging Face on demand; everything runs on your iPhone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large and download from Hugging Face on demand; everything runs on your iPhone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La gomme et l'agrandisseur sont livrés avec l'app. Le remplissage génératif et le Pro Brain sont volumineux et se téléchargent depuis Hugging Face à la demande ; tout fonctionne sur votre iPhone."
           }
         }
       }
