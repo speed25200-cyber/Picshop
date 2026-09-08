@@ -39,6 +39,8 @@ struct HelpSheet: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(AmbientBackground().ignoresSafeArea())
             .navigationTitle(L("Say it"))
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { dismiss() } } }
         }

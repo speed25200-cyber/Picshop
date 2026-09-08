@@ -144,7 +144,7 @@ public struct PDFEditorView: View {
                 HStack(spacing: 8) {
                     TextField(L("New text, then tap where it goes"), text: $session.textDraft)
                         .textFieldStyle(.plain).font(PSFont.body(15)).foregroundStyle(PSTheme.textPrimary)
-                        .padding(.horizontal, 14).padding(.vertical, 10).background(PSTheme.hairline, in: Capsule())
+                        .padding(.horizontal, 14).padding(.vertical, 10).psField(Capsule())
                     Button {
                         let text = session.textDraft.trimmingCharacters(in: .whitespaces)
                         guard !text.isEmpty else { return }
@@ -197,7 +197,7 @@ struct TextEditSheet: View {
             }
             TextField(L("New text"), text: $draft)
                 .textFieldStyle(.plain).font(PSFont.body(17)).foregroundStyle(PSTheme.textPrimary)
-                .padding(.horizontal, 14).padding(.vertical, 12).background(PSTheme.hairline, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .padding(.horizontal, 14).padding(.vertical, 12).psField(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .focused($focused)
                 .submitLabel(.done)
                 .onSubmit { onCommit(draft) }
@@ -478,6 +478,8 @@ struct PDFExportSheet: View {
                         .buttonStyle(SecondaryButtonStyle()).listRowBackground(Color.clear)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(AmbientBackground().ignoresSafeArea())
             .navigationTitle(L("Export"))
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("Done")) { dismiss() } } }
             .onAppear { if session.exportedURL == nil { session.export() } }

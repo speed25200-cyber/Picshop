@@ -38,6 +38,12 @@ public extension View {
             .shadow(color: .black.opacity(shadow ? 0.35 : 0), radius: 18, y: 10)
     }
 
+    /// Inset text-field surface: darker well with a faint edge.
+    func psField<S: Shape>(_ shape: S) -> some View {
+        background(shape.fill(Color.black.opacity(0.28)))
+            .overlay(shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
+    }
+
     /// Solid accent fill for primary actions: gradient, top highlight, glow.
     func psAccentFill<S: Shape>(_ shape: S, glow: Bool = true) -> some View {
         background(shape.fill(PSTheme.accentGradient).overlay(shape.fill(LinearGradient(colors: [Color.white.opacity(0.28), .clear], startPoint: .top, endPoint: .center))))

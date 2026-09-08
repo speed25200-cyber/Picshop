@@ -169,7 +169,7 @@ struct VideoTextPanel: View {
             HStack(spacing: 8) {
                 TextField(L("Type or say “ajoute le texte …”"), text: $draft)
                     .textFieldStyle(.plain).font(PSFont.body(15)).foregroundStyle(PSTheme.textPrimary)
-                    .padding(.horizontal, 14).padding(.vertical, 10).background(PSTheme.hairline, in: Capsule())
+                    .padding(.horizontal, 14).padding(.vertical, 10).psField(Capsule())
                     .submitLabel(.done).onSubmit(commit)
                 Button(action: commit) { Image(systemName: "plus").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
                     .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Circle())

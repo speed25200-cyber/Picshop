@@ -287,7 +287,7 @@ struct PrecisePanel: View {
                 HStack(spacing: 8) {
                     TextField(L("Describe what to generate…"), text: $session.generativePrompt)
                         .textFieldStyle(.plain).font(PSFont.body(15)).foregroundStyle(PSTheme.textPrimary)
-                        .padding(.horizontal, 14).padding(.vertical, 9).background(PSTheme.hairline, in: Capsule())
+                        .padding(.horizontal, 14).padding(.vertical, 9).psField(Capsule())
                         .submitLabel(.go).onSubmit { session.generateInSelection(session.generativePrompt) }
                     Button { session.generateInSelection(session.generativePrompt) } label: { Image(systemName: "sparkles").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
                         .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Circle())
@@ -452,7 +452,7 @@ struct TextPanel: View {
                     .font(PSFont.body(15))
                     .foregroundStyle(PSTheme.textPrimary)
                     .padding(.horizontal, 14).padding(.vertical, 9)
-                    .background(PSTheme.hairline, in: Capsule())
+                    .psField(Capsule())
                     .focused($focused)
                     .submitLabel(.done)
                     .onSubmit(commit)
@@ -706,6 +706,8 @@ struct ExportSheet: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(AmbientBackground().ignoresSafeArea())
             .navigationTitle(L("Export"))
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("Done")) { dismiss() } } }
             .onAppear { format = app?.settings.photoExportFormat ?? .heic }
