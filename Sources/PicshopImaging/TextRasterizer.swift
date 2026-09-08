@@ -8,7 +8,23 @@ import PicshopCore
 /// Results are resolution independent: fonts, shadows and paddings scale with
 /// the canvas so previews match exports exactly.
 public enum TextRasterizer {
-    public static func image(for element: TextElement, canvasSize: CGSize) -> CGImage? {
+    /// Rendered size of a text element (including its padding), in canvas pixels.
+    public static func boundingSize(for element: TextElement, canvasSize: CGSize) -> CGSize? {
+        let layout = layout(for: element, canvasSize: canvasSize)
+        guard layout.size.width > 0, layout.size.height > 0 else { return nil }
+        return layout.size
+    }
+
+    private struct Layout {
+        var fontSize: CGFloat
+        var attributes: [NSAttributedString.Key: Any]
+        var attributed: NSAttributedString
+        var bounds: CGRect
+        var padding: CGFloat
+        var size: CGSize
+    }
+
+    private static func layout(for element: TextElement, canvasSize: CGSize) -> Layout {
         let fontSize = max(4, element.relativeSize * canvasSize.height)
         let font = resolvedFont(named: element.fontName, size: fontSize)
         let paragraph = NSMutableParagraphStyle()
@@ -46,6 +62,16 @@ public enum TextRasterizer {
         let bounds = attributed.boundingRect(with: CGSize(width: maxWidth, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil)
         let padding = fontSize * (element.style == .pill || element.style == .banner ? 0.55 : 0.4)
         let size = CGSize(width: ceil(bounds.width + padding * 2), height: ceil(bounds.height + padding * 2))
+        return Layout(fontSize: fontSize, attributes: attributes, attributed: attributed, bounds: bounds, padding: padding, size: size)
+    }
+
+    public static func image(for element: TextElement, canvasSize: CGSize) -> CGImage? {
+        let layout = layout(for: element, canvasSize: canvasSize)
+        let attributes = layout.attributes
+        let attributed = layout.attributed
+        let bounds = layout.bounds
+        let padding = layout.padding
+        let size = layout.size
         guard size.width > 0, size.height > 0, size.width < 16384, size.height < 16384 else { return nil }
 
         let format = UIGraphicsImageRendererFormat()

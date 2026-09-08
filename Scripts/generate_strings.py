@@ -76,6 +76,15 @@ FR = {
     "Insert photo": "Insérer une photo", "Merge PDF": "Fusionner un PDF", "Page numbers": "Numéros de page", "Save as photo": "Enregistrer en photo", "Blank page": "Page blanche", "Move": "Déplacer",
     "Sign with your finger": "Signez avec le doigt", "Share PDF": "Partager le PDF", "Save current page to Photos": "Enregistrer la page dans Photos", "PDF": "PDF",
     "This build was compiled without the Stable Diffusion runtime.": "Cette version a été compilée sans le moteur Stable Diffusion.", "Music Volume": "Volume de la musique", "Text": "Texte", "Erase & cut out": "Gomme & détourage",
+    "Animals": "Animaux", "Banner": "Bandeau", "Clear strokes": "Effacer les traits",
+    "Drag the text to move it, pinch to resize, twist to rotate.": "Glissez le texte pour le déplacer, pincez pour le redimensionner, tournez pour le faire pivoter.",
+    "Hold the mic and say what to change": "Maintenez le micro et dites quoi changer", "Neon": "Néon", "Outline": "Contour", "Page %d of %d": "Page %d sur %d",
+    "People": "Personnes", "Pick a look, then tune its intensity.": "Choisissez un look, puis réglez son intensité.", "Pill": "Pastille", "Plain": "Simple",
+    "Portrait light": "Lumière portrait", "Shadow": "Ombre",
+    "Tap an object to erase it, paint over it, or say “efface le poteau à droite”.": "Touchez un objet pour l'effacer, peignez dessus, ou dites « efface le poteau à droite ».",
+    "Tap the mic and say what to change": "Touchez le micro et dites quoi changer", "Text & logos": "Texte & logos", "Vehicles": "Véhicules",
+    "Voice unavailable — check microphone access in Settings.": "Voix indisponible — vérifiez l'accès au micro dans Réglages.",
+    "animals": "les animaux", "people": "les personnes", "text": "le texte", "vehicles": "les véhicules",
 }
 
 def main():

@@ -9,46 +9,16 @@ struct VideoToolPanel: View {
     let tool: VideoEditorSession.Tool
 
     var body: some View {
-        Group {
-            switch tool {
-            case .cut: CutPanel(session: session)
-            case .speed: SpeedPanel(session: session)
-            case .audio: AudioPanel(session: session)
-            case .looks: VideoLooksPanel(session: session)
-            case .adjust: VideoAdjustPanel(session: session)
-            case .text: VideoTextPanel(session: session)
-            case .transitions: TransitionsPanel(session: session)
-            case .frame: FramePanel(session: session)
-            }
+        switch tool {
+        case .cut: CutPanel(session: session)
+        case .speed: SpeedPanel(session: session)
+        case .audio: AudioPanel(session: session)
+        case .looks: VideoLooksPanel(session: session)
+        case .adjust: VideoAdjustPanel(session: session)
+        case .text: VideoTextPanel(session: session)
+        case .transitions: TransitionsPanel(session: session)
+        case .frame: FramePanel(session: session)
         }
-        .padding(14)
-        .psGlassPanel()
-        .padding(.horizontal, 16)
-    }
-}
-
-private extension VideoEditorSession {
-    func perform(_ intent: EditIntent) { Task { await run(intent) } }
-}
-
-struct PanelChip: View {
-    let title: String
-    var symbol: String? = nil
-    var tint: Color? = nil
-    var isActive = false
-    let action: () -> Void
-
-    var body: some View {
-        Button { Haptics.tap(); action() } label: {
-            HStack(spacing: 6) {
-                if let symbol { Image(systemName: symbol) }
-                Text(title)
-            }
-            .font(PSFont.caption(13)).padding(.horizontal, 12).padding(.vertical, 9)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(isActive || tint != nil ? Color.black : PSTheme.textPrimary)
-        .psGlass(tint: isActive ? PSTheme.accent : tint, interactive: true)
     }
 }
 
@@ -172,7 +142,7 @@ struct VideoAdjustPanel: View {
                     }
                 }
             }
-            ParameterSlider(title: session.selectedParameter.englishName, value: $value, range: session.selectedParameter.range, bipolar: session.selectedParameter.isBipolar) { editing in
+            DialSlider(value: $value, range: session.selectedParameter.range, neutral: 0, label: Locale.current.language.languageCode?.identifier == "fr" ? session.selectedParameter.frenchName : session.selectedParameter.englishName) { editing in
                 if editing { session.beginSliderInteraction(session.selectedParameter.englishName) } else { session.endSliderInteraction() }
             }
             .onChange(of: value) { _, newValue in session.setAdjustment(session.selectedParameter, value: newValue) }

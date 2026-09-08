@@ -20,21 +20,29 @@ public struct PDFEditorView: View {
     }
 
     public var body: some View {
-        ZStack {
-            PSTheme.canvas.ignoresSafeArea()
-            VStack(spacing: 0) {
-                topBar
-                PDFViewerRepresentable(session: session)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .padding(.horizontal, 8)
-                bottomArea
-            }
+        EditorChrome {
+            PDFViewerRepresentable(session: session)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+        } top: {
+            EditorTopBar(
+                title: L("PDF"),
+                subtitle: String(format: L("Page %d of %d"), session.document.currentPageIndex + 1, session.document.pageCount),
+                canUndo: session.history.canUndo, canRedo: session.history.canRedo,
+                onClose: { session.teardown(); dismiss() },
+                onUndo: { session.undo() }, onRedo: { session.redo() },
+                onHelp: { session.showsHelp = true }, onExport: { session.export(); session.showsExport = true })
+        } bottom: {
+            bottomArea
+        }
+        .overlay {
             if session.isProcessing { ProgressHUD(title: session.processingTitle) }
         }
         .overlay(alignment: .top) {
             if let toast = session.toast {
                 ToastView(text: toast.text, systemImage: toast.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill", tint: toast.isError ? PSTheme.danger : PSTheme.success)
-                    .padding(.top, 64).id(toast.id)
+                    .padding(.top, 60).id(toast.id)
             }
         }
         .onAppear { session.configure() }
@@ -56,68 +64,33 @@ public struct PDFEditorView: View {
             }
         }
         .preferredColorScheme(.dark)
-    }
-
-    private var topBar: some View {
-        HStack(spacing: 10) {
-            GlassIconButton("chevron.left", label: L("Close")) { session.teardown(); dismiss() }
-            Spacer()
-            PSGlassContainer(spacing: 8) {
-                HStack(spacing: 8) {
-                    GlassIconButton("arrow.uturn.backward", label: L("Undo")) { session.undo() }.disabled(!session.history.canUndo).opacity(session.history.canUndo ? 1 : 0.4)
-                    GlassIconButton("arrow.uturn.forward", label: L("Redo")) { session.redo() }.disabled(!session.history.canRedo).opacity(session.history.canRedo ? 1 : 0.4)
-                }
-            }
-            Spacer()
-            Text("\(session.document.currentPageIndex + 1) / \(session.document.pageCount)").font(PSFont.mono(12)).foregroundStyle(PSTheme.textSecondary)
-            GlassIconButton("questionmark", label: L("Help")) { session.showsHelp = true }
-            GlassIconButton("square.and.arrow.up", label: L("Export"), tint: PSTheme.accent, isActive: true) { session.export(); session.showsExport = true }
-        }
-        .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 6)
+        .persistentSystemOverlays(.hidden)
     }
 
     private var bottomArea: some View {
-        VStack(spacing: 10) {
-            if let app {
-                CommandFeedbackView(voice: app.voice, transcript: session.transcript, plan: session.lastPlan, clarification: session.pendingClarification,
-                                    showsTranscript: app.settings.showsVoiceTranscript, onChoose: { _ in }, onChooseAll: {}, onCancel: { session.pendingClarification = nil })
-                    .padding(.horizontal, 16)
-            }
+        VStack(spacing: 8) {
             if let tool = session.activeTool {
-                toolPanel(tool).padding(14).psGlassPanel().padding(.horizontal, 16).transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-            ZStack(alignment: .bottom) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 4) {
-                        ForEach(PDFEditorSession.Tool.allCases) { tool in
-                            let isActive = session.activeTool == tool
-                            Button {
-                                Haptics.tap()
-                                withAnimation(.spring(duration: 0.3)) { session.activeTool = isActive ? nil : tool }
-                                if tool == .signature, SignatureStore.currentAsset() == nil { session.showsSignatureSheet = true }
-                                if tool == .image { session.showsImagePicker = true }
-                            } label: {
-                                VStack(spacing: 4) {
-                                    Image(systemName: tool.symbol).font(.system(size: 18, weight: .semibold))
-                                    Text(tool.title).font(PSFont.caption(10))
-                                }
-                                .foregroundStyle(isActive ? Color.black : PSTheme.textPrimary)
-                                .frame(width: 60, height: 54)
-                                .background(isActive ? PSTheme.accent : Color.clear, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                            if tool == .draw { Spacer(minLength: 80) }
-                        }
-                    }
-                    .padding(.horizontal, 10).padding(.vertical, 6)
+                ToolPanelContainer(title: tool.title, symbol: tool.symbol, onClose: { session.activeTool = nil }) {
+                    toolPanel(tool)
                 }
-                .psGlass(shape: AnyShape(RoundedRectangle(cornerRadius: 30, style: .continuous)))
-                .padding(.horizontal, 16)
-                if let app { VoiceOrb(voice: app.voice, isBusy: session.isProcessing).offset(y: -22) }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            if let app {
+                VoiceBar(voice: app.voice, isBusy: session.isProcessing, busyTitle: session.processingTitle,
+                         transcript: session.transcript, plan: session.lastPlan, clarification: session.pendingClarification,
+                         showsTranscript: app.settings.showsVoiceTranscript,
+                         onChoose: { _ in }, onChooseAll: {}, onCancel: { session.pendingClarification = nil })
+            }
+            ToolDock(tools: PDFEditorSession.Tool.allCases, selection: $session.activeTool, title: { $0.title }, symbol: { $0.symbol }) { tool in
+                if tool == .signature, SignatureStore.currentAsset() == nil { session.showsSignatureSheet = true }
+                if tool == .image { session.showsImagePicker = true }
             }
         }
-        .padding(.bottom, 6)
-        .animation(.spring(duration: 0.35), value: session.activeTool)
+        .padding(.horizontal, 10)
+        .padding(.top, 4)
+        .padding(.bottom, 4)
+        .background(PSTheme.canvas.ignoresSafeArea(edges: .bottom))
+        .animation(.spring(duration: 0.32, bounce: 0.12), value: session.activeTool)
     }
 
     @ViewBuilder

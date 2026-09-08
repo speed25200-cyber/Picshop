@@ -84,7 +84,15 @@ public final class PhotoEditorSession {
     public private(set) var preview: CIImage?
     public private(set) var isRendering = false
     public var showsOriginal = false { didSet { requestPreview() } }
-    public var activeTool: Tool?
+    public var activeTool: Tool? { didSet { toolDidChange(from: oldValue) } }
+    // Crop tool state (normalised over the straightened preview).
+    public var cropRect: PSRect?
+    public var cropAspect: AspectPreset = .free
+    public var straightenPreview: Double = 0 { didSet { if straightenPreview != oldValue { requestPreview(interactive: true) } } }
+    /// Brush circle shown at the canvas centre while the size dial is dragged.
+    public var showsBrushPreview = false
+    /// Text layer being dragged / pinched on the canvas.
+    public var manipulatedTextLayerID: UUID?
     public var selectedParameter: AdjustmentParameter = .exposure
     public var brushRadius: Double = 0.03
     public var brushStrokes: [BrushStroke] = []
@@ -184,7 +192,8 @@ public final class PhotoEditorSession {
     public func requestPreview(interactive: Bool = false) {
         guard let renderer else { return }
         renderTask?.cancel()
-        let document = self.document
+        var document = self.document
+        if straightenPreview != 0 { document.apply(.straighten(degrees: straightenPreview)) }
         let showsOriginal = self.showsOriginal
         let side: Double = interactive ? 1280 : 2048
         interactiveRendering = interactive
@@ -285,6 +294,138 @@ public final class PhotoEditorSession {
         }
         history.commit(document, label: "Look Intensity")
         requestPreview(interactive: true)
+    }
+
+    // MARK: - Tool lifecycle
+
+    private func toolDidChange(from previous: Tool?) {
+        guard previous != activeTool else { return }
+        if previous == .erase { commitBrushErase() }
+        if previous == .precise { brushStrokes = []; lassoPoints = [] }
+        if previous == .crop, activeTool != .crop { cancelCrop() }
+        if activeTool == .crop { beginCrop() }
+        manipulatedTextLayerID = nil
+        if activeTool == .text, document.selectedLayer?.isText != true, let last = document.textLayers.last {
+            selectLayer(last.id)
+        }
+    }
+
+    // MARK: - Crop & straighten
+
+    /// Aspect ratio (w/h) of what is currently on screen.
+    public var previewAspectRatio: Double {
+        if let preview, preview.extent.height > 0 { return Double(preview.extent.width / preview.extent.height) }
+        return document.aspectRatio
+    }
+
+    public var isCropping: Bool { cropRect != nil }
+
+    public func beginCrop() {
+        cropAspect = .free
+        cropRect = .unit
+        straightenPreview = 0
+    }
+
+    public func cancelCrop() {
+        cropRect = nil
+        cropAspect = .free
+        straightenPreview = 0
+    }
+
+    /// Largest centred rectangle with the preset's ratio, in normalised coordinates.
+    public func setCropAspect(_ preset: AspectPreset) {
+        cropAspect = preset
+        guard preset != .free else { return }
+        let image = previewAspectRatio
+        let target = preset == .original ? (document.baseLayer?.imageAsset?.pixelSize.aspectRatio ?? image) : (preset.value ?? image)
+        var width = 1.0, height = 1.0
+        if target >= image { height = image / target } else { width = target / image }
+        cropRect = PSRect(x: (1 - width) / 2, y: (1 - height) / 2, width: width, height: height)
+        Haptics.tick()
+    }
+
+    /// Commits the straighten angle and the crop rectangle as edits.
+    public func commitCrop() {
+        guard let rect = cropRect else { return }
+        var document = self.document
+        var labels: [String] = []
+        if abs(straightenPreview) > 0.01 {
+            document.apply(.straighten(degrees: straightenPreview))
+            labels.append(L("Straighten"))
+        }
+        let clamped = rect.clampedToUnit()
+        if clamped.width < 0.999 || clamped.height < 0.999 || clamped.minX > 0.001 || clamped.minY > 0.001 {
+            document.apply(.crop(clamped))
+            labels.append(L("Crop"))
+        }
+        straightenPreview = 0
+        cropRect = nil
+        cropAspect = .free
+        guard !labels.isEmpty else { requestPreview(); return }
+        commit(document, label: labels.joined(separator: " · "))
+        Haptics.success()
+        activeTool = nil
+    }
+
+    /// Quarter-turn and flips apply immediately and reset the crop frame.
+    public func rotateQuarterTurn() {
+        apply(.rotate(degrees: 90), label: L("Rotate"))
+        if isCropping { cropRect = .unit; cropAspect = .free }
+    }
+
+    public func flipHorizontally() {
+        apply(.flip(.horizontal), label: L("Flip"))
+    }
+
+    public func autoLevel() {
+        Task { await run(EditIntent(action: .straighten)) }
+        if isCropping { cropRect = .unit }
+    }
+
+    // MARK: - Text manipulation on the canvas
+
+    /// Normalised bounds of a text layer as rendered.
+    public func textBounds(for layer: Layer) -> PSRect? {
+        guard let element = layer.textElement else { return nil }
+        let canvas = CGSize(width: document.canvasSize.width, height: document.canvasSize.height)
+        guard canvas.width > 0, canvas.height > 0, let size = TextRasterizer.boundingSize(for: element, canvasSize: canvas) else { return nil }
+        let width = Double(size.width / canvas.width), height = Double(size.height / canvas.height)
+        return PSRect(x: element.center.x - width / 2, y: element.center.y - height / 2, width: width, height: height)
+    }
+
+    /// Topmost text layer under a point (with a small touch slop).
+    public func textLayer(at point: PSPoint) -> Layer? {
+        for layer in document.layers.reversed() where layer.isText && layer.isVisible {
+            if let bounds = textBounds(for: layer), bounds.insetBy(dx: -0.02, dy: -0.02).contains(point) { return layer }
+        }
+        return nil
+    }
+
+    public func beginTextInteraction(_ layerID: UUID) {
+        manipulatedTextLayerID = layerID
+        if document.selectedLayerID != layerID { selectLayer(layerID) }
+        history.beginTransaction(label: "Move Text")
+    }
+
+    public func updateManipulatedText(center: PSPoint? = nil, scale: Double? = nil, rotation: Double? = nil) {
+        guard let id = manipulatedTextLayerID else { return }
+        updateText(layerID: id) { element in
+            if let center { element.center = PSPoint(x: center.x.clamped(to: 0...1), y: center.y.clamped(to: 0...1)) }
+            if let scale { element.relativeSize = (element.relativeSize * scale).clamped(to: 0.015...0.4) }
+            if let rotation { element.rotation = rotation }
+        }
+    }
+
+    public func endTextInteraction() {
+        history.endTransaction()
+        manipulatedTextLayerID = nil
+        requestPreview()
+        Haptics.tick()
+    }
+
+    /// Erases every instance of a category (people, text, animals…).
+    public func eraseAll(label: String, phrase: String) {
+        Task { await run(EditIntent(action: .removeObject, target: ObjectTarget(label: label, originalPhrase: phrase, matchesAll: true), scope: .all)) }
     }
 
     public func crop(to aspect: AspectPreset) {

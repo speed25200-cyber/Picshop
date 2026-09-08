@@ -24,8 +24,8 @@ struct MetalCanvasRepresentable: UIViewRepresentable {
     }
 }
 
-/// Zoomable, pannable canvas with tap, brush and press-to-compare gestures
-/// plus candidate highlight overlays.
+/// Zoomable, pannable canvas. Hosts the crop frame, text handles, brush
+/// strokes, selection outlines and candidate highlights.
 struct PhotoCanvasView: View {
     @Bindable var session: PhotoEditorSession
     @State private var zoom: CGFloat = 1
@@ -34,7 +34,13 @@ struct PhotoCanvasView: View {
     @State private var steadyOffset: CGSize = .zero
     @State private var currentStroke: [PSPoint] = []
     @State private var currentStrokeID: UUID?
+    @State private var cursor: CGPoint?
+    @State private var textDragStart: PSPoint?
+    @State private var textRotationStart: Double = 0
+    @State private var textSizeStart: Double = 0
     @GestureState private var isPressing = false
+
+    private let margin: CGFloat = 14
 
     var body: some View {
         GeometryReader { proxy in
@@ -43,14 +49,20 @@ struct PhotoCanvasView: View {
             ZStack {
                 PSTheme.canvas
                 MetalCanvasRepresentable(image: session.preview, overlay: session.selectionPreview, frame: frame)
-                overlays(frame: frame)
+                overlays(frame: frame, container: container)
                     .allowsHitTesting(false)
+                if let rect = session.cropRect {
+                    CropOverlay(frame: frame, rect: Binding(get: { rect }, set: { session.cropRect = $0 }), aspect: cropAspectValue)
+                }
             }
             .contentShape(Rectangle())
-            .gesture(canvasGesture(frame: frame))
+            .gesture(canvasGesture(frame: frame), including: session.isCropping ? .subviews : .all)
             .simultaneousGesture(compareGesture)
+            .simultaneousGesture(textRotationGesture, including: session.activeTool == .text ? .all : .none)
             .onChange(of: isPressing) { _, pressing in
-                if session.activeTool != .erase, session.activeTool != .precise { session.showsOriginal = pressing }
+                if session.activeTool != .erase, session.activeTool != .precise, session.activeTool != .text, !session.isCropping {
+                    session.showsOriginal = pressing
+                }
             }
             .onChange(of: session.zoomRequest) { _, request in
                 guard let request else { return }
@@ -58,17 +70,26 @@ struct PhotoCanvasView: View {
                 session.zoomRequest = nil
             }
             .onChange(of: session.document.canvasSize) { _, _ in resetZoom() }
+            .onChange(of: session.activeTool) { _, tool in if tool == .crop { resetZoom() } }
             .accessibilityLabel(L("Photo canvas"))
             .accessibilityHint(L("Double tap to reset zoom. Pinch to zoom."))
+        }
+        .clipped()
+    }
+
+    private var cropAspectValue: Double? {
+        switch session.cropAspect {
+        case .free: return nil
+        case .original: return session.document.baseLayer?.imageAsset?.pixelSize.aspectRatio
+        default: return session.cropAspect.value
         }
     }
 
     // MARK: Layout
 
     private func imageFrame(in container: CGSize) -> CGRect {
-        let aspect = CGFloat(max(0.05, session.document.aspectRatio))
-        let inset: CGFloat = 12
-        let available = CGSize(width: max(1, container.width - inset * 2), height: max(1, container.height - inset * 2))
+        let aspect = CGFloat(max(0.05, session.previewAspectRatio))
+        let available = CGSize(width: max(1, container.width - margin * 2), height: max(1, container.height - margin * 2))
         var size = CGSize(width: available.width, height: available.width / aspect)
         if size.height > available.height {
             size = CGSize(width: available.height * aspect, height: available.height)
@@ -81,6 +102,14 @@ struct PhotoCanvasView: View {
     private func normalized(_ location: CGPoint, in frame: CGRect) -> PSPoint? {
         guard frame.contains(location) else { return nil }
         return PSPoint(x: Double((location.x - frame.minX) / frame.width), y: Double((location.y - frame.minY) / frame.height))
+    }
+
+    private func viewPoint(_ point: PSPoint, in frame: CGRect) -> CGPoint {
+        CGPoint(x: frame.minX + point.x * frame.width, y: frame.minY + point.y * frame.height)
+    }
+
+    private func viewRect(_ rect: PSRect, in frame: CGRect) -> CGRect {
+        CGRect(x: frame.minX + rect.minX * frame.width, y: frame.minY + rect.minY * frame.height, width: rect.width * frame.width, height: rect.height * frame.height)
     }
 
     private func resetZoom() {
@@ -115,19 +144,53 @@ struct PhotoCanvasView: View {
 
     // MARK: Gestures
 
+    private var paintsWithBrush: Bool {
+        session.activeTool == .erase || (session.activeTool == .precise && (session.preciseMode == .pixelBrush || session.preciseMode == .clone))
+    }
+
     private func canvasGesture(frame: CGRect) -> some Gesture {
         let magnify = MagnifyGesture()
             .onChanged { value in
-                zoom = min(8, max(0.5, steadyZoom * value.magnification))
+                if session.activeTool == .text, let id = session.manipulatedTextLayerID ?? session.document.selectedLayer.flatMap({ $0.isText ? $0.id : nil }) {
+                    if session.manipulatedTextLayerID == nil {
+                        session.beginTextInteraction(id)
+                        textSizeStart = session.document.layers.first(where: { $0.id == id })?.textElement?.relativeSize ?? 0.06
+                    }
+                    if let element = session.document.layers.first(where: { $0.id == id })?.textElement {
+                        let target = textSizeStart * Double(value.magnification)
+                        session.updateManipulatedText(scale: target / max(0.001, element.relativeSize))
+                    }
+                } else {
+                    zoom = min(8, max(0.5, steadyZoom * value.magnification))
+                }
             }
             .onEnded { _ in
-                if zoom < 1 { resetZoom() } else { steadyZoom = zoom }
+                if session.manipulatedTextLayerID != nil {
+                    session.endTextInteraction()
+                } else if zoom < 1 {
+                    resetZoom()
+                } else {
+                    steadyZoom = zoom
+                }
             }
         let drag = DragGesture(minimumDistance: 2)
             .onChanged { value in
-                let paints = session.activeTool == .erase || (session.activeTool == .precise && (session.preciseMode == .pixelBrush || session.preciseMode == .clone))
-                if paints, session.pendingClarification == nil {
-                    if let point = normalized(value.location, in: frame) {
+                let point = normalized(value.location, in: frame)
+                cursor = value.location
+                if session.activeTool == .text, session.pendingClarification == nil {
+                    if textDragStart == nil {
+                        guard let start = normalized(value.startLocation, in: frame), let layer = session.textLayer(at: start) else {
+                            if zoom > 1 { offset = CGSize(width: steadyOffset.width + value.translation.width, height: steadyOffset.height + value.translation.height) }
+                            return
+                        }
+                        textDragStart = layer.textElement?.center
+                        session.beginTextInteraction(layer.id)
+                    }
+                    guard let origin = textDragStart else { return }
+                    let dx = Double(value.translation.width / frame.width), dy = Double(value.translation.height / frame.height)
+                    session.updateManipulatedText(center: PSPoint(x: origin.x + dx, y: origin.y + dy))
+                } else if paintsWithBrush, session.pendingClarification == nil {
+                    if let point {
                         if currentStroke.isEmpty { session.beginPreciseStroke(at: point) }
                         let id = currentStrokeID ?? UUID()
                         currentStrokeID = id
@@ -136,13 +199,17 @@ struct PhotoCanvasView: View {
                         session.brushStrokes = session.brushStrokes.filter { $0.id != id } + [BrushStroke(id: id, points: currentStroke, radius: radius, hardness: session.activeTool == .precise ? 1 : 0.6)]
                     }
                 } else if session.activeTool == .precise, session.preciseMode == .lasso, session.pendingClarification == nil {
-                    if let point = normalized(value.location, in: frame) { session.lassoPoints.append(point) }
+                    if let point { session.lassoPoints.append(point) }
                 } else if zoom > 1 {
                     offset = CGSize(width: steadyOffset.width + value.translation.width, height: steadyOffset.height + value.translation.height)
                 }
             }
             .onEnded { _ in
-                if !currentStroke.isEmpty {
+                cursor = nil
+                if textDragStart != nil {
+                    textDragStart = nil
+                    if session.manipulatedTextLayerID != nil { session.endTextInteraction() }
+                } else if !currentStroke.isEmpty {
                     currentStroke = []
                     currentStrokeID = nil
                     Haptics.tick()
@@ -156,11 +223,30 @@ struct PhotoCanvasView: View {
             .onEnded { value in
                 if let point = normalized(value.location, in: frame) {
                     Haptics.tap()
-                    session.tapCanvas(at: point)
+                    if session.activeTool == .text, let layer = session.textLayer(at: point) {
+                        session.selectLayer(layer.id)
+                    } else {
+                        session.tapCanvas(at: point)
+                    }
                 }
             }
         let doubleTap = TapGesture(count: 2).onEnded { resetZoom() }
         return doubleTap.exclusively(before: tap).simultaneously(with: magnify).simultaneously(with: drag)
+    }
+
+    private var textRotationGesture: some Gesture {
+        RotateGesture(minimumAngleDelta: .degrees(2))
+            .onChanged { value in
+                guard let id = session.manipulatedTextLayerID ?? session.document.selectedLayer.flatMap({ $0.isText ? $0.id : nil }) else { return }
+                if session.manipulatedTextLayerID == nil {
+                    session.beginTextInteraction(id)
+                    textRotationStart = session.document.layers.first(where: { $0.id == id })?.textElement?.rotation ?? 0
+                }
+                session.updateManipulatedText(rotation: textRotationStart + value.rotation.degrees)
+            }
+            .onEnded { _ in
+                if session.manipulatedTextLayerID != nil { session.endTextInteraction() }
+            }
     }
 
     private var compareGesture: some Gesture {
@@ -174,13 +260,20 @@ struct PhotoCanvasView: View {
     // MARK: Overlays
 
     @ViewBuilder
-    private func overlays(frame: CGRect) -> some View {
+    private func overlays(frame: CGRect, container: CGSize) -> some View {
         let strokes = session.brushStrokes
         let candidates = session.candidateOverlays
         let lasso = session.lassoPoints
         let paintColor = session.activeTool == .precise && session.preciseMode == .pixelBrush ? Color(cgColor: session.paintColor.cgColor).opacity(0.9) : PSTheme.danger.opacity(0.45)
         let showsGrid = zoom >= 6 && session.activeTool == .precise
         let cloneSource = session.activeTool == .precise && session.preciseMode == .clone ? session.cloneSource : nil
+        let brushRadiusPoints = CGFloat(session.activeTool == .precise ? session.pixelBrushRadius : session.brushRadius) * max(frame.width, frame.height)
+        let textBoxes: [(UUID, PSRect, Double, Bool)] = session.activeTool == .text
+            ? session.document.textLayers.compactMap { layer -> (UUID, PSRect, Double, Bool)? in
+                guard let bounds = session.textBounds(for: layer) else { return nil }
+                return (layer.id, bounds, layer.textElement?.rotation ?? 0, session.document.selectedLayerID == layer.id)
+            }
+            : []
         Canvas { context, _ in
             // Pixel grid (loupe) when zoomed far in.
             if showsGrid {
@@ -198,13 +291,13 @@ struct PhotoCanvasView: View {
             // Lasso outline.
             if lasso.count > 1 {
                 var path = Path()
-                let points = lasso.map { CGPoint(x: frame.minX + $0.x * frame.width, y: frame.minY + $0.y * frame.height) }
+                let points = lasso.map { viewPoint($0, in: frame) }
                 path.move(to: points[0])
                 for point in points.dropFirst() { path.addLine(to: point) }
                 context.stroke(path, with: .color(PSTheme.accent), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
             }
             if let cloneSource {
-                let center = CGPoint(x: frame.minX + cloneSource.x * frame.width, y: frame.minY + cloneSource.y * frame.height)
+                let center = viewPoint(cloneSource, in: frame)
                 context.stroke(Path(ellipseIn: CGRect(x: center.x - 10, y: center.y - 10, width: 20, height: 20)), with: .color(PSTheme.warning), lineWidth: 2)
                 context.stroke(Path { $0.move(to: CGPoint(x: center.x - 14, y: center.y)); $0.addLine(to: CGPoint(x: center.x + 14, y: center.y)); $0.move(to: CGPoint(x: center.x, y: center.y - 14)); $0.addLine(to: CGPoint(x: center.x, y: center.y + 14)) }, with: .color(PSTheme.warning), lineWidth: 1.5)
             }
@@ -212,7 +305,7 @@ struct PhotoCanvasView: View {
             for stroke in strokes {
                 let radius = CGFloat(stroke.radius) * max(frame.width, frame.height)
                 var path = Path()
-                let points = stroke.points.map { CGPoint(x: frame.minX + $0.x * frame.width, y: frame.minY + $0.y * frame.height) }
+                let points = stroke.points.map { viewPoint($0, in: frame) }
                 if points.count == 1, let first = points.first {
                     path.addEllipse(in: CGRect(x: first.x - radius, y: first.y - radius, width: radius * 2, height: radius * 2))
                     context.fill(path, with: .color(paintColor))
@@ -222,10 +315,36 @@ struct PhotoCanvasView: View {
                     context.stroke(path, with: .color(paintColor), style: StrokeStyle(lineWidth: max(1, radius * 2), lineCap: .round, lineJoin: .round))
                 }
             }
+            // Brush cursor: under the finger while painting, or centred while the size dial is dragged.
+            if paintsWithBrush, let cursorPoint = cursor ?? (session.showsBrushPreview ? CGPoint(x: container.width / 2, y: container.height / 2) : nil) {
+                let r = max(3, brushRadiusPoints)
+                let circle = Path(ellipseIn: CGRect(x: cursorPoint.x - r, y: cursorPoint.y - r, width: r * 2, height: r * 2))
+                context.stroke(circle, with: .color(.white), lineWidth: 1.5)
+                context.stroke(circle, with: .color(.black.opacity(0.5)), style: StrokeStyle(lineWidth: 0.75, dash: [3, 3]))
+            }
+            // Text layer handles.
+            for (_, bounds, rotation, selected) in textBoxes {
+                let rect = viewRect(bounds, in: frame)
+                var path = Path(roundedRect: rect, cornerRadius: 6)
+                if rotation != 0 {
+                    let transform = CGAffineTransform(translationX: rect.midX, y: rect.midY).rotated(by: CGFloat(rotation * .pi / 180)).translatedBy(x: -rect.midX, y: -rect.midY)
+                    path = path.applying(transform)
+                }
+                context.stroke(path, with: .color(selected ? PSTheme.accent : Color.white.opacity(0.5)), style: StrokeStyle(lineWidth: selected ? 2 : 1, dash: selected ? [] : [5, 4]))
+                if selected {
+                    for corner in [CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY), CGPoint(x: rect.minX, y: rect.maxY), CGPoint(x: rect.maxX, y: rect.maxY)] {
+                        var dot = Path(ellipseIn: CGRect(x: corner.x - 5, y: corner.y - 5, width: 10, height: 10))
+                        if rotation != 0 {
+                            dot = dot.applying(CGAffineTransform(translationX: rect.midX, y: rect.midY).rotated(by: CGFloat(rotation * .pi / 180)).translatedBy(x: -rect.midX, y: -rect.midY))
+                        }
+                        context.fill(dot, with: .color(.white))
+                        context.stroke(dot, with: .color(PSTheme.accent), lineWidth: 2)
+                    }
+                }
+            }
             // Candidate boxes.
             for (index, candidate) in candidates.enumerated() {
-                let rect = CGRect(x: frame.minX + candidate.boundingBox.minX * frame.width, y: frame.minY + candidate.boundingBox.minY * frame.height,
-                                  width: candidate.boundingBox.width * frame.width, height: candidate.boundingBox.height * frame.height)
+                let rect = viewRect(candidate.boundingBox, in: frame)
                 let path = Path(roundedRect: rect, cornerRadius: 10)
                 context.stroke(path, with: .color(PSTheme.accent), lineWidth: 2.5)
                 context.fill(path, with: .color(PSTheme.accent.opacity(0.12)))
@@ -237,10 +356,167 @@ struct PhotoCanvasView: View {
         .overlay(alignment: .top) {
             if session.showsOriginal {
                 GlassChip(L("Original"), systemImage: "eye")
-                    .padding(.top, 8)
+                    .padding(.top, 10)
+                    .transition(.opacity)
+            } else if zoom > 1.05 {
+                GlassChip(String(format: "%.1f×", Double(zoom)), systemImage: "plus.magnifyingglass")
+                    .padding(.top, 10)
                     .transition(.opacity)
             }
         }
+        .animation(.easeOut(duration: 0.2), value: session.showsOriginal)
+    }
+}
+
+/// Crop frame with draggable corners and edges, thirds grid and dimmed
+/// surroundings. Coordinates are normalised to the image frame.
+struct CropOverlay: View {
+    let frame: CGRect
+    @Binding var rect: PSRect
+    var aspect: Double?
+
+    private enum Handle: CaseIterable {
+        case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left, move
+    }
+
+    @State private var activeHandle: Handle?
+    @State private var startRect: PSRect = .unit
+    private let minimum = 0.06
+    private let grab: CGFloat = 30
+
+    var body: some View {
+        let crop = viewRect(rect)
+        ZStack {
+            // Dim everything outside the crop.
+            Path { path in
+                path.addRect(CGRect(x: -10_000, y: -10_000, width: 20_000, height: 20_000))
+                path.addRect(crop)
+            }
+            .fill(Color.black.opacity(0.55), style: FillStyle(eoFill: true))
+            .allowsHitTesting(false)
+            // Grid + border.
+            Canvas { context, _ in
+                var grid = Path()
+                for i in 1..<3 {
+                    let x = crop.minX + crop.width * CGFloat(i) / 3
+                    let y = crop.minY + crop.height * CGFloat(i) / 3
+                    grid.move(to: CGPoint(x: x, y: crop.minY)); grid.addLine(to: CGPoint(x: x, y: crop.maxY))
+                    grid.move(to: CGPoint(x: crop.minX, y: y)); grid.addLine(to: CGPoint(x: crop.maxX, y: y))
+                }
+                context.stroke(grid, with: .color(.white.opacity(activeHandle == nil ? 0.35 : 0.7)), lineWidth: 0.5)
+                context.stroke(Path(crop), with: .color(.white), lineWidth: 1.5)
+                // Corner brackets.
+                let arm: CGFloat = 22
+                var corners = Path()
+                corners.move(to: CGPoint(x: crop.minX, y: crop.minY + arm)); corners.addLine(to: CGPoint(x: crop.minX, y: crop.minY)); corners.addLine(to: CGPoint(x: crop.minX + arm, y: crop.minY))
+                corners.move(to: CGPoint(x: crop.maxX - arm, y: crop.minY)); corners.addLine(to: CGPoint(x: crop.maxX, y: crop.minY)); corners.addLine(to: CGPoint(x: crop.maxX, y: crop.minY + arm))
+                corners.move(to: CGPoint(x: crop.maxX, y: crop.maxY - arm)); corners.addLine(to: CGPoint(x: crop.maxX, y: crop.maxY)); corners.addLine(to: CGPoint(x: crop.maxX - arm, y: crop.maxY))
+                corners.move(to: CGPoint(x: crop.minX + arm, y: crop.maxY)); corners.addLine(to: CGPoint(x: crop.minX, y: crop.maxY)); corners.addLine(to: CGPoint(x: crop.minX, y: crop.maxY - arm))
+                context.stroke(corners, with: .color(.white), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                // Edge pips.
+                let pip: CGFloat = 26
+                var pips = Path()
+                pips.move(to: CGPoint(x: crop.midX - pip / 2, y: crop.minY)); pips.addLine(to: CGPoint(x: crop.midX + pip / 2, y: crop.minY))
+                pips.move(to: CGPoint(x: crop.midX - pip / 2, y: crop.maxY)); pips.addLine(to: CGPoint(x: crop.midX + pip / 2, y: crop.maxY))
+                pips.move(to: CGPoint(x: crop.minX, y: crop.midY - pip / 2)); pips.addLine(to: CGPoint(x: crop.minX, y: crop.midY + pip / 2))
+                pips.move(to: CGPoint(x: crop.maxX, y: crop.midY - pip / 2)); pips.addLine(to: CGPoint(x: crop.maxX, y: crop.midY + pip / 2))
+                context.stroke(pips, with: .color(.white), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+            }
+            .allowsHitTesting(false)
+            Color.clear
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 1)
+                        .onChanged { value in
+                            if activeHandle == nil {
+                                activeHandle = handle(at: value.startLocation, crop: crop)
+                                startRect = rect
+                                Haptics.tick()
+                            }
+                            guard let activeHandle else { return }
+                            let dx = Double(value.translation.width / frame.width)
+                            let dy = Double(value.translation.height / frame.height)
+                            rect = resized(startRect, handle: activeHandle, dx: dx, dy: dy)
+                        }
+                        .onEnded { _ in
+                            activeHandle = nil
+                            Haptics.confirm()
+                        }
+                )
+        }
+        .animation(.interactiveSpring, value: rect)
+    }
+
+    private func viewRect(_ r: PSRect) -> CGRect {
+        CGRect(x: frame.minX + r.minX * frame.width, y: frame.minY + r.minY * frame.height, width: r.width * frame.width, height: r.height * frame.height)
+    }
+
+    private func handle(at point: CGPoint, crop: CGRect) -> Handle {
+        let nearLeft = abs(point.x - crop.minX) < grab, nearRight = abs(point.x - crop.maxX) < grab
+        let nearTop = abs(point.y - crop.minY) < grab, nearBottom = abs(point.y - crop.maxY) < grab
+        let insideX = point.x > crop.minX - grab && point.x < crop.maxX + grab
+        let insideY = point.y > crop.minY - grab && point.y < crop.maxY + grab
+        switch (nearLeft, nearRight, nearTop, nearBottom) {
+        case (true, _, true, _): return .topLeft
+        case (_, true, true, _): return .topRight
+        case (true, _, _, true): return .bottomLeft
+        case (_, true, _, true): return .bottomRight
+        case (true, _, _, _) where insideY: return .left
+        case (_, true, _, _) where insideY: return .right
+        case (_, _, true, _) where insideX: return .top
+        case (_, _, _, true) where insideX: return .bottom
+        default: return .move
+        }
+    }
+
+    /// Applies a drag to one handle, keeping the opposite side anchored and
+    /// honouring the locked aspect ratio (in image-pixel terms).
+    private func resized(_ start: PSRect, handle: Handle, dx: Double, dy: Double) -> PSRect {
+        var minX = start.minX, minY = start.minY, maxX = start.maxX, maxY = start.maxY
+        if handle == .move {
+            let w = start.width, h = start.height
+            minX = (start.minX + dx).clamped(to: 0...(1 - w)); minY = (start.minY + dy).clamped(to: 0...(1 - h))
+            return PSRect(x: minX, y: minY, width: w, height: h)
+        }
+        switch handle {
+        case .topLeft: minX += dx; minY += dy
+        case .top: minY += dy
+        case .topRight: maxX += dx; minY += dy
+        case .right: maxX += dx
+        case .bottomRight: maxX += dx; maxY += dy
+        case .bottom: maxY += dy
+        case .bottomLeft: minX += dx; maxY += dy
+        case .left: minX += dx
+        case .move: break
+        }
+        minX = minX.clamped(to: 0...(maxX - minimum)); maxX = maxX.clamped(to: (minX + minimum)...1)
+        minY = minY.clamped(to: 0...(maxY - minimum)); maxY = maxY.clamped(to: (minY + minimum)...1)
+        guard let aspect, frame.width > 0, frame.height > 0 else { return PSRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY) }
+        // Normalised aspect: (w * frameW) / (h * frameH) == aspect.
+        let frameAspect = Double(frame.width / frame.height)
+        let ratio = aspect / frameAspect // height units per width unit
+        var width = maxX - minX, height = maxY - minY
+        let drivesWidth: Bool
+        switch handle {
+        case .left, .right: drivesWidth = true
+        case .top, .bottom: drivesWidth = false
+        default: drivesWidth = abs(dx) >= abs(dy)
+        }
+        if drivesWidth { height = width / ratio } else { width = height * ratio }
+        // Anchor the side opposite to the handle.
+        let anchorsLeft = [Handle.topRight, .right, .bottomRight, .top, .bottom].contains(handle)
+        let anchorsTop = [Handle.bottomLeft, .bottom, .bottomRight, .left, .right].contains(handle)
+        var result = PSRect(x: anchorsLeft ? start.minX : start.maxX - width, y: anchorsTop ? start.minY : start.maxY - height, width: width, height: height)
+        if handle == .top || handle == .bottom { result.origin.x = start.midX - width / 2 }
+        if handle == .left || handle == .right { result.origin.y = start.midY - height / 2 }
+        // Keep inside the image, shrinking if needed.
+        if result.width > 1 || result.height > 1 {
+            let scale = min(1 / result.width, 1 / result.height)
+            result.size = PSSize(width: result.width * scale, height: result.height * scale)
+        }
+        result.origin.x = result.origin.x.clamped(to: 0...(1 - result.width))
+        result.origin.y = result.origin.y.clamped(to: 0...(1 - result.height))
+        return result
     }
 }
 #endif

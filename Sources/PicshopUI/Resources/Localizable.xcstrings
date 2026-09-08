@@ -113,6 +113,22 @@
         }
       }
     },
+    "Animals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animals"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animaux"
+          }
+        }
+      }
+    },
     "Apple's on-device foundation model with guided generation.": {
       "localizations": {
         "en": {
@@ -269,6 +285,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couleur du fond"
+          }
+        }
+      }
+    },
+    "Banner": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Banner"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bandeau"
           }
         }
       }
@@ -433,6 +465,22 @@
         }
       }
     },
+    "Clear strokes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear strokes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer les traits"
+          }
+        }
+      }
+    },
     "Clip volume": {
       "localizations": {
         "en": {
@@ -493,22 +541,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fermer"
-          }
-        }
-      }
-    },
-    "Colour": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Colour"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couleur"
           }
         }
       }
@@ -689,22 +721,6 @@
         }
       }
     },
-    "Detail": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Detail"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Détail"
-          }
-        }
-      }
-    },
     "Deterministic grammar, instant, offline. Always on.": {
       "localizations": {
         "en": {
@@ -785,18 +801,18 @@
         }
       }
     },
-    "Drag the text on the canvas to move it, or say “put the text at the top”.": {
+    "Drag the text to move it, pinch to resize, twist to rotate.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Drag the text on the canvas to move it, or say “put the text at the top”."
+            "value": "Drag the text to move it, pinch to resize, twist to rotate."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Déplacez le texte sur l'image, ou dites « mets le texte en haut »."
+            "value": "Glissez le texte pour le déplacer, pincez pour le redimensionner, tournez pour le faire pivoter."
           }
         }
       }
@@ -893,22 +909,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Durée"
-          }
-        }
-      }
-    },
-    "Effects": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Effects"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Effets"
           }
         }
       }
@@ -1377,6 +1377,22 @@
         }
       }
     },
+    "Hold the mic and say what to change": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold the mic and say what to change"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maintenez le micro et dites quoi changer"
+          }
+        }
+      }
+    },
     "Hold to talk": {
       "localizations": {
         "en": {
@@ -1581,22 +1597,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mise à niveau…"
-          }
-        }
-      }
-    },
-    "Light": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Light"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lumière"
           }
         }
       }
@@ -1825,6 +1825,22 @@
         }
       }
     },
+    "Neon": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neon"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Néon"
+          }
+        }
+      }
+    },
     "Neural models improve object removal and upscaling. Without them, PicShop uses its built-in PatchMatch engine — see docs/MODELS.md to host the archives.": {
       "localizations": {
         "en": {
@@ -1985,6 +2001,22 @@
         }
       }
     },
+    "Outline": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outline"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contour"
+          }
+        }
+      }
+    },
     "Overlay": {
       "localizations": {
         "en": {
@@ -2045,6 +2077,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Page"
+          }
+        }
+      }
+    },
+    "Page %d of %d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page %d of %d"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page %d sur %d"
           }
         }
       }
@@ -2145,6 +2193,22 @@
         }
       }
     },
+    "People": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "People"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personnes"
+          }
+        }
+      }
+    },
     "Photo": {
       "localizations": {
         "en": {
@@ -2209,6 +2273,22 @@
         }
       }
     },
+    "Pick a look, then tune its intensity.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick a look, then tune its intensity."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez un look, puis réglez son intensité."
+          }
+        }
+      }
+    },
     "Pick a photo or video, then just say what you want.": {
       "localizations": {
         "en": {
@@ -2221,6 +2301,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choisissez une photo ou une vidéo, puis dites simplement ce que vous voulez."
+          }
+        }
+      }
+    },
+    "Pill": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pill"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pastille"
           }
         }
       }
@@ -2257,6 +2353,22 @@
         }
       }
     },
+    "Plain": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plain"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Simple"
+          }
+        }
+      }
+    },
     "Play": {
       "localizations": {
         "en": {
@@ -2269,6 +2381,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lecture"
+          }
+        }
+      }
+    },
+    "Portrait light": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portrait light"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lumière portrait"
           }
         }
       }
@@ -2785,22 +2913,6 @@
         }
       }
     },
-    "Say what to erase (“the pole on the right”), tap it, or paint over it.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Say what to erase (“the pole on the right”), tap it, or paint over it."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dites quoi effacer (« le poteau à droite »), touchez-le, ou peignez dessus."
-          }
-        }
-      }
-    },
     "Say what you want to change, for example: remove the dog.": {
       "localizations": {
         "en": {
@@ -2861,6 +2973,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Réglages"
+          }
+        }
+      }
+    },
+    "Shadow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shadow"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ombre"
           }
         }
       }
@@ -2973,22 +3101,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Signature"
-          }
-        }
-      }
-    },
-    "Size": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Size"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Taille"
           }
         }
       }
@@ -3185,38 +3297,6 @@
         }
       }
     },
-    "Style": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Style"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Style"
-          }
-        }
-      }
-    },
-    "Tap a colour to select it. Pinch in for the pixel grid.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tap a colour to select it. Pinch in for the pixel grid."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Touchez une couleur pour la sélectionner. Pincez pour afficher la grille de pixels."
-          }
-        }
-      }
-    },
     "Tap a word to highlight it, or say “surligne « total »”.": {
       "localizations": {
         "en": {
@@ -3229,6 +3309,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Touchez un mot pour le surligner, ou dites « surligne « total » »."
+          }
+        }
+      }
+    },
+    "Tap an object to erase it, paint over it, or say “efface le poteau à droite”.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap an object to erase it, paint over it, or say “efface le poteau à droite”."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez un objet pour l'effacer, peignez dessus, ou dites « efface le poteau à droite »."
+          }
+        }
+      }
+    },
+    "Tap the mic and say what to change": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the mic and say what to change"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez le micro et dites quoi changer"
           }
         }
       }
@@ -3293,6 +3405,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Texte"
+          }
+        }
+      }
+    },
+    "Text & logos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text & logos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Texte & logos"
           }
         }
       }
@@ -3521,6 +3649,22 @@
         }
       }
     },
+    "Vehicles": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vehicles"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Véhicules"
+          }
+        }
+      }
+    },
     "Version": {
       "localizations": {
         "en": {
@@ -3601,6 +3745,22 @@
         }
       }
     },
+    "Voice unavailable — check microphone access in Settings.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice unavailable — check microphone access in Settings."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voix indisponible — vérifiez l'accès au micro dans Réglages."
+          }
+        }
+      }
+    },
     "Volume": {
       "localizations": {
         "en": {
@@ -3629,6 +3789,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "En cours…"
+          }
+        }
+      }
+    },
+    "animals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "animals"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "les animaux"
           }
         }
       }
@@ -3681,6 +3857,38 @@
         }
       }
     },
+    "people": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "people"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "les personnes"
+          }
+        }
+      }
+    },
+    "text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "text"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "le texte"
+          }
+        }
+      }
+    },
     "that": {
       "localizations": {
         "en": {
@@ -3693,6 +3901,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "ça"
+          }
+        }
+      }
+    },
+    "vehicles": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "vehicles"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "les véhicules"
           }
         }
       }
