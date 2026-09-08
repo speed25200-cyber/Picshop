@@ -40,8 +40,7 @@ converted at other resolutions or with different feature names work without code
 
 ## Generative Fill (Stable Diffusion)
 
-Link Apple's [`ml-stable-diffusion`](https://github.com/apple/ml-stable-diffusion) package (already in
-`project.yml`) and host the compiled resources as `sd-generative-fill.zip`: a zip of a folder containing
+Generate the project with `xcodegen generate --spec project-pro.yml` (adds Apple's [`ml-stable-diffusion`](https://github.com/apple/ml-stable-diffusion) package) and host the compiled resources as `sd-generative-fill.zip`: a zip of a folder containing
 `TextEncoder.mlmodelc`, `Unet.mlmodelc` (or `UnetChunk1/2.mlmodelc`), `VAEDecoder.mlmodelc`,
 `VAEEncoder.mlmodelc`, `merges.txt`, `vocab.json` — e.g. the `split_einsum/compiled` folder of
 `apple/coreml-stable-diffusion-2-1-base` on Hugging Face. The engine runs masked image-to-image on a

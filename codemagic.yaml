@@ -1,35 +1,131 @@
 # Codemagic CI/CD for PicShop.
 #
-# Connect the repository in Codemagic (Add application → GitHub → speed25200-cyber/Picshop),
-# then start the "picshop-ios" workflow on this branch. Two modes:
-#   • unsigned (default): builds and tests, uploads an .xcarchive — no Apple credentials needed.
-#   • signed TestFlight: add an App Store Connect integration named "app_store_connect" and a
-#     BUNDLE_ID / TEAM_ID group (see "signing" below); the workflow then archives an .ipa
-#     and publishes it to TestFlight.
+# Workflows
+#   picshop-testflight  — signs with your App Store Connect API key and uploads to TestFlight.
+#                          Requirements in Codemagic (Teams → Integrations):
+#                            • an App Store Connect integration named "app_store_connect"
+#                              (API key with the App Manager role)
+#                          Requirements in App Store Connect:
+#                            • an app record with bundle ID com.picshop.app (the bundle ID and
+#                              provisioning profile are created automatically if missing).
+#   picshop-unsigned    — build + tests + unsigned archive, no Apple credentials needed.
+definitions:
+  env: &env
+    xcode: latest
+    vars:
+      XCODE_PROJECT: "PicShop.xcodeproj"
+      XCODE_SCHEME: "PicShop"
+      BUNDLE_ID: "com.picshop.app"
+      APP_STORE_APPLE_ID: ""          # optional: numeric App Store app id, speeds up build-number lookup
+  cache: &cache
+    cache_paths:
+      - $HOME/Library/Caches/org.swift.swiftpm
+      - $HOME/Library/Developer/Xcode/DerivedData
+  scripts:
+    - &toolchain
+      name: Toolchain
+      script: |
+        set -e
+        xcodebuild -version
+        swift --version
+        brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+    - &generate
+      name: Generate Xcode project
+      script: |
+        set -e
+        xcodegen generate
+        ls -d *.xcodeproj
+    - &tests
+      name: Package tests
+      script: |
+        set -e
+        swift test --filter 'PicshopCoreTests|PicshopIntentTests|PicshopImagingTests'
+    - &resolve
+      name: Resolve dependencies
+      script: |
+        set -e
+        xcodebuild -resolvePackageDependencies -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME"
+    - &simulator
+      name: Build (simulator)
+      script: |
+        set -e
+        xcodebuild build -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" \
+          -destination 'generic/platform=iOS Simulator' -configuration Debug \
+          CODE_SIGNING_ALLOWED=NO -quiet
+
 workflows:
-  picshop-ios:
-    name: PicShop iOS
-    max_build_duration: 90
+  picshop-testflight:
+    name: PicShop → TestFlight
+    max_build_duration: 120
     instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: app_store_connect
     environment:
-      xcode: latest
-      vars:
-        XCODE_PROJECT: "PicShop.xcodeproj"
-        XCODE_SCHEME: "PicShop"
-        BUNDLE_ID: "com.picshop.app"
-      # Uncomment to sign and publish to TestFlight (requires the integration + group in Codemagic):
-      # groups:
-      #   - picshop_signing        # TEAM_ID
-      # ios_signing:
-      #   distribution_type: app_store
-      #   bundle_identifier: com.picshop.app
-    cache:
-      cache_paths:
-        - $HOME/Library/Caches/org.swift.swiftpm
-        - $HOME/Library/Developer/Xcode/DerivedData
+      <<: *env
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.picshop.app
+    cache: *cache
     triggering:
       events:
         - push
+      branch_patterns:
+        - pattern: "*"
+          include: true
+          source: true
+      cancel_previous_builds: true
+    scripts:
+      - *toolchain
+      - *generate
+      - *tests
+      - name: Signing files
+        script: |
+          set -e
+          # Creates the bundle ID / App Store profile in the developer portal when missing.
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          xcode-project use-profiles --project "$XCODE_PROJECT"
+      - name: Build number
+        script: |
+          set -e
+          if [ -n "$APP_STORE_APPLE_ID" ]; then
+            LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo 0)
+          else
+            LATEST=$(app-store-connect get-latest-app-store-build-number --bundle-id "$BUNDLE_ID" 2>/dev/null || echo 0)
+          fi
+          NEXT=$(( ${LATEST:-0} + 1 ))
+          [ "$NEXT" -lt "${BUILD_NUMBER:-1}" ] && NEXT="$BUILD_NUMBER"
+          echo "Build number: $NEXT"
+          agvtool new-version -all "$NEXT"
+      - *resolve
+      - name: Archive & IPA
+        script: |
+          set -e
+          xcode-project build-ipa --project "$XCODE_PROJECT" --scheme "$XCODE_SCHEME" --config Release
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    publishing:
+      email:
+        recipients:
+          - hakik2.ramadani@gmail.com
+        notify:
+          success: true
+          failure: true
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        # beta_groups:
+        #   - Testeurs internes
+
+  picshop-unsigned:
+    name: PicShop (unsigned check)
+    max_build_duration: 90
+    instance_type: mac_mini_m2
+    environment: *env
+    cache: *cache
+    triggering:
+      events:
         - pull_request
       branch_patterns:
         - pattern: "*"
@@ -37,52 +133,21 @@ workflows:
           source: true
       cancel_previous_builds: true
     scripts:
-      - name: Toolchain
+      - *toolchain
+      - *generate
+      - *tests
+      - *resolve
+      - *simulator
+      - name: Archive (unsigned)
         script: |
-          xcodebuild -version
-          swift --version
-          brew install xcodegen || brew upgrade xcodegen || true
-      - name: Generate Xcode project
-        script: |
-          xcodegen generate
-          ls *.xcodeproj
-      - name: Package tests (PicshopCore, PicshopIntent, PicshopImaging)
-        script: |
-          swift build --target PicshopCore --target PicshopIntent --target PicshopImaging
-          swift test --filter 'PicshopCoreTests|PicshopIntentTests|PicshopImagingTests'
-      - name: Resolve app dependencies
-        script: |
-          xcodebuild -resolvePackageDependencies -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME"
-      - name: Build (simulator, unsigned)
-        script: |
-          xcodebuild build \
-            -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" \
-            -destination 'generic/platform=iOS Simulator' \
-            -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO \
-            | xcpretty --color || true
-          # Fail the step if the build failed (xcpretty masks the exit code).
-          xcodebuild build -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" -destination 'generic/platform=iOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO -quiet
-      - name: Archive (device)
-        script: |
-          if [ -n "${TEAM_ID:-}" ] && [ -d "$HOME/Library/MobileDevice/Provisioning Profiles" ]; then
-            # Signed archive + IPA (profiles are installed by ios_signing).
-            xcode-project use-profiles
-            xcode-project build-ipa --project "$XCODE_PROJECT" --scheme "$XCODE_SCHEME"
-          else
-            # Unsigned archive so the build is verified end-to-end for the device SDK.
-            xcodebuild archive \
-              -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" \
-              -destination 'generic/platform=iOS' \
-              -configuration Release \
-              -archivePath build/PicShop.xcarchive \
-              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -quiet
-            (cd build && zip -qr PicShop.xcarchive.zip PicShop.xcarchive)
-          fi
+          set -e
+          xcodebuild archive -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" \
+            -destination 'generic/platform=iOS' -configuration Release \
+            -archivePath build/PicShop.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -quiet
+          (cd build && zip -qr PicShop.xcarchive.zip PicShop.xcarchive)
     artifacts:
-      - build/ios/ipa/*.ipa
       - build/PicShop.xcarchive.zip
-      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
       - /tmp/xcodebuild_logs/*.log
     publishing:
       email:
@@ -91,7 +156,3 @@ workflows:
         notify:
           success: true
           failure: true
-      # Uncomment with the App Store Connect integration to ship to TestFlight:
-      # app_store_connect:
-      #   auth: integration
-      #   submit_to_testflight: true

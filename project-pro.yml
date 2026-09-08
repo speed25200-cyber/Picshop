@@ -1,0 +1,20 @@
+# PicShop "Pro" spec: the standard project plus the optional on-device runtimes.
+#   xcodegen generate --spec project-pro.yml
+include:
+  - project.yml
+packages:
+  MLXSwiftExamples:
+    url: https://github.com/ml-explore/mlx-swift-examples
+    from: "2.25.0"
+  StableDiffusion:
+    url: https://github.com/apple/ml-stable-diffusion
+    from: "1.1.0"
+targets:
+  PicShop:
+    dependencies:
+      - package: MLXSwiftExamples
+        product: MLXLLM
+      - package: MLXSwiftExamples
+        product: MLXLMCommon
+      - package: StableDiffusion
+        product: StableDiffusion

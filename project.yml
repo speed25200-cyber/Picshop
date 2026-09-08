@@ -36,15 +36,8 @@ settings:
 packages:
   PicshopKit:
     path: .
-  # "Pro Brain": optional on-device MLX LLM (Qwen3-4B, 4-bit). Remove this
-  # package (and the App/ProBrain sources) to ship with Apple Intelligence only.
-  MLXSwiftExamples:
-    url: https://github.com/ml-explore/mlx-swift-examples
-    from: "2.25.0"
-  # Generative Fill: Apple's Core ML Stable Diffusion runtime. Optional like MLX.
-  StableDiffusion:
-    url: https://github.com/apple/ml-stable-diffusion
-    from: "1.1.0"
+  # Optional on-device runtimes (MLX "Pro Brain", Stable Diffusion "Generative Fill")
+  # are added by project-pro.yml: `xcodegen generate --spec project-pro.yml`.
 
 targets:
   PicShop:
@@ -84,6 +77,7 @@ targets:
         INFOPLIST_FILE: App/Info.plist
         CODE_SIGN_ENTITLEMENTS: App/Picshop.entitlements
         CODE_SIGN_STYLE: Automatic
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.photography
         ENABLE_PREVIEWS: YES
         OTHER_LDFLAGS: "-ObjC"
     preBuildScripts:
