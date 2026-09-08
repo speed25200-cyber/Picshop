@@ -125,6 +125,15 @@ struct ToolDock<Tool: Identifiable & Hashable>: View {
                 .frame(minWidth: proxy.size.width)
             }
             .scrollBounceBehavior(.basedOnSize)
+            .mask {
+                // Fade the edges when the dock scrolls so the hidden tools are discoverable.
+                let scrolls = CGFloat(tools.count) * 66 + 12 > proxy.size.width
+                HStack(spacing: 0) {
+                    LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing).frame(width: scrolls ? 18 : 0)
+                    Color.black
+                    LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: scrolls ? 18 : 0)
+                }
+            }
         }
         .frame(height: 62)
         .psGlass(shape: AnyShape(RoundedRectangle(cornerRadius: 26, style: .continuous)))
