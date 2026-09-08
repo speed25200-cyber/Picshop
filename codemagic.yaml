@@ -16,7 +16,8 @@ definitions:
       XCODE_PROJECT: "PicShop.xcodeproj"
       XCODE_SCHEME: "PicShop"
       BUNDLE_ID: "com.picshop.app"
-      APP_STORE_APPLE_ID: ""          # optional: numeric App Store app id, speeds up build-number lookup
+      # Optional: add APP_STORE_APPLE_ID (numeric App Store app id) as a Codemagic environment
+      # variable to derive the build number from the latest TestFlight build.
   cache: &cache
     cache_paths:
       - $HOME/Library/Caches/org.swift.swiftpm
@@ -39,9 +40,10 @@ definitions:
       name: Package tests
       script: |
         set -e
-        # Build only the platform-independent modules and their tests (the UI/AV modules are iOS-only).
-        swift build --target PicshopCoreTests --target PicshopIntentTests --target PicshopImagingTests
-        swift test --skip-build --filter 'PicshopCoreTests|PicshopIntentTests|PicshopImagingTests'
+        # Only the platform-independent modules are tested here; the Apple-only modules are
+        # compiled for real by the xcodebuild steps below.
+        swift build --target PicshopCoreTests --target PicshopIntentTests
+        swift test --skip-build --filter 'PicshopCoreTests|PicshopIntentTests'
     - &resolve
       name: Resolve dependencies
       script: |
@@ -89,13 +91,13 @@ workflows:
       - name: Build number
         script: |
           set -e
-          if [ -n "$APP_STORE_APPLE_ID" ]; then
-            LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo 0)
-          else
-            LATEST=$(app-store-connect get-latest-app-store-build-number --bundle-id "$BUNDLE_ID" 2>/dev/null || echo 0)
+          LATEST=0
+          if [ -n "${APP_STORE_APPLE_ID:-}" ]; then
+            LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null | tail -n 1 || true)
           fi
-          NEXT=$(( ${LATEST:-0} + 1 ))
-          [ "$NEXT" -lt "${BUILD_NUMBER:-1}" ] && NEXT="$BUILD_NUMBER"
+          case "$LATEST" in ''|*[!0-9]*) LATEST=0 ;; esac
+          NEXT=$(( LATEST + 1 ))
+          if [ "$NEXT" -lt "${BUILD_NUMBER:-1}" ]; then NEXT="$BUILD_NUMBER"; fi
           echo "Build number: $NEXT"
           agvtool new-version -all "$NEXT"
       - *resolve
