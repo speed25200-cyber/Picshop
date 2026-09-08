@@ -23,7 +23,7 @@ public struct VideoEditorView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 transportBar
                 TimelineView(session: session)
-                    .frame(height: 104)
+                    .frame(height: 118)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .padding(.horizontal, 10)
                     .padding(.bottom, 6)
