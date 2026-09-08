@@ -77,7 +77,7 @@ public final class CoreMLImageModel: @unchecked Sendable {
             return (ImageSupport.rgbaBytes(from: cg), cg.width, cg.height)
         }
         if let array = value.multiArrayValue {
-            return try rgba(from: array)
+            return try rgbaBytes(from: array)
         }
         throw PicshopError.renderFailed("unsupported model output")
     }
@@ -106,7 +106,7 @@ public final class CoreMLImageModel: @unchecked Sendable {
         return MLFeatureValue(multiArray: array)
     }
 
-    private func rgba(from array: MLMultiArray) throws -> (rgba: [UInt8], width: Int, height: Int) {
+    private func rgbaBytes(from array: MLMultiArray) throws -> (rgba: [UInt8], width: Int, height: Int) {
         let shape = array.shape.map { $0.intValue }
         guard shape.count >= 3 else { throw PicshopError.renderFailed("model output shape") }
         let width = shape[shape.count - 1]

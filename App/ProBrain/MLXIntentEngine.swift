@@ -34,9 +34,7 @@ public final class MLXIntentEngine: IntentEngine, @unchecked Sendable {
             let loaded = try await LLMModelFactory.shared.loadContainer(configuration: configuration) { progress in
                 Task { await models.setDownloadProgress(descriptor.id, progress.fractionCompleted) }
             }
-            lock.lock()
-            container = loaded
-            lock.unlock()
+            lock.withLock { container = loaded }
             try await models.markInstalled(descriptor.id)
         } catch {
             PSLog.error("Pro Brain install failed: \(error)", category: .models)
@@ -45,27 +43,28 @@ public final class MLXIntentEngine: IntentEngine, @unchecked Sendable {
     }
 
     private func loadedContainer() async throws -> ModelContainer {
-        lock.lock()
-        if let container {
-            lock.unlock()
-            return container
-        }
-        if let loading {
-            lock.unlock()
-            return try await loading.value
-        }
         let hub = ModelCatalog.descriptor(id: modelID)?.huggingFaceID ?? "mlx-community/Qwen3-4B-4bit"
-        let task = Task<ModelContainer, Error> {
-            try await LLMModelFactory.shared.loadContainer(configuration: ModelConfiguration(id: hub)) { _ in }
+        enum State { case ready(ModelContainer), loading(Task<ModelContainer, Error>) }
+        let state: State = lock.withLock {
+            if let container { return .ready(container) }
+            if let loading { return .loading(loading) }
+            let task = Task<ModelContainer, Error> {
+                try await LLMModelFactory.shared.loadContainer(configuration: ModelConfiguration(id: hub)) { _ in }
+            }
+            loading = task
+            return .loading(task)
         }
-        loading = task
-        lock.unlock()
-        let result = try await task.value
-        lock.lock()
-        container = result
-        loading = nil
-        lock.unlock()
-        return result
+        switch state {
+        case .ready(let container):
+            return container
+        case .loading(let task):
+            let result = try await task.value
+            lock.withLock {
+                container = result
+                loading = nil
+            }
+            return result
+        }
     }
 
     public func plan(_ utterance: String, context: IntentContext) async throws -> EditPlan {

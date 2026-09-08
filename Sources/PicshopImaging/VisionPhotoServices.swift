@@ -47,17 +47,14 @@ public final class VisionPhotoServices: PhotoAIServices, @unchecked Sendable {
             hasher.combine(layer.imageAsset?.relativePath)
             return hasher.finalize()
         } ?? 0
-        cacheLock.lock()
-        if let cached = analysisCache, cached.documentHash == key {
-            cacheLock.unlock()
-            return cached.image
+        let cachedImage: CGImage? = cacheLock.withLock {
+            if let cached = analysisCache, cached.documentHash == key { return cached.image }
+            return nil
         }
-        cacheLock.unlock()
+        if let cachedImage { return cachedImage }
         let image = try await renderer.renderBase(document, options: PhotoRenderer.Options(targetLongestSide: Double(Self.analysisLongestSide), allowExpensiveWork: true))
         guard let cg = ImageSupport.cgImage(from: image) else { throw PicshopError.renderFailed("analysis image") }
-        cacheLock.lock()
-        analysisCache = (key, cg)
-        cacheLock.unlock()
+        cacheLock.withLock { analysisCache = (key, cg) }
         return cg
     }
 

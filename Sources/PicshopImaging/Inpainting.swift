@@ -61,9 +61,7 @@ public final class InpaintingPipeline: @unchecked Sendable {
 
     /// Text-guided fill. Same crop/composite strategy as `fill`, with the generative engine.
     public func generate(image: CIImage, mask: CIImage, boundingBox: PSRect, prompt: String, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> CIImage {
-        lock.lock()
-        let engine = generative
-        lock.unlock()
+        let engine = lock.withLock { generative }
         guard let engine else { throw PicshopError.modelUnavailable("Generative Fill") }
         return try await process(image: image, mask: mask, boundingBox: boundingBox, feather: 0.015, contextMargin: 1.0, workingSide: engine.preferredLongestSide) { rgba, maskBytes, width, height in
             try await engine.generate(rgba: rgba, mask: maskBytes, width: width, height: height, prompt: prompt, progress: progress)
