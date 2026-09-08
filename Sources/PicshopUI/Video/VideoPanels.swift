@@ -22,6 +22,10 @@ struct VideoToolPanel: View {
     }
 }
 
+private extension VideoEditorSession {
+    func perform(_ intent: EditIntent) { Task { await run(intent) } }
+}
+
 struct CutPanel: View {
     @Bindable var session: VideoEditorSession
 
