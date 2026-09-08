@@ -62,12 +62,6 @@ targets:
         product: PicshopSpeech
       - package: PicshopKit
         product: PicshopPDF
-      - package: StableDiffusion
-        product: StableDiffusion
-      - package: MLXSwiftExamples
-        product: MLXLLM
-      - package: MLXSwiftExamples
-        product: MLXLMCommon
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.picshop.app
