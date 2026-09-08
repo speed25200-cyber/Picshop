@@ -52,6 +52,27 @@ public enum RenderContext {
         return pixels[0] > 127
     }()
 
+    /// How `CIContext.createCGImage` moves pixels on this device, probed once with a
+    /// 2×2 image whose top-left pixel is white. Thumbnails, exports and the Vision
+    /// analysis image all go through that call; if it came back rotated or flipped,
+    /// every mask would land on the wrong part of the photo. `cgImage(from:)`
+    /// pre-applies the inverse so the output always matches the canvas.
+    public static let cgImageOrientationFix: CGImagePropertyOrientation = {
+        guard let probe = ImageSupport.grayImage(width: 2, height: 2, bytes: [255, 0, 0, 0]),
+              let out = shared.createCGImage(CIImage(cgImage: probe), from: CGRect(x: 0, y: 0, width: 2, height: 2), format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB()) else { return .up }
+        let gray = ImageSupport.grayBytes(from: out)
+        guard gray.count == 4, let index = gray.indices.max(by: { gray[$0] < gray[$1] }), gray[index] > 127 else { return .up }
+        let fix: CGImagePropertyOrientation
+        switch index {
+        case 1: fix = .upMirrored
+        case 2: fix = .downMirrored
+        case 3: fix = .down
+        default: fix = .up
+        }
+        if fix != .up { PSLog.info("createCGImage moves pixels (white corner at \(index)); compensating with orientation \(fix.rawValue)", category: .imaging) }
+        return fix
+    }()
+
     /// A context tuned for offline exports (no intermediate caching).
     public static let export: CIContext = {
         let options: [CIContextOption: Any] = [
@@ -111,7 +132,12 @@ public enum ImageSupport {
     public static func cgImage(from image: CIImage, context: CIContext = RenderContext.shared) -> CGImage? {
         let extent = image.extent.integral
         guard !extent.isEmpty, extent.width.isFinite, extent.height.isFinite else { return nil }
-        return context.createCGImage(image, from: extent, format: .RGBA8, colorSpace: RenderContext.colorSpace)
+        let fix = RenderContext.cgImageOrientationFix
+        guard fix != .up else { return context.createCGImage(image, from: extent, format: .RGBA8, colorSpace: RenderContext.colorSpace) }
+        // Rotate/flip inside the same extent so the output covers the same pixels.
+        let corrected = image.cropped(to: extent).oriented(fix)
+        let moved = corrected.transformed(by: CGAffineTransform(translationX: extent.minX - corrected.extent.minX, y: extent.minY - corrected.extent.minY))
+        return context.createCGImage(moved, from: extent, format: .RGBA8, colorSpace: RenderContext.colorSpace)
     }
 
     /// Writes a CGImage as JPEG/PNG/HEIC.

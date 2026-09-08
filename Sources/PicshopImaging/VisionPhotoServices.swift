@@ -350,28 +350,78 @@ final class Detector {
         return Instance(index: instance.index, bytes: bytes, box: MaskStore.boundingBox(of: bytes, width: width, height: height), area: remaining)
     }
 
+    /// Connected components of a mask, largest first, ignoring specks.
+    func components(of instance: Instance, minimumArea: Double = 0.0005) -> [Instance] {
+        let count = width * height
+        var labels = [Int32](repeating: 0, count: count)
+        var next: Int32 = 1
+        var areas: [Int32: Int] = [:]
+        var stack: [Int] = []
+        stack.reserveCapacity(4096)
+        for start in 0..<count where instance.bytes[start] > 127 && labels[start] == 0 {
+            let label = next
+            next += 1
+            var area = 0
+            labels[start] = label
+            stack.append(start)
+            while let index = stack.popLast() {
+                area += 1
+                let x = index % width, y = index / width
+                if x > 0 { let n = index - 1; if labels[n] == 0, instance.bytes[n] > 127 { labels[n] = label; stack.append(n) } }
+                if x < width - 1 { let n = index + 1; if labels[n] == 0, instance.bytes[n] > 127 { labels[n] = label; stack.append(n) } }
+                if y > 0 { let n = index - width; if labels[n] == 0, instance.bytes[n] > 127 { labels[n] = label; stack.append(n) } }
+                if y < height - 1 { let n = index + width; if labels[n] == 0, instance.bytes[n] > 127 { labels[n] = label; stack.append(n) } }
+            }
+            areas[label] = area
+        }
+        let threshold = Int(minimumArea * Double(count))
+        let kept = areas.filter { $0.value >= threshold }.sorted { $0.value > $1.value }.prefix(6)
+        return kept.map { label, area in
+            var bytes = [UInt8](repeating: 0, count: count)
+            for index in 0..<count where labels[index] == label { bytes[index] = instance.bytes[index] }
+            return Instance(index: instance.index, bytes: bytes, box: MaskStore.boundingBox(of: bytes, width: width, height: height), area: Double(area) / Double(count))
+        }
+    }
+
     /// Foreground instances scored against a vocabulary entry (or free text via embeddings).
+    ///
+    /// Vision merges an object with the person touching it into one instance. For
+    /// non-person targets the person is cut out, the remainder is split into
+    /// connected pieces and each piece is classified on its own, so "the laptop"
+    /// ends up being the laptop and not the desk, the papers or the man behind it.
     func instances(matching entry: ObjectVocabulary.Entry?, freeText: String?, near point: PSPoint? = nil) throws -> [ObjectCandidate] {
         let instances = try instanceList()
         var candidates: [ObjectCandidate] = []
         let excludesPeople = entry?.category != .person
         for original in instances {
             if let point, !original.box.insetBy(dx: -0.03, dy: -0.03).contains(point) { continue }
-            let crop = croppedImage(masked: original)
-            let classifications = try classify(crop)
-            var score: Double = point != nil ? 0.9 : 0
-            var label = entry?.label ?? (freeText ?? "object")
-            if let entry {
-                score = max(score, termScore(classifications, terms: entry.classifierTerms))
-            } else if let freeText {
-                let semantic = semanticScore(classifications, phrase: freeText)
-                score = max(score, semantic.score)
-                if semantic.score > 0.3, let best = semantic.identifier { label = freeText.isEmpty ? best : freeText }
+            let refined = excludesPeople ? withoutPeople(original, keeping: point) : original
+            let touchedPerson = refined.area < original.area * 0.999
+            let pieces: [Instance] = touchedPerson ? components(of: refined) : [refined]
+            var scored: [(instance: Instance, score: Double, label: String)] = []
+            for piece in pieces {
+                if let point, pieces.count > 1, !piece.box.insetBy(dx: -0.03, dy: -0.03).contains(point) { continue }
+                let classifications = try classify(croppedImage(masked: piece))
+                var score: Double = point != nil ? 0.9 : 0
+                var label = entry?.label ?? (freeText ?? "object")
+                if let entry {
+                    score = max(score, termScore(classifications, terms: entry.classifierTerms))
+                } else if let freeText {
+                    let semantic = semanticScore(classifications, phrase: freeText)
+                    score = max(score, semantic.score)
+                    if semantic.score > 0.3, let best = semantic.identifier { label = freeText.isEmpty ? best : freeText }
+                }
+                scored.append((piece, score, label))
             }
-            if point == nil, score < CandidateSelector.minimumConfidence { continue }
-            let instance = excludesPeople ? withoutPeople(original, keeping: point) : original
-            let path = try saveInstanceMask(instance)
-            candidates.append(ObjectCandidate(label: label, boundingBox: instance.box, confidence: min(1, score), instanceIndex: instance.index, maskPath: path))
+            var accepted = scored.filter { point != nil || $0.score >= CandidateSelector.minimumConfidence }
+            if accepted.isEmpty, touchedPerson, entry != nil, let best = scored.max(by: { $0.score < $1.score }), best.score >= CandidateSelector.minimumConfidence * 0.6 {
+                // The pieces are small once the person is gone; keep the most plausible one.
+                accepted = [best]
+            }
+            for item in accepted {
+                let path = try saveInstanceMask(item.instance)
+                candidates.append(ObjectCandidate(label: item.label, boundingBox: item.instance.box, confidence: min(1, item.score), instanceIndex: item.instance.index, maskPath: path))
+            }
         }
         return candidates
     }
