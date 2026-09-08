@@ -1,7 +1,7 @@
 # Codemagic CI/CD for PicShop.
 #
 # Workflows
-#   picshop-testflight  — signs with your App Store Connect API key and uploads to TestFlight.
+#   picshop-testflight  — Pro build (MLX Pro Brain + Stable Diffusion) signed with your App Store Connect API key, uploaded to TestFlight.
 #                          Requirements in Codemagic (Teams → Integrations → Developer Portal):
 #                            • an App Store Connect integration named "PetMind ASC API"
 #                              (API key with the App Manager role)
@@ -45,10 +45,10 @@ definitions:
         python3 Scripts/convert_models.py all --out App/Models || true
         ls -la App/Models || true
     - &generate
-      name: Generate Xcode project
+      name: Generate Xcode project (Pro: MLX + Stable Diffusion runtimes)
       script: |
         set -e
-        xcodegen generate
+        xcodegen generate --spec project-pro.yml
         ls -d *.xcodeproj
     - &tests
       name: Package tests
