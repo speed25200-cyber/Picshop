@@ -98,4 +98,6 @@ Hold the orb to compare before/after; long-press the canvas does the same.
 
 | Enregistre cette version sous brouillon · Reviens à la version brouillon · Save this version as v1 | Named versions (any editor) |
 | Décris la photo · What do you see | Spoken description of the photo |
+| Enregistre ce style sous plage · Applique le style plage · Applique les mêmes réglages que la dernière photo | Named styles: the tone of one photo replayed on another |
+| Qu'est-ce que j'ai modifié ? · What did I change | Spoken recap of the edits (any editor) |
 | Lis la page · De quoi parle cette page · Read this page | Reads a PDF page aloud (OCR on scans) |

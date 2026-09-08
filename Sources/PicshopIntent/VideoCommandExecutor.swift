@@ -311,6 +311,7 @@ public struct VideoCommandExecutor: Sendable {
         case .confirm: return (timeline, .effect(.confirm, label: ""))
         case .cancel: return (timeline, .effect(.cancel, label: ""))
         case .saveVersion: return (timeline, .effect(.message("version:save:" + (intent.text ?? "")), label: ""))
+        case .summarizeEdits: return (timeline, .effect(.message("summary"), label: ""))
         case .restoreVersion: return (timeline, .effect(.message("version:restore:" + (intent.text ?? "")), label: ""))
         case .unknown: return (timeline, ExecutionResult(outcome: .info(message: Replies.reply(for: intent, language: language))))
         default: return (timeline, .failed(PicshopError.unsupportedOperation(intent.summary).message))

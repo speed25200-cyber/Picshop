@@ -175,6 +175,7 @@ public final class PhotoEditorSession {
     public func save() {
         let project = Project(id: projectID, content: .photo(document), createdAt: document.createdAt, modifiedAt: Date())
         app.library.save(project)
+        app.styles.rememberLast(currentStyle)
         if let renderer {
             let store = app.store
             let document = self.document
@@ -867,6 +868,10 @@ public final class PhotoEditorSession {
                 zoomRequest = ZoomRequest(amount: amount, target: target)
             case .message(let message) where message.hasPrefix("version:"):
                 handleVersionEffect(message)
+            case .message(let message) where message.hasPrefix("style:"):
+                handleStyleEffect(message)
+            case .message("summary"):
+                summarizeEdits(labels: history.past.map(\.label))
             case .message(let message) where message.hasPrefix("speak:"):
                 VoiceFeedback.shared.speak(String(message.dropFirst(6)), language: language == .french ? "fr" : "en", force: true)
             default: break
@@ -897,6 +902,71 @@ public final class PhotoEditorSession {
             }
             restoreVersion(match.state, label: String(format: L("Version “%@”"), match.name))
         }
+    }
+
+    // MARK: - Styles
+
+    /// The tonal recipe of the current photo.
+    public var currentStyle: [EditOperation.Kind] {
+        StyleLibrary.recipe(from: document.baseLayer?.edits ?? EditStack())
+    }
+
+    func handleStyleEffect(_ message: String) {
+        let parts = message.split(separator: ":", maxSplits: 2).map(String.init)
+        guard parts.count >= 2 else { return }
+        let requested = parts.count > 2 ? parts[2].trimmingCharacters(in: .whitespaces) : ""
+        let french = language == .french
+        if parts[1] == "save" {
+            let name = requested.isEmpty ? String(format: L("Style %d"), app.styles.named.count + 1) : requested
+            guard app.styles.save(currentStyle, as: name) else {
+                showToast(french ? "Aucun réglage à enregistrer : ajuste d'abord la photo." : "Nothing to save yet: adjust the photo first.", isError: true)
+                return
+            }
+            showToast(String(format: L("Style “%@” saved"), name))
+            Haptics.success()
+        } else if parts[1] == "apply" {
+            let style: StyleLibrary.Style?
+            if requested.isEmpty || requested == StyleLibrary.lastName {
+                style = app.styles.style(named: StyleLibrary.lastName) ?? app.styles.named.first
+            } else {
+                style = app.styles.style(named: requested)
+            }
+            guard let style else {
+                showToast(app.styles.styles.isEmpty ? L("No saved style yet. Say “save this style as …”.") : String(format: L("No style named “%@”"), requested), isError: true)
+                return
+            }
+            applyStyle(style)
+        }
+    }
+
+    public func applyStyle(_ style: StyleLibrary.Style) {
+        var document = self.document
+        for kind in style.operations { document.apply(kind) }
+        let label = style.id == StyleLibrary.lastName ? L("Last photo's style") : String(format: L("Style “%@”"), style.name)
+        commit(document, label: label)
+        showToast(label)
+        Haptics.success()
+    }
+
+    /// Spoken and shown recap of the edits made so far.
+    func summarizeEdits(labels: [String]) {
+        let french = language == .french
+        let meaningful = labels.filter { !$0.isEmpty && $0 != "Select" }
+        guard !meaningful.isEmpty else {
+            let text = french ? "Tu n'as encore rien modifié." : "You haven't changed anything yet."
+            showToast(text)
+            VoiceFeedback.shared.speak(text, language: french ? "fr" : "en", force: true)
+            return
+        }
+        var counts: [(String, Int)] = []
+        for label in meaningful {
+            if let index = counts.firstIndex(where: { $0.0 == label }) { counts[index].1 += 1 } else { counts.append((label, 1)) }
+        }
+        let parts = counts.suffix(8).map { $0.1 > 1 ? "\($0.0) ×\($0.1)" : $0.0 }
+        let list = parts.joined(separator: ", ")
+        let text = french ? "\(meaningful.count) modification\(meaningful.count > 1 ? "s" : "") : \(list)." : "\(meaningful.count) edit\(meaningful.count > 1 ? "s" : ""): \(list)."
+        showToast(text)
+        VoiceFeedback.shared.speak(text, language: french ? "fr" : "en", force: true)
     }
 
     private func restoreVersion(_ state: PhotoDocument, label: String) {

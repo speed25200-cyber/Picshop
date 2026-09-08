@@ -1761,6 +1761,22 @@
         }
       }
     },
+    "Last photo's style": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last photo's style"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Style de la dernière photo"
+          }
+        }
+      }
+    },
     "Layers": {
       "localizations": {
         "en": {
@@ -2177,6 +2193,22 @@
         }
       }
     },
+    "No saved style yet. Say “save this style as …”.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No saved style yet. Say “save this style as …”."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun style enregistré. Dites « enregistre ce style sous … »."
+          }
+        }
+      }
+    },
     "No saved version yet. Say “save this version as …”.": {
       "localizations": {
         "en": {
@@ -2189,6 +2221,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aucune version enregistrée. Dites « enregistre cette version sous … »."
+          }
+        }
+      }
+    },
+    "No style named “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No style named “%@”"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun style nommé « %@ »"
           }
         }
       }
@@ -3837,6 +3885,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Redresser"
+          }
+        }
+      }
+    },
+    "Style %d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Style %d"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Style %d"
+          }
+        }
+      }
+    },
+    "Style “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Style “%@”"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Style « %@ »"
+          }
+        }
+      }
+    },
+    "Style “%@” saved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Style “%@” saved"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Style « %@ » enregistré"
           }
         }
       }

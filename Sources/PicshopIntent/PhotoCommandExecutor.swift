@@ -295,6 +295,9 @@ public struct PhotoCommandExecutor: Sendable {
                 return (document, .failed(errorMessage(error)))
             }
         case .saveVersion: return (document, .effect(.message("version:save:" + (intent.text ?? "")), label: ""))
+        case .saveStyle: return (document, .effect(.message("style:save:" + (intent.text ?? "")), label: ""))
+        case .applyStyle: return (document, .effect(.message("style:apply:" + (intent.text ?? "")), label: ""))
+        case .summarizeEdits: return (document, .effect(.message("summary"), label: ""))
         case .restoreVersion: return (document, .effect(.message("version:restore:" + (intent.text ?? "")), label: ""))
         case .export: return (document, .effect(.export, label: ""))
         case .share: return (document, .effect(.share, label: ""))

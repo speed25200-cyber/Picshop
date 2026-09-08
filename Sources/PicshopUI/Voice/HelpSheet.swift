@@ -24,7 +24,7 @@ struct HelpSheet: View {
         if mode == .video {
             result.insert((L("Video"), ["Coupe ici", "Coupe les 3 premières secondes", "Delete from 5 to 12 seconds", "Accélère x2", "Slow motion", "Coupe le son", "Ajoute un fondu entre tous les clips", "Extract this frame", "Stabilise la vidéo", "Va à 10 secondes"]), at: 0)
         }
-        result.append((L("Control"), ["Annule", "Redo", "Montre l'original", "Zoom sur le visage", "Enregistre", "Reviens à l'original"]))
+        result.append((L("Control"), ["Annule", "Redo", "Montre l'original", "Zoom sur le visage", "Enregistre", "Reviens à l'original", "Enregistre cette version sous brouillon", "Reviens à la version brouillon", "Qu'est-ce que j'ai modifié ?", "Décris la photo", "Enregistre ce style sous plage", "Applique le même style que la dernière photo"]))
         return result
     }
 

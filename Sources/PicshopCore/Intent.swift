@@ -87,6 +87,11 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     /// Named snapshots of the whole document ("enregistre cette version sous v1").
     case saveVersion
     case restoreVersion
+    /// Named styles: the adjustments, look and tone of one photo, reusable on any other.
+    case saveStyle
+    case applyStyle
+    /// Spoken recap of what was edited.
+    case summarizeEdits
 
     public var isVideoOnly: Bool {
         switch self {
@@ -101,7 +106,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
 
     public var isPhotoOnly: Bool {
         switch self {
-        case .selectLayer, .duplicateLayer, .deleteLayer, .upscale, .relight, .generativeFill, .recolor, .describe: return true
+        case .selectLayer, .duplicateLayer, .deleteLayer, .upscale, .relight, .generativeFill, .recolor, .describe, .saveStyle, .applyStyle: return true
         default: return false
         }
     }
@@ -118,7 +123,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
 
     public var isMeta: Bool {
         switch self {
-        case .chooseCandidate, .confirm, .cancel, .help, .unknown, .undo, .redo, .compare, .zoom, .play, .pause, .seek, .saveVersion, .restoreVersion: return true
+        case .chooseCandidate, .confirm, .cancel, .help, .unknown, .undo, .redo, .compare, .zoom, .play, .pause, .seek, .saveVersion, .restoreVersion, .summarizeEdits: return true
         default: return false
         }
     }
@@ -373,6 +378,9 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .readPage: return "Read page"
         case .saveVersion: return "Save version “\(text ?? "")”"
         case .restoreVersion: return "Restore version “\(text ?? "")”"
+        case .saveStyle: return "Save style “\(text ?? "")”"
+        case .applyStyle: return "Apply style “\(text ?? "")”"
+        case .summarizeEdits: return "Summarize edits"
         }
     }
 }

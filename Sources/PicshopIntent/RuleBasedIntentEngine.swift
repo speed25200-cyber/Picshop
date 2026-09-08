@@ -55,6 +55,8 @@ public struct RuleBasedIntentEngine: IntentEngine {
     // MARK: - Segment dispatch
 
     func parseSegment(_ u: NormalizedUtterance, original: String, context: IntentContext) -> [EditIntent] {
+        if let summary = parseSummary(u) { return [summary] }
+        if context.mode == .photo, let style = parseStyle(u, original: original) { return [style] }
         if let version = parseVersion(u, original: original) { return [version] }
         if let meta = parseMeta(u, context: context) { return [meta] }
         if context.mode == .photo, let describe = parseDescribe(u) { return [describe] }
@@ -505,6 +507,46 @@ public struct RuleBasedIntentEngine: IntentEngine {
             return EditIntent(action: .saveVersion, text: value.isEmpty ? nil : value)
         }
         return nil
+    }
+
+    static let saveStylePhrases = ["enregistre ce style", "sauvegarde ce style", "garde ce style", "memorise ce style", "enregistre ce look", "sauvegarde ce look", "garde ce look", "enregistre mon style", "cree un style", "nouveau style", "enregistre ces reglages", "sauvegarde ces reglages", "garde ces reglages",
+                                   "save this style", "save the style", "save this look", "save the look", "save my style", "create a style", "new style", "save these settings", "save these edits", "remember this look", "remember this style"]
+    static let applyStylePhrases = ["applique le style", "applique mon style", "mets le style", "utilise le style", "applique le look", "mets le look", "utilise mon style", "reprends le style", "applique les reglages", "applique le preset", "applique mon preset",
+                                    "apply the style", "apply my style", "apply style", "use the style", "use my style", "apply the look", "apply my look", "use the look", "apply the preset", "apply my preset", "apply the settings"]
+    static let lastPhotoPhrases = ["derniere photo", "photo precedente", "derniere image", "image precedente", "derniere fois", "dernier projet", "comme avant", "comme la derniere", "comme la precedente",
+                                   "last photo", "previous photo", "last image", "previous image", "last time", "last project", "like before", "like the last one", "like the previous one", "same as last"]
+
+    /// "enregistre ce style sous plage" / "applique le style plage" / "applique les mêmes réglages que la dernière photo".
+    func parseStyle(_ u: NormalizedUtterance, original: String) -> EditIntent? {
+        let fillers: Set<String> = ["sous", "as", "comme", "nomme", "nommee", "named", "called", "appele", "appelee", "le", "la", "the", "nom", "name", "en", "in", "de", "of", "a", "to", "mon", "ma", "my", "que", "than", "sur", "on", "cette", "this", "photo", "image", "picture"]
+        func name(after phrases: [String]) -> String {
+            if let quoted = extractQuoted(from: original) { return quoted }
+            var words = remainder(of: u, after: phrases)?.split(separator: " ").map(String.init) ?? []
+            while let first = words.first, fillers.contains(first) { words.removeFirst() }
+            while let last = words.last, fillers.contains(last) { words.removeLast() }
+            let joined = words.joined(separator: " ")
+            return originalSubstring(matching: joined, in: original) ?? joined
+        }
+        if u.contains(Self.lastPhotoPhrases), u.contains(["meme", "memes", "same", "applique", "apply", "reprends", "copie", "copy", "style", "look", "reglages", "settings", "edits", "retouche", "retouches"]) {
+            return EditIntent(action: .applyStyle, text: "last")
+        }
+        if u.contains(Self.applyStylePhrases) {
+            let value = name(after: Self.applyStylePhrases)
+            return EditIntent(action: .applyStyle, text: value.isEmpty ? nil : value, confidence: value.isEmpty ? 0.6 : 1)
+        }
+        if u.contains(Self.saveStylePhrases) {
+            let value = name(after: Self.saveStylePhrases)
+            return EditIntent(action: .saveStyle, text: value.isEmpty ? nil : value)
+        }
+        return nil
+    }
+
+    /// "qu'est-ce que j'ai modifié ?", "what did I change", "résume mes modifications".
+    func parseSummary(_ u: NormalizedUtterance) -> EditIntent? {
+        let phrases = ["qu est ce que j ai modifie", "qu est ce que j ai fait", "qu est ce que j ai change", "qu ai je modifie", "qu ai je fait", "resume mes modifications", "resume les modifications", "liste les modifications", "liste mes modifications", "mes modifications", "historique des modifications", "montre l historique", "recapitule", "recap",
+                       "what did i change", "what have i changed", "what did i do", "what have i done", "list my edits", "list the edits", "summarize my edits", "summarise my edits", "show the history", "edit history", "what changed", "recap my edits"]
+        guard u.contains(phrases) else { return nil }
+        return EditIntent(action: .summarizeEdits)
     }
 
     /// "décris la photo", "qu'est-ce qu'il y a sur cette image", "what do you see".

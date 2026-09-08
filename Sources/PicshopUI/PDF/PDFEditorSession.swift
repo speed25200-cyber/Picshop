@@ -349,6 +349,7 @@ public final class PDFEditorSession {
                 else if message == "image" { showsImagePicker = true }
                 else if message.hasPrefix("find:") { searchQuery = String(message.dropFirst(5)) }
                 else if message.hasPrefix("version:") { handleVersionEffect(message) }
+                else if message == "summary" { summarizeEdits(labels: history.past.map(\.label)) }
                 else if message.hasPrefix("read:"), let index = Int(message.dropFirst(5)) { readPage(index) }
             case .cancel: pendingClarification = nil
             default: break
@@ -403,6 +404,28 @@ public final class PDFEditorSession {
             }
             restoreVersion(match.state, label: String(format: L("Version “%@”"), match.name))
         }
+    }
+
+
+    /// Spoken and shown recap of the edits made so far.
+    func summarizeEdits(labels: [String]) {
+        let french = language == .french
+        let meaningful = labels.filter { !$0.isEmpty && $0 != "Select" }
+        guard !meaningful.isEmpty else {
+            let text = french ? "Tu n'as encore rien modifié." : "You haven't changed anything yet."
+            showToast(text)
+            VoiceFeedback.shared.speak(text, language: french ? "fr" : "en", force: true)
+            return
+        }
+        var counts: [(String, Int)] = []
+        for label in meaningful {
+            if let index = counts.firstIndex(where: { $0.0 == label }) { counts[index].1 += 1 } else { counts.append((label, 1)) }
+        }
+        let parts = counts.suffix(8).map { $0.1 > 1 ? "\($0.0) ×\($0.1)" : $0.0 }
+        let list = parts.joined(separator: ", ")
+        let text = french ? "\(meaningful.count) modification\(meaningful.count > 1 ? "s" : "") : \(list)." : "\(meaningful.count) edit\(meaningful.count > 1 ? "s" : ""): \(list)."
+        showToast(text)
+        VoiceFeedback.shared.speak(text, language: french ? "fr" : "en", force: true)
     }
 
     private func restoreVersion(_ state: PDFDocumentModel, label: String) {

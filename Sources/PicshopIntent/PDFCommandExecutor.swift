@@ -208,6 +208,7 @@ public struct PDFCommandExecutor: Sendable {
             let index = document.resolvePageIndex(intent.index) ?? current
             return (document, ExecutionResult(outcome: .info(message: fr ? "Lecture de la page \(index + 1)…" : "Reading page \(index + 1)…"), effects: [.message("read:\(index)")]))
         case .saveVersion: return (document, .effect(.message("version:save:" + (intent.text ?? "")), label: ""))
+        case .summarizeEdits: return (document, .effect(.message("summary"), label: ""))
         case .restoreVersion: return (document, .effect(.message("version:restore:" + (intent.text ?? "")), label: ""))
         case .unknown: return (document, ExecutionResult(outcome: .info(message: Replies.reply(for: intent, language: language))))
         default: return (document, .failed(PicshopError.unsupportedOperation(intent.summary).message))

@@ -91,6 +91,11 @@ public enum Replies {
         case .readPage: return fr ? "Je lis la page." : "Reading the page."
         case .saveVersion: return fr ? "Version « \(intent.text ?? "") » enregistrée." : "Saved version “\(intent.text ?? "")”."
         case .restoreVersion: return fr ? "Je reviens à la version « \(intent.text ?? "") »." : "Back to version “\(intent.text ?? "")”."
+        case .saveStyle: return fr ? "Style « \(intent.text ?? "") » enregistré." : "Saved the “\(intent.text ?? "")” style."
+        case .applyStyle:
+            if intent.text == "last" { return fr ? "J'applique le style de la dernière photo." : "Applying the last photo's style." }
+            return fr ? "J'applique le style « \(intent.text ?? "") »." : "Applying the “\(intent.text ?? "")” style."
+        case .summarizeEdits: return fr ? "Voici ce que tu as modifié." : "Here is what you changed."
         case .unknown: return fr ? "Je n'ai pas compris. Tu peux reformuler ?" : "I didn't catch that. Could you rephrase?"
         }
     }
