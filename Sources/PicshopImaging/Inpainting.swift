@@ -138,13 +138,19 @@ public final class InpaintingPipeline: @unchecked Sendable {
         }
         filled = filled.transformed(by: CGAffineTransform(translationX: crop.minX, y: crop.minY)).cropped(to: crop)
 
-        // Blend only inside the (softened) mask so untouched pixels stay pristine at full resolution.
-        let featherRadius = max(1.5, feather * max(extent.width, extent.height) * 0.35)
-        let softMask = mask.cropped(to: crop).clampedToExtent().applyingGaussianBlur(sigma: featherRadius).cropped(to: crop)
-        let dilatedMask = CIFilter.morphologyMaximum()
-        dilatedMask.inputImage = softMask
-        dilatedMask.radius = Float(featherRadius)
-        let blendMask = dilatedMask.outputImage?.cropped(to: crop) ?? softMask
+        // Composite at full resolution: the synthesised pixels replace the hole (grown by the
+        // same amount the worker saw), everything else stays the untouched original. The seam is
+        // anti-aliased by a sub-3px blur only — wide feathers would blend a resampled copy of the
+        // surroundings back over sharp edges and read as a smear.
+        let growPixels = max(2, CGFloat(max(1, workWidth / 200)) / workScale)
+        let hardMask = CIFilter.colorThreshold()
+        hardMask.inputImage = mask.cropped(to: crop)
+        hardMask.threshold = 0.4
+        let grown = CIFilter.morphologyMaximum()
+        grown.inputImage = hardMask.outputImage?.clampedToExtent() ?? mask.cropped(to: crop)
+        grown.radius = Float(growPixels)
+        let seam = min(2.5, max(0.8, feather * max(extent.width, extent.height) * 0.05))
+        let blendMask = (grown.outputImage ?? mask).cropped(to: crop).clampedToExtent().applyingGaussianBlur(sigma: seam).cropped(to: crop)
         let blended = AdjustmentPipeline.blendWithMask(foreground: filled, background: image.cropped(to: crop), mask: blendMask)
         return blended.composited(over: image).cropped(to: extent)
     }
@@ -160,7 +166,7 @@ public struct PatchMatchInpainter: Inpainter {
     public let patchRadius: Int
     public let iterationsPerLevel: [Int]
 
-    public init(preferredLongestSide: Int = 768, patchRadius: Int = 3, iterationsPerLevel: [Int] = [6, 5, 4, 3, 3, 2]) {
+    public init(preferredLongestSide: Int = 1024, patchRadius: Int = 3, iterationsPerLevel: [Int] = [6, 5, 4, 3, 3, 2, 2]) {
         self.preferredLongestSide = preferredLongestSide
         self.patchRadius = patchRadius
         self.iterationsPerLevel = iterationsPerLevel
