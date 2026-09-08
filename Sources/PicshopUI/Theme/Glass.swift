@@ -39,7 +39,7 @@ public extension View {
     }
 
     /// Inset text-field surface: darker well with a faint edge.
-    func psField<S: Shape>(_ shape: S) -> some View {
+    func psField<S: InsettableShape>(_ shape: S) -> some View {
         background(shape.fill(Color.black.opacity(0.28)))
             .overlay(shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
     }
