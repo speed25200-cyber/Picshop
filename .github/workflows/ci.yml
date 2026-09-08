@@ -39,13 +39,23 @@ jobs:
           sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
           xcodebuild -version
           swift --version
+      - name: Build every module (collect all errors)
+        run: |
+          status=0
+          for target in PicshopCore PicshopIntent PicshopImaging PicshopVideo PicshopSpeech PicshopPDF PicshopUI; do
+            echo "::group::swift build --target $target"
+            if ! swift build --target "$target" 2>&1 | tee "build-$target.log"; then status=1; fi
+            echo "::endgroup::"
+          done
+          echo "=== errors ==="; grep -hE "error:" build-*.log | sort -u || true
+          exit $status
       - name: swift test
         run: |
           set -o pipefail
           swift test --filter 'PicshopCoreTests|PicshopIntentTests|PicshopImagingTests' 2>&1 | tee swift-test.log
       - name: Errors
         if: failure()
-        run: grep -E "error:" swift-test.log | sort -u || true
+        run: grep -hE "error:" swift-test.log build-*.log | sort -u || true
 
   ios-build:
     name: iOS app build (Xcode 26)
@@ -72,14 +82,14 @@ jobs:
           set -o pipefail
           xcodebuild build -project PicShop.xcodeproj -scheme PicShop \
             -destination 'generic/platform=iOS Simulator' -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO -skipPackagePluginValidation 2>&1 | tee build-sim.log | grep -E "error:|warning: (unused|var|immutable)|BUILD|Compiling|Ld " || true
+            CODE_SIGNING_ALLOWED=NO -skipPackagePluginValidation -IDEBuildingContinueBuildingAfterErrors=YES 2>&1 | tee build-sim.log | grep -E "error:|warning: (unused|var|immutable)|BUILD|Compiling|Ld " || true
           grep -q "BUILD SUCCEEDED" build-sim.log
       - name: Build (iOS device, Release)
         run: |
           set -o pipefail
           xcodebuild build -project PicShop.xcodeproj -scheme PicShop \
             -destination 'generic/platform=iOS' -configuration Release \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -skipPackagePluginValidation 2>&1 | tee build-device.log | grep -E "error:|BUILD" || true
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -skipPackagePluginValidation -IDEBuildingContinueBuildingAfterErrors=YES 2>&1 | tee build-device.log | grep -E "error:|BUILD" || true
           grep -q "BUILD SUCCEEDED" build-device.log
       - name: Errors
         if: failure()
