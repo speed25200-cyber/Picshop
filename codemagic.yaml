@@ -35,6 +35,9 @@ definitions:
         xcodebuild -version
         swift --version
         brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+        # mlx-swift ships a build-tool plugin; trust package plugins and macros on this CI machine.
+        defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidatation -bool YES
+        defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES
     - &models
       name: Convert neural models (LaMa, Real-ESRGAN)
       script: |
@@ -61,14 +64,14 @@ definitions:
       name: Resolve dependencies
       script: |
         set -e
-        xcodebuild -resolvePackageDependencies -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME"
+        xcodebuild -resolvePackageDependencies -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" -skipPackagePluginValidation -skipMacroValidation
     - &simulator
       name: Build (simulator)
       script: |
         set -e
         xcodebuild build -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" \
           -destination 'generic/platform=iOS Simulator' -configuration Debug \
-          CODE_SIGNING_ALLOWED=NO -quiet
+          CODE_SIGNING_ALLOWED=NO -skipPackagePluginValidation -skipMacroValidation -quiet
 
 workflows:
   picshop-testflight:
@@ -111,7 +114,8 @@ workflows:
       - name: Archive & IPA
         script: |
           set -e
-          xcode-project build-ipa --project "$XCODE_PROJECT" --scheme "$XCODE_SCHEME" --config Release
+          xcode-project build-ipa --project "$XCODE_PROJECT" --scheme "$XCODE_SCHEME" --config Release \
+            --archive-flags="-skipPackagePluginValidation -skipMacroValidation"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
@@ -157,7 +161,7 @@ workflows:
           xcodebuild archive -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" \
             -destination 'generic/platform=iOS' -configuration Release \
             -archivePath build/PicShop.xcarchive \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -quiet
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -skipPackagePluginValidation -skipMacroValidation -quiet
           (cd build && zip -qr PicShop.xcarchive.zip PicShop.xcarchive)
     artifacts:
       - build/PicShop.xcarchive.zip
