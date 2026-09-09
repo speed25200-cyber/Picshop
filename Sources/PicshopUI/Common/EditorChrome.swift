@@ -76,6 +76,7 @@ struct EditorTopBar: View {
             }
             .padding(.leading, 4)
             Spacer(minLength: 4)
+            // One capsule for the secondary actions: undo · redo · help.
             HStack(spacing: 0) {
                 Button { Haptics.tap(); onUndo() } label: {
                     Image(systemName: "arrow.uturn.backward").font(.system(size: 15, weight: .semibold)).frame(width: 40, height: 40).contentShape(Rectangle())
@@ -88,11 +89,16 @@ struct EditorTopBar: View {
                 }
                 .buttonStyle(PSPressStyle(scale: 0.9)).disabled(!canRedo).foregroundStyle(canRedo ? PSTheme.textPrimary : PSTheme.textTertiary)
                 .accessibilityLabel(L("Redo"))
+                Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 18)
+                Button { Haptics.tap(); onHelp() } label: {
+                    Image(systemName: "questionmark").font(.system(size: 15, weight: .semibold)).frame(width: 40, height: 40).contentShape(Rectangle())
+                }
+                .buttonStyle(PSPressStyle(scale: 0.9)).foregroundStyle(PSTheme.textPrimary)
+                .accessibilityLabel(L("Help"))
             }
             .psCard(cornerRadius: 20, shadow: false)
             .animation(PSMotion.quick, value: canUndo)
             .animation(PSMotion.quick, value: canRedo)
-            GlassIconButton("questionmark", label: L("Help"), size: 40, action: onHelp)
             Button { Haptics.confirm(); onExport() } label: {
                 Image(systemName: "square.and.arrow.up").font(.system(size: 15, weight: .bold)).foregroundStyle(.white).frame(width: 40, height: 40)
                     .psAccentFill(Circle())

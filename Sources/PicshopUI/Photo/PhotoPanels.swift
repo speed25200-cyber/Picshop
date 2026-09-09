@@ -338,13 +338,17 @@ struct ErasePanel: View {
         VStack(alignment: .leading, spacing: 8) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    PanelChip(title: L("People"), symbol: "person.2") { session.eraseAll(label: "person", phrase: L("people")) }
-                    PanelChip(title: L("Text & logos"), symbol: "textformat.abc") { session.eraseAll(label: "text", phrase: L("text")) }
-                    PanelChip(title: L("Animals"), symbol: "pawprint") { session.eraseAll(label: "animal", phrase: L("animals")) }
-                    PanelChip(title: L("Vehicles"), symbol: "car") { session.eraseAll(label: "car", phrase: L("vehicles")) }
-                    PanelChip(title: L("Clear strokes"), symbol: "xmark", isEnabled: !session.brushStrokes.isEmpty) { session.brushStrokes = [] }
+                    EraseTargetChip(title: L("People"), symbol: "person.2.fill", tint: PSTheme.accent) { session.eraseAll(label: "person", phrase: L("people")) }
+                    EraseTargetChip(title: L("Text & logos"), symbol: "textformat.abc", tint: PSTheme.voice) { session.eraseAll(label: "text", phrase: L("text")) }
+                    EraseTargetChip(title: L("Animals"), symbol: "pawprint.fill", tint: PSTheme.warning) { session.eraseAll(label: "animal", phrase: L("animals")) }
+                    EraseTargetChip(title: L("Vehicles"), symbol: "car.fill", tint: PSTheme.success) { session.eraseAll(label: "car", phrase: L("vehicles")) }
+                    if !session.brushStrokes.isEmpty {
+                        EraseTargetChip(title: L("Clear strokes"), symbol: "xmark", tint: PSTheme.danger) { withAnimation(PSMotion.quick) { session.brushStrokes = [] } }
+                            .transition(.scale.combined(with: .opacity))
+                    }
                 }
                 .padding(.horizontal, 2)
+                .animation(PSMotion.standard, value: session.brushStrokes.isEmpty)
             }
             DialSlider(value: $session.brushRadius, range: 0.006...0.09, neutral: 0.03, label: L("Brush size"), format: { "\(Int(($0 * 1000).rounded()))" }) { editing in
                 session.showsBrushPreview = editing
@@ -352,6 +356,33 @@ struct ErasePanel: View {
             Text(L("Tap an object to erase it, paint over it, or say “efface le poteau à droite”."))
                 .font(PSFont.caption(11)).foregroundStyle(PSTheme.textSecondary).lineLimit(2)
         }
+    }
+}
+
+/// One-tap erase category: tinted squircle icon and a label, in a glass chip.
+struct EraseTargetChip: View {
+    let title: String
+    let symbol: String
+    let tint: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button { Haptics.tap(); action() } label: {
+            HStack(spacing: 8) {
+                Image(systemName: symbol)
+                    .font(.system(size: 11, weight: .bold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.white)
+                    .frame(width: 24, height: 24)
+                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(tint.gradient))
+                Text(title).font(PSFont.caption(13)).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
+            }
+            .padding(.leading, 6).padding(.trailing, 12).padding(.vertical, 6)
+            .psGlass(interactive: true)
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+        }
+        .buttonStyle(PSPressStyle())
+        .accessibilityLabel(title)
     }
 }
 
