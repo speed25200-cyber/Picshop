@@ -2,6 +2,12 @@
 
 ## Unreleased — polish loop
 
+- Fluidity: the editors no longer repaint whole screens for per-frame state. The video transport, the timeline's playhead follow, the player's clip label, the progress and toast overlays and the library's thumbnails each observe their own state, so a playhead tick or a progress fraction repaints one row instead of the canvas, the filmstrip, the panel and the dock.
+- Fluidity: the renderer's operation cache and the library's decoded-thumbnail cache evict oldest-first instead of growing for the life of the session; the ambient background flattens its gradients into one layer and gains a studio falloff.
+- LLM retouching: the instructions are stable per editor and everything that changes between two requests (clip count, playhead, current page, pending question, last adjustment) travels with the request, which both fixes a reused session answering from stale numbers and lets the model read the instructions once. Sessions recycle after eight requests and are dropped on error; the grammar's reading is handed to the engine instead of parsed twice; identical requests in an identical state are answered from a small cache; and the model's time budget is short when the grammar already has a usable plan.
+- Editing screens: the video filmstrip sits under the picture with the transport as the last row, comparing with the original is available while a panel is open, the photo canvas carries a hairline edge, and the Home video/PDF actions are one line each so the library starts higher.
+- Reduce Motion is respected by everything that moves on its own: the voice meter, the microphone ring and the level rim hold still.
+
 - The library grid no longer decodes JPEGs on the main thread: `thumbnail(for:)` was read from a SwiftUI body for every visible card and hit the disk each time. Thumbnails are now decoded once off the main thread, kept in memory, and refreshed when an editor rewrites one; the previous image stays on screen while a newer one loads.
 
 - The editor draws before the models load: `MLModel(contentsOf:)` ran synchronously on the main actor inside `configure()`, so opening a photo froze on a black canvas for as long as the Neural Engine took to prepare the eraser. The pipeline is now built empty, the first frame is requested immediately, and the engines are attached off the main thread; a fill that arrives while they load waits for them instead of silently using the patch-based fallback. The canvas shows the photo's frame with a spinner rather than black.

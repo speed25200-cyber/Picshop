@@ -23,7 +23,7 @@ protocol EditorStatus: AnyObject, Observable {
 struct EditorStatusOverlay<Session: EditorStatus>: View {
     var session: Session
     var toastTopInset: CGFloat = 60
-    var toastHorizontalInset: CGFloat = 24
+    var toastHorizontalInset: CGFloat = 20
 
     private var blocksTouches: Bool { session.isProcessing || session.exportProgress != nil }
 

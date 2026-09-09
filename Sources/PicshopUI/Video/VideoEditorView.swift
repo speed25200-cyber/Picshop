@@ -43,7 +43,7 @@ public struct VideoEditorView: View {
         } bottom: {
             bottomArea
         }
-        .overlay { EditorStatusOverlay(session: session, toastHorizontalInset: 16) }
+        .overlay { EditorStatusOverlay(session: session) }
         .task { await session.configure() }
         .onDisappear { session.teardown() }
         .sheet(isPresented: $session.showsExport) { VideoExportSheet(session: session) }
@@ -79,7 +79,7 @@ public struct VideoEditorView: View {
             }
         }
         .padding(.horizontal, 10)
-        .padding(.top, 4)
+        .padding(.top, 8)
         .padding(.bottom, 4)
         .psDockBackground()
         .animation(PSMotion.standard, value: session.activeTool)
