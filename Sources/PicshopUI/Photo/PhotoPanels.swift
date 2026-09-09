@@ -653,7 +653,7 @@ struct TextPanel: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(TextRasterizer.fontChoices, id: \.name) { font in
-                            PanelChip(title: font.display, isActive: element.fontName == font.name) {
+                            FontChip(name: font.name, display: font.display, isActive: element.fontName == font.name) {
                                 session.updateText(layerID: layer.id) { $0.fontName = font.name }
                             }
                         }
@@ -808,28 +808,37 @@ struct LayersPanel: View {
                 VStack(spacing: 6) {
                     ForEach(Array(session.document.layers.enumerated().reversed()), id: \.element.id) { index, layer in
                         let selected = session.document.selectedLayerID == layer.id
+                        let isBase = index == 0
+                        let tint: Color = layer.isText ? PSTheme.voice : (layer.isShape ? PSTheme.warning : PSTheme.accent)
                         HStack(spacing: 10) {
-                            Image(systemName: layer.symbolName).frame(width: 22)
-                            Text(layer.name).font(PSFont.body(14)).lineLimit(1)
-                            Spacer()
-                            if index > 0 {
-                                Button { session.moveLayer(layer.id, to: min(session.document.layers.count - 1, index + 1)) } label: { Image(systemName: "chevron.up") }
-                                    .buttonStyle(.plain).disabled(index == session.document.layers.count - 1).opacity(index == session.document.layers.count - 1 ? 0.3 : 1)
-                                Button { session.moveLayer(layer.id, to: max(1, index - 1)) } label: { Image(systemName: "chevron.down") }
-                                    .buttonStyle(.plain).disabled(index <= 1).opacity(index <= 1 ? 0.3 : 1)
+                            Image(systemName: layer.symbolName)
+                                .font(.system(size: 12, weight: .bold))
+                                .symbolRenderingMode(.hierarchical)
+                                .foregroundStyle(.white)
+                                .frame(width: 26, height: 26)
+                                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(selected ? AnyShapeStyle(Color.white.opacity(0.25)) : AnyShapeStyle(tint.gradient)))
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(layer.name).font(PSFont.headline(13)).lineLimit(1)
+                                Text(isBase ? L("Photo") : (layer.isText ? L("Text") : (layer.isShape ? L("Shapes") : L("Layers"))))
+                                    .font(PSFont.caption(10)).foregroundStyle(selected ? Color.white.opacity(0.75) : PSTheme.textTertiary)
                             }
-                            Button { session.updateLayer(layer.id) { $0.isVisible.toggle() } } label: { Image(systemName: layer.isVisible ? "eye" : "eye.slash") }
-                                .buttonStyle(.plain)
-                            if index > 0 {
-                                Button(role: .destructive) { session.removeLayer(layer.id) } label: { Image(systemName: "trash") }
-                                    .buttonStyle(.plain).foregroundStyle(PSTheme.danger)
+                            Spacer(minLength: 4)
+                            if !isBase {
+                                LayerRowButton(symbol: "chevron.up", enabled: index < session.document.layers.count - 1) { session.moveLayer(layer.id, to: min(session.document.layers.count - 1, index + 1)) }
+                                LayerRowButton(symbol: "chevron.down", enabled: index > 1) { session.moveLayer(layer.id, to: max(1, index - 1)) }
+                            }
+                            LayerRowButton(symbol: layer.isVisible ? "eye" : "eye.slash", enabled: true) { session.updateLayer(layer.id) { $0.isVisible.toggle() } }
+                            if !isBase {
+                                LayerRowButton(symbol: "trash", enabled: true, tint: PSTheme.danger) { Haptics.warning(); session.removeLayer(layer.id) }
                             }
                         }
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(selected ? Color.black : PSTheme.textPrimary)
-                        .padding(.horizontal, 12).padding(.vertical, 9)
-                        .background(selected ? PSTheme.accent : PSTheme.hairline, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .foregroundStyle(selected ? Color.white : PSTheme.textPrimary)
+                        .padding(.horizontal, 10).padding(.vertical, 8)
+                        .background(Color.white.opacity(selected ? 0 : 0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .psActivePill(RoundedRectangle(cornerRadius: 14, style: .continuous), isActive: selected, glow: false)
+                        .opacity(layer.isVisible ? 1 : 0.55)
                         .contentShape(Rectangle())
+                        .animation(PSMotion.quick, value: selected)
                         .onTapGesture { Haptics.tick(); session.selectLayer(layer.id) }
                     }
                 }
@@ -845,6 +854,54 @@ struct LayersPanel: View {
                 }
             }
         }
+    }
+}
+
+/// Small round action inside a layer row.
+struct LayerRowButton: View {
+    let symbol: String
+    let enabled: Bool
+    var tint: Color? = nil
+    let action: () -> Void
+
+    var body: some View {
+        Button { Haptics.tap(); action() } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(tint ?? Color.primary)
+                .frame(width: 28, height: 28)
+                .background(Color.white.opacity(0.08), in: Circle())
+        }
+        .buttonStyle(PSPressStyle(scale: 0.88))
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.3)
+    }
+}
+
+/// Font choice rendered in its own face, so the row is a live specimen sheet.
+struct FontChip: View {
+    let name: String
+    let display: String
+    let isActive: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button { Haptics.tick(); action() } label: {
+            VStack(spacing: 3) {
+                Text("Aa").font(Font(UIFont(name: name, size: 20) ?? UIFont.systemFont(ofSize: 20, weight: .bold)))
+                    .frame(height: 24)
+                Text(display).font(PSFont.caption(10)).lineLimit(1).minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(isActive ? Color.white : PSTheme.textPrimary)
+            .frame(width: 60, height: 50)
+            .background(Color.white.opacity(isActive ? 0 : 0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .psActivePill(RoundedRectangle(cornerRadius: 14, style: .continuous), isActive: isActive, glow: false)
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .animation(PSMotion.quick, value: isActive)
+        }
+        .buttonStyle(PSPressStyle())
+        .accessibilityLabel(display)
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 }
 
