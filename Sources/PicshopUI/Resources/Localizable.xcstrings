@@ -369,6 +369,22 @@
         }
       }
     },
+    "Balanced": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Balanced"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Équilibré"
+          }
+        }
+      }
+    },
     "Banner": {
       "localizations": {
         "en": {
@@ -2657,6 +2673,22 @@
         }
       }
     },
+    "Output": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Output"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sortie"
+          }
+        }
+      }
+    },
     "Overlay": {
       "localizations": {
         "en": {
@@ -4061,6 +4093,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Le ralenti conserve chaque image ; l'accéléré en saute. L'audio suit la vitesse."
+          }
+        }
+      }
+    },
+    "Small": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Small"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Léger"
           }
         }
       }

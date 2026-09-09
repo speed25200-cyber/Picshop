@@ -212,38 +212,214 @@ struct VideoExportSheet: View {
     @Environment(\.picshop) private var app
     @State private var quality: VideoExportOptions.Quality = .high
     @State private var saveToPhotos = true
+    @State private var poster: UIImage?
+    @Namespace private var qualityIndicator
+
+    private var isExporting: Bool { session.exportProgress != nil }
+
+    /// Output frame for a quality, so the choice is concrete.
+    private func outputSize(for quality: VideoExportOptions.Quality) -> (width: Int, height: Int) {
+        let size = session.timeline.renderSize
+        let longest = max(size.width, size.height)
+        let cap: Double
+        switch quality {
+        case .high: cap = longest
+        case .medium: cap = 1920
+        case .low: cap = 1280
+        }
+        let scale = min(1, cap / max(1, longest))
+        return (Int((size.width * scale).rounded()), Int((size.height * scale).rounded()))
+    }
+
+    /// Rough file size from typical HEVC/H.264 bitrates.
+    private func estimatedMegabytes(for quality: VideoExportOptions.Quality) -> Double {
+        let megabitsPerSecond: Double
+        switch quality {
+        case .high: megabitsPerSecond = max(8, Double(outputSize(for: .high).width * outputSize(for: .high).height) / 1_000_000 * 5)
+        case .medium: megabitsPerSecond = 10
+        case .low: megabitsPerSecond = 5
+        }
+        return megabitsPerSecond * max(0, session.timeline.duration) / 8
+    }
+
+    private func subtitle(for quality: VideoExportOptions.Quality) -> String {
+        switch quality {
+        case .high: return L("Original")
+        case .medium: return L("Balanced")
+        case .low: return L("Small")
+        }
+    }
+
+    private func title(for quality: VideoExportOptions.Quality) -> String {
+        switch quality {
+        case .high: return "HEVC"
+        case .medium: return "1080p"
+        case .low: return "720p"
+        }
+    }
+
+    private var durationText: String {
+        let total = max(0, session.timeline.duration)
+        return String(format: "%d:%02d", Int(total) / 60, Int(total) % 60)
+    }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section(L("Quality")) {
-                    Picker(L("Quality"), selection: $quality) {
-                        ForEach(VideoExportOptions.Quality.allCases) { Text($0.displayName).tag($0) }
+            ScrollView {
+                VStack(spacing: PSSpacing.large) {
+                    preview
+                    qualityPicker
+                    VStack(spacing: 0) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(L("Output")).font(PSFont.headline(15))
+                                let size = outputSize(for: quality)
+                                Text("\(size.width) × \(size.height) · \(durationText) · ~\(String(format: "%.0f", estimatedMegabytes(for: quality))) MB")
+                                    .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary).contentTransition(.numericText())
+                            }
+                            Spacer()
+                            Image(systemName: "film.stack").font(.system(size: 18, weight: .medium)).foregroundStyle(PSTheme.textTertiary)
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 12)
+                        Divider().overlay(PSTheme.hairline).padding(.leading, 16)
+                        Toggle(isOn: $saveToPhotos) {
+                            Text(L("Save to Photos")).font(PSFont.headline(15))
+                        }
+                        .tint(PSTheme.accent)
+                        .padding(.horizontal, 16).padding(.vertical, 12)
                     }
-                    .pickerStyle(.inline)
-                    Text("\(Int(session.timeline.renderSize.width)) × \(Int(session.timeline.renderSize.height)) · \(String(format: "%.1f", session.timeline.duration)) s")
-                        .font(PSFont.caption()).foregroundStyle(PSTheme.textSecondary)
-                }
-                Section { Toggle(L("Save to Photos"), isOn: $saveToPhotos) }
-                Section {
-                    Button { Task { await session.export(options: VideoExportOptions(quality: quality, saveToPhotos: saveToPhotos)) } } label: {
-                        Label(L("Export"), systemImage: "square.and.arrow.down").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(PrimaryButtonStyle()).listRowBackground(Color.clear)
-                    if let url = session.exportedURL {
+                    .psCard(cornerRadius: 18, shadow: false)
+                    if let url = session.exportedURL, !isExporting {
                         ShareLink(item: url) { Label(L("Share last export"), systemImage: "square.and.arrow.up").frame(maxWidth: .infinity) }
-                            .buttonStyle(SecondaryButtonStyle()).listRowBackground(Color.clear)
+                            .buttonStyle(SecondaryButtonStyle())
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
                 }
+                .padding(.horizontal, PSSpacing.page)
+                .padding(.top, 8)
+                .padding(.bottom, 96)
+                .animation(PSMotion.standard, value: quality)
+                .animation(PSMotion.standard, value: session.exportedURL)
             }
-            .scrollContentBackground(.hidden)
+            .scrollIndicators(.hidden)
             .background(AmbientBackground().ignoresSafeArea())
+            .safeAreaInset(edge: .bottom) { footer }
             .navigationTitle(L("Export"))
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("Done")) { dismiss() } } }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("Done")) { dismiss() }.disabled(isExporting) } }
             .onAppear { quality = app?.settings.videoExportQuality ?? .high }
+            .interactiveDismissDisabled(isExporting)
         }
         .preferredColorScheme(.dark)
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    /// Primary action, or the export progress in its place — the sheet stays
+    /// put while the movie is written, so the percentage is where the eye is.
+    @ViewBuilder private var footer: some View {
+        Group {
+            if let progress = session.exportProgress {
+                VStack(spacing: 10) {
+                    HStack {
+                        Text(L("Exporting…")).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
+                        Spacer()
+                        Text("\(Int(progress * 100)) %").font(PSFont.mono(13)).foregroundStyle(PSTheme.textSecondary).contentTransition(.numericText())
+                    }
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.white.opacity(0.1))
+                            Capsule().fill(PSTheme.accentGradient)
+                                .frame(width: max(8, geo.size.width * CGFloat(min(1, progress))))
+                        }
+                    }
+                    .frame(height: 6)
+                    .animation(PSMotion.numeric, value: progress)
+                }
+                .padding(.horizontal, 18).padding(.vertical, 14)
+                .psCard(cornerRadius: 18, shadow: false)
+                .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            } else {
+                Button {
+                    Haptics.confirm()
+                    Task { await session.export(options: VideoExportOptions(quality: quality, saveToPhotos: saveToPhotos)) }
+                } label: {
+                    Label(saveToPhotos ? L("Save to Photos") : L("Export"), systemImage: saveToPhotos ? "photo.badge.arrow.down" : "square.and.arrow.down").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
+        }
+        .padding(.horizontal, PSSpacing.page)
+        .padding(.vertical, 10)
+        .background(LinearGradient(colors: [PSTheme.ink.opacity(0), PSTheme.ink.opacity(0.9)], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+        .animation(PSMotion.standard, value: isExporting)
+    }
+
+    /// Poster frame with the running time, so the sheet reads as the movie.
+    private var preview: some View {
+        ZStack(alignment: .bottomLeading) {
+            Group {
+                if let poster {
+                    Image(uiImage: poster).resizable().scaledToFill()
+                } else {
+                    PSTheme.surfaceElevated
+                        .overlay(Image(systemName: "film").font(.system(size: 32, weight: .light)).foregroundStyle(PSTheme.textTertiary))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 180)
+            .clipped()
+            HStack(spacing: 6) {
+                Image(systemName: "play.fill").font(.system(size: 10, weight: .bold))
+                Text(durationText).font(PSFont.mono(12))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(.black.opacity(0.55), in: Capsule())
+            .padding(12)
+        }
+        .task {
+            guard poster == nil, let cg = await session.thumbnailer.poster(for: session.timeline) else { return }
+            poster = UIImage(cgImage: cg)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(PSTheme.strokeGradient, lineWidth: 1))
+        .shadow(color: .black.opacity(0.4), radius: 18, y: 10)
+    }
+
+    private var qualityPicker: some View {
+        HStack(spacing: 4) {
+            ForEach(VideoExportOptions.Quality.allCases) { item in
+                let isActive = quality == item
+                Button {
+                    Haptics.tick()
+                    withAnimation(PSMotion.standard) { quality = item }
+                } label: {
+                    VStack(spacing: 2) {
+                        Text(title(for: item)).font(PSFont.headline(14))
+                        Text(subtitle(for: item)).font(PSFont.caption(10)).opacity(0.8)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 9)
+                    .foregroundStyle(isActive ? Color.white : PSTheme.textSecondary)
+                    .background {
+                        if isActive {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(PSTheme.accentGradient)
+                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(PSTheme.accentHighlight))
+                                .matchedGeometryEffect(id: "quality", in: qualityIndicator)
+                        }
+                    }
+                    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(PSPressStyle(scale: 0.97))
+                .disabled(isExporting)
+                .accessibilityAddTraits(isActive ? [.isSelected] : [])
+            }
+        }
+        .padding(4)
+        .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 }
 
