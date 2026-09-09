@@ -159,8 +159,13 @@ FR = {
     "The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large and download from Hugging Face on demand; everything runs on your iPhone.": "La gomme et l'agrandisseur sont livrés avec l'app. Le remplissage génératif et le Pro Brain sont volumineux et se téléchargent depuis Hugging Face à la demande ; tout fonctionne sur votre iPhone.",
 }
 
+# Keys passed to L() at runtime rather than as literals (enum display names).
+DYNAMIC_KEYS = {
+    "Dissolve", "Fade to Black", "Fade to White", "Slide Left", "Slide Right", "Wipe", "Zoom", "Blur",
+}
+
 def main():
-    keys = set()
+    keys = set(DYNAMIC_KEYS)
     for f in UI.rglob("*.swift"):
         for m in re.finditer(r'L\("((?:[^"\\]|\\.)*)"\)', f.read_text()):
             keys.add(m.group(1).replace('\\"', '"'))

@@ -465,6 +465,22 @@
         }
       }
     },
+    "Blur": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blur"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flou"
+          }
+        }
+      }
+    },
     "Blur amount": {
       "localizations": {
         "en": {
@@ -977,6 +993,22 @@
         }
       }
     },
+    "Dissolve": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dissolve"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fondu enchaîné"
+          }
+        }
+      }
+    },
     "Done": {
       "localizations": {
         "en": {
@@ -1421,6 +1453,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Extraire l'image"
+          }
+        }
+      }
+    },
+    "Fade to Black": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fade to Black"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fondu au noir"
+          }
+        }
+      }
+    },
+    "Fade to White": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fade to White"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fondu au blanc"
           }
         }
       }
@@ -4193,6 +4257,38 @@
         }
       }
     },
+    "Slide Left": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slide Left"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glissement gauche"
+          }
+        }
+      }
+    },
+    "Slide Right": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slide Right"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glissement droite"
+          }
+        }
+      }
+    },
     "Slightly lighter previews; effects unchanged.": {
       "localizations": {
         "en": {
@@ -5185,6 +5281,22 @@
         }
       }
     },
+    "Wipe": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wipe"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volet"
+          }
+        }
+      }
+    },
     "Working…": {
       "localizations": {
         "en": {
@@ -5197,6 +5309,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "En cours…"
+          }
+        }
+      }
+    },
+    "Zoom": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom"
           }
         }
       }
