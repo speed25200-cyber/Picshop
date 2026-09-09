@@ -49,7 +49,8 @@ public struct VideoEditorView: View {
         }
         .overlay(alignment: .top) {
             if let toast = session.toast {
-                ToastView(text: toast.text, systemImage: toast.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill", tint: toast.isError ? PSTheme.danger : PSTheme.success)
+                ToastView(text: toast.text, systemImage: toast.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill", tint: toast.isError ? PSTheme.danger : PSTheme.success,
+                          onUndo: toast.undoable ? { session.undo() } : nil)
                     .padding(.top, 60)
                     .id(toast.id)
             }

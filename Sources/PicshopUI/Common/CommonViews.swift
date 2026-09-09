@@ -45,6 +45,8 @@ struct ToastView: View {
     let text: String
     var systemImage: String = "checkmark.circle.fill"
     var tint: Color = PSTheme.success
+    /// When set, the toast offers Undo right there, like Mail after an archive.
+    var onUndo: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 10) {
@@ -53,9 +55,24 @@ struct ToastView: View {
                 .foregroundStyle(tint)
                 .symbolRenderingMode(.hierarchical)
             Text(text).font(PSFont.body(14)).foregroundStyle(PSTheme.textPrimary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            if let onUndo {
+                Button {
+                    Haptics.tap()
+                    onUndo()
+                } label: {
+                    Label(L("Undo"), systemImage: "arrow.uturn.backward")
+                        .font(PSFont.headline(12))
+                        .foregroundStyle(PSTheme.textPrimary)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Capsule().fill(Color.white.opacity(0.12)))
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
+                }
+                .buttonStyle(PSPressStyle(scale: 0.94))
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 11)
+        .padding(.leading, 16)
+        .padding(.trailing, onUndo == nil ? 16 : 8)
+        .padding(.vertical, onUndo == nil ? 11 : 8)
         .psCard(cornerRadius: 24, shadow: true)
         .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92, anchor: .top)))
     }

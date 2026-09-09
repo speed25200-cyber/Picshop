@@ -72,6 +72,8 @@ public final class PhotoEditorSession {
     public struct Toast: Equatable {
         var text: String
         var isError: Bool
+        /// Offers an Undo button in the toast (applied edits).
+        var undoable = false
         var id = UUID()
     }
 
@@ -930,10 +932,11 @@ public final class PhotoEditorSession {
         case .applied(let label):
             pendingClarification = nil
             candidateOverlays = []
-            if updatedDocument != document {
+            let changed = updatedDocument != document
+            if changed {
                 commit(updatedDocument, label: label)
             }
-            if !label.isEmpty { showToast(label) }
+            if !label.isEmpty { showToast(label, undoable: changed) }
             Haptics.success()
         case .needsClarification(let request):
             pendingClarification = request
@@ -1054,11 +1057,11 @@ public final class PhotoEditorSession {
 
     // MARK: - Toast
 
-    public func showToast(_ text: String, isError: Bool = false) {
+    public func showToast(_ text: String, isError: Bool = false, undoable: Bool = false) {
         toastTask?.cancel()
-        withAnimation(.spring(duration: 0.35)) { toast = Toast(text: text, isError: isError) }
+        withAnimation(.spring(duration: 0.35)) { toast = Toast(text: text, isError: isError, undoable: undoable) }
         toastTask = Task {
-            try? await Task.sleep(for: .seconds(isError ? 3.5 : 2.2))
+            try? await Task.sleep(for: .seconds(isError ? 3.5 : (undoable ? 4 : 2.2)))
             guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.25)) { toast = nil }
         }
