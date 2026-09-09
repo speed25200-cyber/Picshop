@@ -977,6 +977,22 @@
         }
       }
     },
+    "Detected from the page": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detected from the page"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Détectée sur la page"
+          }
+        }
+      }
+    },
     "Deterministic grammar, instant, offline. Always on.": {
       "localizations": {
         "en": {

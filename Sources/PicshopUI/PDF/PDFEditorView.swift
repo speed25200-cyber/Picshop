@@ -50,8 +50,8 @@ public struct PDFEditorView: View {
         .sheet(isPresented: $session.showsSignatureSheet) { SignatureSheet { strokes in session.saveSignature(strokes: strokes) } }
         .sheet(isPresented: $session.showsExport) { PDFExportSheet(session: session) }
         .sheet(item: $session.textEdit) { edit in
-            TextEditSheet(edit: edit, onCommit: { session.commitTextEdit($0) }, onCancel: { session.textEdit = nil })
-                .presentationDetents([.height(220)])
+            TextEditSheet(edit: edit, onCommit: { text, font in session.commitTextEdit(text, fontName: font) }, onCancel: { session.textEdit = nil })
+                .presentationDetents([.height(320)])
                 .presentationDragIndicator(.visible)
         }
         .fileImporter(isPresented: $session.showsMergePicker, allowedContentTypes: [.pdf]) { result in
@@ -176,40 +176,88 @@ public struct PDFEditorView: View {
 /// Inline editor for a word tapped on the page.
 struct TextEditSheet: View {
     let edit: PDFEditorSession.TextEdit
-    let onCommit: (String) -> Void
+    let onCommit: (String, String) -> Void
     let onCancel: () -> Void
     @State private var draft: String
+    @State private var fontName: String
     @FocusState private var focused: Bool
 
-    init(edit: PDFEditorSession.TextEdit, onCommit: @escaping (String) -> Void, onCancel: @escaping () -> Void) {
+    /// Faces the user can switch to when the detected one is wrong.
+    private static let faces: [(title: String, name: String)] = [
+        ("Sans", "Helvetica"), ("Sans bold", "Helvetica-Bold"), ("Serif", "TimesNewRomanPSMT"), ("Serif bold", "TimesNewRomanPS-BoldMT"),
+    ]
+
+    init(edit: PDFEditorSession.TextEdit, onCommit: @escaping (String, String) -> Void, onCancel: @escaping () -> Void) {
         self.edit = edit
         self.onCommit = onCommit
         self.onCancel = onCancel
         _draft = State(initialValue: edit.draft)
+        _fontName = State(initialValue: edit.fontName ?? "Helvetica")
+    }
+
+    /// The detected face maps onto the nearest of the four choices (Verdana bold → Sans bold).
+    private func isActive(_ face: (title: String, name: String)) -> Bool {
+        let lower = fontName.lowercased()
+        let bold = lower.contains("bold")
+        let serif = lower.contains("times") || lower.contains("georgia")
+        return face.name == (serif ? (bold ? "TimesNewRomanPS-BoldMT" : "TimesNewRomanPSMT") : (bold ? "Helvetica-Bold" : "Helvetica"))
+    }
+
+    private var previewFont: Font {
+        Font(UIFont(name: fontName, size: 22) ?? UIFont.systemFont(ofSize: 22))
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(L("Edit text")).font(PSFont.headline(17)).foregroundStyle(PSTheme.textPrimary)
                 Spacer()
                 Text(edit.original).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary).lineLimit(1)
             }
+            // Live preview on paper, in the face that will be written on the page.
+            HStack(spacing: 10) {
+                Text(edit.original).font(previewFont).foregroundStyle(.black.opacity(0.35)).strikethrough(true, color: .red.opacity(0.6)).lineLimit(1)
+                Image(systemName: "arrow.right").font(.system(size: 11, weight: .bold)).foregroundStyle(.black.opacity(0.35))
+                Text(draft.isEmpty ? " " : draft).font(previewFont).foregroundStyle(.black).lineLimit(1).contentTransition(.interpolate)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .background(Color(red: 0.97, green: 0.96, blue: 0.94), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .animation(PSMotion.quick, value: fontName)
             TextField(L("New text"), text: $draft)
                 .textFieldStyle(.plain).font(PSFont.body(17)).foregroundStyle(PSTheme.textPrimary)
                 .padding(.horizontal, 14).padding(.vertical, 12).psField(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .focused($focused)
                 .submitLabel(.done)
-                .onSubmit { onCommit(draft) }
+                .onSubmit { onCommit(draft, fontName) }
+            HStack(spacing: 6) {
+                ForEach(Self.faces, id: \.name) { face in
+                    let active = isActive(face)
+                    Button {
+                        Haptics.tick()
+                        withAnimation(PSMotion.quick) { fontName = face.name }
+                    } label: {
+                        Text(face.title)
+                            .font(Font(UIFont(name: face.name, size: 12) ?? UIFont.systemFont(ofSize: 12)))
+                            .foregroundStyle(active ? Color.white : PSTheme.textSecondary)
+                            .padding(.horizontal, 11).padding(.vertical, 6)
+                            .background(Capsule().fill(active ? PSTheme.accent : Color.white.opacity(0.06)))
+                    }
+                    .buttonStyle(PSPressStyle())
+                    .accessibilityAddTraits(active ? [.isSelected] : [])
+                }
+                Spacer()
+                Text(L("Detected from the page")).font(PSFont.caption(10)).foregroundStyle(PSTheme.textTertiary)
+            }
             HStack(spacing: 10) {
-                Button(role: .destructive) { Haptics.warning(); onCommit("") } label: {
+                Button(role: .destructive) { Haptics.warning(); onCommit("", fontName) } label: {
                     Label(L("Erase"), systemImage: "eraser").font(PSFont.caption(13)).padding(.horizontal, 14).padding(.vertical, 9)
                 }
                 .buttonStyle(.plain).foregroundStyle(PSTheme.danger).psGlass(interactive: true)
                 Spacer()
                 Button { onCancel() } label: { Text(L("Cancel")).font(PSFont.caption(13)).padding(.horizontal, 14).padding(.vertical, 9) }
                     .buttonStyle(.plain).foregroundStyle(PSTheme.textPrimary).psGlass(interactive: true)
-                Button { onCommit(draft) } label: { Text(L("Replace")).font(PSFont.headline(13)).padding(.horizontal, 16).padding(.vertical, 9) }
+                Button { onCommit(draft, fontName) } label: { Text(L("Replace")).font(PSFont.headline(13)).padding(.horizontal, 16).padding(.vertical, 9) }
                     .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Capsule())
             }
         }

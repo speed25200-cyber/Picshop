@@ -86,6 +86,7 @@ FR = {
     "Dissolve": "Fondu enchaîné", "Fade to Black": "Fondu au noir", "Fade to White": "Fondu au blanc", "Slide Left": "Glissement gauche", "Slide Right": "Glissement droite", "Wipe": "Volet", "Zoom": "Zoom", "Blur": "Flou",
     "Tap a clip on the timeline to change its speed.": "Touchez un clip sur la timeline pour changer sa vitesse.",
     "In this photo": "Sur cette photo", "Looking for objects…": "Recherche des objets…", "Erase %@": "Effacer %@",
+    "Detected from the page": "Détectée sur la page",
     "Balanced": "Équilibré", "Small": "Léger", "Output": "Sortie",
     "Opacity": "Opacité", "Original": "Original", "Overlay": "Élément", "Pause": "Pause", "Photo": "Photo", "Photo canvas": "Zone de la photo", "Photo format": "Format photo",
     "Photos, videos and voice never leave your device. PicShop has no servers, no accounts and no tracking.": "Vos photos, vidéos et votre voix ne quittent jamais votre appareil. PicShop n'a ni serveur, ni compte, ni suivi.",

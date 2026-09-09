@@ -232,13 +232,13 @@ public final class PDFEditorSession {
     }
 
     /// Commits the inline editor: the original word is covered and the new text written in place.
-    public func commitTextEdit(_ newText: String) {
+    public func commitTextEdit(_ newText: String, fontName: String? = nil) {
         guard let edit = textEdit else { return }
         textEdit = nil
         var text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard text != edit.original else { return }
+        guard text != edit.original || (fontName != nil && fontName != edit.fontName) else { return }
         if !text.isEmpty, !edit.suffix.isEmpty, !(text.last.map { ",.;:!?".contains($0) } ?? false) { text += edit.suffix }
-        let element = TextElement(text: text, fontName: edit.fontName ?? "Helvetica", relativeSize: edit.relativeFontSize ?? 0, color: inkColor == .red ? .black : inkColor, alignment: .leading, style: .plain)
+        let element = TextElement(text: text, fontName: fontName ?? edit.fontName ?? "Helvetica", relativeSize: edit.relativeFontSize ?? 0, color: inkColor == .red ? .black : inkColor, alignment: .leading, style: .plain)
         update(text.isEmpty ? L("Erase text") : L("Edit text")) {
             $0.addMarkup(PDFMarkup(kind: .replacement(rects: [edit.rect], text: element, background: edit.background)), toPageAt: edit.pageIndex)
         }
