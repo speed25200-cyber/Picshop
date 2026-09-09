@@ -119,4 +119,10 @@ public enum Haptics {
 public func L(_ key: String.LocalizationValue) -> String {
     String(localized: key, bundle: .module)
 }
+
+/// Localises a key that is only known at runtime (enum display names). Such
+/// keys are listed in DYNAMIC_KEYS of Scripts/generate_strings.py.
+public func LD(_ key: String) -> String {
+    String(localized: String.LocalizationValue(key), bundle: .module)
+}
 #endif

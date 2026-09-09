@@ -313,7 +313,7 @@ struct TransitionsPanel: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(TransitionKind.allCases.filter { $0 != .none }) { kind in
-                        PanelChip(title: L(kind.displayName), symbol: transitionSymbol(kind), isActive: session.selectedClip?.transitionOut?.kind == kind) {
+                        PanelChip(title: LD(kind.displayName), symbol: transitionSymbol(kind), isActive: session.selectedClip?.transitionOut?.kind == kind) {
                             Haptics.tick()
                             session.perform(EditIntent(action: .addTransition, time: duration, transition: kind))
                         }
