@@ -73,5 +73,13 @@ public protocol IntentEngine: Sendable {
     var kind: IntentEngineKind { get }
     /// Whether the engine can currently answer (model downloaded, device supported…).
     func isAvailable() async -> Bool
-    func plan(_ utterance: String, context: IntentContext) async throws -> EditPlan
+    /// - Parameter hint: the grammar's reading of the same utterance, already
+    ///   computed by the router. Passed in so engines never parse it twice.
+    func plan(_ utterance: String, context: IntentContext, hint: EditPlan?) async throws -> EditPlan
+}
+
+public extension IntentEngine {
+    func plan(_ utterance: String, context: IntentContext) async throws -> EditPlan {
+        try await plan(utterance, context: context, hint: nil)
+    }
 }

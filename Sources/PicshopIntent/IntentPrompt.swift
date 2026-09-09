@@ -15,31 +15,29 @@ public enum IntentPrompt {
     public static let spatialList: String = SpatialHint.allCases.map(\.rawValue).joined(separator: ", ")
     public static let placementList: String = TextElement.Placement.allCases.map(\.rawValue).joined(separator: ", ")
 
-    public static func systemInstructions(context: IntentContext) -> String {
+    /// Instructions for one editor.
+    ///
+    /// Deliberately free of anything that changes while the user works: the
+    /// clip count, the playhead, the current page and the pending question used
+    /// to live here, which meant a reused model session kept answering from
+    /// stale numbers. Those facts now travel with every request, and these
+    /// instructions stay identical for the whole editing session so the model
+    /// only has to read them once.
+    public static func systemInstructions(mode: EditorMode) -> String {
         let modeDescription: String
-        switch context.mode {
+        switch mode {
         case .photo: modeDescription = "The user is editing a PHOTO. Video-only actions are not allowed."
-        case .video: modeDescription = "The user is editing a VIDEO timeline with \(context.clipCount) clip(s), total duration \(String(format: "%.1f", context.timelineDuration)) s, playhead at \(String(format: "%.1f", context.playheadSeconds)) s."
-        case .pdf: modeDescription = "The user is editing a PDF with \(context.pageCount) page(s), currently on page \(context.currentPage). Only PDF actions, text, undo/redo/export/help are allowed."
+        case .video: modeDescription = "The user is editing a VIDEO timeline. Each request carries the current clip count, duration and playhead."
+        case .pdf: modeDescription = "The user is editing a PDF. Each request carries the page count and the current page. Only PDF actions, text, undo/redo/export/help are allowed."
         }
-        var pending = ""
-        if let clarification = context.pendingClarification {
-            let options = clarification.candidates.enumerated().map { "\($0.offset + 1): \($0.element.spokenDescription)" }.joined(separator: "; ")
-            pending = "\nThe app just asked: \"\(clarification.question)\" with options [\(options)]. If the user answers that question, output a single chooseCandidate step with choiceIndex (1-based) or spatialHint, or cancel. If they name a different object instead, output the original action on that object."
-        }
-        var memory = ""
-        if let last = context.lastParameter {
-            let direction = context.lastAdjustmentDirection < 0 ? "decreased" : "increased"
-            memory = "\nThe previous edit \(direction) \(last.rawValue). Bare follow-ups such as \"more\", \"a bit more\", \"encore\", \"less\", \"too much\", \"trop\" refer to \(last.rawValue): \"too much\" means undo part of it (opposite direction, about 12), \"more\"/\"encore\" means the same direction again."
-        }
-        let photoGuide = context.mode == .photo ? photoInterpretationGuide : ""
+        let photoGuide = mode == .photo ? photoInterpretationGuide : ""
         return """
         You are the command planner inside PicShop, a professional photo and video editor on iPhone. \
         Translate the user's spoken request (French or English) into a JSON plan the app executes. \
         Never chat, never explain, never refuse an editing request: output only the JSON object. \
         Understand what the user wants to achieve, not only the words: a vague wish ("it looks flat", "c'est moche") still becomes concrete steps.
 
-        \(modeDescription)\(pending)\(memory)
+        \(modeDescription)
 
         Output format (JSON, no markdown):
         {"steps":[{...}, ...],"reply":"<one short sentence in the user's language>","clarification":null|"<question if the request is truly ambiguous>","language":"fr"|"en"}
@@ -103,12 +101,36 @@ public enum IntentPrompt {
         ("je veux la vendre sur vinted", #"{"steps":[{"action":"replaceBackground","background":"white"},{"action":"autoEnhance","amount":70}],"reply":"Fond blanc et photo améliorée pour l'annonce.","clarification":null,"language":"fr"}"#),
     ]
 
-    public static func userPrompt(for utterance: String, hint: EditPlan?) -> String {
-        var prompt = "Request: \"\(utterance)\""
+    /// The facts that change between two requests, sent with each one so a
+    /// reused session never answers from a stale playhead or page number.
+    public static func stateSummary(context: IntentContext) -> String {
+        switch context.mode {
+        case .photo:
+            return ""
+        case .video:
+            return "Timeline: \(context.clipCount) clip(s), duration \(String(format: "%.1f", context.timelineDuration)) s, playhead at \(String(format: "%.1f", context.playheadSeconds)) s."
+        case .pdf:
+            return "Document: \(context.pageCount) page(s), currently on page \(context.currentPage)."
+        }
+    }
+
+    public static func userPrompt(for utterance: String, context: IntentContext, hint: EditPlan?) -> String {
+        var lines: [String] = []
+        let state = stateSummary(context: context)
+        if !state.isEmpty { lines.append(state) }
+        if let clarification = context.pendingClarification {
+            let options = clarification.candidates.enumerated().map { "\($0.offset + 1): \($0.element.spokenDescription)" }.joined(separator: "; ")
+            lines.append("You just asked: \"\(clarification.question)\" with options [\(options)]. If the user answers that question, output a single chooseCandidate step with choiceIndex (1-based) or spatialHint, or cancel. If they name a different object instead, output the original action on that object.")
+        }
+        if let last = context.lastParameter {
+            let direction = context.lastAdjustmentDirection < 0 ? "decreased" : "increased"
+            lines.append("The previous edit \(direction) \(last.rawValue). Bare follow-ups such as \"more\", \"a bit more\", \"encore\", \"less\", \"too much\", \"trop\" refer to \(last.rawValue): \"too much\" means undo part of it (opposite direction, about 12), \"more\"/\"encore\" means the same direction again.")
+        }
+        lines.append("Request: \"\(utterance)\"")
         if let hint, !hint.isEmpty, hint.confidence >= 0.5 {
             let actions = hint.intents.map(\.action.rawValue).joined(separator: ", ")
-            prompt += "\n(A fast parser guessed: \(actions). Use it only if it matches the request.)"
+            lines.append("(A fast parser guessed: \(actions). Use it only if it matches the request.)")
         }
-        return prompt
+        return lines.joined(separator: "\n")
     }
 }

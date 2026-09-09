@@ -13,14 +13,21 @@ public actor HybridIntentRouter {
     public struct Configuration: Sendable {
         /// Rule confidence at or above which the LLM is skipped.
         public var fastPathThreshold: Double
-        /// Maximum time to wait for the language model.
+        /// Maximum time to wait for the language model when the grammar
+        /// produced nothing usable and the model is the only hope.
         public var llmTimeout: Duration
+        /// Maximum time to wait when the grammar already has a usable plan and
+        /// the model is only being asked to do better. Keeping this short is
+        /// what stops an understood command from feeling slow.
+        public var improveTimeout: Duration
         /// Always consult the LLM (useful for evaluation / debugging).
         public var alwaysUseLLM: Bool
 
-        public init(fastPathThreshold: Double = 0.85, llmTimeout: Duration = .seconds(6), alwaysUseLLM: Bool = false) {
+        public init(fastPathThreshold: Double = 0.85, llmTimeout: Duration = .seconds(6),
+                    improveTimeout: Duration = .seconds(2), alwaysUseLLM: Bool = false) {
             self.fastPathThreshold = fastPathThreshold
             self.llmTimeout = llmTimeout
+            self.improveTimeout = improveTimeout
             self.alwaysUseLLM = alwaysUseLLM
         }
     }
@@ -30,6 +37,34 @@ public actor HybridIntentRouter {
     private let rules = RuleBasedIntentEngine()
     private var llmEngines: [IntentEngineKind: any IntentEngine] = [:]
     private var lastResolvedEngine: IntentEngineKind = .rules
+    private var cache: [CacheKey: EditPlan] = [:]
+    private var cacheOrder: [CacheKey] = []
+    private static let cacheLimit = 24
+
+    /// Identifies a request completely: the same words in the same editor state
+    /// must plan to the same thing, and anything the plan can depend on has to
+    /// be part of the key or a stale plan would be replayed.
+    private struct CacheKey: Hashable {
+        let utterance: String
+        let mode: EditorMode
+        let clipCount: Int
+        let pageCount: Int
+        let currentPage: Int
+        let playheadTenths: Int
+        let lastParameter: String
+        let lastDirection: Int
+
+        init(utterance: String, context: IntentContext) {
+            self.utterance = utterance.lowercased()
+            mode = context.mode
+            clipCount = context.clipCount
+            pageCount = context.pageCount
+            currentPage = context.currentPage
+            playheadTenths = Int((context.playheadSeconds * 10).rounded())
+            lastParameter = context.lastParameter?.rawValue ?? ""
+            lastDirection = context.lastAdjustmentDirection
+        }
+    }
 
     public init(preferredEngine: IntentEngineKind = .appleIntelligence, configuration: Configuration = Configuration()) {
         self.preferredEngine = preferredEngine
@@ -59,6 +94,7 @@ public actor HybridIntentRouter {
         let timer = PSTimer("intent.plan")
         defer { timer.log(category: .intent) }
 
+        let trimmed = utterance.trimmingCharacters(in: .whitespacesAndNewlines)
         let fast = rules.parse(utterance, context: context)
         let fastIsGood = !fast.isEmpty && fast.confidence >= configuration.fastPathThreshold
         if fastIsGood && !configuration.alwaysUseLLM {
@@ -71,11 +107,24 @@ public actor HybridIntentRouter {
             return fast
         }
 
-        let timeout = configuration.llmTimeout
+        // Repeating a command — said twice, or misheard the first time — must not
+        // pay for inference again. Only exact repeats in the same editor state hit.
+        let key = CacheKey(utterance: trimmed, context: context)
+        let cacheable = context.pendingClarification == nil && !trimmed.isEmpty
+        if cacheable, let cached = cache[key] {
+            lastResolvedEngine = cached.engine
+            return cached
+        }
+
+        // With a usable grammar plan in hand the model is only being asked to do
+        // better, so it gets a short slot; when the grammar came up empty it gets
+        // the full budget because it is the only thing that can answer.
+        let hasUsableFast = !fast.isEmpty && fast.confidence >= 0.5
+        let timeout = hasUsableFast ? configuration.improveTimeout : configuration.llmTimeout
         let llmPlan: EditPlan? = await withTaskGroup(of: EditPlan?.self) { group in
             group.addTask {
                 do {
-                    return try await engine.plan(utterance, context: context)
+                    return try await engine.plan(utterance, context: context, hint: fast)
                 } catch {
                     PSLog.error("LLM planning failed: \(error)", category: .intent)
                     return nil
@@ -94,7 +143,9 @@ public actor HybridIntentRouter {
             let checked = Self.validated(llmPlan, for: context)
             if !checked.isEmpty || checked.needsClarification {
                 lastResolvedEngine = checked.engine
-                return merge(fast: fast, llm: checked)
+                let merged = merge(fast: fast, llm: checked)
+                if cacheable { remember(merged, for: key) }
+                return merged
             }
             // The model answered with something this editor cannot do: prefer the
             // grammar, and otherwise explain rather than executing a wrong plan.
@@ -105,6 +156,17 @@ public actor HybridIntentRouter {
         }
         lastResolvedEngine = .rules
         return fast
+    }
+
+    private func remember(_ plan: EditPlan, for key: CacheKey) {
+        if cache[key] == nil {
+            cacheOrder.append(key)
+            if cacheOrder.count > Self.cacheLimit, let oldest = cacheOrder.first {
+                cacheOrder.removeFirst()
+                cache[oldest] = nil
+            }
+        }
+        cache[key] = plan
     }
 
     /// Drops every step the current editor cannot execute (a photo action inside

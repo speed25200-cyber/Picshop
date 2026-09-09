@@ -162,10 +162,15 @@ final class DeepUnderstandingTests: XCTestCase {
         var context = IntentContext.photo
         context.lastParameter = .temperature
         context.lastAdjustmentDirection = 1
-        let prompt = IntentPrompt.systemInstructions(context: context)
-        XCTAssertTrue(prompt.contains("photo de profil"))
+        // The retoucher's guide belongs to the editor, so it lives in the
+        // instructions the model reads once.
+        let instructions = IntentPrompt.systemInstructions(mode: .photo)
+        XCTAssertTrue(instructions.contains("photo de profil"))
+        XCTAssertFalse(IntentPrompt.systemInstructions(mode: .video).contains("How to read photo requests"))
+        XCTAssertFalse(instructions.contains("The previous edit"), "the last-adjustment memory changes between requests")
+        // The memory of the last adjustment changes, so it rides with the request.
+        let prompt = IntentPrompt.userPrompt(for: "encore un peu", context: context, hint: nil)
         XCTAssertTrue(prompt.contains("temperature"))
         XCTAssertTrue(prompt.contains("follow-ups"))
-        XCTAssertFalse(IntentPrompt.systemInstructions(context: .video).contains("How to read photo requests"))
     }
 }

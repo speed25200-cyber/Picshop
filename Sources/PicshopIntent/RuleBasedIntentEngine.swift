@@ -14,8 +14,8 @@ public struct RuleBasedIntentEngine: IntentEngine {
 
     public func isAvailable() async -> Bool { true }
 
-    public func plan(_ utterance: String, context: IntentContext) async throws -> EditPlan {
-        parse(utterance, context: context)
+    public func plan(_ utterance: String, context: IntentContext, hint: EditPlan?) async throws -> EditPlan {
+        hint ?? parse(utterance, context: context)
     }
 
     /// Synchronous entry point (also used directly by tests and the hybrid router).

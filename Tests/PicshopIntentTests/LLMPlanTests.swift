@@ -54,11 +54,57 @@ final class LLMPlanTests: XCTestCase {
     }
 
     func testPromptMentionsEveryAction() {
-        let prompt = IntentPrompt.systemInstructions(context: .video)
+        let prompt = IntentPrompt.systemInstructions(mode: .video)
         for action in IntentAction.allCases {
             XCTAssertTrue(prompt.contains(action.rawValue), "prompt is missing \(action.rawValue)")
         }
         XCTAssertTrue(prompt.contains("VIDEO"))
+    }
+
+    /// The model session is reused across commands, so anything that changes
+    /// while editing has to travel with the request or it goes stale.
+    func testEditorStateTravelsWithTheRequestNotTheInstructions() {
+        var context = IntentContext.video
+        context.clipCount = 3
+        context.playheadSeconds = 12.5
+        let instructions = IntentPrompt.systemInstructions(mode: .video)
+        XCTAssertFalse(instructions.contains("12.5"))
+        XCTAssertFalse(instructions.contains("3 clip"))
+        let prompt = IntentPrompt.userPrompt(for: "coupe ici", context: context, hint: nil)
+        XCTAssertTrue(prompt.contains("12.5"))
+        XCTAssertTrue(prompt.contains("3 clip"))
+        XCTAssertTrue(prompt.contains("coupe ici"))
+        var pdf = IntentContext.pdf
+        pdf.currentPage = 4
+        XCTAssertTrue(IntentPrompt.userPrompt(for: "efface cette page", context: pdf, hint: nil).contains("page 4"))
+    }
+
+    func testRouterCachesRepeatedRequests() async {
+        actor CallCounter {
+            private(set) var value = 0
+            func bump() { value += 1 }
+        }
+        struct CountingEngine: IntentEngine {
+            let kind: IntentEngineKind = .proLocal
+            let counter: CallCounter
+            func isAvailable() async -> Bool { true }
+            func plan(_ utterance: String, context: IntentContext, hint: EditPlan?) async throws -> EditPlan {
+                await counter.bump()
+                return EditPlan(utterance: utterance, intents: [EditIntent(action: .removeObject, target: ObjectTarget(label: "surfboard"))], confidence: 0.9, engine: .proLocal)
+            }
+        }
+        let counter = CallCounter()
+        let router = HybridIntentRouter(preferredEngine: .proLocal)
+        await router.register(CountingEngine(counter: counter))
+        _ = await router.plan("get rid of the surfboard", context: .photo)
+        _ = await router.plan("get rid of the surfboard", context: .photo)
+        let repeated = await counter.value
+        XCTAssertEqual(repeated, 1, "the same words in the same state must not pay for inference twice")
+        var moved = IntentContext.photo
+        moved.lastParameter = .brightness
+        _ = await router.plan("get rid of the surfboard", context: moved)
+        let afterChange = await counter.value
+        XCTAssertEqual(afterChange, 2, "a different editor state is a different request")
     }
 
     func testRouterFallsBackToRulesWhenNoLLM() async {
@@ -74,7 +120,7 @@ final class LLMPlanTests: XCTestCase {
         struct StubEngine: IntentEngine {
             let kind: IntentEngineKind = .proLocal
             func isAvailable() async -> Bool { true }
-            func plan(_ utterance: String, context: IntentContext) async throws -> EditPlan {
+            func plan(_ utterance: String, context: IntentContext, hint: EditPlan?) async throws -> EditPlan {
                 EditPlan(utterance: utterance, intents: [EditIntent(action: .removeObject, target: ObjectTarget(label: "surfboard"))], confidence: 0.9, engine: .proLocal)
             }
         }
@@ -90,7 +136,7 @@ final class LLMPlanTests: XCTestCase {
         struct SlowEngine: IntentEngine {
             let kind: IntentEngineKind = .proLocal
             func isAvailable() async -> Bool { true }
-            func plan(_ utterance: String, context: IntentContext) async throws -> EditPlan {
+            func plan(_ utterance: String, context: IntentContext, hint: EditPlan?) async throws -> EditPlan {
                 try await Task.sleep(for: .seconds(5))
                 return EditPlan(utterance: utterance, intents: [], engine: .proLocal)
             }

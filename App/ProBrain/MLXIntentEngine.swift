@@ -67,12 +67,11 @@ public final class MLXIntentEngine: IntentEngine, @unchecked Sendable {
         }
     }
 
-    public func plan(_ utterance: String, context: IntentContext) async throws -> EditPlan {
+    public func plan(_ utterance: String, context: IntentContext, hint: EditPlan?) async throws -> EditPlan {
         let container = try await loadedContainer()
-        let instructions = IntentPrompt.systemInstructions(context: context) + "\n\nExamples:\n"
+        let instructions = IntentPrompt.systemInstructions(mode: context.mode) + "\n\nExamples:\n"
             + IntentPrompt.fewShotExamples.map { "Request: \"\($0.0)\" → \($0.1)" }.joined(separator: "\n")
-        let hint = RuleBasedIntentEngine().parse(utterance, context: context)
-        let prompt = IntentPrompt.userPrompt(for: utterance, hint: hint) + "\nJSON:"
+        let prompt = IntentPrompt.userPrompt(for: utterance, context: context, hint: hint) + "\nJSON:"
         let session = ChatSession(container, instructions: instructions, generateParameters: GenerateParameters(maxTokens: 400, temperature: 0.1))
         let text = try await session.respond(to: prompt)
         guard let raw = LLMResponseParser.parse(text) else {

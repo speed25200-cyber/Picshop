@@ -15,7 +15,12 @@ public final class FoundationModelsIntentEngine: IntentEngine, @unchecked Sendab
 
     private let model = SystemLanguageModel.default
     private let lock = NSLock()
-    private var sessions: [String: LanguageModelSession] = [:]
+    private var sessions: [EditorMode: (session: LanguageModelSession, requests: Int)] = [:]
+    /// A session keeps every exchange in its transcript, which grows the prompt
+    /// and eventually overflows the context window. Recycled after this many
+    /// requests: often enough to stay bounded, rarely enough that consecutive
+    /// commands still reuse the instructions the model has already read.
+    private static let requestsPerSession = 8
 
     public init() {}
 
@@ -41,34 +46,46 @@ public final class FoundationModelsIntentEngine: IntentEngine, @unchecked Sendab
 
     /// Warms the model so the first voice command answers quickly.
     public func prewarm(context: IntentContext) {
-        let session = session(for: context)
-        session.prewarm()
+        session(for: context.mode).prewarm()
     }
 
-    public func plan(_ utterance: String, context: IntentContext) async throws -> EditPlan {
+    public func plan(_ utterance: String, context: IntentContext, hint: EditPlan?) async throws -> EditPlan {
         guard await isAvailable() else { throw PicshopError.modelUnavailable("Apple Intelligence") }
-        let session = session(for: context)
-        let hint = RuleBasedIntentEngine().parse(utterance, context: context)
-        let prompt = IntentPrompt.userPrompt(for: utterance, hint: hint)
+        let session = session(for: context.mode)
+        let prompt = IntentPrompt.userPrompt(for: utterance, context: context, hint: hint)
         let options = GenerationOptions(temperature: 0.1)
-        let response = try await session.respond(to: prompt, generating: GeneratedPlan.self, options: options)
-        let raw = response.content.rawPlan
-        return IntentNormalizer.plan(from: raw, utterance: utterance, context: context, engine: .appleIntelligence)
+        do {
+            let response = try await session.respond(to: prompt, generating: GeneratedPlan.self, options: options)
+            return IntentNormalizer.plan(from: response.content.rawPlan, utterance: utterance, context: context, engine: .appleIntelligence)
+        } catch {
+            // A full context window or a wedged session must not poison the next
+            // command: drop it so the following request starts clean.
+            discardSession(for: context.mode)
+            throw error
+        }
     }
 
-    private func session(for context: IntentContext) -> LanguageModelSession {
-        // One session per (mode, pending-question) so the instructions stay accurate
-        // while still reusing the KV cache across consecutive commands.
-        let key = "\(context.mode.rawValue)-\(context.pendingClarification?.id.uuidString ?? "none")-\(context.clipCount)"
+    /// One session per editor, so the instructions the model has already read
+    /// are reused across consecutive commands. Everything that changes between
+    /// two requests is in the request itself, not in the instructions.
+    private func session(for mode: EditorMode) -> LanguageModelSession {
         lock.lock()
         defer { lock.unlock() }
-        if let existing = sessions[key] { return existing }
-        let instructions = IntentPrompt.systemInstructions(context: context)
+        if let existing = sessions[mode], existing.requests < Self.requestsPerSession {
+            sessions[mode] = (existing.session, existing.requests + 1)
+            return existing.session
+        }
+        let instructions = IntentPrompt.systemInstructions(mode: mode)
             + "\n\nExamples:\n" + IntentPrompt.fewShotExamples.map { "Request: \"\($0.0)\" → \($0.1)" }.joined(separator: "\n")
         let session = LanguageModelSession(instructions: instructions)
-        if sessions.count > 6 { sessions.removeAll() }
-        sessions[key] = session
+        sessions[mode] = (session, 1)
         return session
+    }
+
+    private func discardSession(for mode: EditorMode) {
+        lock.lock()
+        sessions[mode] = nil
+        lock.unlock()
     }
 }
 
