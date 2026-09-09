@@ -87,7 +87,8 @@ public final class VideoEditorSession {
     public func configure() async {
         guard !isConfigured else { return }
         isConfigured = true
-        let pipeline = await app.makeInpaintingPipeline()
+        // Same rule as the photo editor: the first frame never waits for Core ML.
+        let pipeline = InpaintingPipeline()
         let services = AVVideoServices(store: app.store, projectID: projectID, inpainting: pipeline)
         self.services = services
         executor = VideoCommandExecutor(services: services, language: language) { [weak self] progress in
@@ -97,6 +98,11 @@ public final class VideoEditorSession {
             Task { await self?.handleTranscript(text) }
         }
         player.load(timeline)
+        let load = Task { [weak self] in
+            guard let self else { return }
+            await app.attachEngines(to: pipeline)
+        }
+        pipeline.setLoading(load)
     }
 
     public func teardown() {

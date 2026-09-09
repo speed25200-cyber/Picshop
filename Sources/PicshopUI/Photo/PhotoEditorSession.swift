@@ -170,19 +170,27 @@ public final class PhotoEditorSession {
     public func configure() async {
         guard !isConfigured else { return }
         isConfigured = true
-        let pipeline = await app.makeInpaintingPipeline()
-        let upscaler = await app.makeUpscaler()
-        let renderer = PhotoRenderer(store: app.store, projectID: projectID, inpainting: pipeline, upscaler: upscaler)
+        // The photo must appear immediately. The neural models are attached to
+        // the pipeline in the background: it is a reference type, so the
+        // renderer built here picks them up as soon as they land, and a fill
+        // that arrives first waits for them rather than using the fallback.
+        let pipeline = InpaintingPipeline()
+        let renderer = PhotoRenderer(store: app.store, projectID: projectID, inpainting: pipeline, upscaler: await app.makeUpscaler())
         self.renderer = renderer
         let services = VisionPhotoServices(renderer: renderer, store: app.store, projectID: projectID)
         self.services = services
         executor = PhotoCommandExecutor(services: services, language: language)
-        hasGenerativeEngine = pipeline.hasGenerativeEngine
         app.voice.onFinalTranscript = { [weak self] text in
             Task { await self?.handleTranscript(text) }
         }
         isVoiceReady = true
         requestPreview()
+        let load = Task { [weak self] in
+            guard let self else { return }
+            await app.attachEngines(to: pipeline)
+            hasGenerativeEngine = pipeline.hasGenerativeEngine
+        }
+        pipeline.setLoading(load)
     }
 
     public func teardown() {

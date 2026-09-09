@@ -158,13 +158,33 @@ public final class AppEnvironment {
     /// Inpainting pipeline for a session, with the neural model when installed.
     public func makeInpaintingPipeline() async -> InpaintingPipeline {
         let pipeline = InpaintingPipeline()
-        if let url = await models.compiledModelURL(for: "lama-inpainting"), let neural = try? CoreMLInpainter(compiledModelURL: url) {
-            pipeline.setNeural(neural)
-        }
-        if let provider = generativeEngineProvider, let resources = await models.resourcesURL(for: "sd-generative-fill") {
-            pipeline.setGenerative(provider(resources))
-        }
+        await attachEngines(to: pipeline)
         return pipeline
+    }
+
+    /// Loads the neural eraser and the generative engine and attaches them to
+    /// `pipeline`.
+    ///
+    /// `MLModel(contentsOf:)` is synchronous and takes seconds on device the
+    /// first time a model is prepared for the Neural Engine. On the main actor
+    /// that freezes the editor before it has drawn a single frame, so the load
+    /// runs off the main thread and the pipeline — a reference type — receives
+    /// the engines whenever they are ready.
+    public func attachEngines(to pipeline: InpaintingPipeline) async {
+        if let eraserURL = await models.compiledModelURL(for: "lama-inpainting") {
+            let neural = await Task.detached(priority: .userInitiated) {
+                try? CoreMLInpainter(compiledModelURL: eraserURL)
+            }.value
+            if let neural {
+                pipeline.setNeural(neural)
+            } else {
+                PSLog.error("neural eraser failed to load", category: .models)
+            }
+        }
+        if let provider = generativeEngineProvider, let resourcesURL = await models.resourcesURL(for: "sd-generative-fill") {
+            let engine = await Task.detached(priority: .utility) { provider(resourcesURL) }.value
+            pipeline.setGenerative(engine)
+        }
     }
 
     public func makeUpscaler() async -> Upscaler {

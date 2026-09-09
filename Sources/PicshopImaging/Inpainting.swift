@@ -29,10 +29,25 @@ public final class InpaintingPipeline: @unchecked Sendable {
     private var neural: (any Inpainter)?
     private var generative: (any GenerativeFillEngine)?
     private let fallback: any Inpainter
+    private var loading: Task<Void, Never>?
 
     public init(neural: (any Inpainter)? = nil, fallback: any Inpainter = PatchMatchInpainter()) {
         self.neural = neural
         self.fallback = fallback
+    }
+
+    /// Registers the task that loads the engines. A fill or a generation that
+    /// arrives while it runs waits for it, so an erase never silently falls back
+    /// to the patch-based engine just because the model had not finished loading.
+    public func setLoading(_ task: Task<Void, Never>?) {
+        lock.lock()
+        loading = task
+        lock.unlock()
+    }
+
+    private func waitForEngines() async {
+        let task = lock.withLock { loading }
+        await task?.value
     }
 
     public func setNeural(_ inpainter: (any Inpainter)?) {
@@ -61,6 +76,7 @@ public final class InpaintingPipeline: @unchecked Sendable {
 
     /// Text-guided fill. Same crop/composite strategy as `fill`, with the generative engine.
     public func generate(image: CIImage, mask: CIImage, boundingBox: PSRect, prompt: String, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> CIImage {
+        await waitForEngines()
         let engine = lock.withLock { generative }
         guard let engine else { throw PicshopError.modelUnavailable("Generative Fill") }
         return try await process(image: image, mask: mask, boundingBox: boundingBox, feather: 0.015, contextMargin: 1.0, workingSide: engine.preferredLongestSide) { rgba, maskBytes, width, height in
@@ -75,6 +91,7 @@ public final class InpaintingPipeline: @unchecked Sendable {
     public func fill(image: CIImage, mask: CIImage, boundingBox: PSRect, feather: Double) async throws -> CIImage {
         let timer = PSTimer("inpaint")
         defer { timer.log(category: .imaging) }
+        await waitForEngines()
         let inpainter = activeInpainter
         return try await process(image: image, mask: mask, boundingBox: boundingBox, feather: feather, contextMargin: 0.75, workingSide: inpainter.preferredLongestSide) { rgba, maskBytes, width, height in
             try await inpainter.inpaint(rgba: rgba, mask: maskBytes, width: width, height: height)

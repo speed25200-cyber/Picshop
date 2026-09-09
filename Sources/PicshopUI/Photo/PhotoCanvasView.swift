@@ -56,6 +56,16 @@ struct PhotoCanvasView: View {
             let frame = imageFrame(in: container)
             ZStack {
                 PSTheme.canvas
+                if session.preview == nil {
+                    // A slow first render must read as loading, never as a black screen.
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous).fill(PSTheme.surfaceElevated)
+                        ProgressView().tint(PSTheme.textTertiary)
+                    }
+                    .frame(width: frame.width, height: frame.height)
+                    .position(x: frame.midX, y: frame.midY)
+                    .transition(.opacity)
+                }
                 MetalCanvasRepresentable(image: session.preview, overlay: session.selectionPreview, frame: frame,
                                          maxFrameRate: session.app.performance.maxFrameRate, maxContentScale: session.app.performance.maxContentScale)
                 overlays(frame: frame, container: container)
@@ -77,6 +87,7 @@ struct PhotoCanvasView: View {
                         .transition(.scale(scale: 0.8, anchor: .bottomTrailing).combined(with: .opacity))
                 }
             }
+            .animation(PSMotion.standard, value: session.preview == nil)
             .animation(PSMotion.standard, value: session.activeTool == nil && session.history.canUndo && !session.isProcessing)
             .animation(PSMotion.quick, value: zoom > 1.01)
             .contentShape(Rectangle())
