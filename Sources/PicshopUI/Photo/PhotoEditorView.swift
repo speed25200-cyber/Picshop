@@ -48,7 +48,7 @@ public struct PhotoEditorView: View {
         .task { await session.configure() }
         .onDisappear { session.teardown() }
         .sheet(isPresented: $session.showsExport) { ExportSheet(session: session) }
-        .sheet(isPresented: $session.showsHelp) { HelpSheet(mode: .photo) { Task { await session.handleTranscript($0) } } }
+        .sheet(isPresented: $session.showsHelp) { HelpSheet(mode: .photo) { text in Task { await session.handleTranscript(text) } } }
         .preferredColorScheme(.dark)
         .persistentSystemOverlays(.hidden)
     }
