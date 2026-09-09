@@ -19,6 +19,7 @@ public struct HomeView: View {
     @State private var renameText = ""
     @State private var deleteTarget: Project?
     @Namespace private var filterIndicator
+    @Namespace private var cardTransition
 
     enum LibraryFilter: String, CaseIterable, Identifiable {
         case all, photos, videos, pdfs
@@ -61,7 +62,10 @@ public struct HomeView: View {
             }
             .sheet(isPresented: $showsSettings) { SettingsView() }
             .fullScreenCover(item: $openProject) { project in
-                if let app { EditorHost(project: project, app: app) }
+                if let app {
+                    EditorHost(project: project, app: app)
+                        .navigationTransition(.zoom(sourceID: project.id, in: cardTransition))
+                }
             }
             .photosPicker(isPresented: $showsPicker, selection: $pickedItem, matching: pickerFilter, photoLibrary: .shared())
             .fileImporter(isPresented: $showsPDFPicker, allowedContentTypes: [.pdf]) { result in
@@ -209,11 +213,11 @@ public struct HomeView: View {
                 showsPicker = true
             }
             HStack(spacing: PSSpacing.medium) {
-                heroCard(title: L("New Video"), subtitle: L("Cut, clean up, grade"), systemImage: "film.stack", tint: PSTheme.voice) {
+                secondaryAction(title: L("New Video"), systemImage: "film.stack", tint: PSTheme.voice) {
                     pickerFilter = .videos
                     showsPicker = true
                 }
-                heroCard(title: L("New PDF"), subtitle: L("Sign, mark up, reorder"), systemImage: "doc.richtext", tint: PSTheme.warning) {
+                secondaryAction(title: L("New PDF"), systemImage: "doc.richtext", tint: PSTheme.warning) {
                     showsPDFPicker = true
                 }
             }
@@ -221,52 +225,70 @@ public struct HomeView: View {
         .padding(.horizontal, PSSpacing.page)
     }
 
-    private func heroCard(title: String, subtitle: String, systemImage: String, tint: Color, prominent: Bool = false, action: @escaping () -> Void) -> some View {
+    /// The picture card: the one action most sessions start with, so it carries
+    /// the mesh, the description and the chevron.
+    private func heroCard(title: String, subtitle: String, systemImage: String, tint: Color, prominent: Bool = true, action: @escaping () -> Void) -> some View {
         Button {
             Haptics.confirm()
             action()
         } label: {
-            Group {
-                if prominent {
-                    HStack(spacing: 14) {
-                        heroIcon(systemImage, tint: tint, prominent: true)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(title).font(PSFont.headline(19)).foregroundStyle(PSTheme.textPrimary)
-                            Text(subtitle).font(PSFont.caption(13)).foregroundStyle(Color.white.opacity(0.8)).lineLimit(2)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right").font(.system(size: 14, weight: .bold)).foregroundStyle(Color.white.opacity(0.8))
-                    }
-                } else {
-                    // Secondary cards stack vertically so the subtitle never wraps into the icon.
-                    VStack(alignment: .leading, spacing: 12) {
-                        heroIcon(systemImage, tint: tint, prominent: false)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(title).font(PSFont.headline(16)).foregroundStyle(PSTheme.textPrimary)
-                            Text(subtitle).font(PSFont.caption(11.5)).foregroundStyle(PSTheme.textSecondary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
+            HStack(spacing: 14) {
+                heroIcon(systemImage, tint: tint, prominent: true)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(PSFont.headline(19)).foregroundStyle(PSTheme.textPrimary)
+                    Text(subtitle).font(PSFont.caption(13)).foregroundStyle(Color.white.opacity(0.8)).lineLimit(2)
                 }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.system(size: 14, weight: .bold)).foregroundStyle(Color.white.opacity(0.8))
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, prominent ? 18 : 16)
+            .padding(.vertical, 18)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
         .buttonStyle(PSPressStyle(scale: 0.985))
-        .modifier(HeroSurface(prominent: prominent, tint: tint))
+        .modifier(HeroSurface(prominent: true, tint: tint))
         .accessibilityLabel(title)
         .accessibilityHint(subtitle)
     }
 
+    /// Video and PDF import, one line each. They used to be tall cards with a
+    /// description, which pushed the library below the fold for no gain: what
+    /// they open is obvious from the word and the icon.
+    private func secondaryAction(title: String, systemImage: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.confirm()
+            action()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 14, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(tint.gradient))
+                Text(title).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+        .buttonStyle(PSPressStyle(scale: 0.97))
+        .modifier(HeroSurface(prominent: false, tint: tint, cornerRadius: 20))
+        .accessibilityLabel(title)
+    }
+
     private func heroIcon(_ systemImage: String, tint: Color, prominent: Bool) -> some View {
         Image(systemName: systemImage)
-            .font(.system(size: prominent ? 26 : 20, weight: .semibold))
+            .font(.system(size: 26, weight: .semibold))
             .symbolRenderingMode(.hierarchical)
-            .foregroundStyle(prominent ? Color.white : tint)
-            .frame(width: prominent ? 56 : 44, height: prominent ? 56 : 44)
-            .background(prominent ? Color.white.opacity(0.22) : tint.opacity(0.18), in: RoundedRectangle(cornerRadius: prominent ? 18 : 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: prominent ? 18 : 14, style: .continuous).strokeBorder(prominent ? Color.white.opacity(0.25) : tint.opacity(0.35), lineWidth: 1))
+            .foregroundStyle(.white)
+            .frame(width: 56, height: 56)
+            .background(Color.white.opacity(0.22), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
     }
 
     private func projectGrid(_ projects: [Project]) -> some View {
@@ -279,6 +301,8 @@ public struct HomeView: View {
                     ProjectCard(project: project, library: app?.library)
                 }
                 .buttonStyle(PSPressStyle(scale: 0.97))
+                // The editor grows out of the card the user tapped.
+                .matchedTransitionSource(id: project.id, in: cardTransition)
                 .contextMenu {
                     Button { renameText = project.title; renameTarget = project } label: { Label(L("Rename"), systemImage: "pencil") }
                     Button { Haptics.tap(); app?.library.duplicate(project) } label: { Label(L("Duplicate"), systemImage: "plus.square.on.square") }
@@ -337,11 +361,12 @@ public struct HomeView: View {
 struct HeroSurface: ViewModifier {
     let prominent: Bool
     var tint: Color = PSTheme.accent
+    var cornerRadius: CGFloat = 24
     @Environment(\.psEffects) private var effects
 
     func body(content: Content) -> some View {
         if prominent {
-            let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
+            let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             content
                 .background {
                     ZStack {
@@ -353,7 +378,7 @@ struct HeroSurface: ViewModifier {
                 .clipShape(shape)
                 .shadow(color: PSTheme.accent.opacity(effects == .rich ? 0.35 : 0), radius: 22, y: 10)
         } else {
-            let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
+            let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             content
                 .background {
                     ZStack {
