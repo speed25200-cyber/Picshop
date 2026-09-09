@@ -1,0 +1,4 @@
+// Overwritten on CI by Scripts/build-stamp.sh before the project is generated.
+PS_BUILD_COMMIT = local
+PS_BUILD_BRANCH = local
+PS_BUILD_DATE = 

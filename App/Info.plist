@@ -20,6 +20,12 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>PSBuildCommit</key>
+	<string>$(PS_BUILD_COMMIT)</string>
+	<key>PSBuildBranch</key>
+	<string>$(PS_BUILD_BRANCH)</string>
+	<key>PSBuildDate</key>
+	<string>$(PS_BUILD_DATE)</string>
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>en</string>

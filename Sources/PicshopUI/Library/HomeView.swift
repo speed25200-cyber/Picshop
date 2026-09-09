@@ -156,9 +156,14 @@ public struct HomeView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(Date.now, format: .dateTime.weekday(.wide).day().month(.wide))
-                .font(PSFont.caption(12)).textCase(.uppercase).tracking(0.8)
-                .foregroundStyle(PSTheme.textTertiary)
+            HStack(spacing: 6) {
+                Text(Date.now, format: .dateTime.weekday(.wide).day().month(.wide))
+                Text("·")
+                // Build stamp, so any screenshot says which code produced it.
+                Text(BuildInfo.commit).font(PSFont.mono(11))
+            }
+            .font(PSFont.caption(12)).textCase(.uppercase).tracking(0.8)
+            .foregroundStyle(PSTheme.textTertiary)
             Text("PicShop").font(PSFont.display(40)).foregroundStyle(PSTheme.textPrimary).tracking(-1.4)
             Text(L("Photos, videos and PDFs. Just say it."))
                 .font(PSFont.body(15)).foregroundStyle(PSTheme.textSecondary)

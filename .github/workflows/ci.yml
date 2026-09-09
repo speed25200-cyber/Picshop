@@ -93,7 +93,7 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
-        run: xcodegen generate
+        run: sh Scripts/build-stamp.sh && xcodegen generate
       - name: Build (iOS Simulator, Debug)
         run: |
           set -o pipefail
@@ -148,7 +148,7 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project (pro)
-        run: xcodegen generate --spec project-pro.yml
+        run: sh Scripts/build-stamp.sh && xcodegen generate --spec project-pro.yml
       - name: Resolve packages
         run: xcodebuild -resolvePackageDependencies -project PicShop.xcodeproj -scheme PicShop -skipPackagePluginValidation
       - name: Build (iOS device, Release)

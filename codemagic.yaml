@@ -70,6 +70,7 @@ definitions:
       script: |
         set -e
         echo "spec: ${PICSHOP_SPEC:-project.yml}"
+        sh Scripts/build-stamp.sh
         xcodegen generate --spec "${PICSHOP_SPEC:-project.yml}"
         ls -d *.xcodeproj
     - &tests

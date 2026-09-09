@@ -53,11 +53,19 @@ public struct SettingsView: View {
                     Text("PicShop").font(PSFont.display(22)).foregroundStyle(PSTheme.textPrimary).tracking(-0.4)
                     HStack(spacing: 6) {
                         Text(L("Version")).foregroundStyle(PSTheme.textTertiary)
-                        Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
+                        Text("\(BuildInfo.version) (\(BuildInfo.buildNumber))")
                         Text("·").foregroundStyle(PSTheme.textTertiary)
                         Label(L("On-device, private"), systemImage: "lock.shield.fill").foregroundStyle(PSTheme.success)
                     }
                     .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                    HStack(spacing: 6) {
+                        Image(systemName: "number").font(.system(size: 9, weight: .bold))
+                        Text(BuildInfo.commit).font(PSFont.mono(11))
+                        if !BuildInfo.branch.isEmpty { Text(BuildInfo.branch).lineLimit(1).truncationMode(.middle) }
+                        if !BuildInfo.date.isEmpty { Text(BuildInfo.date) }
+                    }
+                    .font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary)
+                    .textSelection(.enabled)
                 }
                 Spacer(minLength: 0)
             }
