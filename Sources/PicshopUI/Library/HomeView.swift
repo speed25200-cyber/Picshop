@@ -15,6 +15,9 @@ public struct HomeView: View {
     @State private var showsPicker = false
     @State private var showsPDFPicker = false
     @State private var filter: LibraryFilter = .all
+    @State private var renameTarget: Project?
+    @State private var renameText = ""
+    @State private var deleteTarget: Project?
     @Namespace private var filterIndicator
 
     enum LibraryFilter: String, CaseIterable, Identifiable {
@@ -85,6 +88,23 @@ public struct HomeView: View {
             } message: {
                 Text(app?.library.errorMessage ?? "")
             }
+            .alert(L("Rename"), isPresented: Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })) {
+                TextField(L("Name"), text: $renameText)
+                Button(L("Cancel"), role: .cancel) { renameTarget = nil }
+                Button(L("Save")) {
+                    if let renameTarget { app?.library.rename(renameTarget, to: renameText) }
+                    renameTarget = nil
+                }
+            }
+            .confirmationDialog(deleteTarget.map { String(format: L("Delete “%@”?"), $0.title) } ?? "", isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }), titleVisibility: .visible) {
+                Button(L("Delete"), role: .destructive) {
+                    if let deleteTarget { Haptics.confirm(); app?.library.delete(deleteTarget) }
+                    deleteTarget = nil
+                }
+                Button(L("Cancel"), role: .cancel) { deleteTarget = nil }
+            } message: {
+                Text(L("The project and its edits are removed from this iPhone. The original in Photos stays."))
+            }
         }
         .preferredColorScheme(.dark)
         .tint(PSTheme.accent)
@@ -114,7 +134,7 @@ public struct HomeView: View {
                     }
                     .padding(.horizontal, PSSpacing.page)
                     if shown.isEmpty {
-                        Text(L("Nothing here yet.")).font(PSFont.body(14)).foregroundStyle(PSTheme.textTertiary).padding(.horizontal, PSSpacing.page)
+                        filterEmptyState
                     } else {
                         projectGrid(shown)
                     }
@@ -255,13 +275,34 @@ public struct HomeView: View {
                 }
                 .buttonStyle(PSPressStyle(scale: 0.97))
                 .contextMenu {
-                    Button { app?.library.duplicate(project) } label: { Label(L("Duplicate"), systemImage: "plus.square.on.square") }
-                    Button(role: .destructive) { app?.library.delete(project) } label: { Label(L("Delete"), systemImage: "trash") }
+                    Button { renameText = project.title; renameTarget = project } label: { Label(L("Rename"), systemImage: "pencil") }
+                    Button { Haptics.tap(); app?.library.duplicate(project) } label: { Label(L("Duplicate"), systemImage: "plus.square.on.square") }
+                    Divider()
+                    Button(role: .destructive) { deleteTarget = project } label: { Label(L("Delete"), systemImage: "trash") }
+                } preview: {
+                    ProjectCard(project: project, thumbnail: app?.library.thumbnail(for: project))
+                        .frame(width: 260)
                 }
             }
         }
         .padding(.horizontal, PSSpacing.page)
         .animation(PSMotion.standard, value: projects.map(\.id))
+    }
+
+    /// Shown when a filter has nothing to show: a quiet tile, not a bare line of text.
+    private var filterEmptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: filter == .videos ? "film" : (filter == .pdfs ? "doc.text" : "photo.on.rectangle"))
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(PSTheme.textTertiary)
+            Text(L("Nothing here yet.")).font(PSFont.headline(14)).foregroundStyle(PSTheme.textSecondary)
+            Text(L("Import one from the cards above.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textTertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
+        .psCard(cornerRadius: 22, shadow: false)
+        .padding(.horizontal, PSSpacing.page)
+        .transition(.opacity)
     }
 
     private var emptyState: some View {

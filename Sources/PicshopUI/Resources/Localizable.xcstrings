@@ -913,6 +913,22 @@
         }
       }
     },
+    "Delete “%@”?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete “%@”?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer « %@ » ?"
+          }
+        }
+      }
+    },
     "Describe what to generate…": {
       "localizations": {
         "en": {
@@ -1873,6 +1889,22 @@
         }
       }
     },
+    "Import one from the cards above.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import one from the cards above."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importez-en un depuis les cartes ci-dessus."
+          }
+        }
+      }
+    },
     "Importing…": {
       "localizations": {
         "en": {
@@ -2397,6 +2429,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couper le son"
+          }
+        }
+      }
+    },
+    "Name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom"
           }
         }
       }
@@ -3569,6 +3617,22 @@
         }
       }
     },
+    "Rename": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renommer"
+          }
+        }
+      }
+    },
     "Rendering": {
       "localizations": {
         "en": {
@@ -3773,6 +3837,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arrondi"
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer"
           }
         }
       }
@@ -4541,6 +4621,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "L'iPhone est trop chaud pour générer maintenant. Laissez-le refroidir un instant."
+          }
+        }
+      }
+    },
+    "The project and its edits are removed from this iPhone. The original in Photos stays.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The project and its edits are removed from this iPhone. The original in Photos stays."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le projet et ses retouches sont retirés de cet iPhone. L'original dans Photos est conservé."
           }
         }
       }

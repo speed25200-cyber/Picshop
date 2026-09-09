@@ -69,6 +69,24 @@ public final class ProjectLibrary {
         refresh()
     }
 
+    /// Renames a project in place; the title lives on the content model.
+    public func rename(_ project: Project, to title: String) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != project.title else { return }
+        var copy = project
+        switch copy.content {
+        case .photo(var document): document.title = trimmed; copy.content = .photo(document)
+        case .video(var timeline): timeline.title = trimmed; copy.content = .video(timeline)
+        case .pdf(var document): document.title = trimmed; copy.content = .pdf(document)
+        }
+        do {
+            try store.save(copy)
+            refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     public func duplicate(_ project: Project) {
         var copy = project
         let newID = UUID()

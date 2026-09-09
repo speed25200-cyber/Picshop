@@ -76,6 +76,8 @@ FR = {
     "Looks": "Looks", "Microphone & speech": "Micro et reconnaissance vocale", "Middle": "Milieu", "Model server": "Serveur de modèles", "Music": "Musique", "Mute": "Couper le son",
     "Neural models improve object removal and upscaling. Without them, PicShop uses its built-in PatchMatch engine — see docs/MODELS.md to host the archives.": "Les modèles neuronaux améliorent la suppression d'objets et l'agrandissement. Sans eux, PicShop utilise son moteur PatchMatch intégré — voir docs/MODELS.md pour héberger les archives.",
     "New Photo": "Nouvelle photo", "New Video": "Nouvelle vidéo", "Next frame": "Image suivante", "OK": "OK", "On-device models": "Modèles embarqués",
+    "Rename": "Renommer", "Name": "Nom", "Save": "Enregistrer", "Delete “%@”?": "Supprimer « %@ » ?", "Import one from the cards above.": "Importez-en un depuis les cartes ci-dessus.",
+    "The project and its edits are removed from this iPhone. The original in Photos stays.": "Le projet et ses retouches sont retirés de cet iPhone. L'original dans Photos est conservé.",
     "Balanced": "Équilibré", "Small": "Léger", "Output": "Sortie",
     "Opacity": "Opacité", "Original": "Original", "Overlay": "Élément", "Pause": "Pause", "Photo": "Photo", "Photo canvas": "Zone de la photo", "Photo format": "Format photo",
     "Photos, videos and voice never leave your device. PicShop has no servers, no accounts and no tracking.": "Vos photos, vidéos et votre voix ne quittent jamais votre appareil. PicShop n'a ni serveur, ni compte, ni suivi.",
