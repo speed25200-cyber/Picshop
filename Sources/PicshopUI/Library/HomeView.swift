@@ -132,7 +132,7 @@ public struct HomeView: View {
                 }
                 if let library = app?.library, !library.projects.isEmpty {
                     let shown = library.projects.filter(filter.matches)
-                    VStack(alignment: .leading, spacing: PSSpacing.medium) {
+                    VStack(alignment: .leading, spacing: 10) {
                         SectionTitle(title: L("Recent"), count: shown.count)
                         filterRow
                     }
@@ -493,7 +493,11 @@ struct AmbientBackground: View {
             RadialGradient(colors: [Color(red: 0.24, green: 0.44, blue: 0.98).opacity(0.28), .clear], center: .init(x: 0.15, y: 0.05), startRadius: 0, endRadius: 420)
             RadialGradient(colors: [Color(red: 0.62, green: 0.40, blue: 1.0).opacity(0.18), .clear], center: .init(x: 0.95, y: 0.25), startRadius: 0, endRadius: 380)
             RadialGradient(colors: [Color(red: 1.0, green: 0.55, blue: 0.35).opacity(0.10), .clear], center: .init(x: 0.5, y: 1.0), startRadius: 0, endRadius: 500)
+            // Falloff towards the edges, the way a lit studio darkens at the
+            // corners: it gives the washes a centre instead of a flat glow.
+            RadialGradient(colors: [.clear, PSTheme.ink.opacity(0.55)], center: .center, startRadius: 180, endRadius: 760)
         }
+        .drawingGroup(opaque: true)
     }
 }
 

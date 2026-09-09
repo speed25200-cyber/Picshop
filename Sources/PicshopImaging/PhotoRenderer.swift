@@ -37,7 +37,13 @@ public actor PhotoRenderer {
     private let upscaler: Upscaler
     private var sourceCache: [String: CIImage] = [:]
     private var operationCache: [String: CIImage] = [:]
+    private var operationOrder: [String] = []
     private var overlayCache: [String: CIImage] = [:]
+    /// Results of the expensive operations (erase, generate, upscale, denoise)
+    /// are worth keeping so undo and a panel change do not re-run a neural
+    /// model, but not forever: unbounded, a long session grew until the system
+    /// started reclaiming memory, and everything stuttered. Oldest out first.
+    private static let operationCacheLimit = 24
 
     public init(store: ProjectStore, projectID: UUID, inpainting: InpaintingPipeline, upscaler: Upscaler = Upscaler()) {
         self.store = store
@@ -48,15 +54,28 @@ public actor PhotoRenderer {
 
     public var maskStore: MaskStore { MaskStore(store: store, projectID: projectID) }
 
+    private func cacheOperation(_ image: CIImage, for key: String) {
+        if operationCache[key] == nil {
+            operationOrder.append(key)
+            while operationOrder.count > Self.operationCacheLimit, let oldest = operationOrder.first {
+                operationOrder.removeFirst()
+                operationCache[oldest] = nil
+            }
+        }
+        operationCache[key] = image
+    }
+
     /// Drops all cached intermediates (call when memory is tight or media changed).
     public func purgeCaches() {
         sourceCache.removeAll()
         operationCache.removeAll()
+        operationOrder.removeAll()
         overlayCache.removeAll()
     }
 
     public func purgeOperationCache(for operationIDs: Set<UUID>) {
         operationCache = operationCache.filter { key, _ in !operationIDs.contains { key.hasPrefix($0.uuidString) } }
+        operationOrder = operationOrder.filter { operationCache[$0] != nil }
     }
 
     // MARK: - Rendering
@@ -191,7 +210,7 @@ public actor PhotoRenderer {
             if let cached = operationCache[cacheKey] { return cached }
             guard options.allowExpensiveWork, let maskImage = maskStore.load(mask, fitting: extent) else { return input }
             let result = try await inpainting.fill(image: input, mask: maskImage, boundingBox: mask.boundingBox, feather: mask.feather)
-            operationCache[cacheKey] = result
+            cacheOperation(result, for: cacheKey)
             return result
 
         case .heal(let strokes):
@@ -204,7 +223,7 @@ public actor PhotoRenderer {
             let maskImage = CIImage(cgImage: cg)
             let box = MaskStore.boundingBox(of: bytes, width: width, height: height)
             let result = try await inpainting.fill(image: input, mask: maskImage, boundingBox: box, feather: 0.01)
-            operationCache[cacheKey] = result
+            cacheOperation(result, for: cacheKey)
             return result
 
         case .removeBackground(let mask):
@@ -229,7 +248,7 @@ public actor PhotoRenderer {
             if let cached = operationCache[cacheKey] { return cached }
             guard options.allowExpensiveWork else { return input }
             let result = try await upscaler.upscale(input, factor: factor)
-            operationCache[cacheKey] = result
+            cacheOperation(result, for: cacheKey)
             return result
 
         case .denoise(let amount):
@@ -253,7 +272,7 @@ public actor PhotoRenderer {
             if let cached = operationCache[cacheKey] { return cached }
             guard options.allowExpensiveWork, let maskImage = maskStore.load(mask, fitting: extent) else { return input }
             let result = try await inpainting.generate(image: input, mask: maskImage, boundingBox: mask.boundingBox, prompt: prompt)
-            operationCache[cacheKey] = result
+            cacheOperation(result, for: cacheKey)
             return result
 
         case .recolor(let mask, let color, let strength):

@@ -43,11 +43,16 @@ public final class ProjectLibrary {
     /// Drops a cached thumbnail; call after rewriting one on disk.
     public func invalidateThumbnail(for id: UUID) {
         thumbnails[id] = nil
+        thumbnailOrder.removeAll { $0 == id }
         refresh()
     }
 
     private var thumbnails: [UUID: (modified: Date, image: UIImage)] = [:]
+    @ObservationIgnored private var thumbnailOrder: [UUID] = []
     @ObservationIgnored private var loadingThumbnails: Set<UUID> = []
+    /// A prepared thumbnail is a decoded bitmap, around a megabyte each, so a
+    /// long scroll through a large library must not keep every one of them.
+    private static let thumbnailCacheLimit = 48
 
     private func loadThumbnail(for project: Project) {
         guard !loadingThumbnails.contains(project.id) else { return }
@@ -64,6 +69,13 @@ public final class ProjectLibrary {
             guard let self else { return }
             loadingThumbnails.remove(id)
             if let image {
+                if thumbnails[id] == nil {
+                    thumbnailOrder.append(id)
+                    while thumbnailOrder.count > Self.thumbnailCacheLimit, let oldest = thumbnailOrder.first {
+                        thumbnailOrder.removeFirst()
+                        thumbnails[oldest] = nil
+                    }
+                }
                 thumbnails[id] = (modified, image)
             } else if let project = projects.first(where: { $0.id == id }) {
                 regenerateThumbnail(for: project)
@@ -106,6 +118,7 @@ public final class ProjectLibrary {
     public func delete(_ project: Project) {
         try? store.delete(id: project.id)
         thumbnails[project.id] = nil
+        thumbnailOrder.removeAll { $0 == project.id }
         refresh()
     }
 

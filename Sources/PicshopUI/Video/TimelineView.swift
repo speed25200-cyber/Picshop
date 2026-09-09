@@ -81,7 +81,7 @@ struct TimelineView: View {
         let major: Double = pixelsPerSecond >= 200 ? 1 : (pixelsPerSecond >= 80 ? 2 : (pixelsPerSecond >= 40 ? 5 : (pixelsPerSecond >= 16 ? 10 : 30)))
         let minor = major / 5
         let duration = max(0, session.timeline.duration)
-        return Canvas { context, size in
+        return Canvas(rendersAsynchronously: true) { context, size in
             let baseline = size.height - 1
             var index = 0
             while true {
