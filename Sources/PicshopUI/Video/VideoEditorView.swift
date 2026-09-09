@@ -21,7 +21,7 @@ public struct VideoEditorView: View {
             VStack(spacing: 0) {
                 PlayerPreview(session: session)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                transportBar
+                TransportBar(session: session)
                 TimelineView(session: session)
                     .frame(height: 118 + TimelineView.rulerHeight)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -31,7 +31,7 @@ public struct VideoEditorView: View {
         } top: {
             EditorTopBar(
                 title: L("Video"),
-                subtitle: "\(Int(session.timeline.renderSize.width)) × \(Int(session.timeline.renderSize.height)) · \(timecode(session.timeline.duration))",
+                subtitle: "\(Int(session.timeline.renderSize.width)) × \(Int(session.timeline.renderSize.height)) · \(psTimecode(session.timeline.duration, frameRate: session.timeline.frameRate))",
                 canUndo: session.history.canUndo, canRedo: session.history.canRedo,
                 onClose: { session.teardown(); dismiss() },
                 onUndo: { session.undo() }, onRedo: { session.redo() },
@@ -39,22 +39,7 @@ public struct VideoEditorView: View {
         } bottom: {
             bottomArea
         }
-        .overlay {
-            if session.isProcessing {
-                ProgressHUD(title: session.processingTitle, progress: session.processingProgress)
-            }
-            if let progress = session.exportProgress {
-                ProgressHUD(title: L("Exporting…"), progress: progress)
-            }
-        }
-        .overlay(alignment: .top) {
-            if let toast = session.toast {
-                ToastView(text: toast.text, systemImage: toast.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill", tint: toast.isError ? PSTheme.danger : PSTheme.success,
-                          onUndo: toast.undoable ? { session.undo() } : nil)
-                    .padding(.top, 60)
-                    .id(toast.id)
-            }
-        }
+        .overlay { EditorStatusOverlay(session: session, toastHorizontalInset: 16) }
         .task { await session.configure() }
         .onDisappear { session.teardown() }
         .sheet(isPresented: $session.showsExport) { VideoExportSheet(session: session) }
@@ -64,41 +49,6 @@ public struct VideoEditorView: View {
         }
         .preferredColorScheme(.dark)
         .persistentSystemOverlays(.hidden)
-    }
-
-    @State private var scrubStart: Double?
-
-    /// Transport row. Dragging horizontally anywhere on the row scrubs the
-    /// playhead (a second per 120 pt, with frame-fine control at slow speed).
-    private var transportBar: some View {
-        HStack(spacing: 14) {
-            Text(timecode(session.player.currentTime)).font(PSFont.mono(12)).foregroundStyle(PSTheme.textSecondary).frame(width: 64, alignment: .leading)
-                .contentTransition(.numericText())
-            Spacer()
-            GlassIconButton("backward.frame", label: L("Previous frame"), size: 34) { Task { await session.player.step(frames: -1, frameRate: session.timeline.frameRate) } }
-            GlassIconButton(session.player.isPlaying ? "pause.fill" : "play.fill", label: session.player.isPlaying ? L("Pause") : L("Play"), tint: PSTheme.accent, isActive: true, size: 44) { session.player.togglePlayback() }
-            GlassIconButton("forward.frame", label: L("Next frame"), size: 34) { Task { await session.player.step(frames: 1, frameRate: session.timeline.frameRate) } }
-            Spacer()
-            Text(timecode(session.timeline.duration)).font(PSFont.mono(12)).foregroundStyle(PSTheme.textSecondary).frame(width: 64, alignment: .trailing)
-        }
-        .padding(.horizontal, 20).padding(.vertical, 4)
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 12)
-                .onChanged { value in
-                    if scrubStart == nil {
-                        scrubStart = session.player.currentTime
-                        Haptics.soft()
-                    }
-                    guard let start = scrubStart else { return }
-                    let target = (start + Double(value.translation.width) / 120).clamped(to: 0...max(0, session.timeline.duration))
-                    Task { await session.player.seek(to: target) }
-                }
-                .onEnded { _ in
-                    scrubStart = nil
-                    Haptics.tick()
-                }
-        )
     }
 
     private var bottomArea: some View {
@@ -131,12 +81,58 @@ public struct VideoEditorView: View {
         .animation(PSMotion.standard, value: session.activeTool)
     }
 
-    private func timecode(_ seconds: Double) -> String {
-        let total = max(0, seconds)
-        let minutes = Int(total) / 60
-        let secs = Int(total) % 60
-        let frames = Int((total - floor(total)) * max(1, session.timeline.frameRate))
-        return String(format: "%02d:%02d.%02d", minutes, secs, frames)
+}
+
+/// Minutes, seconds and frames, the way an editor reads a timeline.
+func psTimecode(_ seconds: Double, frameRate: Double) -> String {
+    let total = max(0, seconds)
+    let minutes = Int(total) / 60
+    let secs = Int(total) % 60
+    let frames = Int((total - floor(total)) * max(1, frameRate))
+    return String(format: "%02d:%02d.%02d", minutes, secs, frames)
+}
+
+/// Transport row: timecode, frame stepping, play/pause, and a horizontal drag
+/// anywhere on the row to scrub (a second per 120 pt).
+///
+/// Its own view because the playhead moves many times a second: read in the
+/// editor's body, every tick would re-evaluate the player, the timeline, the
+/// tool panel and the dock.
+private struct TransportBar: View {
+    @Bindable var session: VideoEditorSession
+    @State private var scrubStart: Double?
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text(psTimecode(session.player.currentTime, frameRate: session.timeline.frameRate))
+                .font(PSFont.mono(12)).foregroundStyle(PSTheme.textSecondary).frame(width: 64, alignment: .leading)
+                .contentTransition(.numericText())
+            Spacer()
+            GlassIconButton("backward.frame", label: L("Previous frame"), size: 34) { Task { await session.player.step(frames: -1, frameRate: session.timeline.frameRate) } }
+            GlassIconButton(session.player.isPlaying ? "pause.fill" : "play.fill", label: session.player.isPlaying ? L("Pause") : L("Play"), tint: PSTheme.accent, isActive: true, size: 44) { session.player.togglePlayback() }
+            GlassIconButton("forward.frame", label: L("Next frame"), size: 34) { Task { await session.player.step(frames: 1, frameRate: session.timeline.frameRate) } }
+            Spacer()
+            Text(psTimecode(session.timeline.duration, frameRate: session.timeline.frameRate))
+                .font(PSFont.mono(12)).foregroundStyle(PSTheme.textSecondary).frame(width: 64, alignment: .trailing)
+        }
+        .padding(.horizontal, 20).padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 12)
+                .onChanged { value in
+                    if scrubStart == nil {
+                        scrubStart = session.player.currentTime
+                        Haptics.soft()
+                    }
+                    guard let start = scrubStart else { return }
+                    let target = (start + Double(value.translation.width) / 120).clamped(to: 0...max(0, session.timeline.duration))
+                    Task { await session.player.seek(to: target) }
+                }
+                .onEnded { _ in
+                    scrubStart = nil
+                    Haptics.tick()
+                }
+        )
     }
 }
 
@@ -181,7 +177,9 @@ struct PlayerPreview: View {
                     }
                 }
                 .allowsHitTesting(false)
-                if let clip = session.selectedClip, let label = clip.processedLabel {
+                // The explicitly selected clip only: resolving the clip under the
+                // playhead here would re-evaluate the preview on every tick.
+                if let id = session.selectedClipID, let clip = session.timeline.clips.first(where: { $0.id == id }), let label = clip.processedLabel {
                     GlassChip(label, systemImage: "sparkles").position(x: frame.minX + 60, y: frame.minY + 22)
                 }
             }

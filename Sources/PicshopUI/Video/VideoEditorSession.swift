@@ -415,4 +415,5 @@ public final class VideoEditorSession {
         }
     }
 }
+extension VideoEditorSession: EditorStatus {}
 #endif

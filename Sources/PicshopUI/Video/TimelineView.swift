@@ -64,9 +64,10 @@ struct TimelineView: View {
             .gesture(MagnifyGesture().onChanged { value in
                 pixelsPerSecond = min(400, max(12, steadyScale * value.magnification))
             }.onEnded { _ in steadyScale = pixelsPerSecond })
-            .onChange(of: session.player.currentTime) { _, time in
-                guard session.player.isPlaying else { return }
-                position.scrollTo(x: CGFloat(time) * pixelsPerSecond)
+            .overlay {
+                // Following the playhead must not re-evaluate the filmstrip on
+                // every tick, so the observation lives in a leaf view.
+                PlayheadFollower(player: session.player, pixelsPerSecond: pixelsPerSecond, position: $position)
             }
         }
         .psCard(cornerRadius: 18, shadow: false)
@@ -132,6 +133,24 @@ struct TimelineView: View {
             .background(PSTheme.success, in: Capsule())
             .offset(x: x, y: 96 + TimelineView.rulerHeight)
         }
+    }
+}
+
+/// Scrolls the timeline to keep up with the playhead. A leaf view, so the
+/// player's ticks invalidate nothing but itself.
+private struct PlayheadFollower: View {
+    let player: TimelinePlayer
+    let pixelsPerSecond: CGFloat
+    @Binding var position: ScrollPosition
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .allowsHitTesting(false)
+            .onChange(of: player.currentTime) { _, time in
+                guard player.isPlaying else { return }
+                position.scrollTo(x: CGFloat(time) * pixelsPerSecond)
+            }
     }
 }
 

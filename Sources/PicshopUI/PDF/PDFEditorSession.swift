@@ -439,4 +439,9 @@ public final class PDFEditorSession {
         }
     }
 }
+extension PDFEditorSession: EditorStatus {
+    var processingProgress: Double? { nil }
+    /// The PDF export writes the file in one step and shares it.
+    var exportProgress: Double? { nil }
+}
 #endif

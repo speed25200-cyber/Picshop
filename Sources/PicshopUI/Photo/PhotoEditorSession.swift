@@ -1078,4 +1078,8 @@ public final class PhotoEditorSession {
         }
     }
 }
+extension PhotoEditorSession: EditorStatus {
+    /// The photo tasks report completion rather than a fraction.
+    var processingProgress: Double? { nil }
+}
 #endif

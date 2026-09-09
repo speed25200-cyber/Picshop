@@ -276,7 +276,7 @@ public struct HomeView: View {
                     Haptics.tap()
                     openProject = project
                 } label: {
-                    ProjectCard(project: project, thumbnail: app?.library.thumbnail(for: project))
+                    ProjectCard(project: project, library: app?.library)
                 }
                 .buttonStyle(PSPressStyle(scale: 0.97))
                 .contextMenu {
@@ -285,7 +285,7 @@ public struct HomeView: View {
                     Divider()
                     Button(role: .destructive) { deleteTarget = project } label: { Label(L("Delete"), systemImage: "trash") }
                 } preview: {
-                    ProjectCard(project: project, thumbnail: app?.library.thumbnail(for: project))
+                    ProjectCard(project: project, library: app?.library)
                         .frame(width: 260)
                 }
             }
@@ -386,8 +386,12 @@ struct HeroMesh: View {
 
 struct ProjectCard: View {
     let project: Project
-    let thumbnail: UIImage?
+    /// The card reads its own thumbnail: read in the grid's body instead, one
+    /// image arriving would repaint every card.
+    let library: ProjectLibrary?
     @Environment(\.psEffects) private var effects
+
+    private var thumbnail: UIImage? { library?.thumbnail(for: project) }
 
     private var tint: Color { project.isPDF ? PSTheme.warning : (project.isVideo ? PSTheme.voice : PSTheme.accent) }
 

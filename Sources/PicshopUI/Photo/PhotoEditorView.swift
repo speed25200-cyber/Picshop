@@ -28,23 +28,9 @@ public struct PhotoEditorView: View {
         } bottom: {
             bottomArea
         }
-        .overlay {
-            if session.isProcessing {
-                ProgressHUD(title: session.processingTitle)
-            }
-            if let progress = session.exportProgress {
-                ProgressHUD(title: L("Exporting…"), progress: progress)
-            }
-        }
-        .overlay(alignment: .top) {
-            if let toast = session.toast {
-                ToastView(text: toast.text, systemImage: toast.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill", tint: toast.isError ? PSTheme.danger : PSTheme.success,
-                          onUndo: toast.undoable ? { session.undo() } : nil)
-                    .padding(.top, 60)
-                    .padding(.horizontal, 24)
-                    .id(toast.id)
-            }
-        }
+        // Progress and toasts live in their own view, so a progress tick never
+        // re-evaluates the canvas and the dock.
+        .overlay { EditorStatusOverlay(session: session) }
 
         .task { await session.configure() }
         .onDisappear { session.teardown() }

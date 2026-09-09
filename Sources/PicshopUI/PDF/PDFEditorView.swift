@@ -35,16 +35,7 @@ public struct PDFEditorView: View {
         } bottom: {
             bottomArea
         }
-        .overlay {
-            if session.isProcessing { ProgressHUD(title: session.processingTitle) }
-        }
-        .overlay(alignment: .top) {
-            if let toast = session.toast {
-                ToastView(text: toast.text, systemImage: toast.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill", tint: toast.isError ? PSTheme.danger : PSTheme.success,
-                          onUndo: toast.undoable ? { session.undo() } : nil)
-                    .padding(.top, 60).id(toast.id)
-            }
-        }
+        .overlay { EditorStatusOverlay(session: session, toastHorizontalInset: 16) }
         .onAppear { session.configure() }
         .onDisappear { session.teardown() }
         .sheet(isPresented: $session.showsHelp) { HelpSheet(mode: .pdf) { text in Task { await session.handleTranscript(text) } } }
