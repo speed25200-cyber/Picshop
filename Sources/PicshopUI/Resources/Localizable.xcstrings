@@ -4497,6 +4497,22 @@
         }
       }
     },
+    "Tap one, or say its number.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap one, or say its number."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez-en un, ou dites son numéro."
+          }
+        }
+      }
+    },
     "Tap the canvas to place a shape. Drag to move, pinch to resize, twist to rotate.": {
       "localizations": {
         "en": {

@@ -799,6 +799,26 @@ public final class PhotoEditorSession {
         Task { await run(EditIntent(action: .chooseCandidate, index: candidateIndex + 1)) }
     }
 
+    /// Small crop of the preview around a candidate, so the clarification
+    /// chips show the actual object rather than only a number.
+    public func candidateThumbnail(_ candidate: ObjectCandidate) async -> UIImage? {
+        guard let preview else { return nil }
+        let extent = preview.extent
+        let box = candidate.boundingBox
+        let pad = 0.08
+        let x0 = max(0, box.origin.x - pad), y0 = max(0, box.origin.y - pad)
+        let x1 = min(1, box.origin.x + box.size.width + pad), y1 = min(1, box.origin.y + box.size.height + pad)
+        // Boxes are top-left normalised; Core Image is bottom-left.
+        let rect = CGRect(x: extent.minX + x0 * extent.width, y: extent.minY + (1 - y1) * extent.height,
+                          width: (x1 - x0) * extent.width, height: (y1 - y0) * extent.height).integral
+        guard rect.width > 1, rect.height > 1 else { return nil }
+        let scale = min(1, 160 / max(rect.width, rect.height))
+        let cropped = preview.cropped(to: rect).transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let image = cropped.transformed(by: CGAffineTransform(translationX: -cropped.extent.minX, y: -cropped.extent.minY))
+        await Task.yield()
+        return ImageSupport.cgImage(from: image).map { UIImage(cgImage: $0) }
+    }
+
     public func chooseAllCandidates() {
         Task { await run(EditIntent(action: .chooseCandidate, scope: .all)) }
     }

@@ -487,6 +487,8 @@ struct VoiceStrip: View {
     var clarification: ClarificationRequest?
     /// Shown while nothing else is going on (typically when no tool is open).
     var showsHint: Bool
+    /// Optional picture of each candidate for the clarification chips.
+    var candidateThumbnail: ((ObjectCandidate) async -> UIImage?)? = nil
     var onChoose: (Int) -> Void
     var onChooseAll: () -> Void
     var onCancel: () -> Void
@@ -497,7 +499,7 @@ struct VoiceStrip: View {
     var body: some View {
         VStack(spacing: 8) {
             if let clarification {
-                ClarificationCard(request: clarification, onChoose: onChoose, onChooseAll: onChooseAll, onCancel: onCancel)
+                ClarificationCard(request: clarification, thumbnail: candidateThumbnail, onChoose: onChoose, onChooseAll: onChooseAll, onCancel: onCancel)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             if isIdleHint, let text = statusText {
@@ -683,17 +685,23 @@ struct MicButton: View {
 /// Numbered candidate choices when a command was ambiguous.
 struct ClarificationCard: View {
     let request: ClarificationRequest
+    var thumbnail: ((ObjectCandidate) async -> UIImage?)? = nil
     var onChoose: (Int) -> Void
     var onChooseAll: () -> Void
     var onCancel: () -> Void
+    @State private var images: [UUID: UIImage] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top) {
-                Text(request.question)
-                    .font(PSFont.body(14))
-                    .foregroundStyle(PSTheme.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(request.question)
+                        .font(PSFont.body(14))
+                        .foregroundStyle(PSTheme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(L("Tap one, or say its number."))
+                        .font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary)
+                }
                 Spacer(minLength: 8)
                 Button { Haptics.tap(); onCancel() } label: {
                     Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(PSTheme.textSecondary).frame(width: 26, height: 26)
@@ -709,12 +717,19 @@ struct ClarificationCard: View {
                             Haptics.confirm()
                             onChoose(index)
                         } label: {
-                            HStack(spacing: 6) {
-                                Text("\(index + 1)").font(PSFont.headline(12)).foregroundStyle(.white)
-                                    .frame(width: 20, height: 20).background(Circle().fill(PSTheme.accentGradient))
+                            HStack(spacing: 8) {
+                                if let image = images[candidate.id] {
+                                    Image(uiImage: image).resizable().scaledToFill()
+                                        .frame(width: 36, height: 36)
+                                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                        .overlay(alignment: .bottomTrailing) { numberBadge(index + 1, size: 16).offset(x: 4, y: 4) }
+                                        .transition(.opacity)
+                                } else {
+                                    numberBadge(index + 1, size: 20)
+                                }
                                 Text(candidate.spokenDescription).font(PSFont.caption(13)).foregroundStyle(PSTheme.textPrimary)
                             }
-                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .padding(.leading, images[candidate.id] == nil ? 10 : 6).padding(.trailing, 12).padding(.vertical, 6)
                             .psGlass(interactive: true)
                         }
                         .buttonStyle(PSPressStyle())
@@ -727,10 +742,24 @@ struct ClarificationCard: View {
                         .buttonStyle(PSPressStyle())
                     }
                 }
+                .animation(PSMotion.quick, value: images.count)
             }
         }
         .padding(12)
         .psGlassPanel(cornerRadius: 22)
+        .task(id: request.id) {
+            guard let thumbnail else { return }
+            images = [:]
+            for candidate in request.candidates {
+                if let image = await thumbnail(candidate) { images[candidate.id] = image }
+            }
+        }
+    }
+
+    private func numberBadge(_ number: Int, size: CGFloat) -> some View {
+        Text("\(number)").font(PSFont.headline(size * 0.6)).foregroundStyle(.white)
+            .frame(width: size, height: size).background(Circle().fill(PSTheme.accentGradient))
+            .overlay(Circle().strokeBorder(Color.black.opacity(0.35), lineWidth: 1))
     }
 }
 
