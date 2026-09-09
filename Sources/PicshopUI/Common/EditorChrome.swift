@@ -495,6 +495,7 @@ struct VoiceStrip: View {
 
     @State private var replyVisible = false
     @Environment(\.psEffects) private var effects
+    @Environment(\.psReducedMotion) private var reducedMotion
 
     var body: some View {
         VStack(spacing: 8) {
@@ -536,9 +537,9 @@ struct VoiceStrip: View {
                 .psCard(cornerRadius: 20, shadow: false)
                 // While listening the card breathes with the voice: a tinted rim whose strength follows the input level.
                 .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(PSTheme.voice.opacity(voice.isListening ? 0.35 + voice.level * 0.5 : 0), lineWidth: 1.5)
-                    .animation(PSMotion.interactive, value: voice.level))
-                .shadow(color: PSTheme.voice.opacity(voice.isListening && effects == .rich ? 0.25 + voice.level * 0.3 : 0), radius: 14, y: 4)
+                    .strokeBorder(PSTheme.voice.opacity(voice.isListening ? 0.35 + rimLevel * 0.5 : 0), lineWidth: 1.5)
+                    .animation(PSMotion.interactive, value: rimLevel))
+                .shadow(color: PSTheme.voice.opacity(voice.isListening && effects == .rich ? 0.25 + rimLevel * 0.3 : 0), radius: 14, y: 4)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -555,10 +556,14 @@ struct VoiceStrip: View {
         }
     }
 
+    /// The rim and the bars follow the voice, unless the user asked the system
+    /// to stop things moving on their own.
+    private var rimLevel: Double { reducedMotion ? 0.5 : voice.level }
+
     @ViewBuilder
     private var statusIcon: some View {
         if voice.isListening {
-            LevelBars(level: effects == .minimal ? 0.5 : voice.level)
+            LevelBars(level: effects == .minimal || reducedMotion ? 0.5 : voice.level)
         } else if isBusy {
             ProgressView().tint(PSTheme.accent).controlSize(.small)
         } else if isUnavailable {
@@ -607,6 +612,7 @@ struct LevelBars: View {
         .frame(height: 18)
         .animation(PSMotion.interactive, value: level)
         .accessibilityHidden(true)
+        .accessibilityHidden(true)
     }
 }
 
@@ -619,15 +625,18 @@ struct MicButton: View {
 
     @State private var pressing = false
     @Environment(\.psEffects) private var effects
+    @Environment(\.psReducedMotion) private var reducedMotion
 
     var body: some View {
         ZStack {
             Circle()
                 .stroke(PSTheme.voice.opacity(0.35), lineWidth: 2)
                 .frame(width: 52, height: 52)
-                .scaleEffect(voice.isListening ? 1.18 + CGFloat(voice.level) * 0.45 : 1)
+                // Reduce Motion: the ring still says "listening", it just holds
+                // its size instead of breathing.
+                .scaleEffect(voice.isListening ? (reducedMotion ? 1.2 : 1.18 + CGFloat(voice.level) * 0.45) : 1)
                 .opacity(voice.isListening ? 1 : 0)
-                .animation(PSMotion.interactive, value: voice.level)
+                .animation(PSMotion.interactive, value: reducedMotion ? 0 : voice.level)
                 .animation(PSMotion.quick, value: voice.isListening)
             Circle()
                 .fill(PSTheme.voiceGradient)

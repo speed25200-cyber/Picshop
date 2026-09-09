@@ -118,6 +118,7 @@ public struct RootView: View {
         }
         .environment(\.picshop, environment)
         .environment(\.psEffects, environment.performance.effectsLevel)
+        .environment(\.psReducedMotion, environment.performance.reduceMotion)
         .animation(.easeInOut, value: environment.settings.hasCompletedOnboarding)
     }
 }

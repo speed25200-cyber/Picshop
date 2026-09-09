@@ -230,11 +230,23 @@ private struct PSEffectsLevelKey: EnvironmentKey {
     static let defaultValue: PSEffectsLevel = .rich
 }
 
+private struct PSReducedMotionKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 public extension EnvironmentValues {
     /// Set once at the root from `PerformanceGovernor.effectsLevel`.
     var psEffects: PSEffectsLevel {
         get { self[PSEffectsLevelKey.self] }
         set { self[PSEffectsLevelKey.self] = newValue }
+    }
+
+    /// Mirrors the system Reduce Motion setting. Anything that moves without
+    /// the user touching it — a level meter, a breathing ring, an iterating
+    /// symbol — holds still when this is on.
+    var psReducedMotion: Bool {
+        get { self[PSReducedMotionKey.self] }
+        set { self[PSReducedMotionKey.self] = newValue }
     }
 }
 #endif
