@@ -206,8 +206,11 @@ public final class PhotoEditorSession {
         if let renderer {
             let store = app.store
             let document = self.document
+            let library = app.library
+            let id = projectID
             Task.detached(priority: .utility) {
                 await ThumbnailGenerator.writeThumbnail(for: document, renderer: renderer, store: store)
+                await MainActor.run { library.invalidateThumbnail(for: id) }
             }
         }
     }

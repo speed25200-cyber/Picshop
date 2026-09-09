@@ -26,13 +26,52 @@ public final class ProjectLibrary {
         projects = store.listProjects()
     }
 
+    /// Thumbnail for the library grid.
+    ///
+    /// This is read from a SwiftUI body for every visible card, so it must not
+    /// touch the disk: reading and decoding the JPEG inline re-decoded every
+    /// thumbnail on the main thread on each pass, which is what made the
+    /// library feel slow. The image is decoded once, off the main thread, and
+    /// kept; while a newer version loads the previous one stays on screen.
     public func thumbnail(for project: Project) -> UIImage? {
-        if let image = UIImage(contentsOfFile: store.thumbnailURL(for: project.id).path) { return image }
-        regenerateThumbnail(for: project)
-        return nil
+        let cached = thumbnails[project.id]
+        if let cached, cached.modified == project.modifiedAt { return cached.image }
+        loadThumbnail(for: project)
+        return cached?.image
     }
 
-    private var regenerating: Set<UUID> = []
+    /// Drops a cached thumbnail; call after rewriting one on disk.
+    public func invalidateThumbnail(for id: UUID) {
+        thumbnails[id] = nil
+        refresh()
+    }
+
+    private var thumbnails: [UUID: (modified: Date, image: UIImage)] = [:]
+    @ObservationIgnored private var loadingThumbnails: Set<UUID> = []
+
+    private func loadThumbnail(for project: Project) {
+        guard !loadingThumbnails.contains(project.id) else { return }
+        loadingThumbnails.insert(project.id)
+        let url = store.thumbnailURL(for: project.id)
+        let id = project.id
+        let modified = project.modifiedAt
+        Task { [weak self] in
+            let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+                guard let data = try? Data(contentsOf: url, options: .mappedIfSafe), let image = UIImage(data: data) else { return nil }
+                // Decode here rather than at draw time, so the first frame costs nothing.
+                return image.preparingForDisplay() ?? image
+            }.value
+            guard let self else { return }
+            loadingThumbnails.remove(id)
+            if let image {
+                thumbnails[id] = (modified, image)
+            } else if let project = projects.first(where: { $0.id == id }) {
+                regenerateThumbnail(for: project)
+            }
+        }
+    }
+
+    @ObservationIgnored private var regenerating: Set<UUID> = []
 
     /// Projects saved by older builds have no current thumbnail: rebuild one from the
     /// original media in the background, then refresh the grid.
@@ -59,13 +98,14 @@ public final class ProjectLibrary {
             }
             await MainActor.run { [weak self] in
                 self?.regenerating.remove(id)
-                self?.refresh()
+                self?.invalidateThumbnail(for: id)
             }
         }
     }
 
     public func delete(_ project: Project) {
         try? store.delete(id: project.id)
+        thumbnails[project.id] = nil
         refresh()
     }
 

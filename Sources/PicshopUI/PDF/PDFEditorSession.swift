@@ -115,6 +115,7 @@ public final class PDFEditorSession {
         app.library.save(Project(id: projectID, content: .pdf(document), createdAt: document.createdAt, modifiedAt: Date()))
         if let image = services.thumbnail(for: 0, in: document, height: 400)?.cgImage {
             ThumbnailGenerator.writeThumbnail(image: image, projectID: projectID, store: app.store)
+            app.library.invalidateThumbnail(for: projectID)
         }
     }
 

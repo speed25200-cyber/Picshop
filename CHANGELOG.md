@@ -2,6 +2,8 @@
 
 ## Unreleased — polish loop
 
+- The library grid no longer decodes JPEGs on the main thread: `thumbnail(for:)` was read from a SwiftUI body for every visible card and hit the disk each time. Thumbnails are now decoded once off the main thread, kept in memory, and refreshed when an editor rewrites one; the previous image stays on screen while a newer one loads.
+
 - The editor draws before the models load: `MLModel(contentsOf:)` ran synchronously on the main actor inside `configure()`, so opening a photo froze on a black canvas for as long as the Neural Engine took to prepare the eraser. The pipeline is now built empty, the first frame is requested immediately, and the engines are attached off the main thread; a fill that arrives while they load waits for them instead of silently using the patch-based fallback. The canvas shows the photo's frame with a spinner rather than black.
 
 - Build stamp: every CI build carries its git commit, branch and date (Home eyebrow, Settings identity card), so a screenshot always says which code produced it.
