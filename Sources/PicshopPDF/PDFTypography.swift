@@ -83,13 +83,33 @@ enum PDFTypography {
 
     // MARK: Scan estimation
 
-    /// Guesses the face of a run of words on a scan: the family whose glyph
-    /// proportions best reproduce the measured width, bold when the ink is dense.
-    static func estimateFace(words: [(text: String, widthPx: CGFloat, heightPx: CGFloat, inkCoverage: Double)]) -> String {
+    /// Measured ink of a scanned word: how dense it is, how thick its strokes
+    /// are relative to the glyph height, and how much the stroke width varies
+    /// (serif faces alternate hairlines and stems; sans faces are even).
+    struct InkSample {
+        var text: String
+        var widthPx: CGFloat
+        var heightPx: CGFloat
+        var inkCoverage: Double
+        /// Mean horizontal stroke width ÷ glyph height (≈0.10–0.13 regular sans, ≥0.16 bold).
+        var strokeRatio: Double = 0
+        /// Coefficient of variation of stroke widths (≥0.55 reads as serif).
+        var strokeVariation: Double = 0
+    }
+
+    /// Guesses the face of a run of words on a scan. Weight comes from the
+    /// stroke thickness, serif-ness from the stroke variation, and the family
+    /// from whichever candidate best reproduces the measured word widths.
+    /// Business documents are overwhelmingly sans, so serif needs evidence.
+    static func estimateFace(words: [InkSample]) -> String {
         let usable = words.filter { $0.widthPx > 2 && $0.heightPx > 2 && !$0.text.isEmpty }
         guard !usable.isEmpty else { return fallbackName }
-        let coverage = usable.map(\.inkCoverage).reduce(0, +) / Double(usable.count)
-        let isBold = coverage > 0.27
+        let count = Double(usable.count)
+        let coverage = usable.map(\.inkCoverage).reduce(0, +) / count
+        let strokeRatio = usable.map(\.strokeRatio).reduce(0, +) / count
+        let variation = usable.map(\.strokeVariation).reduce(0, +) / count
+        let isBold = strokeRatio > 0 ? (strokeRatio > 0.155 || (strokeRatio > 0.135 && coverage > 0.3)) : coverage > 0.27
+        let looksSerif = variation > 0.55
         var best: (name: String, error: CGFloat) = (fallbackName, .greatestFiniteMagnitude)
         for family in candidateFamilies {
             let name = isBold ? family.bold : family.regular
@@ -100,9 +120,41 @@ enum PDFTypography {
                 let measured = (word.text as NSString).size(withAttributes: [.font: probe.withSize(size)]).width
                 error += abs(measured - word.widthPx) / max(1, word.widthPx)
             }
+            // Width alone cannot tell Times from Helvetica on a scan; the ink can.
+            if family.serif != looksSerif { error += 0.12 * CGFloat(usable.count) }
             if error < best.error { best = (name, error) }
         }
         return best.name
+    }
+
+    /// Stroke statistics of the ink inside a normalised box of a grey page render:
+    /// horizontal run lengths of dark pixels, which cross the vertical stems.
+    static func strokeStats(of rect: PSRect, gray: [UInt8], width: Int, height: Int) -> (ratio: Double, variation: Double) {
+        let x0 = max(0, Int(rect.minX * Double(width))), x1 = min(width, Int(rect.maxX * Double(width)))
+        let y0 = max(0, Int(rect.minY * Double(height))), y1 = min(height, Int(rect.maxY * Double(height)))
+        guard x1 > x0 + 2, y1 > y0 + 2 else { return (0, 0) }
+        var samples: [UInt8] = []
+        samples.reserveCapacity((x1 - x0) * (y1 - y0))
+        for y in y0..<y1 { for x in x0..<x1 { samples.append(gray[y * width + x]) } }
+        let sorted = samples.sorted()
+        let paper = Double(sorted[min(sorted.count - 1, sorted.count * 3 / 4)])
+        let threshold = paper - max(40, paper * 0.35)
+        var runs: [Int] = []
+        for y in y0..<y1 {
+            var run = 0
+            for x in x0...x1 {
+                let ink = x < x1 && Double(gray[y * width + x]) < threshold
+                if ink { run += 1 } else if run > 0 { runs.append(run); run = 0 }
+            }
+        }
+        // Drop the longest runs (horizontal bars of E, T, underlines) and the 1-px noise.
+        let cleaned = runs.filter { $0 > 1 }.sorted()
+        guard cleaned.count >= 8 else { return (0, 0) }
+        let kept = Array(cleaned.prefix(max(8, cleaned.count * 85 / 100)))
+        let mean = Double(kept.reduce(0, +)) / Double(kept.count)
+        let variance = kept.reduce(0.0) { $0 + (Double($1) - mean) * (Double($1) - mean) } / Double(kept.count)
+        let glyphHeight = Double(y1 - y0)
+        return (mean / max(1, glyphHeight), variance.squareRoot() / max(0.001, mean))
     }
 
     /// Fraction of dark pixels inside a normalised box of a grey page render.

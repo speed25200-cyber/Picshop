@@ -77,6 +77,7 @@ public final class PDFEditorSession {
         public var draft: String
         public var fontName: String? = nil
         public var relativeFontSize: Double? = nil
+        public var suffix: String = ""
     }
     /// Tap location on the current page (displayed, normalised) for text/image placement.
     public var lastTapPoint: PSPoint?
@@ -220,7 +221,7 @@ public final class PDFEditorSession {
                 guard let self else { return }
                 self.isProcessing = false
                 if let hit {
-                    self.textEdit = TextEdit(pageIndex: pageIndex, original: hit.text, rect: hit.rect, background: hit.background, draft: hit.text, fontName: hit.fontName, relativeFontSize: hit.relativeFontSize)
+                    self.textEdit = TextEdit(pageIndex: pageIndex, original: hit.text, rect: hit.rect, background: hit.background, draft: hit.text, fontName: hit.fontName, relativeFontSize: hit.relativeFontSize, suffix: hit.suffix)
                     Haptics.tick()
                     return
                 }
@@ -234,8 +235,9 @@ public final class PDFEditorSession {
     public func commitTextEdit(_ newText: String) {
         guard let edit = textEdit else { return }
         textEdit = nil
-        let text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+        var text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard text != edit.original else { return }
+        if !text.isEmpty, !edit.suffix.isEmpty, !(text.last.map { ",.;:!?".contains($0) } ?? false) { text += edit.suffix }
         let element = TextElement(text: text, fontName: edit.fontName ?? "Helvetica", relativeSize: edit.relativeFontSize ?? 0, color: inkColor == .red ? .black : inkColor, alignment: .leading, style: .plain)
         update(text.isEmpty ? L("Erase text") : L("Edit text")) {
             $0.addMarkup(PDFMarkup(kind: .replacement(rects: [edit.rect], text: element, background: edit.background)), toPageAt: edit.pageIndex)

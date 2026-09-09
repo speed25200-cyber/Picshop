@@ -112,7 +112,9 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
                 guard let first = run.first else { continue }
                 let rect = run.dropFirst().reduce(first.baseRect) { $0.union($1.baseRect) }
                 let face = recognizer.fontEstimate(for: run, page: page, key: key)
-                hits.append(PDFTextHit(pageIndex: index, rects: [rect], text: run.map(\.text).joined(separator: " "), background: first.background, fontName: face))
+                var hit = PDFTextHit(pageIndex: index, rects: [rect], text: run.map(\.text).joined(separator: " "), background: first.background, fontName: face)
+                hit.suffix = run.last?.suffix ?? ""
+                hits.append(hit)
             }
         }
         return hits
@@ -126,6 +128,8 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
         public var background: PSColor?
         public var fontName: String? = nil
         public var relativeFontSize: Double? = nil
+        /// Punctuation glued to the word on the page, kept after a replacement.
+        public var suffix: String = ""
     }
 
     /// Font of a text-layer selection, mapped to an installed face, with its size relative to the page height.
@@ -156,7 +160,7 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
         let key = ocrKey(for: model, pageIndex: pageIndex)
         let text = recognizer.text(for: page, key: key)
         guard let word = recognizer.word(at: displayedPoint, in: text) else { return nil }
-        return WordHit(text: word.text, rect: word.baseRect, background: word.background, fontName: recognizer.fontEstimate(for: [word], page: page, key: key))
+        return WordHit(text: word.text, rect: word.baseRect, background: word.background, fontName: recognizer.fontEstimate(for: [word], page: page, key: key), suffix: word.suffix)
     }
 
     /// The words of a page in reading order: the text layer, or OCR for scans.

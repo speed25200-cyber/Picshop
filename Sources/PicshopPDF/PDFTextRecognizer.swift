@@ -21,6 +21,8 @@ final class PDFTextRecognizer: @unchecked Sendable {
         let background: PSColor
         let lineIndex: Int
         let indexInLine: Int
+        /// Punctuation glued to the end of the word on the page ("Monsieur," → ","), kept when the word is replaced.
+        var suffix: String = ""
     }
 
     struct PageText: Sendable {
@@ -47,11 +49,13 @@ final class PDFTextRecognizer: @unchecked Sendable {
             render = (key, ImageSupport.grayBytes(from: cg), cg.width, cg.height)
             lock.withLock { grayRender = render }
         }
-        let samples = words.map { word in
-            (text: word.text,
-             widthPx: CGFloat(word.displayedRect.width * Double(render.width)),
-             heightPx: CGFloat(word.displayedRect.height * Double(render.height)),
-             inkCoverage: PDFTypography.inkCoverage(of: word.displayedRect, gray: render.gray, width: render.width, height: render.height))
+        let samples = words.map { word -> PDFTypography.InkSample in
+            let stroke = PDFTypography.strokeStats(of: word.displayedRect, gray: render.gray, width: render.width, height: render.height)
+            return PDFTypography.InkSample(text: word.text,
+                                           widthPx: CGFloat(word.displayedRect.width * Double(render.width)),
+                                           heightPx: CGFloat(word.displayedRect.height * Double(render.height)),
+                                           inkCoverage: PDFTypography.inkCoverage(of: word.displayedRect, gray: render.gray, width: render.width, height: render.height),
+                                           strokeRatio: stroke.ratio, strokeVariation: stroke.variation)
         }
         return PDFTypography.estimateFace(words: samples)
     }
@@ -107,7 +111,8 @@ final class PDFTextRecognizer: @unchecked Sendable {
                 let background = sampler.color(around: displayed)
                 let cleaned = String(piece).trimmingCharacters(in: CharacterSet(charactersIn: ",.;:!?()[]«»\"“”'"))
                 guard !cleaned.isEmpty else { continue }
-                words.append(Word(text: cleaned, displayedRect: displayed, baseRect: base, background: background, lineIndex: lineIndex, indexInLine: indexInLine))
+                let suffix = String(piece.reversed().prefix { ",.;:!?".contains($0) }.reversed())
+                words.append(Word(text: cleaned, displayedRect: displayed, baseRect: base, background: background, lineIndex: lineIndex, indexInLine: indexInLine, suffix: suffix))
                 indexInLine += 1
             }
         }

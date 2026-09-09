@@ -139,6 +139,8 @@ public struct PDFTextHit: Hashable, Codable, Sendable {
     public var fontName: String?
     /// Point size of the original text relative to the page height; nil when only the glyph box is known (scans).
     public var relativeFontSize: Double?
+    /// Punctuation glued to the last word on the page ("Monsieur," → ","); a replacement keeps it.
+    public var suffix: String = ""
 
     public init(pageIndex: Int, rects: [PSRect], text: String, background: PSColor? = nil, fontName: String? = nil, relativeFontSize: Double? = nil) {
         self.pageIndex = pageIndex
