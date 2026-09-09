@@ -65,6 +65,23 @@ public final class VisionPhotoServices: PhotoAIServices, @unchecked Sendable {
         return try VisionGrounding.candidates(in: image, for: target, maskStore: maskStore, embedding: embedding)
     }
 
+    /// The main things in the picture, largest first, each named by the
+    /// classifier so the UI can offer them as one-tap erase targets.
+    public func namedObjects(in document: PhotoDocument, limit: Int = 6) async throws -> [ObjectCandidate] {
+        let image = try await analysisImage(for: document)
+        let detector = Detector(image: image, maskStore: maskStore, embedding: embedding)
+        let instances = try detector.instanceList().sorted { $0.area > $1.area }.prefix(limit)
+        var result: [ObjectCandidate] = []
+        for instance in instances where instance.area > 0.004 {
+            let crop = detector.croppedImage(masked: instance)
+            let top = (try? detector.classify(crop))?.first
+            let label = top.map { $0.identifier.lowercased().replacingOccurrences(of: "_", with: " ") } ?? "object"
+            let path = try? detector.saveInstanceMask(instance)
+            result.append(ObjectCandidate(label: label, boundingBox: instance.box, confidence: 0.5 + min(0.4, instance.area * 2), instanceIndex: instance.index, maskPath: path))
+        }
+        return result
+    }
+
     public func mask(for candidates: [ObjectCandidate], target: ObjectTarget, in document: PhotoDocument) async throws -> MaskReference {
         let image = try await analysisImage(for: document)
         let width = image.width, height = image.height

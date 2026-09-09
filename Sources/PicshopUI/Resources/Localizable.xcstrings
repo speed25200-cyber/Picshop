@@ -1265,6 +1265,22 @@
         }
       }
     },
+    "Erase %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer %@"
+          }
+        }
+      }
+    },
     "Erase & cut out": {
       "localizations": {
         "en": {
@@ -1985,6 +2001,22 @@
         }
       }
     },
+    "In this photo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In this photo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur cette photo"
+          }
+        }
+      }
+    },
     "Included in the app": {
       "localizations": {
         "en": {
@@ -2253,6 +2285,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Je vous écoute…"
+          }
+        }
+      }
+    },
+    "Looking for objects…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Looking for objects…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recherche des objets…"
           }
         }
       }

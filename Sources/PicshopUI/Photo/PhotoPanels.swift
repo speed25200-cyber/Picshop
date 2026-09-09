@@ -350,12 +350,71 @@ struct ErasePanel: View {
                 .padding(.horizontal, 2)
                 .animation(PSMotion.standard, value: session.brushStrokes.isEmpty)
             }
+            if session.isFindingObjects && session.sceneObjects.isEmpty {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.mini).tint(PSTheme.textTertiary)
+                    Text(L("Looking for objects…")).font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary)
+                }
+                .transition(.opacity)
+            } else if !session.sceneObjects.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L("In this photo")).font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(session.sceneObjects) { candidate in
+                                SceneObjectChip(candidate: candidate, thumbnail: { await session.candidateThumbnail($0) }) {
+                                    session.erase(candidate)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 2)
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
             DialSlider(value: $session.brushRadius, range: 0.006...0.09, neutral: 0.03, label: L("Brush size"), format: { "\(Int(($0 * 1000).rounded()))" }) { editing in
                 session.showsBrushPreview = editing
             }
             Text(L("Tap an object to erase it, paint over it, or say “efface le poteau à droite”."))
                 .font(PSFont.caption(11)).foregroundStyle(PSTheme.textSecondary).lineLimit(2)
         }
+        .animation(PSMotion.standard, value: session.sceneObjects.map(\.id))
+        .task(id: session.lookThumbnailKey) { await session.loadSceneObjects() }
+    }
+}
+
+/// A found object as a chip: its crop, its name, one tap to erase it.
+struct SceneObjectChip: View {
+    let candidate: ObjectCandidate
+    let thumbnail: (ObjectCandidate) async -> UIImage?
+    let action: () -> Void
+    @State private var image: UIImage?
+
+    var body: some View {
+        Button { Haptics.confirm(); action() } label: {
+            HStack(spacing: 8) {
+                ZStack {
+                    if let image {
+                        Image(uiImage: image).resizable().scaledToFill()
+                    } else {
+                        PSTheme.surfaceElevated
+                    }
+                }
+                .frame(width: 30, height: 30)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(alignment: .bottomTrailing) {
+                    Image(systemName: "eraser.fill").font(.system(size: 8, weight: .bold)).foregroundStyle(.white)
+                        .frame(width: 14, height: 14).background(Circle().fill(PSTheme.danger)).offset(x: 4, y: 4)
+                }
+                Text(candidate.label.capitalized).font(PSFont.caption(13)).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
+            }
+            .padding(.leading, 5).padding(.trailing, 12).padding(.vertical, 5)
+            .psGlass(interactive: true)
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+        }
+        .buttonStyle(PSPressStyle())
+        .task(id: candidate.id) { image = await thumbnail(candidate) }
+        .accessibilityLabel(String(format: L("Erase %@"), candidate.label))
     }
 }
 

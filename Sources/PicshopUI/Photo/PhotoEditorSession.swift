@@ -129,6 +129,10 @@ public final class PhotoEditorSession {
     public var lastPlan: EditPlan?
     public var pendingClarification: ClarificationRequest?
     public var candidateOverlays: [ObjectCandidate] = []
+    /// Main objects found in the picture, offered as one-tap erase targets.
+    public var sceneObjects: [ObjectCandidate] = []
+    public var isFindingObjects = false
+    private var sceneObjectsKey: String?
     public var showsExport = false
     public var exportedURL: URL?
     public var exportProgress: Double?
@@ -562,6 +566,23 @@ public final class PhotoEditorSession {
         manipulatedTextLayerID = nil
         requestPreview()
         Haptics.tick()
+    }
+
+    /// Finds the main objects once per photo state (cheap re-entry).
+    public func loadSceneObjects() async {
+        let key = lookThumbnailKey
+        guard sceneObjectsKey != key, let services, !isFindingObjects else { return }
+        isFindingObjects = true
+        defer { isFindingObjects = false }
+        let found = (try? await services.namedObjects(in: document)) ?? []
+        sceneObjectsKey = key
+        withAnimation(PSMotion.standard) { sceneObjects = found }
+    }
+
+    /// Erases one of the objects found in the picture.
+    public func erase(_ candidate: ObjectCandidate) {
+        let target = ObjectTarget(label: candidate.label, originalPhrase: candidate.label, point: candidate.boundingBox.center)
+        Task { await run(EditIntent(action: .removeObject, target: target)) }
     }
 
     /// Erases every instance of a category (people, text, animals…).
