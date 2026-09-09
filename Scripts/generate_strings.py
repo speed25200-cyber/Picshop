@@ -81,6 +81,7 @@ FR = {
     "Page %d of %d": "Page %d sur %d", "Preparing the PDF…": "Préparation du PDF…",
     "Reset zoom": "Réinitialiser le zoom", "Double tap to zoom in or back out. Pinch to zoom.": "Touchez deux fois pour zoomer ou revenir. Pincez pour zoomer.",
     "Tap one, or say its number.": "Touchez-en un, ou dites son numéro.",
+    "On-device, private": "Sur l'appareil, privé",
     "Balanced": "Équilibré", "Small": "Léger", "Output": "Sortie",
     "Opacity": "Opacité", "Original": "Original", "Overlay": "Élément", "Pause": "Pause", "Photo": "Photo", "Photo canvas": "Zone de la photo", "Photo format": "Format photo",
     "Photos, videos and voice never leave your device. PicShop has no servers, no accounts and no tracking.": "Vos photos, vidéos et votre voix ne quittent jamais votre appareil. PicShop n'a ni serveur, ni compte, ni suivi.",

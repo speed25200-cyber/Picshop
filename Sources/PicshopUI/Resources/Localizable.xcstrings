@@ -2673,6 +2673,22 @@
         }
       }
     },
+    "On-device, private": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device, private"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur l'appareil, privé"
+          }
+        }
+      }
+    },
     "Opacity": {
       "localizations": {
         "en": {
@@ -3645,22 +3661,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Renommer"
-          }
-        }
-      }
-    },
-    "Rendering": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rendering"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rendu"
           }
         }
       }

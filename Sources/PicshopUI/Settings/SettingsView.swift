@@ -17,6 +17,7 @@ public struct SettingsView: View {
         NavigationStack {
             Form {
                 if let app {
+                    identityHeader
                     brainSection(app)
                     modelsSection(app)
                     performanceSection(app)
@@ -32,6 +33,38 @@ public struct SettingsView: View {
         }
         .preferredColorScheme(.dark)
         .tint(PSTheme.accent)
+    }
+
+    /// App identity at the top, like the Apple ID card in Settings: the icon
+    /// tile, the version and the one promise that matters (nothing leaves).
+    private var identityHeader: some View {
+        Section {
+            HStack(spacing: 14) {
+                let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+                Image(systemName: "waveform.and.mic")
+                    .font(.system(size: 24, weight: .medium))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.white)
+                    .frame(width: 58, height: 58)
+                    .background { HeroMesh().clipShape(shape).overlay(shape.fill(LinearGradient(colors: [Color.white.opacity(0.22), .clear], startPoint: .top, endPoint: .center))) }
+                    .overlay(shape.strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
+                    .shadow(color: PSTheme.voice.opacity(0.4), radius: 14, y: 6)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("PicShop").font(PSFont.display(22)).foregroundStyle(PSTheme.textPrimary).tracking(-0.4)
+                    HStack(spacing: 6) {
+                        Text(L("Version")).foregroundStyle(PSTheme.textTertiary)
+                        Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
+                        Text("·").foregroundStyle(PSTheme.textTertiary)
+                        Label(L("On-device, private"), systemImage: "lock.shield.fill").foregroundStyle(PSTheme.success)
+                    }
+                    .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 6)
+        }
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
     }
 
     /// The brain is chosen automatically; this row only shows which one is answering.
@@ -173,19 +206,22 @@ public struct SettingsView: View {
                     Text(tierDescription(app.performance.tier)).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
                 }
                 Spacer()
-                Text("\(Int(app.performance.previewLongestSide)) px").font(PSFont.mono(11)).foregroundStyle(PSTheme.textTertiary)
-            }
-            .animation(PSMotion.quick, value: app.performance.tier)
-            SettingsRow(systemName: "gauge.with.dots.needle.67percent", tint: PSTheme.warning) {
-                Picker(L("Rendering"), selection: Binding(get: { app.settings.performancePreference }, set: { value in
-                    app.settings.performancePreference = value
-                    app.applyPerformanceSettings()
-                })) {
-                    Text(L("Automatic")).tag(PerformanceGovernor.Preference.automatic)
-                    Text(L("Best quality")).tag(PerformanceGovernor.Preference.quality)
-                    Text(L("Cool & battery")).tag(PerformanceGovernor.Preference.efficiency)
+                VStack(alignment: .trailing, spacing: 4) {
+                    TierDots(tier: app.performance.tier, tint: app.performance.statusTint)
+                    Text("\(Int(app.performance.previewLongestSide)) px").font(PSFont.mono(11)).foregroundStyle(PSTheme.textTertiary).contentTransition(.numericText())
                 }
             }
+            .animation(PSMotion.quick, value: app.performance.tier)
+            SegmentedChoice(selection: Binding(get: { app.settings.performancePreference }, set: { value in
+                Haptics.tick()
+                app.settings.performancePreference = value
+                app.applyPerformanceSettings()
+            }), options: [
+                .init(value: PerformanceGovernor.Preference.automatic, title: L("Automatic"), symbol: "wand.and.sparkles"),
+                .init(value: .quality, title: L("Best quality"), symbol: "sparkles.rectangle.stack"),
+                .init(value: .efficiency, title: L("Cool & battery"), symbol: "leaf.fill"),
+            ])
+            .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
         } header: {
             Text(L("Performance"))
         } footer: {
@@ -246,12 +282,86 @@ public struct SettingsView: View {
 
     private var aboutSection: some View {
         Section {
-            LabeledContent(L("Version"), value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
-            Text(L("Photos, videos and voice never leave your device. PicShop has no servers, no accounts and no tracking."))
-                .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+            HStack(spacing: 12) {
+                SettingsRowIcon(systemName: "hand.raised.fill", tint: PSTheme.success)
+                Text(L("Photos, videos and voice never leave your device. PicShop has no servers, no accounts and no tracking."))
+                    .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+            }
         } header: {
             Text(L("Privacy"))
         }
+    }
+}
+
+/// Four dots that read the performance tier at a glance: all lit is full
+/// quality, one lit is the critical tier.
+struct TierDots: View {
+    let tier: PerformanceGovernor.Tier
+    let tint: Color
+
+    private var lit: Int {
+        switch tier {
+        case .full: return 4
+        case .balanced: return 3
+        case .conserve: return 2
+        case .critical: return 1
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<4, id: \.self) { index in
+                Capsule().fill(index < lit ? tint : PSTheme.hairline).frame(width: 10, height: 4)
+            }
+        }
+        .animation(PSMotion.quick, value: lit)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Illustrated segments for a short list of choices, the same control the
+/// export sheets use, so settings feel like the rest of the app.
+struct SegmentedChoice<Value: Hashable>: View {
+    struct Option {
+        let value: Value
+        let title: String
+        let symbol: String
+    }
+
+    @Binding var selection: Value
+    let options: [Option]
+    @Namespace private var indicator
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(options, id: \.value) { option in
+                let isActive = selection == option.value
+                Button {
+                    withAnimation(PSMotion.standard) { selection = option.value }
+                } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: option.symbol).font(.system(size: 15, weight: .semibold)).symbolRenderingMode(.hierarchical)
+                        Text(option.title).font(PSFont.caption(11)).lineLimit(1).minimumScaleFactor(0.8)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 9)
+                    .foregroundStyle(isActive ? Color.white : PSTheme.textSecondary)
+                    .background {
+                        if isActive {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(PSTheme.accentGradient)
+                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(PSTheme.accentHighlight))
+                                .matchedGeometryEffect(id: "segment", in: indicator)
+                        }
+                    }
+                    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(PSPressStyle(scale: 0.97))
+                .accessibilityAddTraits(isActive ? [.isSelected] : [])
+            }
+        }
+        .padding(4)
+        .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 }
 
