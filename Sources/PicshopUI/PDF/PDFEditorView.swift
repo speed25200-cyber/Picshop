@@ -115,25 +115,21 @@ public struct PDFEditorView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     ForEach([PSColor.red, .blue, .black, .green, .orange, .purple], id: \.self) { color in
-                        Button { session.inkColor = color } label: {
-                            Circle().fill(Color(cgColor: color.cgColor)).frame(width: 28, height: 28)
-                                .overlay(Circle().stroke(session.inkColor == color ? PSTheme.accent : PSTheme.hairline, lineWidth: 2))
-                        }.buttonStyle(.plain)
+                        ColorSwatch(color: color, isSelected: session.inkColor == color, size: 28) { session.inkColor = color }
                     }
                     Spacer()
+                    // The stroke as it will land on the page: colour and width, live.
+                    PenPreview(color: session.inkColor, width: session.inkWidth)
                     PanelChip(title: L("Undo stroke"), symbol: "arrow.uturn.backward") { session.removeLastMarkup(onPage: session.document.currentPageIndex) }
                 }
-                ParameterSlider(title: L("Pen width"), value: $session.inkWidth, range: 0.001...0.015, bipolar: false)
+                DialSlider(value: $session.inkWidth, range: 0.001...0.015, neutral: 0.004, label: L("Pen width"), units: 40, format: { String(format: "%.1f", $0 * 1000) })
                 Text(L("Draw directly on the page.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
             }
         case .highlight:
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     ForEach([PSColor.yellow, .green, .pink, .teal, .orange], id: \.self) { color in
-                        Button { session.highlightColor = color } label: {
-                            Circle().fill(Color(cgColor: color.cgColor)).frame(width: 28, height: 28)
-                                .overlay(Circle().stroke(session.highlightColor == color ? PSTheme.accent : PSTheme.hairline, lineWidth: 2))
-                        }.buttonStyle(.plain)
+                        HighlightSwatch(color: color, isSelected: session.highlightColor == color) { session.highlightColor = color }
                     }
                     Spacer()
                     PanelChip(title: L("Undo"), symbol: "arrow.uturn.backward") { session.removeLastMarkup(onPage: session.document.currentPageIndex) }
@@ -171,6 +167,46 @@ public struct PDFEditorView: View {
                 PanelChip(title: L("Page numbers"), symbol: "number") { Task { await session.run(EditIntent(action: .addPageNumbers)) } }
             }
         }
+    }
+}
+
+/// A short stroke in the current ink, so the pen's colour and thickness are visible before drawing.
+struct PenPreview: View {
+    let color: PSColor
+    let width: Double
+
+    var body: some View {
+        Path { path in
+            path.move(to: CGPoint(x: 4, y: 18))
+            path.addCurve(to: CGPoint(x: 44, y: 10), control1: CGPoint(x: 16, y: -4), control2: CGPoint(x: 28, y: 30))
+        }
+        .stroke(Color(cgColor: color.cgColor), style: StrokeStyle(lineWidth: max(1.5, width * 900), lineCap: .round))
+        .frame(width: 48, height: 28)
+        .animation(PSMotion.quick, value: width)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Highlighter swatch: "Aa" on paper under the translucent colour, the way the mark will read on the page.
+struct HighlightSwatch: View {
+    let color: PSColor
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button { Haptics.tick(); action() } label: {
+            Text("Aa")
+                .font(.system(size: 13, weight: .semibold, design: .serif))
+                .foregroundStyle(.black)
+                .frame(width: 34, height: 28)
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white))
+                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color(cgColor: color.cgColor).opacity(0.55)))
+                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(isSelected ? PSTheme.accent : Color.white.opacity(0.2), lineWidth: isSelected ? 2 : 1))
+                .scaleEffect(isSelected ? 1.08 : 1)
+                .animation(PSMotion.quick, value: isSelected)
+        }
+        .buttonStyle(PSPressStyle(scale: 0.9))
+        .accessibilityLabel(color.hexString)
     }
 }
 
