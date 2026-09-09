@@ -508,8 +508,10 @@ struct CropPanel: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ForEach(presets) { preset in
-                        PanelChip(title: preset.displayName, isActive: session.cropAspect == preset) {
-                            if preset == .free { session.cropAspect = .free } else { session.setCropAspect(preset) }
+                        AspectChip(preset: preset, isActive: session.cropAspect == preset, originalAspect: session.document.baseLayer?.imageAsset?.pixelSize.aspectRatio ?? 1) {
+                            withAnimation(PSMotion.standard) {
+                                if preset == .free { session.cropAspect = .free } else { session.setCropAspect(preset) }
+                            }
                         }
                     }
                 }
@@ -537,6 +539,52 @@ struct CropPanel: View {
                 Spacer()
             }
         }
+    }
+}
+
+/// Aspect-ratio chip: a little frame drawn at the preset's proportion, like the
+/// Photos app, with the label underneath.
+struct AspectChip: View {
+    let preset: AspectPreset
+    let isActive: Bool
+    var originalAspect: Double = 1
+    let action: () -> Void
+
+    private var frameSize: CGSize {
+        let ratio: Double
+        switch preset {
+        case .free: ratio = 1.25
+        case .original: ratio = max(0.4, min(2.5, originalAspect))
+        default: ratio = preset.value ?? 1
+        }
+        let box = 22.0
+        return ratio >= 1 ? CGSize(width: box, height: box / ratio) : CGSize(width: box * ratio, height: box)
+    }
+
+    var body: some View {
+        Button { Haptics.tick(); action() } label: {
+            VStack(spacing: 5) {
+                ZStack {
+                    let shape = RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    shape.strokeBorder(isActive ? Color.white : PSTheme.textSecondary, style: StrokeStyle(lineWidth: 1.6, dash: preset == .free ? [3, 2] : []))
+                        .frame(width: frameSize.width, height: frameSize.height)
+                    if preset == .original {
+                        Image(systemName: "photo").font(.system(size: 8, weight: .bold)).foregroundStyle(isActive ? Color.white : PSTheme.textSecondary)
+                    }
+                }
+                .frame(width: 24, height: 24)
+                Text(preset.displayName).font(PSFont.caption(10)).lineLimit(1).minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(isActive ? Color.white : PSTheme.textSecondary)
+            .frame(width: 52, height: 48)
+            .psActivePill(RoundedRectangle(cornerRadius: 14, style: .continuous), isActive: isActive, glow: false)
+            .background(Color.white.opacity(isActive ? 0 : 0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .animation(PSMotion.quick, value: isActive)
+        }
+        .buttonStyle(PSPressStyle())
+        .accessibilityLabel(preset.displayName)
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 }
 
