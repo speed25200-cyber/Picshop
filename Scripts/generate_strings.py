@@ -79,6 +79,7 @@ FR = {
     "Rename": "Renommer", "Name": "Nom", "Save": "Enregistrer", "Delete “%@”?": "Supprimer « %@ » ?", "Import one from the cards above.": "Importez-en un depuis les cartes ci-dessus.",
     "The project and its edits are removed from this iPhone. The original in Photos stays.": "Le projet et ses retouches sont retirés de cet iPhone. L'original dans Photos est conservé.",
     "Page %d of %d": "Page %d sur %d", "Preparing the PDF…": "Préparation du PDF…",
+    "Reset zoom": "Réinitialiser le zoom", "Double tap to zoom in or back out. Pinch to zoom.": "Touchez deux fois pour zoomer ou revenir. Pincez pour zoomer.",
     "Balanced": "Équilibré", "Small": "Léger", "Output": "Sortie",
     "Opacity": "Opacité", "Original": "Original", "Overlay": "Élément", "Pause": "Pause", "Photo": "Photo", "Photo canvas": "Zone de la photo", "Photo format": "Format photo",
     "Photos, videos and voice never leave your device. PicShop has no servers, no accounts and no tracking.": "Vos photos, vidéos et votre voix ne quittent jamais votre appareil. PicShop n'a ni serveur, ni compte, ni suivi.",

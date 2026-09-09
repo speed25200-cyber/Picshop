@@ -1009,18 +1009,18 @@
         }
       }
     },
-    "Double tap to reset zoom. Pinch to zoom.": {
+    "Double tap to zoom in or back out. Pinch to zoom.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Double tap to reset zoom. Pinch to zoom."
+            "value": "Double tap to zoom in or back out. Pinch to zoom."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Touchez deux fois pour réinitialiser le zoom. Pincez pour zoomer."
+            "value": "Touchez deux fois pour zoomer ou revenir. Pincez pour zoomer."
           }
         }
       }
@@ -3741,6 +3741,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Réinitialiser"
+          }
+        }
+      }
+    },
+    "Reset zoom": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset zoom"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réinitialiser le zoom"
           }
         }
       }

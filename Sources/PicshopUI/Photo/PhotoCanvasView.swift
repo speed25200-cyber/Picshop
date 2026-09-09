@@ -63,6 +63,12 @@ struct PhotoCanvasView: View {
                 if let rect = session.cropRect {
                     CropOverlay(frame: frame, rect: Binding(get: { rect }, set: { session.cropRect = $0 }), aspect: cropAspectValue)
                 }
+                if zoom > 1.01, !session.isCropping {
+                    ZoomBadge(zoom: zoom) { resetZoom() }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .padding(12)
+                        .transition(.scale(scale: 0.8, anchor: .topLeading).combined(with: .opacity))
+                }
                 if session.activeTool == nil, session.history.canUndo, !session.isProcessing, session.pendingClarification == nil {
                     CompareButton(isShowingOriginal: session.showsOriginal) { session.showsOriginal = $0 }
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -71,8 +77,9 @@ struct PhotoCanvasView: View {
                 }
             }
             .animation(PSMotion.standard, value: session.activeTool == nil && session.history.canUndo && !session.isProcessing)
+            .animation(PSMotion.quick, value: zoom > 1.01)
             .contentShape(Rectangle())
-            .gesture(canvasGesture(frame: frame), including: session.isCropping ? .subviews : .all)
+            .gesture(canvasGesture(frame: frame, container: container), including: session.isCropping ? .subviews : .all)
             .simultaneousGesture(compareGesture)
             .simultaneousGesture(textRotationGesture, including: session.manipulatesOverlays ? .all : .none)
             .onChange(of: isPressing) { _, pressing in
@@ -88,7 +95,7 @@ struct PhotoCanvasView: View {
             .onChange(of: session.document.canvasSize) { _, _ in resetZoom() }
             .onChange(of: session.activeTool) { _, tool in if tool == .crop { resetZoom() } }
             .accessibilityLabel(L("Photo canvas"))
-            .accessibilityHint(L("Double tap to reset zoom. Pinch to zoom."))
+            .accessibilityHint(L("Double tap to zoom in or back out. Pinch to zoom."))
         }
         .clipped()
     }
@@ -134,6 +141,21 @@ struct PhotoCanvasView: View {
         }
     }
 
+    /// Double-tap zoom: 2.5× with the tapped point held under the finger,
+    /// the way Photos does it. The image is centred in the container at
+    /// zoom 1, so the tap's vector from the centre scales by (1 − z).
+    private func zoomIn(at location: CGPoint, container: CGSize) {
+        let scale: CGFloat = 2.5
+        let center = CGPoint(x: container.width / 2, y: container.height / 2)
+        let vector = CGSize(width: location.x - center.x, height: location.y - center.y)
+        Haptics.soft()
+        withAnimation(.spring(duration: 0.35)) {
+            zoom = scale; steadyZoom = scale
+            offset = CGSize(width: vector.width * (1 - scale), height: vector.height * (1 - scale))
+            steadyOffset = offset
+        }
+    }
+
     private func applyZoomRequest(_ request: PhotoEditorSession.ZoomRequest, container: CGSize) {
         withAnimation(.spring(duration: 0.4)) {
             if let target = request.target, let candidate = session.candidateOverlays.first(where: { $0.label == target.label }) ?? session.candidateOverlays.first {
@@ -164,7 +186,7 @@ struct PhotoCanvasView: View {
         session.activeTool == .erase || (session.activeTool == .precise && (session.preciseMode == .pixelBrush || session.preciseMode == .clone))
     }
 
-    private func canvasGesture(frame: CGRect) -> some Gesture {
+    private func canvasGesture(frame: CGRect, container: CGSize) -> some Gesture {
         let magnify = MagnifyGesture()
             .onChanged { value in
                 if session.manipulatesOverlays, let id = session.manipulatedTextLayerID ?? session.selectedOverlayLayerID {
@@ -248,7 +270,13 @@ struct PhotoCanvasView: View {
                     }
                 }
             }
-        let doubleTap = TapGesture(count: 2).onEnded { resetZoom() }
+        let doubleTap = SpatialTapGesture(count: 2).onEnded { value in
+            if zoom > 1.01 || session.isCropping {
+                resetZoom()
+            } else {
+                zoomIn(at: value.location, container: container)
+            }
+        }
         return doubleTap.exclusively(before: tap).simultaneously(with: magnify).simultaneously(with: drag)
     }
 

@@ -81,6 +81,31 @@ public struct PhotoEditorView: View {
 }
 
 /// Press-and-hold "before" button floating over the canvas, like Photos.
+/// Live zoom factor in the corner of the canvas; tapping it snaps back to fit.
+struct ZoomBadge: View {
+    let zoom: CGFloat
+    let onReset: () -> Void
+
+    var body: some View {
+        Button {
+            Haptics.tick()
+            onReset()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "arrow.down.right.and.arrow.up.left").font(.system(size: 10, weight: .bold))
+                Text("\(Int((zoom * 100).rounded())) %").font(PSFont.mono(11)).contentTransition(.numericText())
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(.black.opacity(0.55), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+            .animation(PSMotion.numeric, value: zoom)
+        }
+        .buttonStyle(PSPressStyle(scale: 0.94))
+        .accessibilityLabel(L("Reset zoom"))
+    }
+}
+
 struct CompareButton: View {
     var isShowingOriginal: Bool
     var onChange: (Bool) -> Void
