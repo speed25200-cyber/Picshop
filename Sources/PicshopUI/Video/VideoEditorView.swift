@@ -160,6 +160,9 @@ struct PlayerPreview: View {
                 PlayerLayerView(player: session.player.player)
                     .frame(width: frame.width, height: frame.height)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    // Lit edge and a soft drop, so the frame sits on the studio floor like the photo canvas.
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(PSTheme.strokeGradient, lineWidth: 1))
+                    .shadow(color: .black.opacity(session.app.performance.effectsLevel == .rich ? 0.5 : 0), radius: 22, y: 12)
                     .position(x: frame.midX, y: frame.midY)
                     .onTapGesture { location in
                         let point = PSPoint(x: Double((location.x - frame.minX) / frame.width), y: Double((location.y - frame.minY) / frame.height))

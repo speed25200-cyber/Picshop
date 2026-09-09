@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased — polish loop
+
+- Build stamp: every CI build carries its git commit, branch and date (Home eyebrow, Settings identity card), so a screenshot always says which code produced it.
+- Export sheets share one design across photo, video and PDF: a preview of the result, illustrated format / quality segments, size estimate, anchored primary action, inline progress with an animated percentage; the PDF is re-exported each time the sheet opens.
+- Home: rename, duplicate and delete (with confirmation) from a long press with a larger preview; illustrated empty tile for an empty filter.
+- Video timeline: zoom-aware time ruler, capped playhead, glow on the selected clip, duration chips; speed rail with the resulting clip length; illustrated, localised transition chips; Looks panel with filmstrip thumbnails of the selected clip through every look.
+- Photo canvas: double-tap zooms 2.5× around the finger and back; live zoom badge that resets the view; crop frame with a pixel-size readout and a fine grid while dragging or levelling.
+- Eraser lists the objects found in the picture as one-tap targets with a crop of each; clarification chips show a crop of each candidate.
+- Voice strip: level meter bars while listening, rim and glow that follow the input; toasts offer Undo in place after an applied edit.
+- PDF: paper reconstructed under a replaced word on scans (ink filled from the surrounding paper, no flat block); stroke-based face estimation (weight from thickness, serif from stroke variation, sans by default); trailing punctuation kept; the edit sheet previews the replacement in the detected face with a one-tap face override; pages strip lifts the current page.
+- Settings: identity header on the mesh tile, performance tier dots, illustrated rendering segments; help sheet with tappable example commands.
+
 ## 1.1.0 — fluid UI, thermal budget, deeper understanding
 
 - Design system rebuilt around Apple's rhythm: system-blue accent, concentric radii, one motion vocabulary (`PSMotion`), press feedback on every control, SF Symbols with hierarchical rendering.
