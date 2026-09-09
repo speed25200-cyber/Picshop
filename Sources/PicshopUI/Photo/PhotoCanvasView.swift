@@ -61,7 +61,8 @@ struct PhotoCanvasView: View {
                 overlays(frame: frame, container: container)
                     .allowsHitTesting(false)
                 if let rect = session.cropRect {
-                    CropOverlay(frame: frame, rect: Binding(get: { rect }, set: { session.cropRect = $0 }), aspect: cropAspectValue)
+                    CropOverlay(frame: frame, rect: Binding(get: { rect }, set: { session.cropRect = $0 }), aspect: cropAspectValue,
+                                pixelSize: session.document.canvasSize, denseGrid: session.straightenPreview != 0)
                 }
                 if zoom > 1.01, !session.isCropping {
                     ZoomBadge(zoom: zoom) { resetZoom() }
@@ -419,6 +420,10 @@ struct CropOverlay: View {
     let frame: CGRect
     @Binding var rect: PSRect
     var aspect: Double?
+    /// Canvas size in pixels, for the live size readout.
+    var pixelSize: PSSize = .zero
+    /// A finer grid while the picture is being levelled.
+    var denseGrid = false
 
     private enum Handle: CaseIterable {
         case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left, move
@@ -441,6 +446,17 @@ struct CropOverlay: View {
             .allowsHitTesting(false)
             // Grid + border.
             Canvas { context, _ in
+                if denseGrid || activeHandle != nil {
+                    // Fine grid: horizons and verticals are easy to align against it.
+                    var fine = Path()
+                    for i in 1..<9 where i % 3 != 0 {
+                        let x = crop.minX + crop.width * CGFloat(i) / 9
+                        let y = crop.minY + crop.height * CGFloat(i) / 9
+                        fine.move(to: CGPoint(x: x, y: crop.minY)); fine.addLine(to: CGPoint(x: x, y: crop.maxY))
+                        fine.move(to: CGPoint(x: crop.minX, y: y)); fine.addLine(to: CGPoint(x: crop.maxX, y: y))
+                    }
+                    context.stroke(fine, with: .color(.white.opacity(0.18)), lineWidth: 0.5)
+                }
                 var grid = Path()
                 for i in 1..<3 {
                     let x = crop.minX + crop.width * CGFloat(i) / 3
@@ -468,6 +484,18 @@ struct CropOverlay: View {
                 context.stroke(pips, with: .color(.white), style: StrokeStyle(lineWidth: 4, lineCap: .round))
             }
             .allowsHitTesting(false)
+            // Live size readout, so a crop for a 1080p frame or a print is exact.
+            if pixelSize.width > 0, crop.width > 90, crop.height > 40 {
+                let width = Int((rect.width * pixelSize.width).rounded()), height = Int((rect.height * pixelSize.height).rounded())
+                Text("\(width) × \(height)")
+                    .font(PSFont.mono(11)).foregroundStyle(.white)
+                    .padding(.horizontal, 9).padding(.vertical, 5)
+                    .background(.black.opacity(0.55), in: Capsule())
+                    .position(x: crop.midX, y: crop.minY + 18)
+                    .opacity(activeHandle == nil ? 0.8 : 1)
+                    .allowsHitTesting(false)
+                    .contentTransition(.numericText())
+            }
             Color.clear
                 .contentShape(Rectangle())
                 .gesture(
