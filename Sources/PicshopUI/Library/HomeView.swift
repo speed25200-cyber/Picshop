@@ -229,7 +229,7 @@ public struct HomeView: View {
             .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
         .buttonStyle(PSPressStyle(scale: 0.985))
-        .modifier(HeroSurface(prominent: prominent))
+        .modifier(HeroSurface(prominent: prominent, tint: tint))
         .accessibilityLabel(title)
         .accessibilityHint(subtitle)
     }
@@ -285,9 +285,12 @@ public struct HomeView: View {
     }
 }
 
-/// The prominent card paints a mesh gradient; the others are glass.
+/// The prominent card paints a mesh gradient; the others a tinted, layered
+/// surface. They are deliberately not glass: on device the glass sampled the
+/// cards' own icon and text into its blur.
 struct HeroSurface: ViewModifier {
     let prominent: Bool
+    var tint: Color = PSTheme.accent
     @Environment(\.psEffects) private var effects
 
     func body(content: Content) -> some View {
@@ -304,7 +307,18 @@ struct HeroSurface: ViewModifier {
                 .clipShape(shape)
                 .shadow(color: PSTheme.accent.opacity(effects == .rich ? 0.35 : 0), radius: 22, y: 10)
         } else {
-            content.psCard(cornerRadius: 24)
+            let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
+            content
+                .background {
+                    ZStack {
+                        shape.fill(PSTheme.surfaceElevated)
+                        shape.fill(LinearGradient(colors: [tint.opacity(0.28), tint.opacity(0.06), .clear], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        shape.fill(PSTheme.sheen)
+                    }
+                }
+                .overlay(shape.strokeBorder(LinearGradient(colors: [tint.opacity(0.55), Color.white.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1))
+                .clipShape(shape)
+                .shadow(color: .black.opacity(effects == .rich ? 0.35 : 0), radius: 18, y: 10)
         }
     }
 }
