@@ -532,6 +532,11 @@ struct VoiceStrip: View {
                 }
                 .padding(.horizontal, 14).padding(.vertical, 10)
                 .psCard(cornerRadius: 20, shadow: false)
+                // While listening the card breathes with the voice: a tinted rim whose strength follows the input level.
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(PSTheme.voice.opacity(voice.isListening ? 0.35 + voice.level * 0.5 : 0), lineWidth: 1.5)
+                    .animation(PSMotion.interactive, value: voice.level))
+                .shadow(color: PSTheme.voice.opacity(voice.isListening && effects == .rich ? 0.25 + voice.level * 0.3 : 0), radius: 14, y: 4)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -551,9 +556,7 @@ struct VoiceStrip: View {
     @ViewBuilder
     private var statusIcon: some View {
         if voice.isListening {
-            Image(systemName: "waveform")
-                .symbolEffect(.variableColor.iterative, isActive: effects != .minimal)
-                .foregroundStyle(PSTheme.voice)
+            LevelBars(level: effects == .minimal ? 0.5 : voice.level)
         } else if isBusy {
             ProgressView().tint(PSTheme.accent).controlSize(.small)
         } else if isUnavailable {
@@ -582,6 +585,26 @@ struct VoiceStrip: View {
         if replyVisible, !transcript.isEmpty { return plan?.reply?.isEmpty == false ? plan?.reply : L("Done.") }
         if showsHint { return voice.mode == .pushToTalk ? L("Hold the mic and say what to change") : L("Tap the mic and say what to change") }
         return nil
+    }
+}
+
+/// Five bars that follow the microphone level, each with its own weight so
+/// the meter reads as a voice rather than a single gauge.
+struct LevelBars: View {
+    let level: Double
+    private let weights: [Double] = [0.55, 0.85, 1, 0.75, 0.5]
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 2) {
+            ForEach(weights.indices, id: \.self) { index in
+                Capsule()
+                    .fill(PSTheme.voice)
+                    .frame(width: 3, height: 4 + CGFloat(min(1, max(0, level)) * weights[index]) * 14)
+            }
+        }
+        .frame(height: 18)
+        .animation(PSMotion.interactive, value: level)
+        .accessibilityHidden(true)
     }
 }
 
