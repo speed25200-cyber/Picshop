@@ -18,15 +18,19 @@ public struct VideoEditorView: View {
 
     public var body: some View {
         EditorChrome {
+            // Picture, then time, then the controls: the filmstrip sits directly
+            // under the frame it describes, and the transport is the row closest
+            // to the thumb.
             VStack(spacing: 0) {
                 PlayerPreview(session: session)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                TransportBar(session: session)
                 TimelineView(session: session)
                     .frame(height: 118 + TimelineView.rulerHeight)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .padding(.horizontal, 10)
-                    .padding(.bottom, 6)
+                    .padding(.top, 4)
+                TransportBar(session: session)
+                    .padding(.bottom, 2)
             }
         } top: {
             EditorTopBar(

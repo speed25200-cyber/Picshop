@@ -47,6 +47,7 @@ struct PhotoCanvasView: View {
     @State private var textRotationStart: Double = 0
     @State private var textSizeStart: Double = 0
     @GestureState private var isPressing = false
+    @Environment(\.psEffects) private var effects
 
     private let margin: CGFloat = 14
 
@@ -68,6 +69,17 @@ struct PhotoCanvasView: View {
                 }
                 MetalCanvasRepresentable(image: session.preview, overlay: session.selectionPreview, frame: frame,
                                          maxFrameRate: session.app.performance.maxFrameRate, maxContentScale: session.app.performance.maxContentScale)
+                if !session.isCropping, effects != .minimal, session.preview != nil {
+                    // Hairline around the picture, so its edge is legible against
+                    // the dark table. Square, because the Metal canvas draws the
+                    // image with square corners; the crop frame owns the edge
+                    // while cropping.
+                    Rectangle()
+                        .strokeBorder(PSTheme.strokeGradient, lineWidth: 1)
+                        .frame(width: frame.width, height: frame.height)
+                        .position(x: frame.midX, y: frame.midY)
+                        .allowsHitTesting(false)
+                }
                 overlays(frame: frame, container: container)
                     .allowsHitTesting(false)
                 if let rect = session.cropRect {
@@ -80,7 +92,10 @@ struct PhotoCanvasView: View {
                         .padding(12)
                         .transition(.scale(scale: 0.8, anchor: .topLeading).combined(with: .opacity))
                 }
-                if session.activeTool == nil, session.history.canUndo, !session.isProcessing, session.pendingClarification == nil {
+                // Comparing matters most while an adjustment panel is open, so the
+                // button is offered whenever there is something to compare. Only
+                // the crop overlay, which owns the canvas, hides it.
+                if session.history.canUndo, !session.isCropping, !session.isProcessing, session.pendingClarification == nil {
                     CompareButton(isShowingOriginal: session.showsOriginal) { session.showsOriginal = $0 }
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                         .padding(12)
@@ -88,7 +103,7 @@ struct PhotoCanvasView: View {
                 }
             }
             .animation(PSMotion.standard, value: session.preview == nil)
-            .animation(PSMotion.standard, value: session.activeTool == nil && session.history.canUndo && !session.isProcessing)
+            .animation(PSMotion.standard, value: session.history.canUndo && !session.isCropping && !session.isProcessing)
             .animation(PSMotion.quick, value: zoom > 1.01)
             .contentShape(Rectangle())
             .gesture(canvasGesture(frame: frame, container: container), including: session.isCropping ? .subviews : .all)
