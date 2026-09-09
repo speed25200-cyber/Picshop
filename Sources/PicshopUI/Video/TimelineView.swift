@@ -26,12 +26,14 @@ struct TimelineView: View {
             Group {
                 ScrollView(.horizontal, showsIndicators: false) {
                     ZStack(alignment: .topLeading) {
-                        HStack(spacing: 2) {
+                        ruler(contentWidth: contentWidth, leading: width / 2)
+                        HStack(spacing: 3) {
                             ForEach(Array(session.timeline.clips.enumerated()), id: \.element.id) { index, clip in
                                 ClipView(session: session, clip: clip, index: index, pixelsPerSecond: pixelsPerSecond, trimDrag: $trimDrag)
                             }
                         }
                         .padding(.horizontal, width / 2)
+                        .offset(y: TimelineView.rulerHeight)
                         overlaysLane(width: width)
                     }
                     .frame(width: contentWidth + width, alignment: .leading)
@@ -48,9 +50,16 @@ struct TimelineView: View {
                 }
             }
             .overlay(alignment: .top) {
-                Rectangle().fill(PSTheme.accent).frame(width: 2).frame(maxHeight: .infinity)
-                    .shadow(color: PSTheme.accent.opacity(0.6), radius: 4)
-                    .allowsHitTesting(false)
+                // Playhead: a capped needle, like the one in Final Cut, so the
+                // current frame reads at a glance even over busy thumbnails.
+                VStack(spacing: 0) {
+                    Capsule().fill(PSTheme.accent).frame(width: 10, height: 5)
+                    Rectangle().fill(PSTheme.accent).frame(width: 2)
+                }
+                .frame(maxHeight: .infinity)
+                .shadow(color: .black.opacity(0.5), radius: 1)
+                .shadow(color: PSTheme.accent.opacity(0.55), radius: 5)
+                .allowsHitTesting(false)
             }
             .gesture(MagnifyGesture().onChanged { value in
                 pixelsPerSecond = min(400, max(12, steadyScale * value.magnification))
@@ -61,6 +70,40 @@ struct TimelineView: View {
             }
         }
         .psCard(cornerRadius: 18, shadow: false)
+    }
+
+    static let rulerHeight: CGFloat = 16
+
+    /// Time ruler: labelled ticks whose spacing follows the zoom, so a
+    /// second stays legible whether the strip is pinched in or out.
+    private func ruler(contentWidth: CGFloat, leading: CGFloat) -> some View {
+        let major: Double = pixelsPerSecond >= 200 ? 1 : (pixelsPerSecond >= 80 ? 2 : (pixelsPerSecond >= 40 ? 5 : (pixelsPerSecond >= 16 ? 10 : 30)))
+        let minor = major / 5
+        let duration = max(0, session.timeline.duration)
+        return Canvas { context, size in
+            let baseline = size.height - 1
+            var index = 0
+            while true {
+                let t = Double(index) * minor
+                guard t <= duration + 0.001 else { break }
+                defer { index += 1 }
+                let x = leading + CGFloat(t) * pixelsPerSecond
+                let isMajor = index % 5 == 0
+                let height: CGFloat = isMajor ? 6 : 3
+                var tick = Path()
+                tick.move(to: CGPoint(x: x, y: baseline))
+                tick.addLine(to: CGPoint(x: x, y: baseline - height))
+                context.stroke(tick, with: .color(Color.white.opacity(isMajor ? 0.5 : 0.22)), lineWidth: 1)
+                if isMajor {
+                    let total = Int(t.rounded())
+                    let label = String(format: "%d:%02d", total / 60, total % 60)
+                    context.draw(Text(label).font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(Color.white.opacity(0.55)),
+                                 at: CGPoint(x: x + 3, y: 5), anchor: .leading)
+                }
+            }
+        }
+        .frame(width: contentWidth + leading * 2, height: TimelineView.rulerHeight)
+        .allowsHitTesting(false)
     }
 
     @ViewBuilder
@@ -75,7 +118,7 @@ struct TimelineView: View {
             .padding(.horizontal, 6).frame(height: 18)
             .frame(width: max(30, CGFloat(overlay.span.duration) * pixelsPerSecond), alignment: .leading)
             .background(PSTheme.warning, in: Capsule())
-            .offset(x: x, y: 96)
+            .offset(x: x, y: 96 + TimelineView.rulerHeight)
         }
         ForEach(session.timeline.audioTracks) { track in
             let x = width / 2 + CGFloat(track.timelineStart) * pixelsPerSecond
@@ -87,7 +130,7 @@ struct TimelineView: View {
             .padding(.horizontal, 6).frame(height: 18)
             .frame(width: max(30, CGFloat(min(track.sourceRange.duration, session.timeline.duration - track.timelineStart)) * pixelsPerSecond), alignment: .leading)
             .background(PSTheme.success, in: Capsule())
-            .offset(x: x, y: 96)
+            .offset(x: x, y: 96 + TimelineView.rulerHeight)
         }
     }
 }
@@ -127,8 +170,14 @@ struct ClipView: View {
                 }
                 .padding(4)
             }
+            .overlay(alignment: .topTrailing) {
+                if width > 72 { GlassChipMini(text: formattedDuration).padding(4) }
+            }
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(isSelected ? PSTheme.accent : PSTheme.hairline, lineWidth: isSelected ? 3 : 1))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(isSelected ? PSTheme.accent : PSTheme.hairline, lineWidth: isSelected ? 2.5 : 1))
+            .shadow(color: PSTheme.accent.opacity(isSelected ? 0.45 : 0), radius: 8)
+            .opacity(session.selectedClip == nil || isSelected ? 1 : 0.7)
+            .animation(PSMotion.quick, value: isSelected)
             .contentShape(Rectangle())
             .onTapGesture {
                 Haptics.tick()
@@ -158,6 +207,7 @@ struct ClipView: View {
                         if trimDrag == nil {
                             trimDrag = TimelineView.TrimDrag(clipID: clip.id, edge: edge, originalRange: clip.sourceRange)
                             session.beginSliderInteraction(L("Trim"))
+                            Haptics.soft()
                         }
                         guard let original = trimDrag?.originalRange else { return }
                         let delta = Double(value.translation.width / pixelsPerSecond) * clip.speed
@@ -176,6 +226,11 @@ struct ClipView: View {
 
     private func formatted(_ value: Double) -> String {
         value == value.rounded() ? String(Int(value)) : String(format: "%.2g", value)
+    }
+
+    private var formattedDuration: String {
+        let seconds = clip.timelineDuration
+        return seconds < 10 ? String(format: "%.1fs", seconds) : String(format: "%d:%02d", Int(seconds) / 60, Int(seconds) % 60)
     }
 }
 
