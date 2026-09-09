@@ -68,6 +68,8 @@ public final class VideoEditorSession {
     public var showsMusicPicker = false
     public var exportedURL: URL?
     public var exportProgress: Double?
+    /// Look thumbnails rendered from one frame of a clip, kept per clip.
+    public var lookThumbnails: (clipID: UUID, images: [FilterPreset: UIImage])?
     public var showsOriginal = false
 
     private var toastTask: Task<Void, Never>?

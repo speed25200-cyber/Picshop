@@ -2209,6 +2209,22 @@
         }
       }
     },
+    "Looks preview on the selected clip's frame.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Looks preview on the selected clip's frame."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aperçu des looks sur une image du clip sélectionné."
+          }
+        }
+      }
+    },
     "Lossless": {
       "localizations": {
         "en": {

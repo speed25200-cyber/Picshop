@@ -3,6 +3,8 @@ import SwiftUI
 import PicshopCore
 import PicshopIntent
 import PicshopVideo
+import PicshopImaging
+import CoreImage
 
 struct VideoToolPanel: View {
     @Bindable var session: VideoEditorSession
@@ -99,23 +101,93 @@ struct AudioPanel: View {
 
 struct VideoLooksPanel: View {
     @Bindable var session: VideoEditorSession
+    @State private var thumbnails: [FilterPreset: UIImage] = [:]
+
+    private var currentLook: FilterPreset { session.selectedClip?.look ?? .original }
 
     var body: some View {
         VStack(spacing: 10) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: 10) {
                     ForEach(FilterPreset.gallery) { preset in
-                        PanelChip(title: Locale.current.language.languageCode?.identifier == "fr" ? preset.frenchName : preset.englishName, isActive: session.selectedClip?.look == preset) {
+                        let active = currentLook == preset
+                        Button {
+                            Haptics.tick()
                             session.perform(EditIntent(action: .applyLook, look: preset))
+                        } label: {
+                            VStack(spacing: 6) {
+                                let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                ZStack {
+                                    if let image = thumbnails[preset] {
+                                        Image(uiImage: image).resizable().scaledToFill().transition(.opacity)
+                                    } else {
+                                        PSTheme.surfaceElevated
+                                        ProgressView().tint(PSTheme.textTertiary).controlSize(.mini)
+                                    }
+                                }
+                                .frame(width: 68, height: 68)
+                                .clipShape(shape)
+                                .overlay(shape.strokeBorder(Color.white.opacity(active ? 0 : 0.08), lineWidth: 1))
+                                .overlay {
+                                    if active {
+                                        shape.strokeBorder(PSTheme.accentGradient, lineWidth: 2.5)
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundStyle(.white, PSTheme.accent)
+                                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                                            .padding(4)
+                                            .transition(.scale.combined(with: .opacity))
+                                    }
+                                }
+                                .scaleEffect(active ? 1.04 : 1)
+                                Text(localizedLookName(preset)).font(PSFont.caption(10.5)).fontWeight(active ? .semibold : .medium)
+                                    .foregroundStyle(active ? PSTheme.textPrimary : PSTheme.textSecondary).lineLimit(1)
+                            }
+                            .frame(width: 72)
+                            .animation(PSMotion.quick, value: active)
                         }
+                        .buttonStyle(PSPressStyle())
                     }
                 }
+                .padding(.horizontal, 2)
             }
-            PanelChip(title: L("Apply to all clips"), symbol: "square.stack") {
-                if let look = session.selectedClip?.look { session.perform(EditIntent(action: .applyLook, look: look, scope: .all)) }
+            HStack {
+                PanelChip(title: L("Apply to all clips"), symbol: "square.stack", isEnabled: session.timeline.clips.count > 1) {
+                    session.perform(EditIntent(action: .applyLook, look: currentLook, scope: .all))
+                }
+                Spacer()
+                Text(L("Looks preview on the selected clip's frame.")).font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary).lineLimit(1)
             }
         }
+        .task(id: session.selectedClip?.id ?? session.timeline.clips.first?.id) { await renderThumbnails() }
     }
+
+    /// One frame of the selected clip through every look, cached on the
+    /// session per clip so reopening the panel costs nothing.
+    private func renderThumbnails() async {
+        guard let clip = session.selectedClip ?? session.timeline.clips.first else { return }
+        if let cached = session.lookThumbnails, cached.clipID == clip.id {
+            thumbnails = cached.images
+            return
+        }
+        let side = Int(session.app.performance.thumbnailSide)
+        guard let frame = await session.thumbnailer.thumbnails(for: clip, count: 1, height: side).first else { return }
+        let base = CIImage(cgImage: frame)
+        var rendered: [FilterPreset: UIImage] = [:]
+        for preset in FilterPreset.gallery {
+            let adjusted = AdjustmentPipeline.apply(preset.recipe, toneCurve: preset.toneCurve, to: base, scale: 0.05)
+            if let cg = ImageSupport.cgImage(from: adjusted) {
+                rendered[preset] = UIImage(cgImage: cg)
+                thumbnails[preset] = rendered[preset]
+            }
+            await Task.yield()
+        }
+        session.lookThumbnails = (clip.id, rendered)
+    }
+}
+
+private func localizedLookName(_ preset: FilterPreset) -> String {
+    Locale.current.language.languageCode?.identifier == "fr" ? preset.frenchName : preset.englishName
 }
 
 struct VideoAdjustPanel: View {
