@@ -144,7 +144,7 @@ FR = {
     "Slightly lighter previews; effects unchanged.": "Aperçus légèrement allégés ; effets inchangés.",
     "The iPhone is too hot for generation right now. Let it cool for a moment.": "L'iPhone est trop chaud pour générer maintenant. Laissez-le refroidir un instant.",
     "Very hot": "Très chaud", "Warm": "Tiède",
-    "%d pages": "%d pages", "Goals": "Objectifs", "Follow-ups": "Suivis", "Portrait": "Portrait",
+    "%d pages": "%d pages", "Small, Apple": "Léger, Apple", "Universal": "Universel", "Lossless": "Sans perte", "Goals": "Objectifs", "Follow-ups": "Suivis", "Portrait": "Portrait",
 
     "The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large and download from Hugging Face on demand; everything runs on your iPhone.": "La gomme et l'agrandisseur sont livrés avec l'app. Le remplissage génératif et le Pro Brain sont volumineux et se téléchargent depuis Hugging Face à la demande ; tout fonctionne sur votre iPhone.",
 }

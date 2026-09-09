@@ -1457,22 +1457,6 @@
         }
       }
     },
-    "Format": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Format"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Format"
-          }
-        }
-      }
-    },
     "Frame": {
       "localizations": {
         "en": {
@@ -2129,22 +2113,6 @@
         }
       }
     },
-    "Longest side 2048 px": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Longest side 2048 px"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Grand côté 2048 px"
-          }
-        }
-      }
-    },
     "Looks": {
       "localizations": {
         "en": {
@@ -2157,6 +2125,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Looks"
+          }
+        }
+      }
+    },
+    "Lossless": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lossless"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sans perte"
           }
         }
       }
@@ -4049,6 +4033,22 @@
         }
       }
     },
+    "Small, Apple": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Small, Apple"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Léger, Apple"
+          }
+        }
+      }
+    },
     "Something went wrong": {
       "localizations": {
         "en": {
@@ -4637,6 +4637,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Annuler le trait"
+          }
+        }
+      }
+    },
+    "Universal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Universal"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Universel"
           }
         }
       }
