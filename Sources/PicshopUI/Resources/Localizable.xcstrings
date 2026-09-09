@@ -4465,6 +4465,22 @@
         }
       }
     },
+    "Tap a clip on the timeline to change its speed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap a clip on the timeline to change its speed."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez un clip sur la timeline pour changer sa vitesse."
+          }
+        }
+      }
+    },
     "Tap a word to highlight it, or say “surligne « total »”.": {
       "localizations": {
         "en": {

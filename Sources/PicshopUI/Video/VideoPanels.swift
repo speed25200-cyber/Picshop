@@ -57,17 +57,47 @@ struct SpeedPanel: View {
     @Bindable var session: VideoEditorSession
     private let speeds: [Double] = [0.25, 0.5, 0.75, 1, 1.5, 2, 4]
 
+    private var currentSpeed: Double { session.selectedClip?.speed ?? 1 }
+
+    private func label(_ speed: Double) -> String {
+        "×" + (speed == speed.rounded() ? String(Int(speed)) : String(speed))
+    }
+
+    private func seconds(_ value: Double) -> String { String(format: "%.1f s", value) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                ForEach(speeds, id: \.self) { speed in
-                    PanelChip(title: "×\(speed == speed.rounded() ? String(Int(speed)) : String(speed))", isActive: session.selectedClip?.speed == speed) {
-                        session.perform(EditIntent(action: .setSpeed, amount: .absolute(speed)))
+                Image(systemName: "tortoise.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(PSTheme.textTertiary)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(speeds, id: \.self) { speed in
+                            PanelChip(title: label(speed), isActive: currentSpeed == speed) {
+                                Haptics.tick()
+                                session.perform(EditIntent(action: .setSpeed, amount: .absolute(speed)))
+                            }
+                        }
                     }
                 }
+                Image(systemName: "hare.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(PSTheme.textTertiary)
             }
-            Text(L("Slow motion keeps every frame; time-lapse drops them. Audio follows the speed."))
-                .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+            if let clip = session.selectedClip {
+                HStack(spacing: 6) {
+                    Image(systemName: currentSpeed < 1 ? "slowmo" : (currentSpeed > 1 ? "timelapse" : "speedometer"))
+                        .foregroundStyle(currentSpeed == 1 ? PSTheme.textTertiary : PSTheme.accent)
+                        .contentTransition(.symbolEffect(.replace))
+                    Text(seconds(clip.sourceRange.duration)).foregroundStyle(PSTheme.textTertiary)
+                    Image(systemName: "arrow.right").font(.system(size: 9, weight: .bold)).foregroundStyle(PSTheme.textTertiary)
+                    Text(seconds(clip.timelineDuration)).foregroundStyle(PSTheme.textPrimary).contentTransition(.numericText())
+                    Spacer()
+                    Text(L("Slow motion keeps every frame; time-lapse drops them. Audio follows the speed."))
+                        .foregroundStyle(PSTheme.textTertiary).lineLimit(2).multilineTextAlignment(.trailing)
+                }
+                .font(PSFont.caption(11))
+                .animation(PSMotion.quick, value: currentSpeed)
+            } else {
+                Text(L("Tap a clip on the timeline to change its speed.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+            }
         }
     }
 }
@@ -283,7 +313,8 @@ struct TransitionsPanel: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(TransitionKind.allCases.filter { $0 != .none }) { kind in
-                        PanelChip(title: kind.displayName, isActive: session.selectedClip?.transitionOut?.kind == kind) {
+                        PanelChip(title: L(kind.displayName), symbol: transitionSymbol(kind), isActive: session.selectedClip?.transitionOut?.kind == kind) {
+                            Haptics.tick()
                             session.perform(EditIntent(action: .addTransition, time: duration, transition: kind))
                         }
                     }
@@ -297,8 +328,23 @@ struct TransitionsPanel: View {
                 PanelChip(title: L("Remove"), symbol: "xmark") { session.perform(EditIntent(action: .removeTransition)) }
             }
             if session.timeline.clips.count < 2 {
-                Text(L("Split the video first to add a transition between two clips.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                Label(L("Split the video first to add a transition between two clips."), systemImage: "scissors")
+                    .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
             }
+        }
+    }
+
+    private func transitionSymbol(_ kind: TransitionKind) -> String {
+        switch kind {
+        case .none: return "xmark"
+        case .crossDissolve: return "circle.lefthalf.filled"
+        case .fadeToBlack: return "moon.fill"
+        case .fadeToWhite: return "sun.max.fill"
+        case .slideLeft: return "arrow.left.square"
+        case .slideRight: return "arrow.right.square"
+        case .wipeLeft: return "rectangle.lefthalf.inset.filled"
+        case .zoom: return "plus.magnifyingglass"
+        case .blur: return "drop.fill"
         }
     }
 }

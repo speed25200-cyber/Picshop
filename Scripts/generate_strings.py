@@ -83,6 +83,8 @@ FR = {
     "Tap one, or say its number.": "Touchez-en un, ou dites son numéro.",
     "On-device, private": "Sur l'appareil, privé",
     "Looks preview on the selected clip's frame.": "Aperçu des looks sur une image du clip sélectionné.",
+    "Dissolve": "Fondu enchaîné", "Fade to Black": "Fondu au noir", "Fade to White": "Fondu au blanc", "Slide Left": "Glissement gauche", "Slide Right": "Glissement droite", "Wipe": "Volet", "Zoom": "Zoom", "Blur": "Flou",
+    "Tap a clip on the timeline to change its speed.": "Touchez un clip sur la timeline pour changer sa vitesse.",
     "Balanced": "Équilibré", "Small": "Léger", "Output": "Sortie",
     "Opacity": "Opacité", "Original": "Original", "Overlay": "Élément", "Pause": "Pause", "Photo": "Photo", "Photo canvas": "Zone de la photo", "Photo format": "Format photo",
     "Photos, videos and voice never leave your device. PicShop has no servers, no accounts and no tracking.": "Vos photos, vidéos et votre voix ne quittent jamais votre appareil. PicShop n'a ni serveur, ni compte, ni suivi.",
