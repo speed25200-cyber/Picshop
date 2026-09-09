@@ -163,6 +163,7 @@ public final class PhotoEditorSession {
         self.projectID = projectID
         self.app = app
         history = EditHistory(initial: document)
+        previewAspectRatio = document.aspectRatio
     }
 
     // MARK: - Lifecycle
@@ -278,6 +279,9 @@ public final class PhotoEditorSession {
                     let image = try await renderer.render(document, options: options)
                     guard !Task.isCancelled else { return }
                     preview = image
+                    let ratio = image.extent.height > 0 ? Double(image.extent.width / image.extent.height) : document.aspectRatio
+                    if abs(ratio - previewAspectRatio) > 0.0005 { previewAspectRatio = ratio }
+                    if !hasRenderedPreview { hasRenderedPreview = true }
                 } catch {
                     PSLog.error("preview failed: \(error)", category: .ui)
                 }
@@ -402,10 +406,15 @@ public final class PhotoEditorSession {
     // MARK: - Crop & straighten
 
     /// Aspect ratio (w/h) of what is currently on screen.
-    public var previewAspectRatio: Double {
-        if let preview, preview.extent.height > 0 { return Double(preview.extent.width / preview.extent.height) }
-        return document.aspectRatio
-    }
+    ///
+    /// Stored rather than derived from `preview`: the canvas lays itself out
+    /// from this, and reading the preview here would make the whole layout —
+    /// crop frame, handles, gestures — depend on every rendered frame. It only
+    /// changes when the shape of the picture changes.
+    public private(set) var previewAspectRatio: Double = 1
+    /// False until the first frame has been drawn, so the canvas can show that
+    /// it is loading without reading the preview itself.
+    public private(set) var hasRenderedPreview = false
 
     public var isCropping: Bool { cropRect != nil }
 

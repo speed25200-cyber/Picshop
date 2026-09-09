@@ -32,6 +32,20 @@ struct MetalCanvasRepresentable: UIViewRepresentable {
     }
 }
 
+/// The picture itself. Its own view because a new frame arrives up to sixty
+/// times a second while a dial is dragged: read in the canvas's body, every
+/// one of those would rebuild the crop frame, the handles and the gestures.
+private struct CanvasSurface: View {
+    let session: PhotoEditorSession
+    let frame: CGRect
+
+    var body: some View {
+        MetalCanvasRepresentable(image: session.preview, overlay: session.selectionPreview, frame: frame,
+                                 maxFrameRate: session.app.performance.maxFrameRate,
+                                 maxContentScale: session.app.performance.maxContentScale)
+    }
+}
+
 /// Zoomable, pannable canvas. Hosts the crop frame, text handles, brush
 /// strokes, selection outlines and candidate highlights.
 struct PhotoCanvasView: View {
@@ -57,7 +71,7 @@ struct PhotoCanvasView: View {
             let frame = imageFrame(in: container)
             ZStack {
                 PSTheme.canvas
-                if session.preview == nil {
+                if !session.hasRenderedPreview {
                     // A slow first render must read as loading, never as a black screen.
                     ZStack {
                         RoundedRectangle(cornerRadius: 14, style: .continuous).fill(PSTheme.surfaceElevated)
@@ -67,9 +81,8 @@ struct PhotoCanvasView: View {
                     .position(x: frame.midX, y: frame.midY)
                     .transition(.opacity)
                 }
-                MetalCanvasRepresentable(image: session.preview, overlay: session.selectionPreview, frame: frame,
-                                         maxFrameRate: session.app.performance.maxFrameRate, maxContentScale: session.app.performance.maxContentScale)
-                if !session.isCropping, effects != .minimal, session.preview != nil {
+                CanvasSurface(session: session, frame: frame)
+                if !session.isCropping, effects != .minimal, session.hasRenderedPreview {
                     // Hairline around the picture, so its edge is legible against
                     // the dark table. Square, because the Metal canvas draws the
                     // image with square corners; the crop frame owns the edge
@@ -102,7 +115,7 @@ struct PhotoCanvasView: View {
                         .transition(.scale(scale: 0.8, anchor: .bottomTrailing).combined(with: .opacity))
                 }
             }
-            .animation(PSMotion.standard, value: session.preview == nil)
+            .animation(PSMotion.standard, value: session.hasRenderedPreview)
             .animation(PSMotion.standard, value: session.history.canUndo && !session.isCropping && !session.isProcessing)
             .animation(PSMotion.quick, value: zoom > 1.01)
             .contentShape(Rectangle())
