@@ -7,6 +7,8 @@ import PicshopSpeech
 /// Voice command cheat-sheet.
 struct HelpSheet: View {
     let mode: EditorMode
+    /// Runs an example as if it had been spoken; the sheet closes first.
+    var onSay: ((String) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
     private var sections: [(String, [String])] {
@@ -31,23 +33,112 @@ struct HelpSheet: View {
         return result
     }
 
+    private func symbol(for section: String) -> String {
+        switch section {
+        case L("Erase & cut out"): return "eraser.line.dashed"
+        case L("Light & colour"): return "sun.max"
+        case L("Goals"): return "target"
+        case L("Follow-ups"): return "arrow.turn.down.right"
+        case L("Portrait"): return "person.crop.circle"
+        case L("Looks"): return "camera.filters"
+        case L("Frame"): return "crop.rotate"
+        case L("Text"): return "textformat"
+        case L("Video"): return "film"
+        case L("PDF"): return "doc.text"
+        default: return "command"
+        }
+    }
+
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(sections, id: \.0) { section in
-                    Section(section.0) {
-                        ForEach(section.1, id: \.self) { example in
-                            Label(example, systemImage: "quote.opening").font(PSFont.body(15))
+            ScrollView {
+                VStack(alignment: .leading, spacing: PSSpacing.xLarge) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "waveform.and.mic")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 48, height: 48)
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(PSTheme.voiceGradient))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L("Say it")).font(PSFont.title(22)).foregroundStyle(PSTheme.textPrimary).tracking(-0.4)
+                            Text(onSay == nil ? L("French or English, several requests in one breath.") : L("French or English. Tap an example to run it."))
+                                .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                        }
+                    }
+                    ForEach(sections, id: \.0) { section in
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label(section.0, systemImage: symbol(for: section.0))
+                                .font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
+                                .symbolRenderingMode(.hierarchical)
+                            FlowLayout(spacing: 8) {
+                                ForEach(section.1, id: \.self) { example in
+                                    Button {
+                                        guard let onSay else { return }
+                                        Haptics.confirm()
+                                        dismiss()
+                                        onSay(example)
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "quote.opening").font(.system(size: 9, weight: .bold)).foregroundStyle(PSTheme.voice)
+                                            Text(example).font(PSFont.body(14)).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
+                                        }
+                                        .padding(.horizontal, 12).padding(.vertical, 8)
+                                        .psGlass(interactive: onSay != nil)
+                                    }
+                                    .buttonStyle(PSPressStyle())
+                                    .disabled(onSay == nil)
+                                }
+                            }
                         }
                     }
                 }
+                .padding(.horizontal, PSSpacing.page)
+                .padding(.vertical, 12)
             }
-            .scrollContentBackground(.hidden)
+            .scrollIndicators(.hidden)
             .background(AmbientBackground().ignoresSafeArea())
-            .navigationTitle(L("Say it"))
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { dismiss() } } }
         }
         .preferredColorScheme(.dark)
+        .presentationDragIndicator(.visible)
+    }
+}
+
+/// Wraps chips onto as many rows as needed, leading-aligned.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        return CGSize(width: width == .infinity ? x : width, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
     }
 }
 #endif

@@ -57,7 +57,7 @@ public struct VideoEditorView: View {
         .task { await session.configure() }
         .onDisappear { session.teardown() }
         .sheet(isPresented: $session.showsExport) { VideoExportSheet(session: session) }
-        .sheet(isPresented: $session.showsHelp) { HelpSheet(mode: .video) }
+        .sheet(isPresented: $session.showsHelp) { HelpSheet(mode: .video) { Task { await session.handleTranscript($0) } } }
         .fileImporter(isPresented: $session.showsMusicPicker, allowedContentTypes: [.audio, .mp3, .mpeg4Audio, .wav, .aiff]) { result in
             if case .success(let url) = result { Task { await session.addMusic(from: url) } }
         }

@@ -46,7 +46,7 @@ public struct PDFEditorView: View {
         }
         .onAppear { session.configure() }
         .onDisappear { session.teardown() }
-        .sheet(isPresented: $session.showsHelp) { HelpSheet(mode: .pdf) }
+        .sheet(isPresented: $session.showsHelp) { HelpSheet(mode: .pdf) { Task { await session.handleTranscript($0) } } }
         .sheet(isPresented: $session.showsSignatureSheet) { SignatureSheet { strokes in session.saveSignature(strokes: strokes) } }
         .sheet(isPresented: $session.showsExport) { PDFExportSheet(session: session) }
         .sheet(item: $session.textEdit) { edit in

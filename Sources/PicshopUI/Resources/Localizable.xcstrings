@@ -1489,6 +1489,38 @@
         }
       }
     },
+    "French or English, several requests in one breath.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "French or English, several requests in one breath."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Français ou anglais, plusieurs demandes d'un trait."
+          }
+        }
+      }
+    },
+    "French or English. Tap an example to run it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "French or English. Tap an example to run it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Français ou anglais. Touchez un exemple pour le lancer."
+          }
+        }
+      }
+    },
     "Full quality previews at the display's refresh rate.": {
       "localizations": {
         "en": {
