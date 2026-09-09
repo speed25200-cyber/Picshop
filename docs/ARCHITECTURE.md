@@ -57,6 +57,16 @@ A project package on disk:
    (unknown noun, unusual phrasing), the preferred language model is asked with a 6 s budget and the
    grammar's guess as a hint. `IntentNormalizer` validates every model field against the vocabulary
    (`IntentAction`, `AdjustmentParameter`, `FilterPreset`, `AspectPreset`, `TransitionKind`…).
+   The budget is tiered: a short slot when the grammar already has a usable plan and the model is
+   only being asked to do better, the full one when the grammar came up empty. Identical requests in
+   an identical editor state are answered from a small cache instead of running inference again.
+   **The prompt is split on purpose.** `IntentPrompt.systemInstructions(mode:)` holds only what stays
+   true for the whole editing session, so there is one model session per editor whose instructions the
+   model reads once; everything that changes between two requests — clip count, playhead, page number,
+   the pending clarification, the last adjustment — goes in `IntentPrompt.userPrompt`. Putting any of
+   those back in the instructions reintroduces the bug where a cached session planned "split here"
+   from a stale playhead. Sessions recycle after a few requests so their transcript cannot grow into
+   the context window, and are dropped on error.
 3. **Executors** (`PhotoCommandExecutor`, `VideoCommandExecutor`) turn intents into document
    mutations. Anything that needs vision goes through the `PhotoAIServices` / `VideoAIServices`
    protocols, so the executors are fully unit-tested with fakes.
@@ -139,6 +149,18 @@ that removes glow and drop shadows (and finally glass) before any layout changes
 coalesces interactive renders (at most one in flight, latest state wins) and `MetalCanvasRepresentable` only redraws when
 the image, overlay or frame changed. Heavy neural work (generative fill, upscaling, automatic model installs) waits while
 the tier is critical.
+
+**High-frequency state belongs in a leaf view.** Anything that changes many times a second — the playhead, the rendered
+preview, the microphone level, a progress fraction — must be read by the smallest view that needs it, never by an editor's
+own `body`, or SwiftUI re-evaluates the canvas, the filmstrip, the open panel and the dock on every tick. `TransportBar`,
+`PlayheadFollower`, `CanvasSurface`, `LevelBars` and `EditorStatusOverlay` exist for that reason, and the session stores
+`previewAspectRatio` and `hasRenderedPreview` so a layout can size itself without depending on each frame.
+
+**Nothing that loads a model may sit on the first-frame path.** `MLModel(contentsOf:)` is synchronous and takes seconds on
+device, so `configure()` builds the renderer with an empty `InpaintingPipeline`, asks for the preview immediately, and
+attaches the engines from a detached task; a fill that arrives first waits for them through `InpaintingPipeline.setLoading`
+rather than silently falling back to the patch-based eraser. Caches are bounded (the renderer's operation cache, the
+library's decoded thumbnails) so a long session does not drift into memory pressure.
 
 ## Concurrency
 
