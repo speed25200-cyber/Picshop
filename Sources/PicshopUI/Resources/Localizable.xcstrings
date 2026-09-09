@@ -3281,6 +3281,22 @@
         }
       }
     },
+    "Preparing the PDF…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing the PDF…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Préparation du PDF…"
+          }
+        }
+      }
+    },
     "Previous frame": {
       "localizations": {
         "en": {

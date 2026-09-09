@@ -231,13 +231,20 @@ struct PagesStrip: View {
                 HStack(spacing: 10) {
                     ForEach(Array(session.document.pages.enumerated()), id: \.element.id) { index, page in
                         let selected = index == session.document.currentPageIndex
-                        VStack(spacing: 4) {
+                        VStack(spacing: 5) {
                             PageThumbnail(session: session, index: index)
                                 .frame(height: 96)
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                                 .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(selected ? PSTheme.accent : PSTheme.hairline, lineWidth: selected ? 2.5 : 1))
-                            Text("\(index + 1)").font(PSFont.caption(10)).foregroundStyle(selected ? PSTheme.accent : PSTheme.textSecondary)
+                                .shadow(color: selected ? PSTheme.accent.opacity(0.35) : .clear, radius: 10, y: 4)
+                                .scaleEffect(selected ? 1 : 0.94)
+                                .opacity(selected ? 1 : 0.8)
+                            Text("\(index + 1)")
+                                .font(PSFont.caption(10)).foregroundStyle(selected ? Color.white : PSTheme.textSecondary)
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Capsule().fill(selected ? PSTheme.accent : Color.clear))
                         }
+                        .animation(PSMotion.quick, value: selected)
                         .onTapGesture { Haptics.tick(); session.update(L("Page")) { $0.goToPage(index) } }
                         .contextMenu {
                             Button { Task { await session.run(EditIntent(action: .rotatePage, degrees: 90, index: index + 1)) } } label: { Label(L("Rotate"), systemImage: "rotate.right") }
@@ -464,28 +471,127 @@ struct SignatureSheet: View {
 struct PDFExportSheet: View {
     @Bindable var session: PDFEditorSession
     @Environment(\.dismiss) private var dismiss
+    @State private var preview: UIImage?
+
+    private var fileSizeText: String? {
+        guard let url = session.exportedURL,
+              let bytes = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.doubleValue else { return nil }
+        return bytes < 1_048_576 ? String(format: "%.0f KB", bytes / 1024) : String(format: "%.1f MB", bytes / 1_048_576)
+    }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    Text("\(session.document.pageCount) \(L("pages")) · \(session.document.allMarkups.count) \(L("markups"))").font(PSFont.caption()).foregroundStyle(PSTheme.textSecondary)
+            ScrollView {
+                VStack(spacing: PSSpacing.large) {
+                    pagePreview
+                    VStack(spacing: 0) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(session.document.title).font(PSFont.headline(15)).lineLimit(1)
+                                HStack(spacing: 5) {
+                                    Text("\(session.document.pageCount) \(L("pages"))")
+                                    Text("·")
+                                    Text("\(session.document.allMarkups.count) \(L("markups"))")
+                                    if let fileSizeText {
+                                        Text("·")
+                                        Text(fileSizeText).contentTransition(.numericText())
+                                    }
+                                }
+                                .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                            }
+                            Spacer()
+                            Image(systemName: session.exportedURL == nil ? "doc.badge.clock" : "checkmark.seal.fill")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundStyle(session.exportedURL == nil ? PSTheme.textTertiary : PSTheme.success)
+                                .contentTransition(.symbolEffect(.replace))
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 12)
+                        Divider().overlay(PSTheme.hairline).padding(.leading, 16)
+                        Button { Haptics.tap(); Task { await session.run(EditIntent(action: .extractPage)) } } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "photo.badge.arrow.down")
+                                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                                    .frame(width: 30, height: 30)
+                                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(PSTheme.warning.gradient))
+                                Text(L("Save current page to Photos")).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(PSTheme.textTertiary)
+                            }
+                            .padding(.horizontal, 16).padding(.vertical, 11)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PSPressStyle(scale: 0.99))
+                    }
+                    .psCard(cornerRadius: 18, shadow: false)
+                }
+                .padding(.horizontal, PSSpacing.page)
+                .padding(.top, 8)
+                .padding(.bottom, 96)
+                .animation(PSMotion.standard, value: session.exportedURL)
+            }
+            .scrollIndicators(.hidden)
+            .background(AmbientBackground().ignoresSafeArea())
+            .safeAreaInset(edge: .bottom) {
+                Group {
                     if let url = session.exportedURL {
                         ShareLink(item: url) { Label(L("Share PDF"), systemImage: "square.and.arrow.up").frame(maxWidth: .infinity) }
-                            .buttonStyle(PrimaryButtonStyle()).listRowBackground(Color.clear)
+                            .buttonStyle(PrimaryButtonStyle())
+                            .simultaneousGesture(TapGesture().onEnded { Haptics.confirm() })
+                    } else {
+                        HStack(spacing: 10) {
+                            ProgressView().tint(PSTheme.textPrimary)
+                            Text(L("Preparing the PDF…")).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .psCard(cornerRadius: 18, shadow: false)
                     }
-                    Button { Task { await session.run(EditIntent(action: .extractPage)) } } label: { Label(L("Save current page to Photos"), systemImage: "photo").frame(maxWidth: .infinity) }
-                        .buttonStyle(SecondaryButtonStyle()).listRowBackground(Color.clear)
                 }
+                .padding(.horizontal, PSSpacing.page)
+                .padding(.vertical, 10)
+                .background(LinearGradient(colors: [PSTheme.ink.opacity(0), PSTheme.ink.opacity(0.9)], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+                .animation(PSMotion.standard, value: session.exportedURL == nil)
             }
-            .scrollContentBackground(.hidden)
-            .background(AmbientBackground().ignoresSafeArea())
             .navigationTitle(L("Export"))
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("Done")) { dismiss() } } }
-            .onAppear { if session.exportedURL == nil { session.export() } }
+            // Always re-export on open, so the shared file carries the latest edits.
+            .onAppear { session.export() }
         }
         .preferredColorScheme(.dark)
-        .presentationDetents([.medium])
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    /// The current page as a sheet of paper, with its position in the document.
+    private var pagePreview: some View {
+        ZStack(alignment: .bottomTrailing) {
+            Group {
+                if let preview {
+                    Image(uiImage: preview).resizable().scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .shadow(color: .black.opacity(0.45), radius: 14, y: 8)
+                        .padding(14)
+                } else {
+                    Image(systemName: "doc.text").font(.system(size: 32, weight: .light)).foregroundStyle(PSTheme.textTertiary)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 200)
+            .background(PSTheme.surfaceElevated)
+            Text(String(format: L("Page %d of %d"), session.document.currentPageIndex + 1, session.document.pageCount))
+                .font(PSFont.mono(11)).foregroundStyle(.white)
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(.black.opacity(0.55), in: Capsule())
+                .padding(12)
+        }
+        .task {
+            guard preview == nil, let page = session.composed?.page(at: session.document.currentPageIndex) else { return }
+            preview = session.services.thumbnail(page: page, height: 360)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(PSTheme.strokeGradient, lineWidth: 1))
+        .shadow(color: .black.opacity(0.4), radius: 18, y: 10)
     }
 }
 
