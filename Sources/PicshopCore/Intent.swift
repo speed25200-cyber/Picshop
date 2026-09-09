@@ -50,6 +50,10 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     case removeTransition
     case addMusic
     case removeMusic
+    /// Moves a sound track to a time on the timeline.
+    case moveAudio
+    /// Sets the fade-in / fade-out of a sound track.
+    case fadeAudio
     case extractFrame
     case seek
     case play
@@ -91,7 +95,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     public var isVideoOnly: Bool {
         switch self {
         case .trim, .split, .deleteClip, .deleteRange, .setSpeed, .reverse, .mute, .unmute, .setVolume,
-             .addTransition, .removeTransition, .addMusic, .removeMusic, .extractFrame, .seek, .play, .pause,
+             .addTransition, .removeTransition, .addMusic, .removeMusic, .moveAudio, .fadeAudio, .extractFrame, .seek, .play, .pause,
              .duplicateClip, .moveClip, .stabilize, .freezeFrame:
             return true
         default:
@@ -356,6 +360,8 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .removeTransition: return "Remove transition"
         case .addMusic: return "Add music"
         case .removeMusic: return "Remove music"
+        case .moveAudio: return "Move sound to \(time ?? 0)s"
+        case .fadeAudio: return "Fade sound"
         case .extractFrame: return "Extract frame"
         case .seek: return "Go to \(time ?? 0)s"
         case .play: return "Play"

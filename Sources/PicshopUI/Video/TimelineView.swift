@@ -74,6 +74,13 @@ struct TimelineView: View {
     }
 
     static let rulerHeight: CGFloat = 16
+    static let laneHeight: CGFloat = 20
+    /// Height of the strip: ruler, filmstrip, then one lane per text overlay
+    /// row and per sound track (capped so the picture keeps the room).
+    static func height(for timeline: VideoTimeline) -> CGFloat {
+        let lanes = min(4, (timeline.overlays.isEmpty ? 0 : 1) + timeline.audioTracks.count)
+        return rulerHeight + 84 + 6 + CGFloat(max(1, lanes)) * laneHeight + 8
+    }
 
     /// Time ruler: labelled ticks whose spacing follows the zoom, so a
     /// second stays legible whether the strip is pinched in or out.
@@ -109,6 +116,8 @@ struct TimelineView: View {
 
     @ViewBuilder
     private func overlaysLane(width: CGFloat) -> some View {
+        let laneTop = 96 + TimelineView.rulerHeight
+        let textLane = session.timeline.overlays.isEmpty ? 0 : 1
         ForEach(session.timeline.overlays) { overlay in
             let x = width / 2 + CGFloat(overlay.span.start) * pixelsPerSecond
             HStack(spacing: 4) {
@@ -119,20 +128,64 @@ struct TimelineView: View {
             .padding(.horizontal, 6).frame(height: 18)
             .frame(width: max(30, CGFloat(overlay.span.duration) * pixelsPerSecond), alignment: .leading)
             .background(PSTheme.warning, in: Capsule())
-            .offset(x: x, y: 96 + TimelineView.rulerHeight)
+            .offset(x: x, y: laneTop)
         }
-        ForEach(session.timeline.audioTracks) { track in
+        // One lane per sound track, stacked like an NLE: music, voice-over, effects.
+        ForEach(Array(session.timeline.audioTracks.enumerated()), id: \.element.id) { index, track in
             let x = width / 2 + CGFloat(track.timelineStart) * pixelsPerSecond
-            HStack(spacing: 4) {
-                Image(systemName: "music.note").font(.system(size: 9, weight: .bold))
-                Text(track.name).font(PSFont.caption(10)).lineLimit(1)
-            }
-            .foregroundStyle(.black)
-            .padding(.horizontal, 6).frame(height: 18)
-            .frame(width: max(30, CGFloat(min(track.sourceRange.duration, session.timeline.duration - track.timelineStart)) * pixelsPerSecond), alignment: .leading)
-            .background(PSTheme.success, in: Capsule())
-            .offset(x: x, y: 96 + TimelineView.rulerHeight)
+            let visible = max(0, min(track.sourceRange.duration, session.timeline.duration - track.timelineStart))
+            SoundLaneBar(track: track, index: index)
+                .frame(width: max(30, CGFloat(visible) * pixelsPerSecond), alignment: .leading)
+                .offset(x: x, y: laneTop + CGFloat(textLane + min(index, 3)) * TimelineView.laneHeight)
+                .contextMenu {
+                    Button { session.toggleTrackMute(track.id) } label: { Label(track.isMuted ? L("Unmute") : L("Mute"), systemImage: track.isMuted ? "speaker.wave.2" : "speaker.slash") }
+                    Button { session.moveTrack(track.id, to: session.player.currentTime) } label: { Label(L("Move to playhead"), systemImage: "arrow.right.to.line") }
+                    Button(role: .destructive) { session.removeTrack(track.id) } label: { Label(L("Remove track"), systemImage: "trash") }
+                }
         }
+    }
+}
+
+/// A sound track on its lane: name, fades drawn as ramps at each end, dimmed when muted.
+private struct SoundLaneBar: View {
+    let track: AudioTrack
+    let index: Int
+
+    private var tint: Color {
+        switch index % 3 {
+        case 0: return PSTheme.success
+        case 1: return Color(red: 0.35, green: 0.78, blue: 0.95)
+        default: return Color(red: 1.0, green: 0.62, blue: 0.35)
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: index == 0 ? "music.note" : (track.name.lowercased().contains("voice") || track.name.lowercased().contains("voix") ? "mic.fill" : "waveform"))
+                .font(.system(size: 9, weight: .bold))
+            Text(track.name).font(PSFont.caption(10)).lineLimit(1)
+            if track.isMuted { Image(systemName: "speaker.slash.fill").font(.system(size: 8, weight: .bold)) }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.black.opacity(track.isMuted ? 0.55 : 1))
+        .padding(.horizontal, 6).frame(height: 18)
+        .background {
+            // Fades read as ramps: the bar is transparent where the sound is silent.
+            GeometryReader { proxy in
+                let width = proxy.size.width
+                let total = max(0.001, track.sourceRange.duration)
+                let fadeIn = width * CGFloat(min(0.5, track.fadeIn / total))
+                let fadeOut = width * CGFloat(min(0.5, track.fadeOut / total))
+                LinearGradient(stops: [
+                    .init(color: tint.opacity(0.25), location: 0),
+                    .init(color: tint, location: fadeIn / max(1, width)),
+                    .init(color: tint, location: 1 - fadeOut / max(1, width)),
+                    .init(color: tint.opacity(0.25), location: 1),
+                ], startPoint: .leading, endPoint: .trailing)
+            }
+            .clipShape(Capsule())
+        }
+        .opacity(track.isMuted ? 0.55 : 1)
     }
 }
 
@@ -174,12 +227,18 @@ struct ClipView: View {
         ZStack(alignment: .leading) {
             HStack(spacing: 0) {
                 ForEach(Array(thumbnails.enumerated()), id: \.offset) { _, image in
-                    Image(uiImage: image).resizable().scaledToFill().frame(width: 60, height: 84).clipped()
+                    Image(uiImage: image).resizable().scaledToFill()
+                        .frame(width: max(24, width / CGFloat(max(1, thumbnails.count))), height: 84).clipped()
                 }
             }
             .frame(width: width, height: 84, alignment: .leading)
             .clipped()
             .background(PSTheme.surfaceElevated)
+            .overlay(alignment: .leading) {
+                if thumbnails.isEmpty {
+                    ProgressView().controlSize(.mini).tint(PSTheme.textTertiary).padding(.leading, 12)
+                }
+            }
             .overlay(alignment: .bottomLeading) {
                 HStack(spacing: 4) {
                     if clip.speed != 1 { GlassChipMini(text: "×\(formatted(clip.speed))") }
@@ -209,8 +268,11 @@ struct ClipView: View {
             }
         }
         .frame(width: width, height: 84)
-        .task(id: "\(clip.renderAsset.relativePath)-\(clip.sourceRange.start)-\(clip.sourceRange.duration)-\(Int(width))") {
-            let count = max(1, Int(width / 60) + 1)
+        .task(id: "\(clip.renderAsset.relativePath)-\(clip.sourceRange.start)-\(clip.sourceRange.duration)-\(ClipView.frameCount(for: width))") {
+            // A four-minute clip at 60 px/s would ask for ~280 frames and show nothing
+            // until the last one landed. Frames are capped and tiled across the clip,
+            // like iMovie: evenly spaced in time whatever the zoom.
+            let count = ClipView.frameCount(for: width)
             let images = await session.thumbnailer.thumbnails(for: clip, count: count)
             thumbnails = images.map { UIImage(cgImage: $0) }
         }
@@ -241,6 +303,11 @@ struct ClipView: View {
                         Haptics.confirm()
                     }
             )
+    }
+
+    /// Frames per clip: one per 60 pt up to a small cap, so long clips stay cheap.
+    static func frameCount(for width: CGFloat) -> Int {
+        min(20, max(1, Int(width / 60) + 1))
     }
 
     private func formatted(_ value: Double) -> String {

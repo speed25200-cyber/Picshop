@@ -66,6 +66,9 @@ public final class VideoEditorSession {
     public var showsExport = false
     public var showsHelp = false
     public var showsMusicPicker = false
+    /// Where the next imported sound goes: a timeline second (nil = the playhead)
+    /// and whether it replaces the existing tracks or joins them.
+    public var pendingSoundPlacement: (time: Double?, replace: Bool) = (nil, false)
     public var exportedURL: URL?
     public var exportProgress: Double?
     /// Look thumbnails rendered from one frame of a clip, kept per clip.
@@ -261,8 +264,15 @@ public final class VideoEditorSession {
             let asset = AVURLAsset(url: destination)
             let duration = CMTimeGetSeconds(try await asset.load(.duration))
             let media = MediaAsset(kind: .audio, relativePath: relative, pixelSize: .zero, duration: duration, origin: .file)
-            update(L("Add Music")) { timeline in
-                timeline.audioTracks = [AudioTrack(asset: media, name: url.deletingPathExtension().lastPathComponent)]
+            let placement = pendingSoundPlacement
+            pendingSoundPlacement = (nil, false)
+            let start = max(0, min(timeline.duration, placement.time ?? player.currentTime))
+            let name = url.deletingPathExtension().lastPathComponent
+            update(placement.replace ? L("Replace Music") : L("Add Sound Track")) { timeline in
+                // Several tracks side by side, like lanes in an NLE: a voice-over or a
+                // sound effect joins the music unless the user asked to replace it.
+                let track = AudioTrack(asset: media, timelineStart: start, name: name)
+                if placement.replace { timeline.audioTracks = [track] } else { timeline.audioTracks.append(track) }
             }
             Haptics.success()
         } catch {
@@ -360,7 +370,9 @@ public final class VideoEditorSession {
             case .seek(let time): Task { await player.seek(to: time) }
             case .export, .share: showsExport = true
             case .help: showsHelp = true
-            case .pickMusic: showsMusicPicker = true
+            case .pickMusic(_, let time, let replace):
+                pendingSoundPlacement = (time, replace)
+                showsMusicPicker = true
             case .selectClip(let id): selectedClipID = id
             case .compare:
                 showsOriginal = true
@@ -383,6 +395,37 @@ public final class VideoEditorSession {
            let hit = pending.candidates.filter({ $0.boundingBox.insetBy(dx: -0.02, dy: -0.02).contains(point) }).min(by: { $0.boundingBox.area < $1.boundingBox.area }),
            let index = pending.candidates.firstIndex(where: { $0.id == hit.id }) {
             choose(candidateIndex: index)
+        }
+    }
+
+    // MARK: - Sound tracks
+
+    /// Opens the picker for a new track starting at the playhead.
+    public func addSoundTrack(at time: Double? = nil) {
+        pendingSoundPlacement = (time ?? player.currentTime, false)
+        showsMusicPicker = true
+    }
+
+    public func setTrackVolume(_ id: UUID, _ volume: Double) {
+        updateTrack(id, label: L("Track Volume")) { $0.volume = volume; if volume > 0 { $0.isMuted = false } }
+    }
+
+    public func toggleTrackMute(_ id: UUID) {
+        updateTrack(id, label: L("Mute Track")) { $0.isMuted.toggle() }
+    }
+
+    public func removeTrack(_ id: UUID) {
+        update(L("Remove Sound Track")) { $0.audioTracks.removeAll { $0.id == id } }
+    }
+
+    public func moveTrack(_ id: UUID, to time: Double) {
+        updateTrack(id, label: L("Move Sound")) { $0.timelineStart = max(0, min(self.timeline.duration, time)) }
+    }
+
+    private func updateTrack(_ id: UUID, label: String, _ change: (inout AudioTrack) -> Void) {
+        update(label) { timeline in
+            guard let index = timeline.audioTracks.firstIndex(where: { $0.id == id }) else { return }
+            change(&timeline.audioTracks[index])
         }
     }
 

@@ -162,9 +162,11 @@ public struct AudioTrack: Hashable, Codable, Sendable, Identifiable {
     /// Lower this track when clip audio is present.
     public var ducking: Double
     public var name: String
+    /// Silenced without losing its volume, like a mute button on a mixer.
+    public var isMuted: Bool
 
     public init(id: UUID = UUID(), asset: MediaAsset, timelineStart: Double = 0, sourceRange: TimeSpan? = nil, volume: Double = 0.8,
-                fadeIn: Double = 0.5, fadeOut: Double = 1, ducking: Double = 0.4, name: String = "Music") {
+                fadeIn: Double = 0.5, fadeOut: Double = 1, ducking: Double = 0.4, name: String = "Music", isMuted: Bool = false) {
         self.id = id
         self.asset = asset
         self.timelineStart = timelineStart
@@ -174,6 +176,27 @@ public struct AudioTrack: Hashable, Codable, Sendable, Identifiable {
         self.fadeOut = fadeOut
         self.ducking = ducking
         self.name = name
+        self.isMuted = isMuted
+    }
+
+    /// The span this track occupies on the timeline.
+    public var timelineSpan: TimeSpan { TimeSpan(start: timelineStart, duration: sourceRange.duration) }
+
+    private enum CodingKeys: String, CodingKey { case id, asset, timelineStart, sourceRange, volume, fadeIn, fadeOut, ducking, name, isMuted }
+
+    /// `isMuted` arrived after the first projects were saved; they decode as unmuted.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        asset = try c.decode(MediaAsset.self, forKey: .asset)
+        timelineStart = try c.decode(Double.self, forKey: .timelineStart)
+        sourceRange = try c.decode(TimeSpan.self, forKey: .sourceRange)
+        volume = try c.decode(Double.self, forKey: .volume)
+        fadeIn = try c.decode(Double.self, forKey: .fadeIn)
+        fadeOut = try c.decode(Double.self, forKey: .fadeOut)
+        ducking = try c.decode(Double.self, forKey: .ducking)
+        name = try c.decode(String.self, forKey: .name)
+        isMuted = try c.decodeIfPresent(Bool.self, forKey: .isMuted) ?? false
     }
 }
 

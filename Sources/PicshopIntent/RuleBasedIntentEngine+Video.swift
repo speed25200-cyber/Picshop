@@ -4,6 +4,15 @@ import PicshopCore
 extension RuleBasedIntentEngine {
     static let clipWords: [String] = ["clip", "clips", "segment", "segments", "partie", "part", "passage", "scene", "sequence", "morceau", "bout", "plan", "shot", "section", "extrait"]
 
+    /// Which sound track a request names: 1-based, -1 for the last one, nil for "the music" in general.
+    static func trackOrdinal(in u: NormalizedUtterance) -> Int? {
+        if u.contains(["last track", "derniere piste", "dernier son", "last sound", "la derniere", "the last one"]) { return -1 }
+        if u.contains(["first track", "premiere piste", "premier son", "first sound", "la premiere"]) { return 1 }
+        if u.contains(["second track", "deuxieme piste", "seconde piste", "deuxieme son", "second sound", "la deuxieme", "the second one", "track 2", "piste 2"]) { return 2 }
+        if u.contains(["third track", "troisieme piste", "troisieme son", "third sound", "la troisieme", "track 3", "piste 3"]) { return 3 }
+        return nil
+    }
+
     /// Video-only grammar. Returns nil to fall through to the shared photo/video matchers.
     func parseVideo(_ u: NormalizedUtterance, context: IntentContext) -> [EditIntent]? {
         let times = TimeExpressions.allTimes(in: u.tokens, frameRate: context.frameRate)
@@ -32,11 +41,11 @@ extension RuleBasedIntentEngine {
             if let number = NumberWords.firstNumber(in: u.tokens) { return [EditIntent(action: .seek, time: min(max(0, number.value), duration))] }
         }
 
-        // Audio.
-        if u.contains(["mute", "coupe le son", "coupe l audio", "enleve le son", "enleve l audio", "supprime le son", "supprime l audio", "retire le son", "sans son", "sans le son", "silence", "silencieux", "no sound", "no audio", "remove the sound", "remove the audio", "remove audio", "kill the audio", "kill the sound", "turn off the sound", "turn off the audio", "desactive le son"]) && !u.contains(["unmute", "remets le son", "reactive le son"]) {
+        // Audio. Anything naming a sound track is handled by the sound-track block below.
+        if !u.contains(["music", "musique", "track", "piste", "voice over", "voix off", "bruitage", "sound track", "bande son", "sound effect", "effet sonore"]) && u.contains(["mute", "coupe le son", "coupe l audio", "enleve le son", "enleve l audio", "supprime le son", "supprime l audio", "retire le son", "sans son", "sans le son", "silence", "silencieux", "no sound", "no audio", "remove the sound", "remove the audio", "remove audio", "kill the audio", "kill the sound", "turn off the sound", "turn off the audio", "desactive le son"]) && !u.contains(["unmute", "remets le son", "reactive le son"]) {
             return [EditIntent(action: .mute, scope: u.contains(["all", "tous", "toute", "partout", "everywhere", "whole", "entire", "toute la video", "the whole video"]) ? .all : .current)]
         }
-        if u.contains(["unmute", "remets le son", "remet le son", "reactive le son", "active le son", "with sound", "avec le son", "turn on the sound", "turn the sound on", "turn the sound back on", "restore the sound", "restore the audio", "sound on", "son on"]) {
+        if !u.contains(["music", "musique", "track", "piste", "voice over", "voix off", "bruitage", "sound track", "bande son", "sound effect", "effet sonore"]) && u.contains(["unmute", "remets le son", "remet le son", "reactive le son", "active le son", "with sound", "avec le son", "turn on the sound", "turn the sound on", "turn the sound back on", "restore the sound", "restore the audio", "sound on", "son on"]) {
             return [EditIntent(action: .unmute, scope: .all)]
         }
         if u.contains(["volume", "le son", "the sound", "the audio", "l audio", "louder", "plus fort", "quieter", "moins fort", "softer audio", "monte le son", "baisse le son", "turn it up", "turn it down", "sound level", "niveau sonore"]) && !u.contains(["music", "musique"]) {
@@ -53,20 +62,64 @@ extension RuleBasedIntentEngine {
             return [intent]
         }
 
-        // Music.
-        if u.contains(["music", "musique", "soundtrack", "bande son", "song", "chanson", "track", "morceau de musique", "background music", "musique de fond", "audio track", "piste audio"]) {
-            if u.contains(Self.removeVerbs) || u.contains(["without music", "sans musique", "no music", "pas de musique", "mute the music", "coupe la musique"]) {
-                return [EditIntent(action: .removeMusic)]
+        // Sound tracks: music, voice-over, sound effects — any number of them,
+        // each addressable by number ("the second track", "la dernière piste").
+        let soundWords = ["music", "musique", "soundtrack", "bande son", "bande sonore", "song", "chanson", "track", "morceau de musique", "background music",
+                          "musique de fond", "audio track", "piste audio", "piste son", "piste sonore", "piste", "voice over", "voix off", "voiceover",
+                          "sound effect", "effet sonore", "bruitage", "sound track", "second sound", "deuxieme son", "un son", "a sound", "narration", "commentaire audio"]
+        if u.contains(soundWords) {
+            let trackNumber = Self.trackOrdinal(in: u)
+            if u.contains(["mute the music", "coupe la musique", "silence la musique", "mute the track", "coupe la piste", "mute the sound track", "coupe le son de la musique", "mets la musique en sourdine"]) {
+                var intent = EditIntent(action: .mute, scope: .selection)
+                intent.clipIndex = trackNumber
+                return [intent]
             }
+            if u.contains(["unmute the music", "remets la musique", "reactive la musique", "unmute the track", "remets la piste", "remets le son de la musique"]) {
+                var intent = EditIntent(action: .unmute, scope: .selection)
+                intent.clipIndex = trackNumber
+                return [intent]
+            }
+            if u.contains(["fade", "fondu", "fade in", "fade out", "fondu d entree", "fondu de sortie", "en fondu", "adoucis le debut", "adoucis la fin"]) && !u.contains(["transition", "entre les clips", "between the clips", "between clips"]) {
+                var intent = EditIntent(action: .fadeAudio, scope: .selection)
+                intent.clipIndex = trackNumber
+                if let seconds = times.first { intent.amount = .absolute(seconds) }
+                if u.contains(["fade in", "fondu d entree", "au debut", "at the start", "at the beginning", "debut"]) && !u.contains(["fade out", "fondu de sortie", "a la fin", "at the end"]) { intent.text = "in" }
+                if u.contains(["fade out", "fondu de sortie", "a la fin", "at the end", "fin"]) && !u.contains(["fade in", "fondu d entree", "au debut", "at the start"]) { intent.text = "out" }
+                return [intent]
+            }
+            if u.contains(["move", "deplace", "decale", "shift", "place la", "place le", "mets la musique a", "mets le son a", "start the music at", "commence la musique a", "fais commencer", "starts at", "commence a"]) && (times.first != nil || u.contains(["ici", "here", "au curseur", "at the playhead", "playhead", "tete de lecture"])) {
+                var intent = EditIntent(action: .moveAudio, scope: .selection)
+                intent.clipIndex = trackNumber
+                intent.time = times.first ?? playhead
+                return [intent]
+            }
+            if u.contains(Self.removeVerbs) || u.contains(["without music", "sans musique", "no music", "pas de musique", "sans le son ajoute"]) {
+                var intent = EditIntent(action: .removeMusic)
+                intent.clipIndex = trackNumber
+                return [intent]
+            }
+            if u.contains(["volume", "louder", "quieter", "plus fort", "plus forte", "moins fort", "moins forte", "baisse", "monte", "lower", "softer", "turn down", "turn up", "plus bas", "plus doucement", "moins forte", "a fond", "pour cent", "percent", "%"]) {
+                var intent = EditIntent(action: .setVolume, scope: .selection)
+                intent.clipIndex = trackNumber
+                if let percent = NumberWords.firstNumber(in: u.tokens), u.contains(["pour cent", "percent", "%", "a", "to", "at"]), percent.value >= 0, percent.value <= 100 {
+                    intent.amount = .absolute(percent.value / 100)
+                } else if u.contains(["a fond", "full volume", "max", "maximum"]) {
+                    intent.amount = .absolute(1)
+                } else {
+                    intent.amount = .relative(u.contains(["louder", "plus fort", "plus forte", "up", "monte", "turn up"]) ? 0.25 : -0.25)
+                }
+                return [intent]
+            }
+            // Adding: a new track by default; "replace / change the music" swaps the existing ones.
             var intent = EditIntent(action: .addMusic)
-            if let rest = remainder(of: u, after: ["music", "musique", "soundtrack", "bande son", "song", "chanson", "track"]) {
-                let cleaned = rest.split(separator: " ").filter { !ObjectVocabulary.fillerWords.contains(String($0)) && !["genre", "type", "style", "kind", "of", "de", "d"].contains(String($0)) }.joined(separator: " ")
-                intent.text = cleaned.isEmpty ? nil : cleaned
-            }
-            if u.contains(["volume", "louder", "quieter", "plus fort", "plus forte", "moins fort", "moins forte", "baisse", "monte", "lower", "softer", "turn down", "turn up", "plus bas", "plus doucement", "moins forte"]) {
-                intent.action = .setVolume
+            if u.contains(["replace", "remplace", "change", "changer", "swap", "another music instead", "une autre musique a la place"]) && !u.contains(["second", "deuxieme", "another track", "autre piste", "en plus"]) {
                 intent.scope = .selection
-                intent.amount = .relative(u.contains(["louder", "plus fort", "plus forte", "up", "monte", "turn up"]) ? 0.25 : -0.25)
+            }
+            if let seconds = times.first { intent.time = seconds }
+            else if u.contains(["ici", "here", "au curseur", "at the playhead", "a partir d ici", "from here"]) { intent.time = playhead }
+            if let rest = remainder(of: u, after: ["music", "musique", "soundtrack", "bande son", "song", "chanson", "track", "piste", "son", "sound", "bruitage", "voix off", "voice over"]) {
+                let cleaned = rest.split(separator: " ").filter { !ObjectVocabulary.fillerWords.contains(String($0)) && !["genre", "type", "style", "kind", "of", "de", "d", "a", "at", "seconde", "secondes", "second", "seconds", "ici", "here"].contains(String($0)) && Double($0) == nil }.joined(separator: " ")
+                intent.text = cleaned.isEmpty ? nil : cleaned
             }
             return [intent]
         }

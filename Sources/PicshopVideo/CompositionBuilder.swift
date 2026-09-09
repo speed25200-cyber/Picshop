@@ -165,7 +165,7 @@ public struct CompositionBuilder: Sendable {
         audioParameters.append(contentsOf: clipMixes.compactMap { $0 })
 
         // Music tracks.
-        for music in timeline.audioTracks {
+        for music in timeline.audioTracks where !music.isMuted {
             let asset = AVURLAsset(url: store.url(for: music.asset.relativePath, in: projectID))
             guard let sourceAudio = try await asset.loadTracks(withMediaType: .audio).first,
                   let track = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { continue }

@@ -27,7 +27,7 @@ struct HelpSheet: View {
                     (L("Control"), ["Annule", "Redo", "Exporte", "Partage", "Aide"])]
         }
         if mode == .video {
-            result.insert((L("Video"), ["Coupe ici", "Coupe les 3 premières secondes", "Delete from 5 to 12 seconds", "Accélère x2", "Slow motion", "Coupe le son", "Ajoute un fondu entre tous les clips", "Extract this frame", "Stabilise la vidéo", "Va à 10 secondes"]), at: 0)
+            result.insert((L("Video"), ["Coupe ici", "Coupe les 3 premières secondes", "Delete from 5 to 12 seconds", "Accélère x2", "Slow motion", "Coupe le son", "Ajoute un fondu entre tous les clips", "Extract this frame", "Stabilise la vidéo", "Va à 10 secondes", "Ajoute un deuxième son à 10 secondes", "Baisse la musique à 30 %", "Fade out the music over 2 seconds", "Supprime la deuxième piste"]), at: 0)
         }
         result.append((L("Control"), ["Annule", "Redo", "Montre l'original", "Zoom sur le visage", "Enregistre", "Reviens à l'original"]))
         return result

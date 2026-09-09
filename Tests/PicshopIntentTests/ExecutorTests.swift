@@ -217,6 +217,38 @@ final class VideoExecutorTests: XCTestCase {
         XCTAssertEqual(timeline.duration, 8.5, accuracy: 1e-9)
     }
 
+    /// Two sound tracks live side by side; commands address one by number.
+    func testSeveralSoundTracks() async {
+        let executor = VideoCommandExecutor(services: FakeVideoServices())
+        var timeline = makeTimeline()
+        let asset = MediaAsset(kind: .audio, relativePath: "media/a.m4a", pixelSize: .zero, duration: 60, origin: .file)
+        timeline.audioTracks = [AudioTrack(asset: asset, name: "Music"), AudioTrack(asset: asset, timelineStart: 4, name: "Voice")]
+        let lower = engine.parse("baisse la deuxième piste", context: context(for: timeline)).intents[0]
+        (timeline, _) = await executor.execute(lower, on: timeline, context: context(for: timeline))
+        XCTAssertEqual(timeline.audioTracks[0].volume, 0.8, accuracy: 0.001, "the first track is untouched")
+        XCTAssertEqual(timeline.audioTracks[1].volume, 0.55, accuracy: 0.001)
+        let mute = engine.parse("mute the music", context: context(for: timeline)).intents[0]
+        (timeline, _) = await executor.execute(mute, on: timeline, context: context(for: timeline))
+        XCTAssertTrue(timeline.audioTracks.allSatisfy(\.isMuted))
+        XCTAssertFalse(timeline.clips[0].isMuted, "muting the music leaves the clip's own sound alone")
+        let move = engine.parse("move the last track to 12 seconds", context: context(for: timeline)).intents[0]
+        (timeline, _) = await executor.execute(move, on: timeline, context: context(for: timeline))
+        XCTAssertEqual(timeline.audioTracks[1].timelineStart, 12, accuracy: 0.001)
+        XCTAssertEqual(timeline.audioTracks[0].timelineStart, 0, accuracy: 0.001)
+        let fade = engine.parse("fade out the music over 3 seconds", context: context(for: timeline)).intents[0]
+        (timeline, _) = await executor.execute(fade, on: timeline, context: context(for: timeline))
+        XCTAssertEqual(timeline.audioTracks[0].fadeOut, 3, accuracy: 0.001)
+        XCTAssertEqual(timeline.audioTracks[0].fadeIn, 0.5, accuracy: 0.001, "a fade-out leaves the fade-in alone")
+        let remove = engine.parse("supprime la deuxième piste", context: context(for: timeline)).intents[0]
+        (timeline, _) = await executor.execute(remove, on: timeline, context: context(for: timeline))
+        XCTAssertEqual(timeline.audioTracks.map(\.name), ["Music"])
+        let add = engine.parse("ajoute un deuxième son à 10 secondes", context: context(for: timeline)).intents[0]
+        let (_, result) = await executor.execute(add, on: timeline, context: context(for: timeline))
+        guard case .pickMusic(_, let at, let replace) = result.effects.first else { return XCTFail("adding a sound opens the picker") }
+        XCTAssertEqual(at, 10)
+        XCTAssertFalse(replace)
+    }
+
     func testSplitTransitionAndMute() async {
         let executor = VideoCommandExecutor(services: FakeVideoServices())
         var timeline = makeTimeline()

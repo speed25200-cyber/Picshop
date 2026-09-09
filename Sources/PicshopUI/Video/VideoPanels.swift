@@ -112,20 +112,57 @@ struct AudioPanel: View {
                 PanelChip(title: session.selectedClip?.isMuted == true ? L("Unmute") : L("Mute"), symbol: session.selectedClip?.isMuted == true ? "speaker.slash" : "speaker.wave.2") {
                     session.perform(EditIntent(action: session.selectedClip?.isMuted == true ? .unmute : .mute))
                 }
-                PanelChip(title: session.timeline.audioTracks.isEmpty ? L("Add music") : L("Replace music"), symbol: "music.note") { session.showsMusicPicker = true }
-                if !session.timeline.audioTracks.isEmpty {
-                    PanelChip(title: L("Remove music"), symbol: "music.note.list") { session.perform(EditIntent(action: .removeMusic)) }
-                }
+                PanelChip(title: L("Add sound track"), symbol: "plus.circle", tint: PSTheme.accent) { session.addSoundTrack() }
+                Spacer()
             }
             ParameterSlider(title: L("Clip volume"), value: $volume, range: 0...2, bipolar: false) { editing in
                 if editing { session.beginSliderInteraction(L("Volume")) } else { session.endSliderInteraction() }
             }
             .onChange(of: volume) { _, value in session.updateSelectedClip(L("Volume")) { $0.volume = value; if value > 0 { $0.isMuted = false } } }
             .onAppear { volume = session.selectedClip?.volume ?? 1 }
-            if let music = session.timeline.audioTracks.first {
-                ParameterSlider(title: "\(L("Music")) · \(music.name)", value: Binding(get: { music.volume }, set: { value in session.update(L("Music Volume")) { $0.audioTracks[0].volume = value } }), range: 0...1, bipolar: false)
+            if session.timeline.audioTracks.isEmpty {
+                Text(L("Add music, a voice-over or a sound effect: each one gets its own lane. Say “ajoute un son à 10 secondes”."))
+                    .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary).fixedSize(horizontal: false, vertical: true)
+            } else {
+                // The mixer: one strip per track, like the lanes on the timeline.
+                VStack(spacing: 8) {
+                    ForEach(Array(session.timeline.audioTracks.enumerated()), id: \.element.id) { index, track in
+                        SoundTrackRow(session: session, track: track, index: index)
+                    }
+                }
             }
         }
+    }
+}
+
+/// One sound track in the mixer: name and position, volume, mute, remove.
+struct SoundTrackRow: View {
+    @Bindable var session: VideoEditorSession
+    let track: AudioTrack
+    let index: Int
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                Text("\(index + 1)").font(PSFont.mono(11)).foregroundStyle(.white)
+                    .frame(width: 20, height: 20).background(Circle().fill(PSTheme.accentGradient))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(track.name).font(PSFont.headline(13)).lineLimit(1).foregroundStyle(track.isMuted ? PSTheme.textTertiary : PSTheme.textPrimary)
+                    Text(String(format: L("from %@ · %@"), psTimecode(track.timelineStart, frameRate: session.timeline.frameRate), psTimecode(track.sourceRange.duration, frameRate: session.timeline.frameRate)))
+                        .font(PSFont.caption(10)).foregroundStyle(PSTheme.textTertiary).lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                IconChip(title: track.isMuted ? L("Unmute") : L("Mute"), symbol: track.isMuted ? "speaker.slash.fill" : "speaker.wave.2", isActive: track.isMuted) { session.toggleTrackMute(track.id) }
+                IconChip(title: L("Playhead"), symbol: "arrow.right.to.line") { session.moveTrack(track.id, to: session.player.currentTime) }
+                IconChip(title: L("Remove"), symbol: "trash") { session.removeTrack(track.id) }
+            }
+            ParameterSlider(title: L("Volume"), value: Binding(get: { track.volume }, set: { session.setTrackVolume(track.id, $0) }), range: 0...1, bipolar: false)
+                .opacity(track.isMuted ? 0.5 : 1)
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.05)))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
+        .animation(PSMotion.quick, value: track.isMuted)
     }
 }
 

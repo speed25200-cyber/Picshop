@@ -77,7 +77,10 @@ public enum EditorEffect: Equatable, Sendable {
     case pause
     case seek(Double)
     case help
-    case pickMusic(query: String?)
+    /// Open the sound picker. `at` is the timeline second the new track starts
+    /// at (nil = the playhead); `replace` swaps the existing tracks instead of
+    /// adding another one.
+    case pickMusic(query: String?, at: Double?, replace: Bool)
     case pickBackground
     case clarify(ClarificationRequest)
     case selectLayer(UUID)

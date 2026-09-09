@@ -161,7 +161,7 @@ struct GeneratedStep {
     @Guide(description: "For chooseCandidate/moveClip: 1-based index.")
     var choiceIndex: Int?
 
-    @Guide(description: "current for the selected clip, all for every clip.", .anyOf(["current", "all"]))
+    @Guide(description: "current for the selected clip, all for every clip, selection when the step is about a sound track rather than a clip.", .anyOf(["current", "all", "selection"]))
     var scope: String?
 }
 

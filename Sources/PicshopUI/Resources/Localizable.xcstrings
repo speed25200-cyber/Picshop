@@ -65,22 +65,6 @@
         }
       }
     },
-    "Add Music": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add Music"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ajouter une musique"
-          }
-        }
-      }
-    },
     "Add Shape": {
       "localizations": {
         "en": {
@@ -93,6 +77,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ajouter une forme"
+          }
+        }
+      }
+    },
+    "Add Sound Track": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Sound Track"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter une piste son"
           }
         }
       }
@@ -113,18 +113,34 @@
         }
       }
     },
-    "Add music": {
+    "Add music, a voice-over or a sound effect: each one gets its own lane. Say “ajoute un son à 10 secondes”.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Add music"
+            "value": "Add music, a voice-over or a sound effect: each one gets its own lane. Say “ajoute un son à 10 secondes”."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ajouter une musique"
+            "value": "Ajoutez une musique, une voix off ou un bruitage : chacun a sa propre piste. Dites « ajoute un son à 10 secondes »."
+          }
+        }
+      }
+    },
+    "Add sound track": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add sound track"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter une piste son"
           }
         }
       }
@@ -845,22 +861,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couper"
-          }
-        }
-      }
-    },
-    "Cut, clean up, grade": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cut, clean up, grade"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couper, nettoyer, étalonner"
           }
         }
       }
@@ -2529,34 +2529,34 @@
         }
       }
     },
-    "Music": {
+    "Move Sound": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Music"
+            "value": "Move Sound"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Musique"
+            "value": "Déplacer le son"
           }
         }
       }
     },
-    "Music Volume": {
+    "Move to playhead": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Music Volume"
+            "value": "Move to playhead"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Volume de la musique"
+            "value": "Placer au curseur"
           }
         }
       }
@@ -2573,6 +2573,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couper le son"
+          }
+        }
+      }
+    },
+    "Mute Track": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mute Track"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couper la piste"
           }
         }
       }
@@ -3393,6 +3409,22 @@
         }
       }
     },
+    "Playhead": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playhead"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Curseur"
+          }
+        }
+      }
+    },
     "Portrait": {
       "localizations": {
         "en": {
@@ -3761,6 +3793,22 @@
         }
       }
     },
+    "Remove Sound Track": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Sound Track"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer la piste son"
+          }
+        }
+      }
+    },
     "Remove background": {
       "localizations": {
         "en": {
@@ -3777,18 +3825,18 @@
         }
       }
     },
-    "Remove music": {
+    "Remove track": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Remove music"
+            "value": "Remove track"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Retirer la musique"
+            "value": "Supprimer la piste"
           }
         }
       }
@@ -3841,12 +3889,12 @@
         }
       }
     },
-    "Replace music": {
+    "Replace Music": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Replace music"
+            "value": "Replace Music"
           }
         },
         "fr": {
@@ -4285,22 +4333,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Signez avec le doigt"
-          }
-        }
-      }
-    },
-    "Sign, mark up, reorder": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sign, mark up, reorder"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Signer, annoter, réorganiser"
           }
         }
       }
@@ -4961,6 +4993,22 @@
         }
       }
     },
+    "Track Volume": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track Volume"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volume de la piste"
+          }
+        }
+      }
+    },
     "Transitions": {
       "localizations": {
         "en": {
@@ -5405,6 +5453,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "les animaux"
+          }
+        }
+      }
+    },
+    "from %@ · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "from %@ · %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "dès %@ · %@"
           }
         }
       }

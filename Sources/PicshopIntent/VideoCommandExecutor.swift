@@ -19,6 +19,18 @@ public struct VideoCommandExecutor: Sendable {
         let playhead = context.playheadSeconds
         let fr = language == .french
 
+        /// Sound tracks a command addresses: "the second track", "the last one",
+        /// otherwise every track. `clipIndex` doubles as the track number here.
+        func targetTrackIndices() -> [Int] {
+            let count = timeline.audioTracks.count
+            guard count > 0 else { return [] }
+            if let number = intent.clipIndex {
+                let index = number == -1 ? count - 1 : number - 1
+                return index >= 0 && index < count ? [index] : []
+            }
+            return Array(timeline.audioTracks.indices)
+        }
+
         func targetClipIDs() -> [UUID] {
             if intent.scope == .all { return timeline.clips.map(\.id) }
             if let number = intent.clipIndex {
@@ -88,18 +100,28 @@ public struct VideoCommandExecutor: Sendable {
             }
 
         case .mute:
+            if intent.scope == .selection {
+                guard !timeline.audioTracks.isEmpty else { return (timeline, .failed(fr ? "Pas de piste son." : "There's no sound track.")) }
+                for index in targetTrackIndices() { timeline.audioTracks[index].isMuted = true }
+                return (timeline, .applied("Mute Sound"))
+            }
             for id in targetClipIDs() { timeline.update(clipID: id) { $0.isMuted = true } }
             return (timeline, .applied("Mute"))
 
         case .unmute:
+            if intent.scope == .selection {
+                for index in targetTrackIndices() { timeline.audioTracks[index].isMuted = false }
+                return (timeline, .applied("Unmute Sound"))
+            }
             for id in targetClipIDs() { timeline.update(clipID: id) { $0.isMuted = false } }
             return (timeline, .applied("Unmute"))
 
         case .setVolume:
             if intent.scope == .selection, !timeline.audioTracks.isEmpty {
-                for index in timeline.audioTracks.indices {
+                for index in targetTrackIndices() {
                     let current = timeline.audioTracks[index].volume
                     timeline.audioTracks[index].volume = (intent.amount ?? .relative(0.25)).resolve(current: current, range: 0...1)
+                    if timeline.audioTracks[index].volume > 0 { timeline.audioTracks[index].isMuted = false }
                 }
                 return (timeline, .applied("Music Volume"))
             }
@@ -139,12 +161,36 @@ public struct VideoCommandExecutor: Sendable {
             return (timeline, .applied("Remove Transition"))
 
         case .addMusic:
-            return (timeline, .effect(.pickMusic(query: intent.text), label: ""))
+            // A second (third…) track is the default, like laying a sound effect or a
+            // voice-over under the music in a real NLE; "replace the music" swaps.
+            return (timeline, .effect(.pickMusic(query: intent.text, at: intent.time, replace: intent.scope == .selection), label: ""))
 
         case .removeMusic:
-            guard !timeline.audioTracks.isEmpty else { return (timeline, .failed(fr ? "Pas de musique." : "There's no music track.")) }
+            guard !timeline.audioTracks.isEmpty else { return (timeline, .failed(fr ? "Pas de piste son." : "There's no sound track.")) }
+            if intent.clipIndex != nil {
+                let indices = targetTrackIndices()
+                guard !indices.isEmpty else { return (timeline, .failed(fr ? "Cette piste n'existe pas." : "There's no such track.")) }
+                for index in indices.sorted(by: >) { timeline.audioTracks.remove(at: index) }
+                return (timeline, .applied("Remove Sound Track"))
+            }
             timeline.audioTracks.removeAll()
             return (timeline, .applied("Remove Music"))
+
+        case .moveAudio:
+            guard !timeline.audioTracks.isEmpty else { return (timeline, .failed(fr ? "Pas de piste son." : "There's no sound track.")) }
+            let destination = max(0, min(timeline.duration, intent.time ?? playhead))
+            for index in targetTrackIndices() { timeline.audioTracks[index].timelineStart = destination }
+            return (timeline, .applied("Move Sound"))
+
+        case .fadeAudio:
+            guard !timeline.audioTracks.isEmpty else { return (timeline, .failed(fr ? "Pas de piste son." : "There's no sound track.")) }
+            let seconds = max(0, intent.amount?.value ?? 1.5)
+            let which = intent.text?.lowercased() ?? ""
+            for index in targetTrackIndices() {
+                if which != "out" { timeline.audioTracks[index].fadeIn = seconds }
+                if which != "in" { timeline.audioTracks[index].fadeOut = seconds }
+            }
+            return (timeline, .applied("Fade Sound"))
 
         case .extractFrame:
             do {
