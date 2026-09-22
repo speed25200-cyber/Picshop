@@ -166,6 +166,31 @@ The automatic tools are split the same way as the rest of the app: the algorithm
 - **Voice** (`VoiceIsolator`): offline `AVAudioEngine` manual rendering through Apple's sound-isolation audio unit when
   present, else a dialogue EQ and dynamics chain. The composition plays the cleaned file instead of the clip's sound.
 - **Aesthetics** (`AestheticsRanker`): Vision's `CalculateImageAestheticsScoresRequest` scores each look's thumbnail.
+- **Edit by text** (`TextEditing.swift`): struck words become timeline ranges that take the pause after them (capped) and
+  keep the one before; neighbouring words merge into one cut. Fillers are the words a recogniser wrote (euh, um…), the
+  first of a stuttered pair (with grammatical repeats like « nous nous » excluded), and the voiced runs between two
+  recognised words that it left out, found on the loudness envelope. Phrases are matched as one run of letters, so
+  tokenisation differences (« l'image » / « l' » + « image ») do not matter.
+- **Ducking** (`Ducking.swift`): speech regions (caption words, else the complement of the pauses) are bridged over
+  short gaps and turned into volume breakpoints — attack 250 ms before the voice, release 600 ms after — multiplied by
+  the track's fades and handed to `AVMutableAudioMixInputParameters` as linear ramps. Speech is stored per clip in
+  source time (`VideoClip.speech`) so any edit keeps it aligned.
+- **Tracking** (`Tracking.swift`, `SubjectTracker`): Vision's `VNTrackObjectRequest` runs forwards and backwards from the
+  playhead on the finished picture without overlays (the composition through `AVAssetImageGenerator`), starting from the
+  nearest face, person or objectness-salient box; the path is smoothed with a centred moving average and the overlay
+  moves by the offset from its anchor time.
+- **Scenes** (`SceneDetection.swift`): each frame's fingerprint is a 64-bin joint RGB histogram and a 16 × 9 luma grid;
+  a cut is a local peak above an absolute floor and well above the neighbourhood's median change. The service samples
+  eight frames a second and then pins every cut to the exact frame.
+- **Highlights** (`Highlights.swift`): per-second moment scores (aesthetics, faces, loudness, moderate motion) drive a
+  greedy window picker that avoids straddling shot changes, spreads picks across the recording and restores their order.
+  Magic Movie reuses the same scores.
+- **Titles** (`TextAnimation.swift`): pop, rise, wipe, focus and drift are states (scale, lift, blur, reveal, opacity)
+  computed from time; the compositor applies them to any overlay.
+- **Photo geometry magic**: generative expand places the picture in a larger canvas and fills the border (Stable
+  Diffusion when installed, LaMa otherwise) seeded with stretched edges; magic move lifts an object by its mask, fills the
+  hole and composites it at the offset; face parts (eyes, teeth, lips, skin) are filled from Vision's face landmarks by
+  `PolygonRaster`.
 
 ## Visual language
 
