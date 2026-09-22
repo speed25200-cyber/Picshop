@@ -141,6 +141,8 @@ public final class PhotoEditorSession {
     public var sceneObjects: [ObjectCandidate] = []
     /// The object tapped in the Magic tool, with its actions floating beside it.
     public var magicSelection: ObjectCandidate?
+    /// What the picture is (people, sky, product…), so Magic can lead with what suits it.
+    public var sceneDescription: SceneDescription?
     /// The picker for a picture whose colours this photo should take.
     public var showsColorReferencePicker = false
     public var isFindingObjects = false
@@ -814,8 +816,12 @@ public final class PhotoEditorSession {
         isFindingObjects = true
         defer { isFindingObjects = false }
         let found = (try? await services.namedObjects(in: document)) ?? []
+        let scene = try? await services.describe(document)
         sceneObjectsKey = key
-        withAnimation(PSMotion.standard) { sceneObjects = found }
+        withAnimation(PSMotion.standard) {
+            sceneObjects = found
+            if let scene { sceneDescription = scene }
+        }
     }
 
     /// Erases one of the objects found in the picture.

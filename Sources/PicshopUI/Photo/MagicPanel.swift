@@ -26,7 +26,7 @@ struct MagicPanel: View {
         func say(_ french: String, _ english: String) -> @MainActor (PhotoEditorSession) -> Void {
             { session in Task { await session.handleTranscript(fr ? french : english) } }
         }
-        return [
+        let tiles: [Suggestion] = [
             Suggestion(id: "enhance", title: L("Enhance"), symbol: "wand.and.stars") { $0.perform(EditIntent(action: .autoEnhance)) },
             Suggestion(id: "cleanup", title: L("Clean up"), symbol: "person.2.slash") { $0.perform(EditIntent(action: .cleanUp)) },
             Suggestion(id: "expand", title: L("Expand"), symbol: "arrow.up.left.and.arrow.down.right") { $0.expandCanvas() },
@@ -40,6 +40,9 @@ struct MagicPanel: View {
             Suggestion(id: "upscale", title: L("Upscale"), symbol: "arrow.up.left.and.arrow.down.right") { $0.perform(EditIntent(action: .upscale, amount: .absolute(2))) },
             Suggestion(id: "mono", title: L("Black & white"), symbol: "circle.lefthalf.filled", run: say("noir et blanc", "black and white")),
         ]
+        // The picture decides the order: a portrait leads with the retouch, a crowd with Clean up.
+        let order = MagicSuggestions.ranked(for: session.sceneDescription)
+        return tiles.sorted { (order.firstIndex(of: $0.id) ?? 99) < (order.firstIndex(of: $1.id) ?? 99) }
     }
 
     var body: some View {
@@ -96,6 +99,7 @@ struct MagicPanel: View {
             }
         }
         .animation(PSMotion.standard, value: session.sceneObjects.map(\.id))
+        .animation(PSMotion.standard, value: session.sceneDescription)
         .task(id: session.lookThumbnailKey) { await session.loadSceneObjects() }
         .photosPicker(isPresented: $session.showsColorReferencePicker, selection: $referenceItem, matching: .images)
         .onChange(of: referenceItem) { _, item in

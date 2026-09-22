@@ -171,3 +171,16 @@ final class GrammarSweepTests: XCTestCase {
         XCTAssertEqual(engine.parse("coupe le son", context: video).intents.first?.action, .mute)
     }
 }
+
+final class MagicSuggestionTests: XCTestCase {
+    func testThePictureDecidesWhatComesFirst() {
+        XCTAssertEqual(MagicSuggestions.ranked(for: nil), MagicSuggestions.all)
+        let portrait = MagicSuggestions.ranked(for: SceneDescription(people: 1, faces: 1))
+        XCTAssertEqual(Array(portrait.prefix(2)), ["retouch", "portrait"])
+        XCTAssertEqual(MagicSuggestions.ranked(for: SceneDescription(people: 5, labels: ["street"])).first, "cleanup")
+        XCTAssertEqual(MagicSuggestions.ranked(for: SceneDescription(labels: ["beach", "sky"])).first, "sky")
+        XCTAssertEqual(MagicSuggestions.ranked(for: SceneDescription(labels: ["food"])).first, "cutout")
+        XCTAssertEqual(MagicSuggestions.ranked(for: SceneDescription(brightness: 0.15)).first, "enhance")
+        XCTAssertEqual(Set(portrait), Set(MagicSuggestions.all))
+    }
+}
