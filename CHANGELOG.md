@@ -10,7 +10,8 @@
 - Video magic: auto captions (five styles), jump cuts, cuts on the beat, smart reframe following the subject, voice
   isolation, colour match across clips, Ken Burns moves; captions lane and beat markers on the timeline.
 - Photo magic: text behind the subject, colours from a reference picture, best looks ranked by Vision's aesthetics model,
-  a Magic tab with a prompt field.
+  focus after the shot (lens blur from the depth map or the subject), generative expand to any shape ("étends l'image en
+  16:9"), a Magic tab with a prompt field.
 - Pro colour for photo and video: eight-band HSL mixer and three-way colour wheels, on the GPU.
 - Photos-style adjustment dials; editors rebuilt on the new chrome; new onboarding.
 

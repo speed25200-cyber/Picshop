@@ -120,7 +120,8 @@ Paris au centre · Make the text bigger · Change le texte en Hello · Mets le t
 ## Generative & recolor
 
 *Remplace le ciel par un coucher de soleil · Change le ciel (a clear blue sky by default) · Turn the car into a boat ·
-Ajoute un chapeau sur la personne · Génère un dragon (after tapping where) · Change the shirt to red · Rends la voiture bleue.* Generative prompts need the optional Stable Diffusion
+Ajoute un chapeau sur la personne · Génère un dragon (after tapping where) · Change the shirt to red · Rends la voiture bleue ·
+Étends l'image en 16:9 · Agrandis le cadre de 50 % · Uncrop · Invente les bords.* Generative prompts need the optional Stable Diffusion
 model (Settings › On-device models); recolouring works offline.
 
 ## PDF

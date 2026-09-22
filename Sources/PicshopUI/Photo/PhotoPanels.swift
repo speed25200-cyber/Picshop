@@ -515,12 +515,15 @@ struct CropPanel: View {
             case .horizontal:
                 DialSlider(value: $session.perspectiveHorizontal, range: -1...1, neutral: 0, label: L("Horizontal"), units: 60, format: { String(format: "%.0f", $0 * 100) })
             }
-            HStack(spacing: 8) {
-                IconChip(title: L("Rotate"), symbol: "rotate.right") { session.rotateQuarterTurn() }
-                IconChip(title: L("Flip"), symbol: "arrow.left.and.right.righttriangle.left.righttriangle.right") { session.flipHorizontally() }
-                IconChip(title: L("Auto level"), symbol: "level") { session.autoLevel() }
-                IconChip(title: L("Reset"), symbol: "arrow.counterclockwise", isEnabled: session.hasPendingGeometry) { session.beginCrop(); geometry = .straighten }
-                Spacer()
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    IconChip(title: L("Expand"), symbol: "arrow.up.left.and.arrow.down.right", isEnabled: !session.isProcessing, tint: PSTheme.voice) { session.expandCanvas() }
+                    IconChip(title: L("Rotate"), symbol: "rotate.right") { session.rotateQuarterTurn() }
+                    IconChip(title: L("Flip"), symbol: "arrow.left.and.right.righttriangle.left.righttriangle.right") { session.flipHorizontally() }
+                    IconChip(title: L("Auto level"), symbol: "level") { session.autoLevel() }
+                    IconChip(title: L("Reset"), symbol: "arrow.counterclockwise", isEnabled: session.hasPendingGeometry) { session.beginCrop(); geometry = .straighten }
+                }
+                .padding(.horizontal, 2)
             }
         }
     }

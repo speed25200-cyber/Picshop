@@ -64,6 +64,7 @@ public struct RuleBasedIntentEngine: IntentEngine {
         if context.mode == .video, let video = parseVideo(u, context: context) { return video }
         if context.mode == .photo, let goal = parseGoal(u, context: context) { return goal }
         if context.mode == .photo, let portrait = parsePortrait(u) { return [portrait] }
+        if context.mode == .photo, let expand = parseExpand(u) { return [expand] }
         if context.mode == .photo, let generative = parseGenerative(u, original: original, context: context) { return [generative] }
         if let background = parseBackground(u) { return [background] }
         if let removal = parseRemoveObject(u, context: context) { return [removal] }
@@ -893,8 +894,23 @@ public struct RuleBasedIntentEngine: IntentEngine {
 
     // MARK: - Resolution & detail operations
 
+    /// "étends l'image en 16:9", "agrandis le cadre", "expand the photo", "dézoome".
+    func parseExpand(_ u: NormalizedUtterance) -> EditIntent? {
+        let phrases = ["etends l image", "etends la photo", "etend l image", "etendre l image", "elargis l image", "elargis la photo", "elargis le cadre", "agrandis le cadre", "agrandir le cadre",
+                       "etends le cadre", "plus de decor", "invente les bords", "invente le reste", "decadre", "remplis les bords",
+                       "expand the image", "expand the photo", "expand the canvas", "expand the frame", "extend the image", "extend the photo", "extend the background", "outpaint", "uncrop",
+                       "more background", "fill the edges", "generative expand", "widen the frame", "widen the photo"]
+        guard u.contains(phrases) else { return nil }
+        var intent = EditIntent(action: .expandCanvas)
+        if let aspect = AspectPreset.matching(u.text), aspect != .original, aspect != .free { intent.aspect = aspect }
+        if intent.aspect == nil, let number = NumberWords.firstNumber(in: u.tokens), number.value > 5, number.value <= 100, u.contains(["pour cent", "pourcent", "percent", "%"]) {
+            intent.amount = .absolute(1 + number.value / 100)
+        }
+        return intent
+    }
+
     func parseResolution(_ u: NormalizedUtterance) -> EditIntent? {
-        if u.contains(["upscale", "upscaling", "super resolution", "increase the resolution", "increase resolution", "augmente la resolution", "augmenter la resolution", "plus de resolution", "higher resolution", "haute resolution", "en 4k", "in 4k", "4k", "agrandis l image", "agrandis la photo", "agrandir l image", "agrandis la", "double the size", "double la taille", "enlarge", "make it bigger", "rends la plus grande", "more pixels", "plus de pixels", "hd", "en hd", "upscale it"]) {
+        if u.contains(["upscale", "upscaling", "super resolution", "increase the resolution", "increase resolution", "augmente la resolution", "augmenter la resolution", "plus de resolution", "higher resolution", "haute resolution", "en 4k", "in 4k", "4k", "agrandis l image", "agrandis la photo", "agrandir l image", "agrandis la", "agrandis x2", "agrandis x3", "agrandis x4", "agrandis par", "agrandis 2", "agrandis deux", "double the size", "double la taille", "enlarge", "make it bigger", "rends la plus grande", "more pixels", "plus de pixels", "hd", "en hd", "upscale it"]) {
             var factor = 2.0
             if let number = NumberWords.firstNumber(in: u.tokens), number.value == 2 || number.value == 3 || number.value == 4 { factor = number.value }
             if u.contains(["4k"]) { factor = 2 }

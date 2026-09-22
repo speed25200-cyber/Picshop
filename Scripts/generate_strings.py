@@ -98,6 +98,8 @@ FR = {
     "Relight": "Rééclairer",
     "Sunset sky": "Ciel couchant",
     "Upscale": "Agrandir",
+    "Expand": "Étendre",
+    "Imagining the edges…": "J'imagine les bords…",
     "%d moments chosen": "%d moments choisis",
     "9:16 that follows the subject": "Du 9:16 qui suit le sujet",
     "A soft background, like a big lens": "Un fond doux, comme un grand objectif",

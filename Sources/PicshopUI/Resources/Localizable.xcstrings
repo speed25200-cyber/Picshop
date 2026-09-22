@@ -2081,6 +2081,22 @@
         }
       }
     },
+    "Expand": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expand"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Étendre"
+          }
+        }
+      }
+    },
     "Export": {
       "localizations": {
         "en": {
@@ -2881,6 +2897,22 @@
         }
       }
     },
+    "Imagining the edges…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imagining the edges…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J'imagine les bords…"
+          }
+        }
+      }
+    },
     "Importing…": {
       "localizations": {
         "en": {
@@ -3149,22 +3181,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Style de la dernière photo"
-          }
-        }
-      }
-    },
-    "Last style": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Last style"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dernier style"
           }
         }
       }

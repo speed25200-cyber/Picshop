@@ -74,6 +74,9 @@ public struct PhotoDocument: Hashable, Codable, Sendable, Identifiable {
         if case .crop(let rect) = kind, target == baseLayerID {
             canvasSize = PSSize(width: (canvasSize.width * rect.width).rounded(), height: (canvasSize.height * rect.height).rounded())
         }
+        if case .expand(let placement) = kind, target == baseLayerID, placement.width > 0.05, placement.height > 0.05 {
+            canvasSize = PSSize(width: (canvasSize.width / placement.width).rounded(), height: (canvasSize.height / placement.height).rounded())
+        }
         if case .upscale(let factor) = kind, target == baseLayerID {
             canvasSize = PSSize(width: (canvasSize.width * factor).rounded(), height: (canvasSize.height * factor).rounded())
         }

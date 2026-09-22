@@ -185,6 +185,7 @@ public enum IntentNormalizer {
             "jumpcut": .removeSilences, "jumpcuts": .removeSilences, "removesilence": .removeSilences, "cutsilences": .removeSilences, "removepauses": .removeSilences,
             "beatsync": .syncToBeat, "cuttobeat": .syncToBeat, "synctomusic": .syncToBeat, "reframe": .smartReframe, "autoreframe": .smartReframe,
             "voiceisolation": .enhanceVoice, "isolatevoice": .enhanceVoice, "cleanaudio": .enhanceVoice, "denoiseaudio": .enhanceVoice,
+            "outpaint": .expandCanvas, "uncrop": .expandCanvas, "expand": .expandCanvas, "expandcanvas": .expandCanvas, "extend": .expandCanvas, "generativeexpand": .expandCanvas,
             "colormatch": .matchColor, "matchcolors": .matchColor, "matchcolours": .matchColor, "panzoom": .kenBurns,
         ]
         return aliases[lowered]

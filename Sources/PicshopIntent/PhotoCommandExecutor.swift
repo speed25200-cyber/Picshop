@@ -235,6 +235,21 @@ public struct PhotoCommandExecutor: Sendable {
             document.removeLayer(id: layerID)
             return (document, .applied("Remove Text"))
 
+        case .expandCanvas:
+            let current = max(0.01, document.canvasSize.aspectRatio)
+            var width = 0.8, height = 0.8
+            if let aspect = intent.aspect?.value {
+                if aspect > current { width = current / aspect; height = 1 } else { height = aspect / current; width = 1 }
+                guard width < 0.97 || height < 0.97 else {
+                    return (document, .failed(fr ? "La photo a déjà ce format." : "The photo already has that shape."))
+                }
+            } else if let factor = intent.amount?.value, factor > 1 {
+                width = 1 / min(factor, 2)
+                height = width
+            }
+            document.apply(.expand(PSRect(x: (1 - width) / 2, y: (1 - height) / 2, width: width, height: height)))
+            return (document, .applied(intent.aspect.map { "Expand \($0.displayName)" } ?? "Expand"))
+
         case .upscale:
             let factor = (intent.amount?.value ?? 2).clamped(to: 2...4)
             document.apply(.upscale(factor: factor))

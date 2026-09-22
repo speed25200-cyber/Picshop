@@ -243,6 +243,29 @@ public actor PhotoRenderer {
         case .perspective(let horizontal, let vertical):
             return perspective(input, horizontal: horizontal, vertical: vertical)
 
+        case .expand(let placement):
+            if let cached = operationCache[cacheKey] { return cached }
+            guard placement.width > 0.05, placement.height > 0.05 else { return input }
+            let canvas = CGRect(x: 0, y: 0, width: (extent.width / placement.width).rounded(), height: (extent.height / placement.height).rounded())
+            let origin = CGPoint(x: (placement.minX * canvas.width).rounded(), y: ((1 - placement.maxY) * canvas.height).rounded())
+            let placed = input.transformed(by: CGAffineTransform(translationX: origin.x - extent.minX, y: origin.y - extent.minY))
+            // Edge pixels stretched outwards: a seed the filler continues, and the live preview meanwhile.
+            let seed = placed.clampedToExtent().cropped(to: canvas)
+            guard options.allowExpensiveWork else {
+                return placed.composited(over: seed.clampedToExtent().applyingGaussianBlur(sigma: 0.02 * max(canvas.width, canvas.height)).cropped(to: canvas))
+            }
+            let hole = CIImage(color: .white).cropped(to: canvas)
+            let keep = CIImage(color: .black).cropped(to: placed.extent.insetBy(dx: 2, dy: 2))
+            let mask = keep.composited(over: hole)
+            let result: CIImage
+            if inpainting.hasGenerativeEngine {
+                result = try await inpainting.generate(image: seed, mask: mask, boundingBox: .unit, prompt: "seamless continuation of the scene, same light, same style")
+            } else {
+                result = try await inpainting.fill(image: seed, mask: mask, boundingBox: .unit, feather: 0.01)
+            }
+            cacheOperation(result, for: cacheKey)
+            return result
+
         case .removeObject(let mask):
             if let cached = operationCache[cacheKey] { return cached }
             guard options.allowExpensiveWork, let maskImage = maskStore.load(mask, fitting: extent) else { return input }

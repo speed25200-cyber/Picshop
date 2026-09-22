@@ -36,10 +36,10 @@ struct MagicPanel: View {
             Suggestion(id: "portrait", title: L("Portrait blur"), symbol: "camera.aperture", run: say("floute l'arrière-plan", "blur the background")),
             Suggestion(id: "relight", title: L("Relight"), symbol: "lightbulb.max") { $0.perform(EditIntent(action: .relight)) },
             Suggestion(id: "sky", title: L("Sunset sky"), symbol: "sun.horizon", run: say("remplace le ciel par un coucher de soleil", "replace the sky with a sunset")),
-            Suggestion(id: "upscale", title: L("Upscale"), symbol: "arrow.up.left.and.arrow.down.right", run: say("agrandis x2", "upscale 2x")),
+            Suggestion(id: "upscale", title: L("Upscale"), symbol: "arrow.up.left.and.arrow.down.right") { $0.perform(EditIntent(action: .upscale, amount: .absolute(2))) },
             Suggestion(id: "denoise", title: L("Denoise"), symbol: "circle.dotted.circle") { $0.perform(EditIntent(action: .denoise)) },
             Suggestion(id: "mono", title: L("Black & white"), symbol: "circle.lefthalf.filled", run: say("noir et blanc", "black and white")),
-            Suggestion(id: "style", title: L("Last style"), symbol: "paintbrush.pointed") { $0.perform(EditIntent(action: .applyStyle, text: "last")) },
+            Suggestion(id: "expand", title: L("Expand"), symbol: "arrow.up.left.and.arrow.down.right") { $0.expandCanvas() },
         ]
     }
 

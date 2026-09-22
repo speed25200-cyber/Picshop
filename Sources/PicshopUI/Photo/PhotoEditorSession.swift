@@ -602,6 +602,19 @@ public final class PhotoEditorSession {
         perspectiveVertical = 0
     }
 
+    /// Generative expand from the crop tool: rather than cutting the picture to
+    /// the chosen shape, it grows to it (or by a quarter all round) and the
+    /// new edges are invented to match.
+    public func expandCanvas() {
+        var intent = EditIntent(action: .expandCanvas)
+        if cropAspect != .free, cropAspect != .original { intent.aspect = cropAspect }
+        cancelCrop()
+        Task {
+            await run(intent)
+            if activeTool == .crop { beginCrop() }
+        }
+    }
+
     /// Largest centred rectangle with the preset's ratio, in normalised coordinates.
     public func setCropAspect(_ preset: AspectPreset) {
         cropAspect = preset
@@ -1114,6 +1127,7 @@ public final class PhotoEditorSession {
         case .blurBackground: return L("Blurring the background…")
         case .replaceBackground: return L("Replacing the background…")
         case .upscale: return L("Upscaling…")
+        case .expandCanvas: return L("Imagining the edges…")
         case .straighten: return L("Levelling…")
         default: return L("Working…")
         }
