@@ -15,12 +15,15 @@ Tap a Magic tool, type what you want, or just say it — *« efface le chien »*
 | Photo | Video |
 |---|---|
 | Erase people and objects by tap, brush or voice (LaMa + PatchMatch) | **Auto captions** from the voice, word-timed, five styles (karaoke, reveal…) |
-| **Text behind the subject** (the Lock Screen depth effect) | **Jump cuts**: every pause removed, a breath kept |
-| Cut out, replace or blur the background | **Cuts on the beat**: tempo and beats tracked, cuts moved onto them |
-| **Match colours** from any reference picture (Lab transfer as a 3D LUT) | **Smart reframe** to 9:16 / 1:1 following faces, people or the salient subject |
-| **Best looks** ranked by Vision's aesthetics model | **Clean voice**: Apple's sound isolation, offline |
-| Generative fill (Stable Diffusion), relight, upscale (Real-ESRGAN), denoise | **Magic Movie**: clips + photos + a song → an edit cut on the beat, Ken Burns on stills |
-| A prompt field and voice for anything else, FR/EN | **Colour match** across clips, Ken Burns moves, stabilisation, object removal across a clip |
+| **Magic move**: tap an object, move it — the hole is filled, it lands where you say | **Edit by text**: strike words in the transcript and they leave the video |
+| **Generative expand** to any shape: the border is invented (Stable Diffusion or LaMa) | **No more "euh"**: hesitations, stutters and unwritten fillers cut |
+| **Focus after the shot**: lens blur from the depth map, or the subject | **Jump cuts**: every pause removed, a breath kept |
+| **Text behind the subject** (the Lock Screen depth effect) | **Cuts on the beat**: tempo and beats tracked, cuts moved onto them |
+| Cut out, replace or blur the background | **Smart reframe** to 9:16 / 1:1 following faces, people or the salient subject |
+| **Match colours** from any reference picture (Lab transfer as a 3D LUT) | **Subject tracking**: titles and stickers stick to a face or a moving object |
+| **Best looks** ranked by Vision's aesthetics model | **Automatic ducking**: the music dips under every sentence |
+| Generative fill (Stable Diffusion), relight, upscale (Real-ESRGAN), denoise | **Scene detection**: long recordings split at every shot change |
+| A prompt field and voice for anything else, FR/EN | **Clean voice**, **colour match** across clips, **Magic Movie**, animated titles |
 
 ## Pro
 
