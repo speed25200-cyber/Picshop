@@ -7,6 +7,9 @@
 - Home: backdrop from your latest work, big Photo and Video tiles, a Magic row (Magic Movie, auto captions, jump cuts,
   vertical video, erase people, cut out, enhance, portrait blur) that opens the editor already doing the thing.
 - Magic Movie: clips, photos and a song become an edit cut on the beat.
+- Edit by text: the video's words in a Transcript panel; strike words and they leave the video with the pause after them,
+  the spoken word lights up during playback; one tap removes the "euh"s, stutters and unwritten hesitations; by voice,
+  "coupe le passage où je dis …".
 - Video magic: auto captions (five styles), jump cuts, cuts on the beat, smart reframe following the subject, voice
   isolation, colour match across clips, Ken Burns moves; captions lane and beat markers on the timeline.
 - Photo magic: text behind the subject, colours from a reference picture, best looks ranked by Vision's aesthetics model,

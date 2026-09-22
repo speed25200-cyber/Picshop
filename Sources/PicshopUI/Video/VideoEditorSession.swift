@@ -13,11 +13,12 @@ import PicshopSpeech
 @Observable
 public final class VideoEditorSession {
     public enum Tool: String, CaseIterable, Identifiable {
-        case magic, cut, speed, motion, audio, looks, adjust, color, text, overlay, transitions, frame
+        case magic, transcript, cut, speed, motion, audio, looks, adjust, color, text, overlay, transitions, frame
         public var id: String { rawValue }
         var title: String {
             switch self {
             case .magic: return L("Magic")
+            case .transcript: return L("Transcript")
             case .overlay: return L("Overlays")
             case .motion: return L("Pan & Zoom")
             case .color: return L("Colour")
@@ -34,6 +35,7 @@ public final class VideoEditorSession {
         var symbol: String {
             switch self {
             case .magic: return "sparkles"
+            case .transcript: return "text.quote"
             case .overlay: return "rectangle.on.rectangle"
             case .motion: return "arrow.up.left.and.down.right.magnifyingglass"
             case .color: return "paintpalette"
@@ -344,10 +346,13 @@ public final class VideoEditorSession {
     public func run(_ intent: EditIntent) async -> CommandOutcome {
         guard var executor else { return .failed(message: "not ready") }
         executor.language = language
-        let heavy: Set<IntentAction> = [.removeObject, .chooseCandidate, .stabilize, .reverse, .blurBackground, .removeBackground, .replaceBackground, .freezeFrame, .extractFrame]
+        let heavy: Set<IntentAction> = [.removeObject, .chooseCandidate, .stabilize, .reverse, .blurBackground, .removeBackground, .replaceBackground, .freezeFrame, .extractFrame,
+                                        .autoCaptions, .removeSilences, .removeFillers, .cutWords, .syncToBeat, .smartReframe, .enhanceVoice, .matchColor, .kenBurns]
+        // Analyses that finish without reporting a fraction show the pulsing glyph instead of 0 %.
+        let indeterminate: Set<IntentAction> = [.removeSilences, .syncToBeat, .matchColor, .kenBurns]
         if heavy.contains(intent.action) {
             isProcessing = true
-            processingProgress = 0
+            processingProgress = indeterminate.contains(intent.action) ? nil : 0
             processingTitle = processingLabel(for: intent)
             player.pause()
         }
@@ -355,6 +360,48 @@ public final class VideoEditorSession {
         let (updated, result) = await executor.execute(intent, on: timeline, context: intentContext)
         handle(result, updated: updated, intent: intent)
         return result.outcome
+    }
+
+    // MARK: - Edit by text
+
+    /// Writes down what is said without showing captions, so the video can be edited by its words.
+    public func transcribeForEditing() async {
+        guard let services, !isProcessing else { return }
+        player.pause()
+        isProcessing = true
+        processingTitle = L("Listening…")
+        processingProgress = 0
+        defer { isProcessing = false; processingProgress = nil }
+        do {
+            let (words, language) = try await services.transcribe(timeline: timeline) { [weak self] value in
+                Task { @MainActor [weak self] in self?.processingProgress = value }
+            }
+            guard !words.isEmpty else {
+                showToast(L("I can't hear any speech in this video."), isError: true)
+                return
+            }
+            update(L("Transcript")) { timeline in
+                timeline.captions = CaptionTrack(cues: CaptionBuilder.cues(from: words, style: .karaoke), style: .karaoke, isVisible: false, language: language)
+            }
+            Haptics.success()
+        } catch {
+            showToast(error.localizedDescription, isError: true)
+        }
+    }
+
+    /// Cuts the transcript's words at these indices out of the video, with the pause after each.
+    public func cutWords(at indices: Set<Int>) {
+        guard let words = timeline.captions?.cues.flatMap(\.words), !indices.isEmpty else { return }
+        let duration = timeline.duration
+        let ranges = TranscriptEditor.ranges(removing: indices, from: words)
+            .map { $0.clamped(to: TimeSpan(start: 0, end: duration)) }
+            .filter { $0.duration > 0.02 }
+        guard !ranges.isEmpty else { return }
+        let removed = ranges.reduce(0) { $0 + $1.duration }
+        let label = indices.count == 1 ? L("Cut 1 word") : String(format: L("Cut %d words"), indices.count)
+        update(label) { $0.removeRanges(ranges) }
+        showToast(String(format: L("%@ · −%.1f s"), label, removed), undoable: true)
+        Haptics.success()
     }
 
     private func processingLabel(for intent: EditIntent) -> String {
@@ -368,6 +415,8 @@ public final class VideoEditorSession {
         case .extractFrame: return L("Saving frame…")
         case .autoCaptions: return L("Listening and writing captions…")
         case .removeSilences: return L("Finding the pauses…")
+        case .removeFillers: return L("Listening for hesitations…")
+        case .cutWords: return L("Finding the words…")
         case .syncToBeat: return L("Finding the beat…")
         case .smartReframe: return L("Following the subject…")
         case .enhanceVoice: return L("Isolating the voice…")

@@ -1,6 +1,22 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ · −%.1f s": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · −%.1f s"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · −%.1f s"
+          }
+        }
+      }
+    },
     "%d moments chosen": {
       "localizations": {
         "en": {
@@ -29,6 +45,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%d pages"
+          }
+        }
+      }
+    },
+    "%d words · tap to strike": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d words · tap to strike"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d mots · touchez pour barrer"
           }
         }
       }
@@ -1281,6 +1313,38 @@
         }
       }
     },
+    "Cut %d words": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cut %d words"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couper %d mots"
+          }
+        }
+      }
+    },
+    "Cut 1 word": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cut 1 word"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couper 1 mot"
+          }
+        }
+      }
+    },
     "Cut out": {
       "localizations": {
         "en": {
@@ -1793,6 +1857,22 @@
         }
       }
     },
+    "Edit by text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit by text"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Monter par le texte"
+          }
+        }
+      }
+    },
     "Edit text": {
       "localizations": {
         "en": {
@@ -2225,6 +2305,22 @@
         }
       }
     },
+    "Fillers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fillers"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sans les euh"
+          }
+        }
+      }
+    },
     "Filters": {
       "localizations": {
         "en": {
@@ -2301,6 +2397,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Je cherche le sujet…"
+          }
+        }
+      }
+    },
+    "Finding the words…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finding the words…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je cherche les mots…"
           }
         }
       }
@@ -2737,6 +2849,38 @@
         }
       }
     },
+    "Hide Captions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Captions"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquer les sous-titres"
+          }
+        }
+      }
+    },
+    "Hide captions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide captions"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquer les sous-titres"
+          }
+        }
+      }
+    },
     "Highlight": {
       "localizations": {
         "en": {
@@ -2861,6 +3005,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Teinte"
+          }
+        }
+      }
+    },
+    "I can't hear any speech in this video.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I can't hear any speech in this video."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je n'entends aucune parole dans cette vidéo."
           }
         }
       }
@@ -3341,6 +3501,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "J'écoute et j'écris les sous-titres…"
+          }
+        }
+      }
+    },
+    "Listening for hesitations…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening for hesitations…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J'écoute les hésitations…"
           }
         }
       }
@@ -4705,6 +4881,22 @@
         }
       }
     },
+    "PicShop writes down what is said. Strike words and they leave the video.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop writes down what is said. Strike words and they leave the video."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop écrit ce qui est dit. Barrez des mots : ils quittent la vidéo."
+          }
+        }
+      }
+    },
     "Pick a look, then tune its intensity.": {
       "localizations": {
         "en": {
@@ -5313,6 +5505,38 @@
         }
       }
     },
+    "Remove fillers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove fillers"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enlever les hésitations"
+          }
+        }
+      }
+    },
+    "Remove fillers (%d)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove fillers (%d)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enlever les hésitations (%d)"
+          }
+        }
+      }
+    },
     "Remove track": {
       "localizations": {
         "en": {
@@ -5841,6 +6065,38 @@
         }
       }
     },
+    "Show Captions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Captions"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher les sous-titres"
+          }
+        }
+      }
+    },
+    "Show captions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show captions"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher les sous-titres"
+          }
+        }
+      }
+    },
     "Sign": {
       "localizations": {
         "en": {
@@ -5949,22 +6205,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aperçus légèrement allégés ; effets inchangés."
-          }
-        }
-      }
-    },
-    "Slow motion": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Slow motion"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ralenti"
           }
         }
       }
@@ -6897,6 +7137,38 @@
         }
       }
     },
+    "Transcribe": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribe"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcrire"
+          }
+        }
+      }
+    },
+    "Transcript": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcript"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcription"
+          }
+        }
+      }
+    },
     "Transitions": {
       "localizations": {
         "en": {
@@ -7357,6 +7629,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Roues"
+          }
+        }
+      }
+    },
+    "Will be cut": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Will be cut"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sera coupé"
           }
         }
       }

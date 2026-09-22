@@ -183,6 +183,8 @@ public enum IntentNormalizer {
             "reset": .revert, "revertall": .revert, "save": .export, "download": .export,
             "subtitles": .autoCaptions, "subtitle": .autoCaptions, "captions": .autoCaptions, "autocaption": .autoCaptions, "transcribe": .autoCaptions,
             "jumpcut": .removeSilences, "jumpcuts": .removeSilences, "removesilence": .removeSilences, "cutsilences": .removeSilences, "removepauses": .removeSilences,
+            "removefillers": .removeFillers, "fillers": .removeFillers, "removefillerwords": .removeFillers, "removeums": .removeFillers, "cutfillers": .removeFillers, "removehesitations": .removeFillers,
+            "cutwords": .cutWords, "removewords": .cutWords, "deletewords": .cutWords, "cutphrase": .cutWords, "cuttext": .cutWords, "textcut": .cutWords,
             "beatsync": .syncToBeat, "cuttobeat": .syncToBeat, "synctomusic": .syncToBeat, "reframe": .smartReframe, "autoreframe": .smartReframe,
             "voiceisolation": .enhanceVoice, "isolatevoice": .enhanceVoice, "cleanaudio": .enhanceVoice, "denoiseaudio": .enhanceVoice,
             "outpaint": .expandCanvas, "uncrop": .expandCanvas, "expand": .expandCanvas, "expandcanvas": .expandCanvas, "extend": .expandCanvas, "generativeexpand": .expandCanvas,

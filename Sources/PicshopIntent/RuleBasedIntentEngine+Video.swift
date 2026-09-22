@@ -300,6 +300,36 @@ extension RuleBasedIntentEngine {
 
     /// The automatic tools: captions, jump cuts, beat sync, reframing, voice, colour.
     /// Checked before the audio grammar, which would read "enlève les silences" as "mute".
+    /// Editing by the words: "coupe le passage où je dis bonjour à tous",
+    /// "cut the sentence where I say sorry", "supprime le mot genre à chaque fois".
+    func parseCutWords(_ u: NormalizedUtterance) -> EditIntent? {
+        let markers = ["le passage ou je dis", "le moment ou je dis", "la phrase ou je dis", "la partie ou je dis", "l endroit ou je dis", "quand je dis", "ou je dis", "ou il dit", "ou elle dit", "ou on dit",
+                       "la phrase", "les mots", "le mot", "the part where i say", "the bit where i say", "the sentence where i say", "where i say", "when i say", "where he says", "where she says",
+                       "where they say", "the sentence", "the words", "the word"]
+        let verbs = Self.removeVerbs + ["coupe", "couper", "cut", "vire", "retire", "trim"]
+        guard u.contains(verbs) else { return nil }
+        let padded = " " + u.text + " "
+        guard let marker = markers.first(where: { padded.contains(" " + $0 + " ") }),
+              let range = padded.range(of: " " + marker + " ") else { return nil }
+        var phrase = String(padded[range.upperBound...])
+        for tail in [" s il te plait", " s il vous plait", " stp", " please", " dans la video", " in the video", " a chaque fois", " chaque fois", " every time", " each time", " everywhere", " partout"] {
+            if let found = phrase.range(of: tail) { phrase = String(phrase[..<found.lowerBound]) }
+        }
+        for lead in ["que ", "qui ", "that ", "with ", "avec "] where phrase.hasPrefix(lead) && (marker == "la phrase" || marker == "the sentence") {
+            phrase.removeFirst(lead.count)
+        }
+        if marker == "la phrase" || marker == "the sentence" {
+            for inner in ["ou je dis ", "where i say ", "avec ", "with "] where phrase.hasPrefix(inner) { phrase.removeFirst(inner.count) }
+        }
+        phrase = phrase.trimmingCharacters(in: .whitespaces)
+        guard !phrase.isEmpty, phrase.count <= 80 else { return nil }
+        var intent = EditIntent(action: .cutWords)
+        intent.text = phrase
+        if u.contains(["a chaque fois", "chaque fois", "every time", "each time", "everywhere", "partout", "toutes les fois", "all the times", "all occurrences"]) { intent.scope = .all }
+        if marker.contains("phrase") || marker.contains("sentence") { intent.target = ObjectTarget(label: "sentence", originalPhrase: phrase) }
+        return intent
+    }
+
     func parseMagicVideo(_ u: NormalizedUtterance, context: IntentContext) -> [EditIntent]? {
         let captionWords = ["sous titre", "sous titres", "sous titrage", "soustitre", "soustitres", "subtitle", "subtitles", "caption", "captions", "closed captions",
                             "transcris", "transcription", "transcribe", "ecris ce qui est dit", "ecris ce que je dis", "write what i say", "texte de la voix", "paroles a l ecran"]
@@ -311,7 +341,13 @@ extension RuleBasedIntentEngine {
             if let style = CaptionStyle.matching(u.text) { intent.text = style.rawValue }
             return [intent]
         }
-        let pauseWords = ["blancs", "les blancs", "silences", "les silences", "pauses", "les pauses", "temps morts", "moments ou je ne parle pas", "moments sans parole", "euh",
+        if let words = parseCutWords(u) { return [words] }
+        let fillerWords = ["euh", "les euh", "heu", "hum", "hesitations", "les hesitations", "hesitation", "tics de langage", "tic de langage", "mots parasites", "begaiements", "begaiement", "bafouillages", "bafouille",
+                           "um", "ums", "uh", "uhs", "umms", "filler words", "filler word", "fillers", "the fillers", "stutters", "stutter", "stammers", "hesitations"]
+        if u.contains(fillerWords), u.contains(Self.removeVerbs + ["coupe", "cut", "vire", "retire", "sans", "without", "clean", "no more"]) {
+            return [EditIntent(action: .removeFillers)]
+        }
+        let pauseWords = ["blancs", "les blancs", "silences", "les silences", "pauses", "les pauses", "temps morts", "moments ou je ne parle pas", "moments sans parole",
                           "silence", "silent parts", "the pauses", "dead air", "gaps", "the silences", "where nobody talks", "where i don t talk", "jump cut", "jump cuts", "jumpcut"]
         if u.contains(pauseWords), u.contains(Self.removeVerbs + ["coupe", "cut", "raccourcis", "tighten", "resserre", "jump cut", "jump cuts", "jumpcut", "vire", "retire"]) || u.contains(["jump cut", "jump cuts", "jumpcut"]) {
             var intent = EditIntent(action: .removeSilences)

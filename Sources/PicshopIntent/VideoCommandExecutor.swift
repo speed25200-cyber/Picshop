@@ -390,6 +390,56 @@ public struct VideoCommandExecutor: Sendable {
                 return (timeline, .failed(errorMessage(error)))
             }
 
+        case .removeFillers:
+            do {
+                let words = try await spokenWords(in: &timeline)
+                guard !words.isEmpty else { return (timeline, .failed(fr ? "Je n'entends aucune parole dans cette vidéo." : "I can't hear any speech in this video.")) }
+                // The sound between words finds the "euh"s the recogniser chose not to write.
+                let signal = try? await services.dialogueSignal(timeline: timeline)
+                let fillers = TranscriptEditor.fillers(in: words, envelope: signal.map { LoudnessEnvelope.measure($0) })
+                let ranges = TranscriptEditor.ranges(removing: fillers, from: words)
+                    .map { $0.clamped(to: TimeSpan(start: 0, end: timeline.duration)) }
+                    .filter { $0.duration > 0.02 }
+                guard !ranges.isEmpty else { return (timeline, ExecutionResult(outcome: .info(message: fr ? "Aucune hésitation à couper." : "No filler words to cut."))) }
+                let removed = ranges.reduce(0) { $0 + $1.duration }
+                timeline.removeRanges(ranges)
+                let seconds = Replies.formatted((removed * 10).rounded() / 10)
+                return (timeline, .applied(fr ? "\(fillers.count) hésitations coupées (−\(seconds) s)" : "\(fillers.count) fillers cut (−\(seconds) s)"))
+            } catch {
+                return (timeline, .failed(errorMessage(error)))
+            }
+
+        case .cutWords:
+            let phrase = (intent.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+            guard !phrase.isEmpty else { return (timeline, .failed(fr ? "Quels mots dois-je couper ?" : "Which words should I cut?")) }
+            do {
+                let words = try await spokenWords(in: &timeline)
+                guard !words.isEmpty else { return (timeline, .failed(fr ? "Je n'entends aucune parole dans cette vidéo." : "I can't hear any speech in this video.")) }
+                var found = TranscriptEditor.occurrences(of: phrase, in: words)
+                guard !found.isEmpty else { return (timeline, .failed(fr ? "Je n'entends pas « \(phrase) » dans la vidéo." : "I don't hear “\(phrase)” in the video.")) }
+                if intent.scope != .all {
+                    // The one nearest the playhead: scrub to it, then say what to cut.
+                    let nearest = found.min { abs(words[$0.lowerBound].start - playhead) < abs(words[$1.lowerBound].start - playhead) }!
+                    found = [nearest]
+                }
+                if intent.target?.label == "sentence" {
+                    found = found.map { TranscriptEditor.sentence(containing: $0.lowerBound, in: words).lowerBound...TranscriptEditor.sentence(containing: $0.upperBound, in: words).upperBound }
+                }
+                let indices = Set(found.flatMap { Array($0) })
+                let ranges = TranscriptEditor.ranges(removing: indices, from: words)
+                    .map { $0.clamped(to: TimeSpan(start: 0, end: timeline.duration)) }
+                    .filter { $0.duration > 0.02 }
+                guard !ranges.isEmpty else { return (timeline, .failed(fr ? "Rien à couper." : "Nothing to cut.")) }
+                timeline.removeRanges(ranges)
+                // Quoted as they were said (capitals, accents), not as they were typed.
+                let said = found[0].map { words[$0].text }.joined(separator: " ").trimmingCharacters(in: .punctuationCharacters.union(.whitespaces))
+                let quoted = fr ? "« \(said) »" : "“\(said)”"
+                if found.count > 1 { return (timeline, .applied(fr ? "\(quoted) coupé \(found.count) fois" : "Cut \(quoted) \(found.count) times")) }
+                return (timeline, .applied(fr ? "\(quoted) coupé" : "Cut \(quoted)"))
+            } catch {
+                return (timeline, .failed(errorMessage(error)))
+            }
+
         case .syncToBeat:
             guard timeline.clips.count > 1 || timeline.audioTracks.isEmpty == false else {
                 return (timeline, .failed(fr ? "Ajoute d'abord une musique." : "Add some music first."))
@@ -529,6 +579,16 @@ public struct VideoCommandExecutor: Sendable {
         } catch {
             return (timeline, .failed(errorMessage(error)))
         }
+    }
+
+    /// The words of the timeline: the captions' when there are some, else a
+    /// fresh transcription kept as hidden captions so later edits by text line up.
+    func spokenWords(in timeline: inout VideoTimeline) async throws -> [CaptionWord] {
+        if let captions = timeline.captions, !captions.isEmpty { return captions.cues.flatMap(\.words) }
+        let (words, language) = try await services.transcribe(timeline: timeline, progress: progress)
+        guard !words.isEmpty else { return [] }
+        timeline.captions = CaptionTrack(cues: CaptionBuilder.cues(from: words, style: .karaoke), style: .karaoke, isVisible: false, language: language)
+        return timeline.captions?.cues.flatMap(\.words) ?? []
     }
 
     func errorMessage(_ error: Error) -> String {

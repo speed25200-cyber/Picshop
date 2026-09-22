@@ -36,7 +36,7 @@ struct VideoMagicPanel: View {
             Action(id: "stabilize", title: L("Stabilize"), symbol: "camera.metering.center.weighted", intent: EditIntent(action: .stabilize)),
             Action(id: "enhance", title: L("Enhance"), symbol: "wand.and.stars", intent: EditIntent(action: .autoEnhance)),
             Action(id: "portrait", title: L("Portrait blur"), symbol: "camera.aperture", intent: EditIntent(action: .blurBackground)),
-            Action(id: "slowmo", title: L("Slow motion"), symbol: "tortoise", intent: EditIntent(action: .setSpeed, amount: .absolute(0.5))),
+            Action(id: "fillers", title: L("Fillers"), symbol: "waveform.badge.minus", intent: EditIntent(action: .removeFillers)),
         ]
     }
 

@@ -88,6 +88,8 @@ public enum Replies {
         case .autoCaptions: return fr ? "J'écoute la vidéo et j'écris les sous-titres." : "Listening and writing the captions."
         case .removeCaptions: return fr ? "Sous-titres retirés." : "Captions removed."
         case .removeSilences: return fr ? "J'enlève les blancs." : "Removing the pauses."
+        case .removeFillers: return fr ? "J'enlève les hésitations." : "Removing the filler words."
+        case .cutWords: return fr ? "Je coupe ce passage." : "Cutting that passage."
         case .syncToBeat: return fr ? "Je cale les coupes sur le rythme." : "Cutting to the beat."
         case .smartReframe: return fr ? "Je recadre en suivant le sujet." : "Reframing around the subject."
         case .kenBurns: return fr ? "Mouvement de caméra ajouté." : "Camera move added."

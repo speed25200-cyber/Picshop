@@ -442,7 +442,7 @@ extension VideoEditorSession.Tool {
     /// Dock entries, grouped by purpose. Sub-modes appear as segments in the panel.
     static var groups: [ToolGroup<VideoEditorSession.Tool>] {
         [
-            ToolGroup(id: "magic", title: L("Magic"), symbol: "sparkles", tools: [.magic], isMagic: true),
+            ToolGroup(id: "magic", title: L("Magic"), symbol: "sparkles", tools: [.magic, .transcript], isMagic: true),
             ToolGroup(id: "cut", title: L("Edit"), symbol: "scissors", tools: [.cut, .speed, .motion, .transitions, .frame]),
             ToolGroup(id: "color", title: L("Colour"), symbol: "camera.filters", tools: [.adjust, .color, .looks]),
             ToolGroup(id: "audio", title: L("Audio"), symbol: "speaker.wave.2", tools: [.audio]),
