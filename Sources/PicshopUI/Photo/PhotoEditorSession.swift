@@ -139,6 +139,8 @@ public final class PhotoEditorSession {
     public var candidateOverlays: [ObjectCandidate] = []
     /// Main objects found in the picture, offered as one-tap erase targets.
     public var sceneObjects: [ObjectCandidate] = []
+    /// The object tapped in the Magic tool, with its actions floating beside it.
+    public var magicSelection: ObjectCandidate?
     public var isFindingObjects = false
     private var sceneObjectsKey: String?
     public var showsExport = false
@@ -320,6 +322,7 @@ public final class PhotoEditorSession {
     // MARK: - History
 
     private func commit(_ newDocument: PhotoDocument, label: String) {
+        magicSelection = nil
         var updated = newDocument
         updated.touch()
         history.commit(updated, label: label)
@@ -328,6 +331,7 @@ public final class PhotoEditorSession {
 
     public func undo() {
         guard history.canUndo else { return }
+        magicSelection = nil
         let label = history.undo()
         Haptics.tick()
         showToast(label.map { "\(L("Undo")) · \($0)" } ?? L("Undo"))
@@ -562,6 +566,7 @@ public final class PhotoEditorSession {
         if previous == .precise { brushStrokes = []; lassoPoints = [] }
         if previous == .crop, activeTool != .crop { cancelCrop() }
         if activeTool == .crop { beginCrop() }
+        if activeTool != .magic { magicSelection = nil }
         manipulatedTextLayerID = nil
         if activeTool == .text, document.selectedLayer?.isText != true, let last = document.textLayers.last {
             selectLayer(last.id)
@@ -1033,6 +1038,12 @@ public final class PhotoEditorSession {
         }
         if activeTool == .erase, brushStrokes.isEmpty {
             Task { await run(EditIntent(action: .removeObject, target: ObjectTarget(label: "object", originalPhrase: L("that"), point: point))) }
+        }
+        if activeTool == .magic {
+            // The most specific object under the finger; tapping it again, or nothing, lets go.
+            let hit = sceneObjects.filter { $0.boundingBox.insetBy(dx: -0.01, dy: -0.01).contains(point) }.min { $0.boundingBox.area < $1.boundingBox.area }
+            if hit != nil { Haptics.tick() }
+            magicSelection = hit?.id == magicSelection?.id ? nil : hit
         }
     }
 

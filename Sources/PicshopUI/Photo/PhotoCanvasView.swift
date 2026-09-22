@@ -355,6 +355,7 @@ struct PhotoCanvasView: View {
         let cloneSource = session.activeTool == .precise && session.preciseMode == .clone ? session.cloneSource : nil
         let brushRadiusPoints = CGFloat(session.activeTool == .precise ? session.pixelBrushRadius : session.brushRadius) * max(frame.width, frame.height)
         let focusReticle = session.activeTool == .focus ? session.focusPoint : nil
+        let selection = session.activeTool == .magic ? session.magicSelection : nil
         let overlayLayers = session.activeTool == .text ? session.document.textLayers : (session.activeTool == .shapes ? session.document.shapeLayers : [])
         let textBoxes: [(UUID, PSRect, Double, Bool)] = overlayLayers.compactMap { layer -> (UUID, PSRect, Double, Bool)? in
             guard let bounds = session.overlayBounds(for: layer), let geometry = session.overlayGeometry(for: layer) else { return nil }
@@ -439,6 +440,13 @@ struct PhotoCanvasView: View {
                     }
                 }
             }
+            // The object picked in the Magic tool, ringed in the intelligence colours.
+            if let selection {
+                let rect = viewRect(selection.boundingBox, in: frame).insetBy(dx: -4, dy: -4)
+                let path = Path(roundedRect: rect, cornerRadius: 14)
+                context.fill(path, with: .color(.white.opacity(0.06)))
+                context.stroke(path, with: .linearGradient(Gradient(colors: PSTheme.intelligence), startPoint: CGPoint(x: rect.minX, y: rect.minY), endPoint: CGPoint(x: rect.maxX, y: rect.maxY)), lineWidth: 2.5)
+            }
             // Candidate boxes.
             for (index, candidate) in candidates.enumerated() {
                 let rect = viewRect(candidate.boundingBox, in: frame)
@@ -450,6 +458,17 @@ struct PhotoCanvasView: View {
                 context.draw(Text("\(index + 1)").font(.system(size: 14, weight: .bold, design: .rounded)).foregroundStyle(.black), at: CGPoint(x: badge.midX, y: badge.midY))
             }
         }
+        .overlay {
+            if let selection {
+                let rect = viewRect(selection.boundingBox, in: frame)
+                // Above the object when there is room, else below it.
+                let y = rect.minY > 70 ? rect.minY - 34 : min(container.height - 34, rect.maxY + 34)
+                MagicSelectionBar(session: session, candidate: selection)
+                    .position(x: min(max(rect.midX, 130), container.width - 130), y: y)
+                    .transition(.scale(scale: 0.85).combined(with: .opacity))
+            }
+        }
+        .animation(PSMotion.quick, value: selection?.id)
         .overlay(alignment: .top) {
             if session.showsOriginal {
                 GlassChip(L("Original"), systemImage: "eye")
@@ -641,6 +660,52 @@ struct CropOverlay: View {
         result.origin.x = result.origin.x.clamped(to: 0...(1 - result.width))
         result.origin.y = result.origin.y.clamped(to: 0...(1 - result.height))
         return result
+    }
+}
+/// The actions for an object picked on the canvas: erase it, move it,
+/// or put it in the middle — floating beside it, on glass.
+struct MagicSelectionBar: View {
+    @Bindable var session: PhotoEditorSession
+    let candidate: ObjectCandidate
+
+    var body: some View {
+        HStack(spacing: 2) {
+            button(L("Erase"), symbol: "eraser") { session.erase(candidate) }
+            Menu {
+                Button { session.move(candidate, degrees: 180) } label: { Label(L("Move left"), systemImage: "arrow.left") }
+                Button { session.move(candidate, degrees: 0) } label: { Label(L("Move right"), systemImage: "arrow.right") }
+                Button { session.move(candidate, degrees: 90) } label: { Label(L("Move up"), systemImage: "arrow.up") }
+                Button { session.move(candidate, degrees: -90) } label: { Label(L("Move down"), systemImage: "arrow.down") }
+                Button { session.move(candidate, degrees: nil) } label: { Label(L("Centre it"), systemImage: "scope") }
+            } label: {
+                label(L("Move"), symbol: "arrow.up.and.down.and.arrow.left.and.right")
+            }
+            button(L("Close"), symbol: "xmark") { session.magicSelection = nil }
+        }
+        .padding(4)
+        .psGlass(interactive: true)
+        .overlay(Capsule().strokeBorder(PSTheme.intelligenceAngular, lineWidth: 1).opacity(0.7))
+        .disabled(session.isProcessing)
+    }
+
+    private func button(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.magic()
+            action()
+        } label: {
+            label(title, symbol: symbol)
+        }
+        .buttonStyle(PSPressStyle(scale: 0.92))
+    }
+
+    private func label(_ title: String, symbol: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol).font(.system(size: 12, weight: .semibold))
+            Text(title).font(PSFont.caption(13))
+        }
+        .foregroundStyle(PSTheme.textPrimary)
+        .padding(.horizontal, 11).frame(height: 34)
+        .contentShape(Capsule())
     }
 }
 #endif
