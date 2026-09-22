@@ -340,6 +340,17 @@ public final class PhotoEditorSession {
         requestPreview()
     }
 
+    /// Goes back several steps at once (the History list): one refresh, one toast.
+    public func undo(steps: Int) {
+        guard steps > 0, history.canUndo else { return }
+        magicSelection = nil
+        var last: String?
+        for _ in 0..<steps where history.canUndo { last = history.undo() }
+        Haptics.tick()
+        showToast(last.map { "\(L("Undo")) · \($0)" } ?? L("Undo"))
+        requestPreview()
+    }
+
     public func redo() {
         guard history.canRedo else { return }
         let label = history.redo()

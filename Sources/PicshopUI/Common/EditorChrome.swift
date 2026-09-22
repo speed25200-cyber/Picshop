@@ -72,6 +72,11 @@ struct EditorTopBar: View {
     var onRedo: () -> Void
     var onHelp: () -> Void
     var onExport: () -> Void
+    /// Labels of the steps that can be undone, oldest first; a long press on
+    /// Undo lists them, as Photoshop's History does.
+    var history: [String] = []
+    /// Undoes this many steps at once.
+    var onUndoSteps: ((Int) -> Void)? = nil
 
     var body: some View {
         PSGlassContainer(spacing: 10) {
@@ -88,7 +93,27 @@ struct EditorTopBar: View {
                 .allowsHitTesting(false)
                 Spacer(minLength: 4)
                 HStack(spacing: 0) {
-                    barButton("arrow.uturn.backward", label: L("Undo"), enabled: canUndo, action: onUndo)
+                    if let onUndoSteps, history.count > 1 {
+                        Menu {
+                            Section(L("History")) {
+                                ForEach(Array(history.enumerated().reversed()), id: \.offset) { index, label in
+                                    // Going back to before this step undoes it and everything after it.
+                                    Button(String(format: L("Before “%@”"), LD(label))) { Haptics.tick(); onUndoSteps(history.count - index) }
+                                }
+                            }
+                            Button(role: .destructive) { onUndoSteps(history.count) } label: { Label(L("Back to the original"), systemImage: "arrow.counterclockwise") }
+                        } label: {
+                            Image(systemName: "arrow.uturn.backward").font(.system(size: 15, weight: .semibold)).frame(width: 38, height: 42).contentShape(Rectangle())
+                        } primaryAction: {
+                            Haptics.tap()
+                            onUndo()
+                        }
+                        .foregroundStyle(PSTheme.textPrimary)
+                        .accessibilityLabel(L("Undo"))
+                        .accessibilityHint(L("Hold for the history"))
+                    } else {
+                        barButton("arrow.uturn.backward", label: L("Undo"), enabled: canUndo, action: onUndo)
+                    }
                     barButton("arrow.uturn.forward", label: L("Redo"), enabled: canRedo, action: onRedo)
                     barButton("questionmark", label: L("Help"), enabled: true, action: onHelp)
                 }

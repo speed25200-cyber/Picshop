@@ -545,6 +545,22 @@
         }
       }
     },
+    "Back to the original": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to the original"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revenir à l'original"
+          }
+        }
+      }
+    },
     "Background colour": {
       "localizations": {
         "en": {
@@ -605,6 +621,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Avant"
+          }
+        }
+      }
+    },
+    "Before “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before “%@”"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avant « %@ »"
           }
         }
       }
@@ -3021,6 +3053,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hautes lumières"
+          }
+        }
+      }
+    },
+    "History": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "History"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Historique"
+          }
+        }
+      }
+    },
+    "Hold for the history": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold for the history"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maintenez pour l'historique"
           }
         }
       }

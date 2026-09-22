@@ -180,6 +180,16 @@ public final class VideoEditorSession {
         player.load(timeline)
     }
 
+    /// Goes back several steps at once (the History list): one refresh, one toast.
+    public func undo(steps: Int) {
+        guard steps > 0, history.canUndo else { return }
+        var last: String?
+        for _ in 0..<steps where history.canUndo { last = history.undo() }
+        Haptics.tick()
+        showToast(last.map { "\(L("Undo")) · \($0)" } ?? L("Undo"))
+        player.load(timeline)
+    }
+
     // MARK: - Named versions
 
     /// Snapshots the user named by voice ("enregistre cette version sous brouillon").

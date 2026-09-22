@@ -40,7 +40,8 @@ public struct VideoEditorView: View {
                 canUndo: session.history.canUndo, canRedo: session.history.canRedo,
                 onClose: { session.teardown(); dismiss() },
                 onUndo: { session.undo() }, onRedo: { session.redo() },
-                onHelp: { session.showsHelp = true }, onExport: { session.showsExport = true })
+                onHelp: { session.showsHelp = true }, onExport: { session.showsExport = true },
+                history: session.history.past.map(\.label), onUndoSteps: { session.undo(steps: $0) })
         } bottom: {
             bottomArea
         }
