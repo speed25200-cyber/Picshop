@@ -26,17 +26,17 @@ struct VideoMagicPanel: View {
         square.aspect = .square
         return [
             Action(id: "captions", title: L("Captions"), symbol: "captions.bubble", intent: EditIntent(action: .autoCaptions)),
+            Action(id: "fillers", title: L("Fillers"), symbol: "waveform.badge.minus", intent: EditIntent(action: .removeFillers)),
+            Action(id: "highlights", title: L("Highlights"), symbol: "star.square.on.square", intent: EditIntent(action: .highlights)),
             Action(id: "silences", title: L("Jump cuts"), symbol: "scissors", intent: EditIntent(action: .removeSilences)),
             Action(id: "beat", title: L("On the beat"), symbol: "metronome", intent: EditIntent(action: .syncToBeat)),
             Action(id: "vertical", title: L("Vertical"), symbol: "rectangle.portrait", intent: reframe),
-            Action(id: "square", title: L("Square"), symbol: "square", intent: square),
+            Action(id: "punchins", title: L("Zoom cuts"), symbol: "plus.magnifyingglass", intent: EditIntent(action: .punchIns)),
             Action(id: "voice", title: L("Clean voice"), symbol: "waveform.badge.mic", intent: EditIntent(action: .enhanceVoice, scope: .all)),
             Action(id: "kenburns", title: L("Camera move"), symbol: "arrow.up.left.and.arrow.down.right", intent: EditIntent(action: .kenBurns, scope: .all)),
             Action(id: "match", title: L("Match colour"), symbol: "circle.lefthalf.striped.horizontal", intent: EditIntent(action: .matchColor, scope: .all)),
-            Action(id: "punchins", title: L("Zoom cuts"), symbol: "plus.magnifyingglass", intent: EditIntent(action: .punchIns)),
+            Action(id: "square", title: L("Square"), symbol: "square", intent: square),
             Action(id: "enhance", title: L("Enhance"), symbol: "wand.and.stars", intent: EditIntent(action: .autoEnhance)),
-            Action(id: "highlights", title: L("Highlights"), symbol: "star.square.on.square", intent: EditIntent(action: .highlights)),
-            Action(id: "fillers", title: L("Fillers"), symbol: "waveform.badge.minus", intent: EditIntent(action: .removeFillers)),
         ]
     }
 
