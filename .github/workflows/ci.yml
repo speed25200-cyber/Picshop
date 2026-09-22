@@ -6,6 +6,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A newer push to the same branch supersedes the run in progress: the macOS
+# runners are the bottleneck, and only the latest commit's result matters.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   core-tests:
     name: Core & Intent tests (Linux)

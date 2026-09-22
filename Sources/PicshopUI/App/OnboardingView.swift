@@ -3,7 +3,8 @@ import SwiftUI
 import PicshopSpeech
 import PicshopImaging
 
-/// Three-screen introduction plus permissions.
+/// First launch: a living spectrum behind the name, four short pages —
+/// photo, video, voice, privacy — then the two permissions and one button.
 public struct OnboardingView: View {
     @Environment(\.picshop) private var app
     @State private var page = 0
@@ -12,35 +13,63 @@ public struct OnboardingView: View {
 
     public init() {}
 
-    private let pages: [(String, String, String)] = [
-        ("waveform.and.mic", L("Just say it"), L("“Efface le chien”, “make it warmer”, “coupe les 3 premières secondes”. PicShop understands French and English and edits instantly.")),
-        ("sparkles.rectangle.stack", L("Pro tools, zero friction"), L("Non-destructive layers, looks, cutouts, object removal, and a full video timeline — all on your iPhone.")),
-        ("lock.shield", L("Private by design"), L("Recognition, language models and every pixel stay on device. Nothing is uploaded, ever.")),
-    ]
+    private struct Page {
+        let symbols: [String]
+        let title: String
+        let text: String
+    }
+
+    private var pages: [Page] {
+        [
+            Page(symbols: ["wand.and.stars", "person.crop.rectangle", "eraser"], title: L("Photo, magically."),
+                 text: L("Erase anything, cut out the subject, relight, put the title behind a person, grade like a colourist. One tap or one sentence.")),
+            Page(symbols: ["captions.bubble", "metronome", "rectangle.portrait"], title: L("Video, like a pro."),
+                 text: L("Captions from the voice, pauses cut out, cuts on the beat, vertical video that follows you, a clean voice, a movie made from your clips.")),
+            Page(symbols: ["waveform"], title: L("Just say it."),
+                 text: L("“Efface le chien”, “make it warmer”, “ajoute des sous-titres”. PicShop understands French and English and edits instantly.")),
+            Page(symbols: ["lock.shield"], title: L("Private by design."),
+                 text: L("Recognition, language models and every pixel stay on your iPhone. Nothing is uploaded, ever.")),
+        ]
+    }
 
     public var body: some View {
         ZStack {
-            AmbientBackground().ignoresSafeArea()
-            VStack(spacing: 28) {
+            PSTheme.ink.ignoresSafeArea()
+            IntelligenceField(animated: true)
+                .frame(height: 520)
+                .blur(radius: 50)
+                .opacity(0.65)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .ignoresSafeArea()
+            LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: PSTheme.ink.opacity(0.4), location: 0.35), .init(color: PSTheme.ink, location: 0.62)],
+                           startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+            VStack(spacing: 22) {
+                VStack(spacing: 4) {
+                    Text("PicShop").font(PSFont.display(44)).foregroundStyle(.white).tracking(-1.8)
+                    Text(L("Photo and video, magically.")).font(PSFont.body(16)).foregroundStyle(.white.opacity(0.75))
+                }
+                .padding(.top, 24)
                 TabView(selection: $page) {
                     ForEach(Array(pages.enumerated()), id: \.offset) { index, item in
                         VStack(spacing: 18) {
-                            Image(systemName: item.0)
-                                .font(.system(size: 44, weight: .medium))
-                                .symbolRenderingMode(.hierarchical)
-                                .foregroundStyle(.white)
-                                .frame(width: 112, height: 112)
-                                .background {
-                                    let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
-                                    HeroMesh().clipShape(shape)
-                                        .overlay(shape.fill(LinearGradient(colors: [Color.white.opacity(0.2), .clear], startPoint: .top, endPoint: .center)))
+                            HStack(spacing: -10) {
+                                ForEach(Array(item.symbols.enumerated()), id: \.offset) { position, symbol in
+                                    Image(systemName: symbol)
+                                        .font(.system(size: item.symbols.count == 1 ? 40 : 26, weight: .semibold))
+                                        .symbolRenderingMode(.hierarchical)
+                                        .foregroundStyle(.white)
+                                        .frame(width: item.symbols.count == 1 ? 104 : 72, height: item.symbols.count == 1 ? 104 : 72)
+                                        .psGlass(shape: AnyShape(Circle()))
+                                        .overlay(Circle().strokeBorder(PSTheme.intelligenceAngular, lineWidth: 1).opacity(0.6))
+                                        .offset(y: position == 1 ? -10 : 0)
+                                        .zIndex(position == 1 ? 1 : 0)
                                 }
-                                .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).strokeBorder(Color.white.opacity(0.35), lineWidth: 1))
-                                .shadow(color: PSTheme.voice.opacity(0.45), radius: 30, y: 14)
-                                .padding(.bottom, 12)
-                                .symbolEffect(.bounce, value: page == index)
-                            Text(item.1).font(PSFont.display(32)).foregroundStyle(PSTheme.textPrimary).multilineTextAlignment(.center).tracking(-0.8)
-                            Text(item.2).font(PSFont.body(16)).foregroundStyle(PSTheme.textSecondary).multilineTextAlignment(.center).padding(.horizontal, 28)
+                            }
+                            .symbolEffect(.bounce, value: page == index)
+                            .padding(.bottom, 8)
+                            Text(item.title).font(PSFont.display(30)).foregroundStyle(PSTheme.textPrimary).multilineTextAlignment(.center).tracking(-0.8)
+                            Text(item.text).font(PSFont.body(16)).foregroundStyle(PSTheme.textSecondary).multilineTextAlignment(.center).padding(.horizontal, 30)
                         }
                         .tag(index)
                     }
@@ -48,7 +77,7 @@ public struct OnboardingView: View {
                 .tabViewStyle(.page)
                 .indexViewStyle(.page(backgroundDisplayMode: .always))
 
-                VStack(spacing: 12) {
+                VStack(spacing: 10) {
                     permissionRow(title: L("Microphone & speech"), granted: micGranted, symbol: "mic.fill") {
                         micGranted = await VoiceController.requestPermissions()
                     }
@@ -56,14 +85,14 @@ public struct OnboardingView: View {
                         photosGranted = await PhotoLibrary.requestAddAccess()
                     }
                     Button {
-                        Haptics.confirm()
+                        Haptics.magic()
                         app?.settings.hasCompletedOnboarding = true
                     } label: { Text(L("Start editing")) }
                         .buttonStyle(PrimaryButtonStyle())
                         .padding(.top, 6)
                 }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 24)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 20)
             }
         }
         .preferredColorScheme(.dark)
@@ -77,22 +106,20 @@ public struct OnboardingView: View {
             HStack(spacing: 12) {
                 Image(systemName: symbol)
                     .font(.system(size: 14, weight: .semibold))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.white)
-                    .frame(width: 30, height: 30)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill((granted ? PSTheme.success : PSTheme.accent).gradient))
+                    .foregroundStyle(granted ? PSTheme.success : PSTheme.textPrimary)
+                    .frame(width: 32, height: 32)
+                    .background(Color.white.opacity(0.08), in: Circle())
                 Text(title).font(PSFont.headline(15))
                 Spacer()
-                Image(systemName: granted ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20, weight: .semibold))
+                Image(systemName: granted ? "checkmark.circle.fill" : "chevron.right")
+                    .font(.system(size: granted ? 20 : 13, weight: .semibold))
                     .foregroundStyle(granted ? PSTheme.success : PSTheme.textTertiary)
                     .contentTransition(.symbolEffect(.replace))
                     .symbolEffect(.bounce, value: granted)
             }
             .foregroundStyle(PSTheme.textPrimary)
-            .padding(.horizontal, 14).padding(.vertical, 11)
-            .psCard(cornerRadius: 18, shadow: false)
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(PSTheme.success.opacity(granted ? 0.5 : 0), lineWidth: 1))
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .psCard(cornerRadius: 22, shadow: false)
         }
         .buttonStyle(PSPressStyle(scale: 0.98))
         .animation(PSMotion.quick, value: granted)

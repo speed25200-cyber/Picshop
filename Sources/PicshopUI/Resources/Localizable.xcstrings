@@ -801,6 +801,22 @@
         }
       }
     },
+    "Captions from the voice, pauses cut out, cuts on the beat, vertical video that follows you, a clean voice, a movie made from your clips.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Captions from the voice, pauses cut out, cuts on the beat, vertical video that follows you, a clean voice, a movie made from your clips."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Des sous-titres tirés de la voix, les blancs coupés, des coupes en rythme, une vidéo verticale qui vous suit, une voix nette, un film créé à partir de vos clips."
+          }
+        }
+      }
+    },
     "Choose clips and photos": {
       "localizations": {
         "en": {
@@ -1757,6 +1773,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gomme & détourage"
+          }
+        }
+      }
+    },
+    "Erase anything, cut out the subject, relight, put the title behind a person, grade like a colourist. One tap or one sentence.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase anything, cut out the subject, relight, put the title behind a person, grade like a colourist. One tap or one sentence."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacez n'importe quoi, détourez le sujet, rééclairez, placez le titre derrière une personne, étalonnez comme un pro. Un geste ou une phrase."
           }
         }
       }
@@ -2785,18 +2817,18 @@
         }
       }
     },
-    "Just say it": {
+    "Just say it.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Just say it"
+            "value": "Just say it."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dites-le, c'est tout"
+            "value": "Dites-le, simplement."
           }
         }
       }
@@ -3729,22 +3761,6 @@
         }
       }
     },
-    "Non-destructive layers, looks, cutouts, object removal, and a full video timeline — all on your iPhone.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Non-destructive layers, looks, cutouts, object removal, and a full video timeline — all on your iPhone."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Calques non destructifs, looks, détourage, suppression d'objets et une vraie timeline vidéo — le tout sur votre iPhone."
-          }
-        }
-      }
-    },
     "Nordic": {
       "localizations": {
         "en": {
@@ -4225,6 +4241,22 @@
         }
       }
     },
+    "Photo, magically.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo, magically."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La photo, par magie."
+          }
+        }
+      }
+    },
     "Photos": {
       "localizations": {
         "en": {
@@ -4561,18 +4593,18 @@
         }
       }
     },
-    "Private by design": {
+    "Private by design.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Private by design"
+            "value": "Private by design."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Privé par conception"
+            "value": "Confidentiel par nature."
           }
         }
       }
@@ -4589,22 +4621,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pro Brain"
-          }
-        }
-      }
-    },
-    "Pro tools, zero friction": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pro tools, zero friction"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Outils pro, zéro friction"
           }
         }
       }
@@ -4721,18 +4737,18 @@
         }
       }
     },
-    "Recognition, language models and every pixel stay on device. Nothing is uploaded, ever.": {
+    "Recognition, language models and every pixel stay on your iPhone. Nothing is uploaded, ever.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recognition, language models and every pixel stay on device. Nothing is uploaded, ever."
+            "value": "Recognition, language models and every pixel stay on your iPhone. Nothing is uploaded, ever."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Reconnaissance, modèles de langage et chaque pixel restent sur l'appareil. Rien n'est jamais envoyé."
+            "value": "La reconnaissance, les modèles de langage et chaque pixel restent sur votre iPhone. Rien n'est jamais envoyé."
           }
         }
       }
@@ -6641,6 +6657,22 @@
         }
       }
     },
+    "Video, like a pro.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video, like a pro."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La vidéo, comme un pro."
+          }
+        }
+      }
+    },
     "Videos": {
       "localizations": {
         "en": {
@@ -6977,18 +7009,18 @@
         }
       }
     },
-    "“Efface le chien”, “make it warmer”, “coupe les 3 premières secondes”. PicShop understands French and English and edits instantly.": {
+    "“Efface le chien”, “make it warmer”, “ajoute des sous-titres”. PicShop understands French and English and edits instantly.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "“Efface le chien”, “make it warmer”, “coupe les 3 premières secondes”. PicShop understands French and English and edits instantly."
+            "value": "“Efface le chien”, “make it warmer”, “ajoute des sous-titres”. PicShop understands French and English and edits instantly."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "« Efface le chien », « plus chaud », « coupe les 3 premières secondes ». PicShop comprend le français et l'anglais et retouche instantanément."
+            "value": "« Efface le chien », « make it warmer », « ajoute des sous-titres ». PicShop comprend le français et l'anglais et retouche instantanément."
           }
         }
       }

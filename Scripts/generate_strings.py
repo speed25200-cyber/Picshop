@@ -11,6 +11,14 @@ UI = ROOT / "Sources/PicshopUI"
 OUT = UI / "Resources/Localizable.xcstrings"
 
 FR = {
+    "Photo, magically.": "La photo, par magie.",
+    "Erase anything, cut out the subject, relight, put the title behind a person, grade like a colourist. One tap or one sentence.": "Effacez n'importe quoi, détourez le sujet, rééclairez, placez le titre derrière une personne, étalonnez comme un pro. Un geste ou une phrase.",
+    "Video, like a pro.": "La vidéo, comme un pro.",
+    "Captions from the voice, pauses cut out, cuts on the beat, vertical video that follows you, a clean voice, a movie made from your clips.": "Des sous-titres tirés de la voix, les blancs coupés, des coupes en rythme, une vidéo verticale qui vous suit, une voix nette, un film créé à partir de vos clips.",
+    "Just say it.": "Dites-le, simplement.",
+    "“Efface le chien”, “make it warmer”, “ajoute des sous-titres”. PicShop understands French and English and edits instantly.": "« Efface le chien », « make it warmer », « ajoute des sous-titres ». PicShop comprend le français et l'anglais et retouche instantanément.",
+    "Private by design.": "Confidentiel par nature.",
+    "Recognition, language models and every pixel stay on your iPhone. Nothing is uploaded, ever.": "La reconnaissance, les modèles de langage et chaque pixel restent sur votre iPhone. Rien n'est jamais envoyé.",
     "Best for this photo: %@": "Idéal pour cette photo : %@",
     "Colours matched.": "Couleurs harmonisées.",
     "Double-tap the title to write your own.": "Touchez deux fois le titre pour écrire le vôtre.",
