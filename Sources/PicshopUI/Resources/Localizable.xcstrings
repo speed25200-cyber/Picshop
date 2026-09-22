@@ -545,6 +545,22 @@
         }
       }
     },
+    "Black & white": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Black & white"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noir et blanc"
+          }
+        }
+      }
+    },
     "Blank page": {
       "localizations": {
         "en": {
@@ -881,22 +897,6 @@
         }
       }
     },
-    "Colour": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Colour"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couleur"
-          }
-        }
-      }
-    },
     "Compare with original": {
       "localizations": {
         "en": {
@@ -1185,6 +1185,54 @@
         }
       }
     },
+    "Denoise": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denoise"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Débruiter"
+          }
+        }
+      }
+    },
+    "Describe": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Describe"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Décrire"
+          }
+        }
+      }
+    },
+    "Describe an edit…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Describe an edit…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Décrivez une retouche…"
+          }
+        }
+      }
+    },
     "Describe what to generate…": {
       "localizations": {
         "en": {
@@ -1197,22 +1245,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Décrivez ce qu'il faut générer…"
-          }
-        }
-      }
-    },
-    "Detail": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Detail"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Détail"
           }
         }
       }
@@ -1485,22 +1517,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modifier le texte"
-          }
-        }
-      }
-    },
-    "Effects": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Effects"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Effets"
           }
         }
       }
@@ -1853,6 +1869,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Plein"
+          }
+        }
+      }
+    },
+    "Filters": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filters"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filtres"
           }
         }
       }
@@ -2657,6 +2689,22 @@
         }
       }
     },
+    "Last style": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last style"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dernier style"
+          }
+        }
+      }
+    },
     "Layers": {
       "localizations": {
         "en": {
@@ -2685,22 +2733,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mise à niveau…"
-          }
-        }
-      }
-    },
-    "Light": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Light"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lumière"
           }
         }
       }
@@ -4417,6 +4449,22 @@
         }
       }
     },
+    "Relight": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relight"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rééclairer"
+          }
+        }
+      }
+    },
     "Remove": {
       "localizations": {
         "en": {
@@ -5377,6 +5425,22 @@
         }
       }
     },
+    "Sunset sky": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sunset sky"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ciel couchant"
+          }
+        }
+      }
+    },
     "Super resolution ×4": {
       "localizations": {
         "en": {
@@ -5885,6 +5949,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remettre le son"
+          }
+        }
+      }
+    },
+    "Upscale": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscale"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agrandir"
           }
         }
       }

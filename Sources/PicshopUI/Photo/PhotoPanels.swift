@@ -10,11 +10,11 @@ extension PhotoEditorSession.Tool {
     /// Dock entries, grouped by purpose. Sub-modes appear as segments in the panel.
     static var groups: [ToolGroup<PhotoEditorSession.Tool>] {
         [
-            ToolGroup(id: "retouch", title: L("Retouch"), symbol: "slider.horizontal.3", tools: [.adjust, .looks]),
-            ToolGroup(id: "magic", title: L("Magic"), symbol: "wand.and.stars", tools: [.erase, .cutout, .precise]),
+            ToolGroup(id: "magic", title: L("Magic"), symbol: "sparkles", tools: [.magic], isMagic: true),
+            ToolGroup(id: "adjust", title: L("Adjust"), symbol: "dial.medium", tools: [.adjust, .looks]),
+            ToolGroup(id: "retouch", title: L("Retouch"), symbol: "wand.and.rays", tools: [.erase, .cutout, .precise]),
             ToolGroup(id: "crop", title: L("Crop"), symbol: "crop.rotate", tools: [.crop]),
-            ToolGroup(id: "add", title: L("Add"), symbol: "plus.square.on.square", tools: [.text, .shapes]),
-            ToolGroup(id: "layers", title: L("Layers"), symbol: "square.3.layers.3d", tools: [.layers]),
+            ToolGroup(id: "layers", title: L("Layers"), symbol: "square.3.layers.3d", tools: [.text, .shapes, .layers]),
         ]
     }
 }
@@ -37,6 +37,7 @@ struct PhotoToolPanel: View {
                            symbol: group.map { $0.tools.count > 1 ? $0.symbol : tool.symbol } ?? tool.symbol,
                            onClose: { session.activeTool = nil }, trailing: trailing, modes: modes) {
             switch tool {
+            case .magic: MagicPanel(session: session)
             case .adjust: AdjustPanel(session: session)
             case .looks: LooksPanel(session: session)
             case .erase: ErasePanel(session: session)
@@ -84,161 +85,13 @@ private func localizedName(_ preset: FilterPreset) -> String {
     Locale.current.language.languageCode?.identifier == "fr" ? preset.frenchName : preset.englishName
 }
 
-private extension PhotoEditorSession {
+extension PhotoEditorSession {
     func perform(_ intent: EditIntent) {
         Task { await run(intent) }
     }
 }
 
 // MARK: - Adjust
-
-struct AdjustPanel: View {
-    @Bindable var session: PhotoEditorSession
-    @State private var value: Double = 0
-    @State private var group: Family = .light
-    @Namespace private var groupIndicator
-
-    /// Photos-style families of parameters; the segment slides between them.
-    enum Family: String, CaseIterable, Identifiable {
-        case light, color, detail, effects
-        var id: String { rawValue }
-        var title: String {
-            switch self {
-            case .light: return L("Light")
-            case .color: return L("Colour")
-            case .detail: return L("Detail")
-            case .effects: return L("Effects")
-            }
-        }
-        var symbol: String {
-            switch self {
-            case .light: return "sun.max"
-            case .color: return "paintpalette"
-            case .detail: return "circle.dotted.and.circle"
-            case .effects: return "sparkles"
-            }
-        }
-        var parameters: [AdjustmentParameter] {
-            switch self {
-            case .light: return AdjustmentParameter.lightGroup
-            case .color: return AdjustmentParameter.colorGroup
-            case .detail: return AdjustmentParameter.detailGroup
-            case .effects: return AdjustmentParameter.effectsGroup
-            }
-        }
-        static func containing(_ parameter: AdjustmentParameter) -> Family {
-            allCases.first { $0.parameters.contains(parameter) } ?? .light
-        }
-    }
-
-    var body: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 2) {
-                ForEach(Family.allCases) { item in
-                    let isActive = group == item
-                    let touched = item.parameters.contains { abs(session.adjustmentValue($0)) > 0.0005 }
-                    Button {
-                        Haptics.tick()
-                        withAnimation(PSMotion.standard) {
-                            group = item
-                            if !item.parameters.contains(session.selectedParameter), let first = item.parameters.first {
-                                session.selectedParameter = first
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: item.symbol).font(.system(size: 11, weight: .bold))
-                            Text(item.title).font(PSFont.caption(12)).lineLimit(1).minimumScaleFactor(0.8)
-                            if touched && !isActive { Circle().fill(PSTheme.accent).frame(width: 5, height: 5) }
-                        }
-                        .padding(.horizontal, 10).padding(.vertical, 7)
-                        .frame(maxWidth: .infinity)
-                        .background {
-                            if isActive {
-                                Capsule().fill(PSTheme.selection).overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.75))
-                                    .matchedGeometryEffect(id: "group", in: groupIndicator)
-                            }
-                        }
-                        .foregroundStyle(isActive ? Color.white : PSTheme.textSecondary)
-                        .contentShape(Capsule())
-                    }
-                    .buttonStyle(PSPressStyle(scale: 0.97))
-                    .accessibilityAddTraits(isActive ? [.isSelected] : [])
-                }
-            }
-            .padding(3)
-            .background(Color.black.opacity(0.28), in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(group.parameters) { parameter in
-                        let active = session.selectedParameter == parameter
-                        let current = session.adjustmentValue(parameter)
-                        Button {
-                            Haptics.tick()
-                            withAnimation(PSMotion.quick) { session.selectedParameter = parameter }
-                            value = current
-                        } label: {
-                            VStack(spacing: 5) {
-                                ZStack {
-                                    Circle().stroke(PSTheme.hairline, lineWidth: 3)
-                                    Circle()
-                                        .trim(from: 0, to: CGFloat(min(1, abs(current))))
-                                        .stroke(active ? Color.white : PSTheme.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                                        .rotationEffect(.degrees(-90))
-                                        .scaleEffect(x: current < 0 ? -1 : 1)
-                                        .animation(PSMotion.numeric, value: current)
-                                    Image(systemName: parameter.symbolName).font(.system(size: 15, weight: .semibold))
-                                }
-                                .frame(width: 40, height: 40)
-                                Text(localizedName(parameter)).font(PSFont.caption(10)).lineLimit(1).minimumScaleFactor(0.8)
-                            }
-                            .foregroundStyle(active ? Color.white : PSTheme.textPrimary)
-                            .frame(width: 66, height: 64)
-                            .psActivePill(RoundedRectangle(cornerRadius: 16, style: .continuous), isActive: active, glow: false)
-                            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        }
-                        .buttonStyle(PSPressStyle())
-                        .accessibilityLabel(localizedName(parameter))
-                        .accessibilityValue(String(Int((current * 100).rounded())))
-                    }
-                }
-                .padding(.horizontal, 2)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            DialSlider(value: $value, range: session.selectedParameter.range, neutral: 0, label: localizedName(session.selectedParameter)) { editing in
-                if editing { session.beginSliderInteraction(session.selectedParameter) } else { session.endSliderInteraction() }
-            }
-            .onChange(of: value) { _, newValue in
-                if abs(newValue - session.adjustmentValue(session.selectedParameter)) > 0.0005 {
-                    session.setAdjustment(session.selectedParameter, value: newValue)
-                }
-            }
-            .onChange(of: session.selectedParameter) { _, parameter in
-                value = session.adjustmentValue(parameter)
-                let owner = Family.containing(parameter)
-                if owner != group { withAnimation(PSMotion.standard) { group = owner } }
-            }
-            .onChange(of: session.history.present.modifiedAt) { _, _ in
-                let current = session.adjustmentValue(session.selectedParameter)
-                if abs(current - value) > 0.0005 { value = current }
-            }
-            HStack(spacing: 8) {
-                PanelChip(title: L("Auto"), symbol: "wand.and.stars", tint: PSTheme.accent) { session.perform(EditIntent(action: .autoEnhance)) }
-                PanelChip(title: L("Portrait light"), symbol: "person.and.background.dotted") { session.perform(EditIntent(action: .relight)) }
-                Spacer()
-                PanelChip(title: L("Reset"), symbol: "arrow.counterclockwise", isEnabled: !session.document.activeAdjustments.isNeutral) {
-                    session.apply(.adjustments(.neutral), label: L("Reset"))
-                    value = 0
-                }
-            }
-        }
-        .onAppear {
-            value = session.adjustmentValue(session.selectedParameter)
-            group = Family.containing(session.selectedParameter)
-        }
-    }
-}
 
 // MARK: - Looks
 

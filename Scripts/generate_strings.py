@@ -11,6 +11,15 @@ UI = ROOT / "Sources/PicshopUI"
 OUT = UI / "Resources/Localizable.xcstrings"
 
 FR = {
+    "Black & white": "Noir et blanc",
+    "Denoise": "Débruiter",
+    "Describe": "Décrire",
+    "Describe an edit…": "Décrivez une retouche…",
+    "Filters": "Filtres",
+    "Last style": "Dernier style",
+    "Relight": "Rééclairer",
+    "Sunset sky": "Ciel couchant",
+    "Upscale": "Agrandir",
     "%d moments chosen": "%d moments choisis",
     "9:16 that follows the subject": "Du 9:16 qui suit le sujet",
     "A soft background, like a big lens": "Un fond doux, comme un grand objectif",

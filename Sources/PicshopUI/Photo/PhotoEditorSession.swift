@@ -15,12 +15,13 @@ import PicshopSpeech
 @Observable
 public final class PhotoEditorSession {
     public enum Tool: String, CaseIterable, Identifiable {
-        case adjust, looks, erase, precise, cutout, crop, text, shapes, layers
+        case magic, adjust, looks, erase, precise, cutout, crop, text, shapes, layers
         public var id: String { rawValue }
         var title: String {
             switch self {
+            case .magic: return L("Magic")
             case .adjust: return L("Adjust")
-            case .looks: return L("Looks")
+            case .looks: return L("Filters")
             case .erase: return L("Erase")
             case .precise: return L("Precise")
             case .cutout: return L("Cutout")
@@ -32,6 +33,7 @@ public final class PhotoEditorSession {
         }
         var symbol: String {
             switch self {
+            case .magic: return "sparkles"
             case .adjust: return "slider.horizontal.3"
             case .looks: return "camera.filters"
             case .erase: return "eraser.line.dashed"
