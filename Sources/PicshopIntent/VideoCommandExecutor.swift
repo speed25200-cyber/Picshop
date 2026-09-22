@@ -384,6 +384,28 @@ public struct VideoCommandExecutor: Sendable {
                 return (timeline, .failed(errorMessage(error)))
             }
 
+        case .translateCaptions:
+            guard let target = intent.text, !target.isEmpty else { return (timeline, .failed(fr ? "Dans quelle langue ?" : "Into which language?")) }
+            do {
+                // Captions first when there are none yet: the words to translate come from the voice.
+                _ = try await spokenWords(in: &timeline)
+                guard var captions = timeline.captions, !captions.isEmpty else { return (timeline, .failed(fr ? "Je n'entends aucune parole dans cette vidéo." : "I can't hear any speech in this video.")) }
+                let source = captions.language.map { String($0.prefix(2)) }
+                guard source != target else { return (timeline, ExecutionResult(outcome: .info(message: fr ? "Les sous-titres sont déjà dans cette langue." : "The captions are already in that language."))) }
+                let translated = try await services.translate(captions.cues.map(\.text), from: captions.language, to: target)
+                // Each line keeps its time; its new words share it by length.
+                let words = zip(captions.cues, translated).flatMap { cue, text in CaptionBuilder.words(in: text, span: cue.span) }
+                captions.cues = CaptionBuilder.cues(from: words, style: captions.style)
+                captions.language = target
+                captions.isVisible = true
+                timeline.captions = captions
+                timeline.touch()
+                let name = Self.languageName(target, french: fr)
+                return (timeline, .applied(fr ? "Sous-titres en \(name)" : "Captions in \(name)"))
+            } catch {
+                return (timeline, .failed(errorMessage(error)))
+            }
+
         case .removeCaptions:
             guard timeline.captions != nil else { return (timeline, .failed(fr ? "Il n'y a pas de sous-titres." : "There are no captions.")) }
             timeline.captions = nil
@@ -762,6 +784,10 @@ public struct VideoCommandExecutor: Sendable {
         } catch {
             return (timeline, .failed(errorMessage(error)))
         }
+    }
+
+    static func languageName(_ code: String, french: Bool) -> String {
+        Locale(identifier: french ? "fr" : "en").localizedString(forLanguageCode: code) ?? code
     }
 
     /// The words of the timeline: the captions' when there are some, else a

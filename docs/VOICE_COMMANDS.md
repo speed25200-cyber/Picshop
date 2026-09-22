@@ -110,6 +110,7 @@ Paris au centre · Make the text bigger · Change le texte en Hello · Mets le t
 |---|---|
 | Ajoute des sous-titres · Add captions · Sous-titres style karaoké · Captions word by word | Transcribes the speech on device into timed captions (styles: classic, karaoke, reveal, boxed, minimal); on existing captions, changes the style |
 | Enlève les sous-titres · Remove the captions | Removes them |
+| Traduis les sous-titres en anglais · Translate the captions to Spanish | On-device translation (Apple Translation); each line keeps its time |
 | Enlève les blancs · Coupe les silences · Remove the pauses · Jump cuts | Cuts every pause in the speech, keeping a breath on each side |
 | Enlève les euh · Supprime les hésitations · Remove the ums | Cuts written hesitations, stutters ("je je") and the voiced "euh"s the recogniser left out |
 | Coupe le passage où je dis « bonjour à tous » · Cut the sentence where I say sorry · Supprime le mot genre à chaque fois | Edits by the words: cuts where they are said (nearest the playhead, every time, or the whole sentence) |

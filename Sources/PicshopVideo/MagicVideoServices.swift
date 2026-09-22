@@ -10,6 +10,9 @@ import PicshopImaging
 #if canImport(Speech)
 import Speech
 #endif
+#if canImport(Translation)
+import Translation
+#endif
 
 // The Apple half of the magic video tools: decoding sound for the analysers
 // in PicshopCore, transcribing speech on device, finding the subject of a
@@ -108,6 +111,33 @@ extension AVVideoServices {
         }
         guard !bytes.isEmpty else { throw PicshopError.mediaUnavailable(clip.name) }
         return ColorStatistics.measure(rgba: bytes)
+    }
+
+    // MARK: Translation
+
+    public func translate(_ texts: [String], from source: String?, to target: String) async throws -> [String] {
+        #if canImport(Translation)
+        if #available(iOS 26.0, macOS 26.0, *) {
+            let sourceLanguage = Locale.Language(identifier: source ?? Locale.current.language.languageCode?.identifier ?? "en")
+            let session = TranslationSession(installedSource: sourceLanguage, target: Locale.Language(identifier: target))
+            let requests = texts.enumerated().map { TranslationSession.Request(sourceText: $0.element, clientIdentifier: String($0.offset)) }
+            let responses: [TranslationSession.Response]
+            do {
+                responses = try await session.translations(from: requests)
+            } catch {
+                throw PicshopError.modelUnavailable(Locale.current.language.languageCode?.identifier == "fr"
+                    ? "Traduction (téléchargez la langue dans Réglages › Traduire)" : "Translation (download the language in Settings › Translate)")
+            }
+            var translated = texts
+            for response in responses {
+                if let identifier = response.clientIdentifier, let index = Int(identifier), translated.indices.contains(index) {
+                    translated[index] = response.targetText
+                }
+            }
+            return translated
+        }
+        #endif
+        throw PicshopError.unsupportedOperation("Translation")
     }
 
     // MARK: Highlights

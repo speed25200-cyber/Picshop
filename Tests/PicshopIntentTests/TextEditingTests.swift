@@ -137,3 +137,27 @@ final class TextEditingTests: XCTestCase {
         XCTAssertEqual(output.duration, 8, accuracy: 0.001)
     }
 }
+
+final class CaptionTranslationTests: XCTestCase {
+    func testGrammarAndExecutor() async {
+        let engine = RuleBasedIntentEngine()
+        let context = IntentContext(mode: .video, clipCount: 1, playheadSeconds: 0, timelineDuration: 8)
+        let english = engine.parse("traduis les sous-titres en anglais", context: context).intents.first
+        XCTAssertEqual(english?.action, .translateCaptions)
+        XCTAssertEqual(english?.text, "en")
+        XCTAssertEqual(engine.parse("translate the captions to Spanish", context: context).intents.first?.text, "es")
+        XCTAssertEqual(engine.parse("ajoute des sous-titres", context: context).intents.first?.action, .autoCaptions)
+
+        let asset = MediaAsset(kind: .video, relativePath: "media/v.mov", pixelSize: PSSize(width: 1920, height: 1080), duration: 8, frameRate: 30)
+        var timeline = VideoTimeline(title: "t", clips: [VideoClip(asset: asset, sourceRange: TimeSpan(start: 0, duration: 8))], renderSize: PSSize(width: 1920, height: 1080))
+        let words = [CaptionWord(text: "Bonjour", start: 0, end: 0.5), CaptionWord(text: "tout", start: 0.6, end: 0.9), CaptionWord(text: "le", start: 1.0, end: 1.1), CaptionWord(text: "monde.", start: 1.2, end: 1.6)]
+        timeline.captions = CaptionTrack(cues: CaptionBuilder.cues(from: words, style: .classic), style: .classic, language: "fr-FR")
+        let executor = VideoCommandExecutor(services: FakeMagicVideoServices(), language: .french)
+        guard let english else { return XCTFail("no intent") }
+        let (translated, result) = await executor.execute(english, on: timeline, context: context)
+        XCTAssertTrue(result.outcome.isSuccess)
+        XCTAssertEqual(translated.captions?.language, "en")
+        XCTAssertTrue(translated.captions?.transcript.hasPrefix("[en] Bonjour") ?? false)
+        XCTAssertEqual(translated.captions?.cues.last?.span.end ?? 0, 1.6, accuracy: 0.001)
+    }
+}

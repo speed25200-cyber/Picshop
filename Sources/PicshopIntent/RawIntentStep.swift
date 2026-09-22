@@ -186,6 +186,7 @@ public enum IntentNormalizer {
             "music": .addMusic, "soundtrack": .addMusic, "screenshot": .extractFrame, "frame": .extractFrame, "goto": .seek, "jump": .seek, "choose": .chooseCandidate,
             "select": .chooseCandidate, "pick": .chooseCandidate, "yes": .confirm, "no": .cancel, "none": .unknown, "unknown": .unknown, "compare": .compare,
             "reset": .revert, "revertall": .revert, "save": .export, "download": .export,
+            "translatecaptions": .translateCaptions, "translatesubtitles": .translateCaptions, "translate": .translateCaptions,
             "subtitles": .autoCaptions, "subtitle": .autoCaptions, "captions": .autoCaptions, "autocaption": .autoCaptions, "transcribe": .autoCaptions,
             "jumpcut": .removeSilences, "jumpcuts": .removeSilences, "removesilence": .removeSilences, "cutsilences": .removeSilences, "removepauses": .removeSilences,
             "animatetext": .animateText, "animatetitle": .animateText, "textanimation": .animateText, "titleanimation": .animateText,

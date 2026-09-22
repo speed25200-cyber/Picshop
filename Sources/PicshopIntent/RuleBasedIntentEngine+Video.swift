@@ -369,7 +369,21 @@ extension RuleBasedIntentEngine {
         return intent
     }
 
+    /// Languages captions can be translated to, by what people call them.
+    static let captionLanguages: [(code: String, names: [String])] = [
+        ("en", ["anglais", "english"]), ("fr", ["francais", "french"]), ("es", ["espagnol", "spanish"]), ("de", ["allemand", "german"]),
+        ("it", ["italien", "italian"]), ("pt", ["portugais", "portuguese"]), ("nl", ["neerlandais", "hollandais", "dutch"]),
+        ("ja", ["japonais", "japanese"]), ("zh", ["chinois", "chinese", "mandarin"]), ("ko", ["coreen", "korean"]),
+        ("ar", ["arabe", "arabic"]), ("ru", ["russe", "russian"]), ("tr", ["turc", "turkish"]), ("pl", ["polonais", "polish"]),
+    ]
+
     func parseMagicVideo(_ u: NormalizedUtterance, context: IntentContext) -> [EditIntent]? {
+        if u.contains(["traduis", "traduire", "traduit", "traduction", "translate", "translation", "translated"]) || (u.contains(["sous titres en", "subtitles in", "captions in"]) ),
+           let language = Self.captionLanguages.first(where: { u.contains($0.names) }) {
+            var intent = EditIntent(action: .translateCaptions)
+            intent.text = language.code
+            return [intent]
+        }
         let captionWords = ["sous titre", "sous titres", "sous titrage", "soustitre", "soustitres", "subtitle", "subtitles", "caption", "captions", "closed captions",
                             "transcris", "transcription", "transcribe", "ecris ce qui est dit", "ecris ce que je dis", "write what i say", "texte de la voix", "paroles a l ecran"]
         if u.contains(captionWords) {

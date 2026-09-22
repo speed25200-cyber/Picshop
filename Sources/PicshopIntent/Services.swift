@@ -80,6 +80,8 @@ public protocol VideoAIServices: Sendable {
     func colorStatistics(clip: VideoClip, timeline: VideoTimeline) async throws -> ColorStatistics
     /// How good each moment of a clip looks and sounds, as offsets along its span.
     func momentScores(for clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [MomentScore]
+    /// Texts translated on device, in order (`source` nil = guess from the text).
+    func translate(_ texts: [String], from source: String?, to target: String) async throws -> [String]
     /// Where the shot changes inside a clip, as offsets on the clip's own timeline span.
     func sceneCuts(for clip: VideoClip, timeline: VideoTimeline, sensitivity: Double, progress: @escaping @Sendable (Double) -> Void) async throws -> [Double]
     /// Follows whatever is at `point` (normalised, y down) in the finished picture at `time`,
@@ -108,6 +110,9 @@ public extension VideoAIServices {
     }
     func momentScores(for clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [MomentScore] {
         throw PicshopError.unsupportedOperation("Highlights")
+    }
+    func translate(_ texts: [String], from source: String?, to target: String) async throws -> [String] {
+        throw PicshopError.unsupportedOperation("Translation")
     }
 }
 

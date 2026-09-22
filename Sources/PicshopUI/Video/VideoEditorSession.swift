@@ -378,7 +378,7 @@ public final class VideoEditorSession {
         guard var executor else { return .failed(message: "not ready") }
         executor.language = language
         let heavy: Set<IntentAction> = [.removeObject, .chooseCandidate, .stabilize, .reverse, .blurBackground, .removeBackground, .replaceBackground, .freezeFrame, .extractFrame,
-                                        .autoCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .splitScenes, .highlights, .punchIns, .syncToBeat, .smartReframe, .enhanceVoice, .matchColor, .kenBurns]
+                                        .autoCaptions, .translateCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .splitScenes, .highlights, .punchIns, .syncToBeat, .smartReframe, .enhanceVoice, .matchColor, .kenBurns]
         // Analyses that finish without reporting a fraction show the pulsing glyph instead of 0 %.
         let indeterminate: Set<IntentAction> = [.removeSilences, .autoDuck, .syncToBeat, .matchColor, .kenBurns]
         if heavy.contains(intent.action) {
@@ -445,6 +445,7 @@ public final class VideoEditorSession {
         case .freezeFrame: return L("Creating freeze frame…")
         case .extractFrame: return L("Saving frame…")
         case .autoCaptions: return L("Listening and writing captions…")
+        case .translateCaptions: return L("Translating the captions…")
         case .removeSilences: return L("Finding the pauses…")
         case .removeFillers: return L("Listening for hesitations…")
         case .autoDuck: return L("Listening for the voice…")

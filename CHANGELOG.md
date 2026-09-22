@@ -16,6 +16,7 @@
   it (Vision's tracker on the finished picture, smoothed); Follow subject in the Text and Overlay panels, or by voice.
 - Automatic ducking: the music dips under every sentence and comes back between them; the voice map lives in each
   clip's own time so trims, cuts and speed changes keep it in step.
+- Caption translation on device: "traduis les sous-titres en anglais", or Translate beside the caption styles.
 - Edit by text: the video's words in a Transcript panel; strike words and they leave the video with the pause after them,
   the spoken word lights up during playback; one tap removes the "euh"s, stutters and unwritten hesitations; by voice,
   "coupe le passage où je dis …".

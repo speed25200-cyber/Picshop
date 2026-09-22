@@ -71,6 +71,19 @@ struct VideoMagicPanel: View {
         .animation(PSMotion.standard, value: session.timeline.captions?.style)
     }
 
+    /// Languages offered for translated captions, named in the interface language.
+    struct LanguageOption: Identifiable {
+        let code: String
+        let name: String
+        var id: String { code }
+    }
+
+    static var translations: [LanguageOption] {
+        ["en", "fr", "es", "de", "it", "pt", "nl", "ja", "zh", "ko", "ar"].map { code in
+            LanguageOption(code: code, name: Locale.current.localizedString(forLanguageCode: code)?.capitalized ?? code)
+        }
+    }
+
     /// Once captions exist: their look, their place, and a way to remove them.
     private func captionStyles(_ captions: CaptionTrack) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -88,6 +101,25 @@ struct VideoMagicPanel: View {
                             timeline.captions?.verticalPosition = current > 0.5 ? 0.2 : 0.72
                         }
                     }
+                    Menu {
+                        ForEach(Self.translations.filter { !(captions.language ?? "").hasPrefix($0.code) }) { language in
+                            Button(language.name) {
+                                Haptics.magic()
+                                var intent = EditIntent(action: .translateCaptions)
+                                intent.text = language.code
+                                Task { await session.run(intent) }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            MagicGlyph(size: 12, symbol: "translate")
+                            Text(L("Translate")).lineLimit(1)
+                        }
+                        .font(PSFont.caption(13)).padding(.horizontal, 12).padding(.vertical, 9)
+                        .foregroundStyle(PSTheme.textPrimary)
+                        .background(Capsule().fill(Color.white.opacity(0.08)))
+                    }
+                    .disabled(session.isProcessing)
                     PanelChip(title: L("Remove"), symbol: "trash") {
                         Task { await session.run(EditIntent(action: .removeCaptions)) }
                     }

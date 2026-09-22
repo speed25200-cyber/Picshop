@@ -7745,6 +7745,38 @@
         }
       }
     },
+    "Translate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Translate"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Traduire"
+          }
+        }
+      }
+    },
+    "Translating the captions…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Translating the captions…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je traduis les sous-titres…"
+          }
+        }
+      }
+    },
     "Trim": {
       "localizations": {
         "en": {

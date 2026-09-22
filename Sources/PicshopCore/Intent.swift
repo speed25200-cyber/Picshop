@@ -65,6 +65,8 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     /// Transcribes the speech into timed captions (text = style name to use or switch to).
     case autoCaptions
     case removeCaptions
+    /// Captions in another language (text = BCP-47 language code: en, fr, es…).
+    case translateCaptions
     /// Jump cuts: removes the pauses in speech.
     case removeSilences
     /// Removes the "euh"s, "um"s and stutters from the speech.
@@ -144,7 +146,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
         switch self {
         case .trim, .split, .deleteClip, .deleteRange, .setSpeed, .reverse, .mute, .unmute, .setVolume,
              .addTransition, .removeTransition, .addMusic, .removeMusic, .moveAudio, .fadeAudio, .extractFrame, .seek, .play, .pause,
-             .duplicateClip, .moveClip, .stabilize, .freezeFrame, .autoCaptions, .removeCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .splitScenes, .animateText, .highlights, .speedRamp, .punchIns, .syncToBeat,
+             .duplicateClip, .moveClip, .stabilize, .freezeFrame, .autoCaptions, .removeCaptions, .translateCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .splitScenes, .animateText, .highlights, .speedRamp, .punchIns, .syncToBeat,
              .smartReframe, .kenBurns, .enhanceVoice:
             return true
         default:
@@ -421,6 +423,7 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .freezeFrame: return "Freeze frame"
         case .autoCaptions: return "Captions\(text.map { " (\($0))" } ?? "")"
         case .removeCaptions: return "Remove captions"
+        case .translateCaptions: return "Translate captions to \(text ?? "?")"
         case .removeSilences: return "Remove silences"
         case .removeFillers: return "Remove filler words"
         case .autoDuck: return amount?.value == 0 ? "Ducking off" : "Duck the music under the voice"

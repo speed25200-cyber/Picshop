@@ -89,6 +89,7 @@ public enum Replies {
         case .removeCaptions: return fr ? "Sous-titres retirés." : "Captions removed."
         case .removeSilences: return fr ? "J'enlève les blancs." : "Removing the pauses."
         case .removeFillers: return fr ? "J'enlève les hésitations." : "Removing the filler words."
+        case .translateCaptions: return fr ? "Je traduis les sous-titres." : "Translating the captions."
         case .autoDuck: return fr ? "La musique va s'effacer sous la voix." : "The music will dip under the voice."
         case .trackSubject: return fr ? "Je suis le sujet." : "Following the subject."
         case .splitScenes: return fr ? "Je cherche les changements de plan." : "Finding the shot changes."
