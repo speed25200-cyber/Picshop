@@ -30,6 +30,9 @@ public struct PhotoEditorView: View {
         }
         // Progress and toasts live in their own view, so a progress tick never
         // re-evaluates the canvas and the dock.
+        .overlay {
+            if let app { EditorIntelligenceGlow(voice: app.voice, isBusy: session.isProcessing) }
+        }
         .overlay { EditorStatusOverlay(session: session) }
 
         .task { await session.configure() }

@@ -38,12 +38,18 @@ enum WindowInsets {
     }
 }
 
-/// Scrim behind the bottom controls so they read on any picture.
+/// A soft fall-off behind the bottom controls so they read on any picture,
+/// without a visible band.
 struct DockBackground: ViewModifier {
     func body(content: Content) -> some View {
         content.background(
-            LinearGradient(colors: [PSTheme.canvas.opacity(0), PSTheme.canvas.opacity(0.88)], startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea(edges: .bottom)
+            LinearGradient(stops: [
+                .init(color: PSTheme.canvas.opacity(0), location: 0),
+                .init(color: PSTheme.canvas.opacity(0.55), location: 0.35),
+                .init(color: PSTheme.canvas.opacity(0.92), location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+            .ignoresSafeArea(edges: .bottom)
+            .allowsHitTesting(false)
         )
     }
 }
@@ -52,7 +58,10 @@ extension View {
     func psDockBackground() -> some View { modifier(DockBackground()) }
 }
 
-/// Compact top bar: close · title · undo/redo · help · export.
+// MARK: - Top bar
+
+/// Floating glass controls: close on the left, the document's name in the
+/// middle, history and export on the right — nothing else on top of the picture.
 struct EditorTopBar: View {
     var title: String
     var subtitle: String? = nil
@@ -65,119 +74,90 @@ struct EditorTopBar: View {
     var onExport: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            GlassIconButton("xmark", label: L("Close"), size: 40, action: onClose)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(PSFont.headline(16)).foregroundStyle(PSTheme.textPrimary).lineLimit(1).tracking(-0.2)
-                if let subtitle {
-                    Text(subtitle).font(PSFont.mono(11)).foregroundStyle(PSTheme.textTertiary).lineLimit(1)
-                        .contentTransition(.numericText())
+        PSGlassContainer(spacing: 10) {
+            HStack(spacing: 10) {
+                GlassIconButton("xmark", label: L("Close"), size: 42, action: onClose)
+                Spacer(minLength: 4)
+                VStack(spacing: 1) {
+                    Text(title).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
+                    if let subtitle {
+                        Text(subtitle).font(PSFont.mono(11)).foregroundStyle(PSTheme.textTertiary).lineLimit(1)
+                            .contentTransition(.numericText())
+                    }
                 }
+                .allowsHitTesting(false)
+                Spacer(minLength: 4)
+                HStack(spacing: 0) {
+                    barButton("arrow.uturn.backward", label: L("Undo"), enabled: canUndo, action: onUndo)
+                    barButton("arrow.uturn.forward", label: L("Redo"), enabled: canRedo, action: onRedo)
+                    barButton("questionmark", label: L("Help"), enabled: true, action: onHelp)
+                }
+                .padding(.horizontal, 2)
+                .psGlass(interactive: true)
+                .animation(PSMotion.quick, value: canUndo)
+                .animation(PSMotion.quick, value: canRedo)
+                Button { Haptics.confirm(); onExport() } label: {
+                    Image(systemName: "square.and.arrow.up").font(.system(size: 15, weight: .bold)).foregroundStyle(Color.black)
+                        .frame(width: 42, height: 42)
+                        .background(Circle().fill(Color.white))
+                }
+                .buttonStyle(PSPressStyle(scale: 0.9))
+                .accessibilityLabel(L("Export"))
             }
-            .padding(.leading, 4)
-            Spacer(minLength: 4)
-            // One capsule for the secondary actions: undo · redo · help.
-            HStack(spacing: 0) {
-                Button { Haptics.tap(); onUndo() } label: {
-                    Image(systemName: "arrow.uturn.backward").font(.system(size: 15, weight: .semibold)).frame(width: 40, height: 40).contentShape(Rectangle())
-                }
-                .buttonStyle(PSPressStyle(scale: 0.9)).disabled(!canUndo).foregroundStyle(canUndo ? PSTheme.textPrimary : PSTheme.textTertiary)
-                .accessibilityLabel(L("Undo"))
-                Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 18)
-                Button { Haptics.tap(); onRedo() } label: {
-                    Image(systemName: "arrow.uturn.forward").font(.system(size: 15, weight: .semibold)).frame(width: 40, height: 40).contentShape(Rectangle())
-                }
-                .buttonStyle(PSPressStyle(scale: 0.9)).disabled(!canRedo).foregroundStyle(canRedo ? PSTheme.textPrimary : PSTheme.textTertiary)
-                .accessibilityLabel(L("Redo"))
-                Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 18)
-                Button { Haptics.tap(); onHelp() } label: {
-                    Image(systemName: "questionmark").font(.system(size: 15, weight: .semibold)).frame(width: 40, height: 40).contentShape(Rectangle())
-                }
-                .buttonStyle(PSPressStyle(scale: 0.9)).foregroundStyle(PSTheme.textPrimary)
-                .accessibilityLabel(L("Help"))
-            }
-            .psCard(cornerRadius: 20, shadow: false)
-            .animation(PSMotion.quick, value: canUndo)
-            .animation(PSMotion.quick, value: canRedo)
-            Button { Haptics.confirm(); onExport() } label: {
-                Image(systemName: "square.and.arrow.up").font(.system(size: 15, weight: .bold)).foregroundStyle(.white).frame(width: 40, height: 40)
-                    .psAccentFill(Circle())
-            }
-            .buttonStyle(PSPressStyle(scale: 0.92))
-            .accessibilityLabel(L("Export"))
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 6)
+        .padding(.horizontal, 14)
+        .padding(.top, 4)
         .padding(.bottom, 8)
         .background(
-            LinearGradient(colors: [PSTheme.canvas.opacity(0.9), PSTheme.canvas.opacity(0)], startPoint: .top, endPoint: .bottom)
+            LinearGradient(colors: [PSTheme.canvas.opacity(0.75), PSTheme.canvas.opacity(0)], startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea(edges: .top)
+                .allowsHitTesting(false)
         )
+    }
+
+    private func barButton(_ symbol: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button { Haptics.tap(); action() } label: {
+            Image(systemName: symbol).font(.system(size: 15, weight: .semibold)).frame(width: 38, height: 42).contentShape(Rectangle())
+        }
+        .buttonStyle(PSPressStyle(scale: 0.88))
+        .disabled(!enabled)
+        .foregroundStyle(enabled ? PSTheme.textPrimary : PSTheme.textQuaternary)
+        .accessibilityLabel(label)
     }
 }
 
-/// Bottom dock of tools. Items are equally sized; the row scrolls when it
-/// does not fit and centres itself when it does. The active pill slides
-/// between entries instead of popping.
+// MARK: - Tool dock
+
+/// The tool bar at the bottom: one glass capsule of tools. The chosen tool's
+/// glyph turns edit-yellow and a lit thumb slides behind it; the row scrolls
+/// only when it has to.
 struct ToolDock<Tool: Identifiable & Hashable>: View {
     let tools: [Tool]
     @Binding var selection: Tool?
     var title: (Tool) -> String
     var symbol: (Tool) -> String
+    /// Tools drawn with the intelligence spectrum (the Magic entry).
+    var isMagic: (Tool) -> Bool = { _ in false }
     var onSelect: ((Tool?) -> Void)? = nil
 
     @Namespace private var indicator
-    @Environment(\.psEffects) private var effects
 
-    private let preferredItemWidth: CGFloat = 64
-    private let minimumItemWidth: CGFloat = 54
-    private let itemSpacing: CGFloat = 2
+    private let preferredItemWidth: CGFloat = 62
+    private let minimumItemWidth: CGFloat = 52
 
-    /// Items shrink down to `minimumItemWidth` so a five-tool dock fits an iPhone
-    /// without scrolling; only longer docks scroll.
     private func itemWidth(in available: CGFloat) -> CGFloat {
-        let fitting = (available - 12 - CGFloat(max(0, tools.count - 1)) * itemSpacing) / CGFloat(max(1, tools.count))
+        let fitting = (available - 12) / CGFloat(max(1, tools.count))
         return min(preferredItemWidth, max(minimumItemWidth, fitting))
     }
 
     var body: some View {
         GeometryReader { proxy in
             let itemWidth = itemWidth(in: proxy.size.width)
-            let scrolls = CGFloat(tools.count) * (itemWidth + itemSpacing) + 12 > proxy.size.width
+            let scrolls = CGFloat(tools.count) * itemWidth + 12 > proxy.size.width
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: itemSpacing) {
+                HStack(spacing: 0) {
                     ForEach(tools) { tool in
-                        let isActive = selection == tool
-                        Button {
-                            Haptics.tap()
-                            let next: Tool? = isActive ? nil : tool
-                            withAnimation(PSMotion.standard) { selection = next }
-                            onSelect?(next)
-                        } label: {
-                            VStack(spacing: 4) {
-                                Image(systemName: symbol(tool))
-                                    .font(.system(size: 19, weight: .semibold))
-                                    .symbolVariant(isActive ? .fill : .none)
-                                    .symbolEffect(.bounce.down.byLayer, value: isActive)
-                                    .frame(height: 22)
-                                Text(title(tool)).font(PSFont.caption(10.5)).lineLimit(1).minimumScaleFactor(0.8)
-                            }
-                            .foregroundStyle(isActive ? Color.white : PSTheme.textSecondary)
-                            .frame(width: itemWidth, height: 54)
-                            .background {
-                                if isActive {
-                                    let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    shape.fill(PSTheme.accentGradient)
-                                        .overlay(shape.fill(PSTheme.accentHighlight))
-                                        .shadow(color: PSTheme.accent.opacity(effects == .rich ? 0.45 : 0), radius: 10, y: 4)
-                                        .matchedGeometryEffect(id: "active", in: indicator)
-                                }
-                            }
-                            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        }
-                        .buttonStyle(PSPressStyle(scale: 0.94))
-                        .accessibilityLabel(title(tool))
-                        .accessibilityAddTraits(isActive ? [.isSelected] : [])
+                        item(tool, width: itemWidth)
                     }
                 }
                 .padding(.horizontal, 6)
@@ -185,16 +165,56 @@ struct ToolDock<Tool: Identifiable & Hashable>: View {
             }
             .scrollBounceBehavior(.basedOnSize)
             .mask {
-                // Fade the edges when the dock scrolls so the hidden tools are discoverable.
                 HStack(spacing: 0) {
-                    LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing).frame(width: scrolls ? 18 : 0)
+                    LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing).frame(width: scrolls ? 16 : 0)
                     Color.black
-                    LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: scrolls ? 18 : 0)
+                    LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: scrolls ? 16 : 0)
                 }
             }
         }
-        .frame(height: 62)
-        .psCard(cornerRadius: 26)
+        .frame(height: 60)
+        .psGlass(shape: AnyShape(Capsule()))
+    }
+
+    private func item(_ tool: Tool, width: CGFloat) -> some View {
+        let isActive = selection == tool
+        let magic = isMagic(tool)
+        return Button {
+            Haptics.tap()
+            let next: Tool? = isActive ? nil : tool
+            withAnimation(PSMotion.standard) { selection = next }
+            onSelect?(next)
+        } label: {
+            VStack(spacing: 3) {
+                Group {
+                    if magic {
+                        Image(systemName: symbol(tool)).psIntelligenceForeground()
+                    } else {
+                        Image(systemName: symbol(tool)).foregroundStyle(isActive ? PSTheme.accent : PSTheme.textPrimary)
+                    }
+                }
+                .font(.system(size: 18, weight: .semibold))
+                .symbolVariant(isActive ? .fill : .none)
+                .symbolEffect(.bounce.down.byLayer, value: isActive)
+                .frame(height: 22)
+                Text(title(tool)).font(PSFont.label(10))
+                    .foregroundStyle(isActive ? PSTheme.textPrimary : PSTheme.textSecondary)
+                    .lineLimit(1).minimumScaleFactor(0.75)
+            }
+            .frame(width: width - 4, height: 52)
+            .background {
+                if isActive {
+                    Capsule().fill(PSTheme.selection)
+                        .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 0.75))
+                        .matchedGeometryEffect(id: "active", in: indicator)
+                }
+            }
+            .contentShape(Capsule())
+            .padding(.horizontal, 2)
+        }
+        .buttonStyle(PSPressStyle(scale: 0.92))
+        .accessibilityLabel(title(tool))
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 }
 
@@ -205,6 +225,7 @@ struct ToolGroup<Tool: Hashable & Identifiable>: Identifiable, Hashable {
     let title: String
     let symbol: String
     let tools: [Tool]
+    var isMagic: Bool = false
 
     static func == (lhs: ToolGroup, rhs: ToolGroup) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
@@ -220,7 +241,7 @@ struct GroupedToolDock<Tool: Hashable & Identifiable>: View {
     @State private var lastTool: [String: Tool] = [:]
 
     var body: some View {
-        ToolDock(tools: groups, selection: groupSelection, title: { $0.title }, symbol: { $0.symbol })
+        ToolDock(tools: groups, selection: groupSelection, title: { $0.title }, symbol: { $0.symbol }, isMagic: { $0.isMagic })
             .onChange(of: selection) { _, tool in
                 if let tool, let group = groups.first(where: { $0.contains(tool) }) { lastTool[group.id] = tool }
             }
@@ -237,8 +258,8 @@ struct GroupedToolDock<Tool: Hashable & Identifiable>: View {
     }
 }
 
-/// Segmented sub-mode picker shown in a panel header. The selected capsule
-/// slides between segments.
+/// Segmented sub-mode picker shown in a panel header: a lit thumb sliding
+/// behind the chosen one — the iOS segmented control, in glass.
 struct ModeSegments<Mode: Hashable & Identifiable>: View {
     let modes: [Mode]
     @Binding var selection: Mode?
@@ -248,7 +269,7 @@ struct ModeSegments<Mode: Hashable & Identifiable>: View {
     @Namespace private var indicator
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 0) {
             ForEach(modes) { mode in
                 let isActive = selection == mode
                 Button {
@@ -256,19 +277,19 @@ struct ModeSegments<Mode: Hashable & Identifiable>: View {
                     withAnimation(PSMotion.standard) { selection = mode }
                 } label: {
                     HStack(spacing: 5) {
-                        Image(systemName: symbol(mode)).font(.system(size: 11, weight: .bold))
-                        Text(title(mode)).font(PSFont.caption(12)).lineLimit(1).minimumScaleFactor(0.85)
+                        Image(systemName: symbol(mode)).font(.system(size: 11, weight: .semibold))
+                        Text(title(mode)).font(PSFont.label(12)).lineLimit(1).minimumScaleFactor(0.8)
                     }
-                    .padding(.horizontal, 10).padding(.vertical, 7)
+                    .padding(.horizontal, 8).padding(.vertical, 7)
                     .frame(maxWidth: .infinity)
                     .background {
                         if isActive {
-                            Capsule().fill(PSTheme.accentGradient)
-                                .overlay(Capsule().fill(PSTheme.accentHighlight))
+                            Capsule().fill(PSTheme.selection)
+                                .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 0.75))
                                 .matchedGeometryEffect(id: "segment", in: indicator)
                         }
                     }
-                    .foregroundStyle(isActive ? Color.white : PSTheme.textSecondary)
+                    .foregroundStyle(isActive ? PSTheme.textPrimary : PSTheme.textSecondary)
                     .contentShape(Capsule())
                 }
                 .buttonStyle(PSPressStyle(scale: 0.97))
@@ -276,8 +297,7 @@ struct ModeSegments<Mode: Hashable & Identifiable>: View {
             }
         }
         .padding(3)
-        .background(Color.black.opacity(0.28), in: Capsule())
-        .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+        .background(Color.white.opacity(0.06), in: Capsule())
     }
 }
 
@@ -296,17 +316,9 @@ struct ToolPanelContainer<Content: View>: View {
     @State private var dragOffset: CGFloat = 0
 
     var body: some View {
-        VStack(spacing: 10) {
-            Capsule().fill(Color.white.opacity(0.22)).frame(width: 36, height: 5)
-                .padding(.top, -4)
-                .padding(.bottom, -2)
-            HStack(spacing: 10) {
-                Image(systemName: symbol)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 26, height: 26)
-                    .psAccentFill(RoundedRectangle(cornerRadius: 8, style: .continuous), glow: false)
-                Text(title).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary).tracking(-0.2)
+        VStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Text(title).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
                     .contentTransition(.interpolate)
                 Spacer()
                 if let trailing { trailing }
@@ -314,11 +326,14 @@ struct ToolPanelContainer<Content: View>: View {
                     Haptics.tap()
                     onClose()
                 } label: {
-                    Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold)).foregroundStyle(PSTheme.textSecondary).frame(width: 28, height: 28)
+                    Image(systemName: "chevron.down").font(.system(size: 12, weight: .bold)).foregroundStyle(PSTheme.textSecondary).frame(width: 30, height: 30)
                         .background(Color.white.opacity(0.08), in: Circle())
                 }
                 .buttonStyle(PSPressStyle(scale: 0.9))
                 .accessibilityLabel(L("Close"))
+            }
+            .overlay(alignment: .top) {
+                Capsule().fill(Color.white.opacity(0.18)).frame(width: 34, height: 4).offset(y: -9)
             }
             .contentShape(Rectangle())
             .gesture(
@@ -339,16 +354,19 @@ struct ToolPanelContainer<Content: View>: View {
             content()
         }
         .padding(.horizontal, 14)
-        .padding(.top, 12)
+        .padding(.top, 14)
         .padding(.bottom, 14)
-        .psCard(cornerRadius: 26)
+        .psCard(cornerRadius: PSRadius.panel)
         .offset(y: dragOffset * 0.5)
         .opacity(1 - Double(min(dragOffset, 120)) / 300)
     }
 }
 
-/// Apple-Photos-style ruler dial. Drag to change the value with haptic ticks;
-/// double tap to reset to neutral. The value is shown above the centre mark.
+// MARK: - Dial
+
+/// Photos' ruler dial. Drag to change the value with haptic ticks, double tap
+/// to reset. The value reads above the centre mark and turns yellow as soon
+/// as it leaves neutral.
 struct DialSlider: View {
     @Binding var value: Double
     var range: ClosedRange<Double>
@@ -371,12 +389,12 @@ struct DialSlider: View {
     private var isNeutralValue: Bool { abs(value - neutral) < 0.0001 }
 
     var body: some View {
-        VStack(spacing: 4) {
-            HStack {
-                if let label { Text(label).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary) }
+        VStack(spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                if let label { Text(label.uppercased()).font(PSFont.label(11)).tracking(0.6).foregroundStyle(PSTheme.textSecondary) }
                 Spacer()
                 Text(format(value))
-                    .font(PSFont.mono(13))
+                    .font(PSFont.mono(14).weight(.semibold))
                     .foregroundStyle(isNeutralValue ? PSTheme.textSecondary : PSTheme.accent)
                     .contentTransition(.numericText())
                     .animation(PSMotion.numeric, value: value)
@@ -386,6 +404,7 @@ struct DialSlider: View {
             GeometryReader { proxy in
                 let width = proxy.size.width
                 let centerX = width / 2
+                let markerColor = isNeutralValue ? Color.white : PSTheme.accent
                 Canvas(rendersAsynchronously: true) { context, size in
                     let offset = CGFloat((value - range.lowerBound) / unitValue) * pointsPerUnit
                     let count = Int(units)
@@ -396,34 +415,28 @@ struct DialSlider: View {
                         let x = centerX - offset + CGFloat(index) * pointsPerUnit
                         guard x >= -2, x <= size.width + 2 else { continue }
                         let isMajor = index % 10 == 0
-                        let height: CGFloat = isMajor ? 18 : 10
-                        let isNeutral = index == neutralIndex
-                        if isNeutral {
-                            var path = Path()
-                            path.move(to: CGPoint(x: x, y: size.height / 2 - 10))
-                            path.addLine(to: CGPoint(x: x, y: size.height / 2 + 10))
-                            context.stroke(path, with: .color(PSTheme.accent.opacity(0.9)), lineWidth: 2)
-                            continue
+                        let height: CGFloat = isMajor ? 16 : 9
+                        if index == neutralIndex {
+                            // The neutral point: a dot above the ticks, like Photos.
+                            context.fill(Path(ellipseIn: CGRect(x: x - 2, y: size.height / 2 - 14, width: 4, height: 4)), with: .color(.white.opacity(0.9)))
                         }
                         if isMajor {
-                            major.move(to: CGPoint(x: x, y: size.height / 2 - height / 2))
-                            major.addLine(to: CGPoint(x: x, y: size.height / 2 + height / 2))
+                            major.move(to: CGPoint(x: x, y: size.height / 2 - height / 2 + 3))
+                            major.addLine(to: CGPoint(x: x, y: size.height / 2 + height / 2 + 3))
                         } else {
-                            minor.move(to: CGPoint(x: x, y: size.height / 2 - height / 2))
-                            minor.addLine(to: CGPoint(x: x, y: size.height / 2 + height / 2))
+                            minor.move(to: CGPoint(x: x, y: size.height / 2 - height / 2 + 3))
+                            minor.addLine(to: CGPoint(x: x, y: size.height / 2 + height / 2 + 3))
                         }
                     }
-                    // Ticks fade towards the edges through a mask-like gradient stroke.
                     let fade = GraphicsContext.Shading.linearGradient(
-                        Gradient(colors: [Color.white.opacity(0.05), Color.white.opacity(0.85), Color.white.opacity(0.85), Color.white.opacity(0.05)]),
+                        Gradient(colors: [Color.white.opacity(0.0), Color.white.opacity(0.7), Color.white.opacity(0.7), Color.white.opacity(0.0)]),
                         startPoint: CGPoint(x: 0, y: 0), endPoint: CGPoint(x: size.width, y: 0))
                     context.stroke(minor, with: fade, lineWidth: 1)
-                    context.stroke(major, with: fade, lineWidth: 2)
-                    // Centre marker.
+                    context.stroke(major, with: fade, lineWidth: 1.6)
                     var marker = Path()
-                    marker.move(to: CGPoint(x: centerX, y: 0))
-                    marker.addLine(to: CGPoint(x: centerX, y: size.height))
-                    context.stroke(marker, with: .color(PSTheme.accent), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    marker.move(to: CGPoint(x: centerX, y: 2))
+                    marker.addLine(to: CGPoint(x: centerX, y: size.height - 2))
+                    context.stroke(marker, with: .color(markerColor), style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
                 }
                 .contentShape(Rectangle())
                 .gesture(
@@ -459,7 +472,7 @@ struct DialSlider: View {
                     onEditingChanged?(false)
                 }
             }
-            .frame(height: 36)
+            .frame(height: 34)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label ?? "")
@@ -474,6 +487,8 @@ struct DialSlider: View {
         }
     }
 }
+
+// MARK: - Voice
 
 /// Slim status line above the dock. It only appears when there is something to
 /// say — listening, working, a reply, a question — so an open tool panel sits
@@ -504,9 +519,8 @@ struct VoiceStrip: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             if isIdleHint, let text = statusText {
-                // Nothing is happening: a small centred capsule instead of a full-width card, so the picture keeps the room.
                 HStack(spacing: 7) {
-                    Image(systemName: "mic.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(PSTheme.voice)
+                    MagicGlyph(size: 11, symbol: "waveform")
                     Text(text).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary).lineLimit(1)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 7)
@@ -517,29 +531,34 @@ struct VoiceStrip: View {
                     statusIcon
                         .frame(width: 20)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(text)
-                            .font(PSFont.body(14))
-                            .foregroundStyle(isBusy ? PSTheme.accent : PSTheme.textPrimary)
-                            .lineLimit(2)
-                            .contentTransition(.interpolate)
+                        if voice.isListening || isBusy {
+                            ShimmerText(text, font: PSFont.body(14))
+                        } else {
+                            Text(text)
+                                .font(PSFont.body(14))
+                                .foregroundStyle(PSTheme.textPrimary)
+                                .lineLimit(2)
+                                .contentTransition(.interpolate)
+                        }
                         if replyVisible, !voice.isListening, !isBusy, !transcript.isEmpty {
-                            Text("“\(transcript)”").font(PSFont.caption(11)).foregroundStyle(PSTheme.textSecondary).lineLimit(1)
+                            Text("“\(transcript)”").font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary).lineLimit(1)
                         }
                     }
                     Spacer(minLength: 0)
                     if replyVisible, !voice.isListening, !isBusy, let plan, !transcript.isEmpty {
                         Text(plan.engine.displayName)
-                            .font(PSFont.caption(10)).foregroundStyle(PSTheme.textSecondary)
-                            .padding(.horizontal, 7).padding(.vertical, 3).background(PSTheme.hairline, in: Capsule())
+                            .font(PSFont.label(10)).foregroundStyle(PSTheme.textSecondary)
+                            .padding(.horizontal, 7).padding(.vertical, 3).background(Color.white.opacity(0.08), in: Capsule())
                     }
                 }
-                .padding(.horizontal, 14).padding(.vertical, 10)
-                .psCard(cornerRadius: 20, shadow: false)
-                // While listening the card breathes with the voice: a tinted rim whose strength follows the input level.
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(PSTheme.voice.opacity(voice.isListening ? 0.35 + rimLevel * 0.5 : 0), lineWidth: 1.5)
-                    .animation(PSMotion.interactive, value: rimLevel))
-                .shadow(color: PSTheme.voice.opacity(voice.isListening && effects == .rich ? 0.25 + rimLevel * 0.3 : 0), radius: 14, y: 4)
+                .padding(.horizontal, 14).padding(.vertical, 11)
+                .psCard(cornerRadius: 22, shadow: false)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(PSTheme.intelligenceAngular, lineWidth: 1.2)
+                        .opacity(voice.isListening || isBusy ? 0.5 + rimLevel * 0.5 : 0)
+                        .animation(PSMotion.interactive, value: rimLevel)
+                )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -556,8 +575,8 @@ struct VoiceStrip: View {
         }
     }
 
-    /// The rim and the bars follow the voice, unless the user asked the system
-    /// to stop things moving on their own.
+    /// The rim follows the voice, unless the user asked the system to stop
+    /// things moving on their own.
     private var rimLevel: Double { reducedMotion ? 0.5 : voice.level }
 
     @ViewBuilder
@@ -565,13 +584,13 @@ struct VoiceStrip: View {
         if voice.isListening {
             LevelBars(level: effects == .minimal || reducedMotion ? 0.5 : voice.level)
         } else if isBusy {
-            ProgressView().tint(PSTheme.accent).controlSize(.small)
+            MagicGlyph(size: 15).symbolEffect(.pulse, isActive: !reducedMotion)
         } else if isUnavailable {
             Image(systemName: "mic.slash").foregroundStyle(PSTheme.danger)
         } else if replyVisible, plan != nil {
             Image(systemName: "checkmark.circle.fill").foregroundStyle(PSTheme.success).symbolEffect(.bounce, value: replyVisible)
         } else {
-            Image(systemName: "mic.fill").foregroundStyle(PSTheme.voice)
+            MagicGlyph(size: 15, symbol: "waveform")
         }
     }
 
@@ -605,20 +624,19 @@ struct LevelBars: View {
         HStack(alignment: .center, spacing: 2) {
             ForEach(weights.indices, id: \.self) { index in
                 Capsule()
-                    .fill(PSTheme.voice)
+                    .fill(PSTheme.intelligence[index % PSTheme.intelligence.count])
                     .frame(width: 3, height: 4 + CGFloat(min(1, max(0, level)) * weights[index]) * 14)
             }
         }
         .frame(height: 18)
         .animation(PSMotion.interactive, value: level)
         .accessibilityHidden(true)
-        .accessibilityHidden(true)
     }
 }
 
-/// The voice button that lives at the trailing end of the dock. While
-/// listening, a ring breathes with the input level; the rest of the time it
-/// is a still gradient disc, so nothing animates on an idle screen.
+/// The voice button at the end of the dock: a glass disc with a spectrum
+/// ring. While listening the ring turns and breathes with the voice; idle,
+/// nothing moves.
 struct MicButton: View {
     @Bindable var voice: VoiceController
     var isBusy: Bool
@@ -629,31 +647,22 @@ struct MicButton: View {
 
     var body: some View {
         ZStack {
-            Circle()
-                .stroke(PSTheme.voice.opacity(0.35), lineWidth: 2)
-                .frame(width: 52, height: 52)
-                // Reduce Motion: the ring still says "listening", it just holds
-                // its size instead of breathing.
-                .scaleEffect(voice.isListening ? (reducedMotion ? 1.2 : 1.18 + CGFloat(voice.level) * 0.45) : 1)
-                .opacity(voice.isListening ? 1 : 0)
-                .animation(PSMotion.interactive, value: reducedMotion ? 0 : voice.level)
-                .animation(PSMotion.quick, value: voice.isListening)
-            Circle()
-                .fill(PSTheme.voiceGradient)
-                .frame(width: 52, height: 52)
-                .overlay(Circle().fill(PSTheme.accentHighlight))
-                .shadow(color: PSTheme.voice.opacity(effects == .rich ? (voice.isListening ? 0.7 : 0.35) : 0), radius: voice.isListening ? 16 : 8)
-                .overlay {
-                    Image(systemName: micSymbol)
-                        .font(.system(size: 21, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .contentTransition(.symbolEffect(.replace))
+            ring
+            Image(systemName: micSymbol)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(voice.isListening ? Color.white : PSTheme.textPrimary)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 56, height: 56)
+                .background {
+                    if voice.isListening {
+                        Circle().fill(LinearGradient(colors: PSTheme.intelligence, startPoint: .topLeading, endPoint: .bottomTrailing))
+                    }
                 }
+                .psGlass(interactive: true, shape: AnyShape(Circle()))
                 .scaleEffect(pressing ? 0.9 : 1)
                 .animation(PSMotion.quick, value: pressing)
         }
         .frame(width: 62, height: 62)
-        .background(Circle().fill(Color.black.opacity(0.35)).overlay(Circle().strokeBorder(PSTheme.strokeGradient, lineWidth: 1)))
         .contentShape(Circle())
         .gesture(
             DragGesture(minimumDistance: 0)
@@ -680,6 +689,26 @@ struct MicButton: View {
         .accessibilityAddTraits(.isButton)
     }
 
+    @ViewBuilder
+    private var ring: some View {
+        let active = voice.isListening || isBusy
+        if active && !reducedMotion && effects != .minimal {
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                let angle = Angle.degrees((context.date.timeIntervalSinceReferenceDate * 120).truncatingRemainder(dividingBy: 360))
+                Circle()
+                    .strokeBorder(AngularGradient(colors: PSTheme.intelligence + [PSTheme.intelligence[0]], center: .center, angle: angle), lineWidth: 2.5)
+                    .frame(width: 62, height: 62)
+                    .scaleEffect(1 + CGFloat(voice.isListening ? voice.level : 0.1) * 0.12)
+                    .shadow(color: PSTheme.voice.opacity(0.6), radius: 8)
+            }
+        } else {
+            Circle()
+                .strokeBorder(PSTheme.intelligenceAngular, lineWidth: active ? 2.5 : 1.5)
+                .opacity(active ? 1 : 0.55)
+                .frame(width: 62, height: 62)
+        }
+    }
+
     private var micSymbol: String {
         if isBusy { return "sparkles" }
         switch voice.state {
@@ -701,11 +730,11 @@ struct ClarificationCard: View {
     @State private var images: [UUID: UIImage] = [:]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(request.question)
-                        .font(PSFont.body(14))
+                        .font(PSFont.headline(14))
                         .foregroundStyle(PSTheme.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(L("Tap one, or say its number."))
@@ -713,8 +742,8 @@ struct ClarificationCard: View {
                 }
                 Spacer(minLength: 8)
                 Button { Haptics.tap(); onCancel() } label: {
-                    Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(PSTheme.textSecondary).frame(width: 26, height: 26)
-                        .psGlass(interactive: true, shape: AnyShape(Circle()))
+                    Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(PSTheme.textSecondary).frame(width: 28, height: 28)
+                        .background(Color.white.opacity(0.08), in: Circle())
                 }
                 .buttonStyle(PSPressStyle(scale: 0.9))
                 .accessibilityLabel(L("Cancel"))
@@ -729,8 +758,8 @@ struct ClarificationCard: View {
                             HStack(spacing: 8) {
                                 if let image = images[candidate.id] {
                                     Image(uiImage: image).resizable().scaledToFill()
-                                        .frame(width: 36, height: 36)
-                                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                        .frame(width: 38, height: 38)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                         .overlay(alignment: .bottomTrailing) { numberBadge(index + 1, size: 16).offset(x: 4, y: 4) }
                                         .transition(.opacity)
                                 } else {
@@ -739,13 +768,14 @@ struct ClarificationCard: View {
                                 Text(candidate.spokenDescription).font(PSFont.caption(13)).foregroundStyle(PSTheme.textPrimary)
                             }
                             .padding(.leading, images[candidate.id] == nil ? 10 : 6).padding(.trailing, 12).padding(.vertical, 6)
-                            .psGlass(interactive: true)
+                            .background(Color.white.opacity(0.08), in: Capsule())
                         }
                         .buttonStyle(PSPressStyle())
                     }
                     if request.candidates.count > 1 {
                         Button { Haptics.confirm(); onChooseAll() } label: {
-                            Label(L("All"), systemImage: "checkmark.circle").font(PSFont.caption(13)).foregroundStyle(.white).padding(.horizontal, 10).padding(.vertical, 6)
+                            Label(L("All"), systemImage: "checkmark.circle.fill").font(PSFont.headline(13)).foregroundStyle(PSTheme.onAccent)
+                                .padding(.horizontal, 12).padding(.vertical, 8)
                                 .psAccentFill(Capsule(), glow: false)
                         }
                         .buttonStyle(PSPressStyle())
@@ -754,8 +784,8 @@ struct ClarificationCard: View {
                 .animation(PSMotion.quick, value: images.count)
             }
         }
-        .padding(12)
-        .psGlassPanel(cornerRadius: 22)
+        .padding(14)
+        .psCard(cornerRadius: 24)
         .task(id: request.id) {
             guard let thumbnail else { return }
             images = [:]
@@ -772,7 +802,10 @@ struct ClarificationCard: View {
     }
 }
 
-/// Small chip button used inside panels.
+// MARK: - Chips
+
+/// Small chip button used inside panels. `tint` marks a recommended action:
+/// its glyph takes the colour (the intelligence spectrum for `PSTheme.voice`).
 struct PanelChip: View {
     let title: String
     var symbol: String? = nil
@@ -784,18 +817,23 @@ struct PanelChip: View {
     var body: some View {
         Button { Haptics.tap(); action() } label: {
             HStack(spacing: 6) {
-                if let symbol { Image(systemName: symbol).font(.system(size: 12, weight: .semibold)) }
+                if let symbol {
+                    if tint == PSTheme.voice {
+                        MagicGlyph(size: 12, symbol: symbol)
+                    } else {
+                        Image(systemName: symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(tint ?? (isActive ? PSTheme.accent : PSTheme.textPrimary))
+                    }
+                }
                 Text(title).lineLimit(1)
             }
             .font(PSFont.caption(13)).padding(.horizontal, 12).padding(.vertical, 9)
-            .foregroundStyle(isActive || tint != nil ? Color.white : PSTheme.textPrimary)
-            .psGlass(tint: nil, interactive: true)
-            .psActivePill(Capsule(), isActive: isActive || tint != nil, glow: tint != nil)
-            .overlay(Capsule().strokeBorder(Color.white.opacity(isActive || tint != nil ? 0 : 0.1), lineWidth: 1))
+            .foregroundStyle(PSTheme.textPrimary)
+            .background(Capsule().fill(Color.white.opacity(isActive ? 0 : 0.08)))
+            .psActivePill(Capsule(), isActive: isActive)
         }
         .buttonStyle(PSPressStyle())
         .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.45)
+        .opacity(isEnabled ? 1 : 0.4)
         .animation(PSMotion.quick, value: isActive)
     }
 }
@@ -811,15 +849,20 @@ struct IconChip: View {
 
     var body: some View {
         Button { Haptics.tap(); action() } label: {
-            VStack(spacing: 3) {
-                Image(systemName: symbol).font(.system(size: 16, weight: .semibold)).frame(height: 20)
-                Text(title).font(PSFont.caption(10)).lineLimit(1).minimumScaleFactor(0.8)
+            VStack(spacing: 4) {
+                Group {
+                    if tint == PSTheme.voice {
+                        MagicGlyph(size: 17, symbol: symbol)
+                    } else {
+                        Image(systemName: symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(isActive ? PSTheme.accent : (tint ?? PSTheme.textPrimary))
+                    }
+                }
+                .frame(height: 21)
+                Text(title).font(PSFont.label(10)).lineLimit(1).minimumScaleFactor(0.75).foregroundStyle(isActive ? PSTheme.textPrimary : PSTheme.textSecondary)
             }
-            .foregroundStyle(isActive ? Color.white : (tint ?? PSTheme.textPrimary))
-            .frame(width: 66, height: 48)
-            .background(Color.white.opacity(isActive ? 0 : 0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.white.opacity(isActive ? 0 : 0.08), lineWidth: 1))
-            .psActivePill(RoundedRectangle(cornerRadius: 14, style: .continuous), isActive: isActive, glow: false)
+            .frame(width: 68, height: 52)
+            .background(Color.white.opacity(isActive ? 0 : 0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .psActivePill(RoundedRectangle(cornerRadius: 16, style: .continuous), isActive: isActive)
         }
         .buttonStyle(PSPressStyle())
         .disabled(!isEnabled)
@@ -839,8 +882,10 @@ struct ColorSwatch: View {
         Button { Haptics.tick(); action() } label: {
             Circle().fill(Color(cgColor: color.cgColor))
                 .frame(width: size, height: size)
-                .overlay(Circle().stroke(isSelected ? PSTheme.accent : Color.white.opacity(0.25), lineWidth: isSelected ? 2.5 : 1))
-                .scaleEffect(isSelected ? 1.1 : 1)
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
+                .padding(3)
+                .overlay(Circle().strokeBorder(isSelected ? Color.white : .clear, lineWidth: 2))
+                .scaleEffect(isSelected ? 1.06 : 1)
                 .animation(PSMotion.quick, value: isSelected)
         }
         .buttonStyle(PSPressStyle(scale: 0.88))

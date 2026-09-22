@@ -35,6 +35,9 @@ public struct PDFEditorView: View {
         } bottom: {
             bottomArea
         }
+        .overlay {
+            if let app { EditorIntelligenceGlow(voice: app.voice, isBusy: session.isProcessing) }
+        }
         .overlay { EditorStatusOverlay(session: session) }
         .onAppear { session.configure() }
         .onDisappear { session.teardown() }

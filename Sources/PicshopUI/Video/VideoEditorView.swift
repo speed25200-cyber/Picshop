@@ -44,6 +44,9 @@ public struct VideoEditorView: View {
         } bottom: {
             bottomArea
         }
+        .overlay {
+            if let app { EditorIntelligenceGlow(voice: app.voice, isBusy: session.isProcessing) }
+        }
         .overlay { EditorStatusOverlay(session: session) }
         .task { await session.configure() }
         .onDisappear { session.teardown() }

@@ -1,8 +1,9 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
 
-/// Blocking progress overlay for long operations: a small glass tile in the
-/// centre, the rest of the screen dimmed but still visible.
+/// Blocking progress overlay for long operations: a glass tile in the centre
+/// with a spectrum ring and a shimmering title, the picture still visible
+/// behind a light veil. The screen-edge glow says the rest.
 struct ProgressHUD: View {
     var title: String
     var progress: Double? = nil
@@ -10,30 +11,31 @@ struct ProgressHUD: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.3).ignoresSafeArea()
+            Color.black.opacity(0.22).ignoresSafeArea()
             VStack(spacing: 14) {
                 ZStack {
-                    Circle().stroke(PSTheme.hairline, lineWidth: 4).frame(width: 46, height: 46)
+                    Circle().stroke(Color.white.opacity(0.1), lineWidth: 4).frame(width: 48, height: 48)
                     if let progress {
                         Circle()
                             .trim(from: 0, to: CGFloat(max(0.02, min(1, progress))))
-                            .stroke(PSTheme.accentGradient, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .stroke(AngularGradient(colors: PSTheme.intelligence + [PSTheme.intelligence[0]], center: .center), style: StrokeStyle(lineWidth: 4, lineCap: .round))
                             .rotationEffect(.degrees(-90))
-                            .frame(width: 46, height: 46)
+                            .frame(width: 48, height: 48)
                             .animation(PSMotion.numeric, value: progress)
-                        Text("\(Int(progress * 100))").font(PSFont.mono(12)).foregroundStyle(PSTheme.textPrimary).contentTransition(.numericText())
+                        Text("\(Int(progress * 100))").font(PSFont.mono(13)).foregroundStyle(PSTheme.textPrimary).contentTransition(.numericText())
                     } else {
-                        ProgressView().tint(PSTheme.textPrimary).controlSize(.regular)
+                        MagicGlyph(size: 20).symbolEffect(.pulse)
                     }
                 }
-                Text(title).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary).multilineTextAlignment(.center).lineLimit(2)
+                ShimmerText(title, font: PSFont.headline(15))
+                    .multilineTextAlignment(.center)
                 if let onCancel {
                     Button(L("Cancel"), action: onCancel).font(PSFont.caption(13)).foregroundStyle(PSTheme.textSecondary)
                 }
             }
             .padding(.horizontal, 26)
             .padding(.vertical, 22)
-            .frame(minWidth: 168)
+            .frame(minWidth: 180, maxWidth: 300)
             .psCard(cornerRadius: PSRadius.panel)
         }
         .transition(.opacity.combined(with: .scale(scale: 0.98)))
