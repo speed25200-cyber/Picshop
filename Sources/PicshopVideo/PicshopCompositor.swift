@@ -71,8 +71,23 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
         }
 
         for overlay in instruction.overlays where overlay.span.contains(time) {
-            guard let image = overlayImage(overlay, renderSize: renderSize) else { continue }
-            var alpha = 1.0
+            let placed: CIImage?
+            switch overlay.content {
+            case .video(_, let transform, _):
+                if let source = instruction.overlaySources[overlay.id], let buffer = request.sourceFrame(byTrackID: source.trackID) {
+                    var media = CIImage(cvPixelBuffer: buffer).transformed(by: source.preferredTransform)
+                    media = media.transformed(by: CGAffineTransform(translationX: -media.extent.minX, y: -media.extent.minY))
+                    placed = Self.place(media, transform: transform, key: overlay.chromaKey, canvas: canvas)
+                } else {
+                    placed = nil
+                }
+            case .image(_, let transform):
+                placed = overlayPicture(overlay, url: instruction.overlayImageURLs[overlay.id]).map { Self.place($0, transform: transform, key: overlay.chromaKey, canvas: canvas) }
+            default:
+                placed = overlayImage(overlay, renderSize: renderSize)
+            }
+            guard let image = placed else { continue }
+            var alpha = overlay.opacity ?? 1.0
             if overlay.fadeIn > 0 { alpha = min(alpha, (time - overlay.span.start) / overlay.fadeIn) }
             if overlay.fadeOut > 0 { alpha = min(alpha, (overlay.span.end - time) / overlay.fadeOut) }
             frame = AdjustmentPipeline.blend(image, over: frame, alpha: alpha.clamped(to: 0...1))
@@ -195,6 +210,43 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
         }
     }
 
+    /// Places a picture or a video frame over the canvas: keyed, scaled to its
+    /// share of the frame width, rotated, rounded like a picture-in-picture.
+    static func place(_ media: CIImage, transform: LayerTransform, key: ChromaKey?, canvas: CGRect) -> CIImage {
+        var image = media
+        if let key { image = ColorCube.shared.apply(key, to: image) }
+        let width = max(1, image.extent.width), height = max(1, image.extent.height)
+        if key == nil, transform.scale < 0.98 {
+            // Rounded corners read as a window over the picture.
+            let radius = min(width, height) * 0.06
+            let shape = CIFilter.roundedRectangleGenerator()
+            shape.extent = image.extent
+            shape.radius = Float(radius)
+            shape.color = .white
+            if let mask = shape.outputImage {
+                image = image.applyingFilter("CIBlendWithAlphaMask", parameters: [kCIInputBackgroundImageKey: CIImage.empty(), kCIInputMaskImageKey: mask])
+            }
+        }
+        let scale = canvas.width * CGFloat(max(0.05, transform.scale)) / width
+        var affine = CGAffineTransform(translationX: canvas.minX + CGFloat(transform.center.x) * canvas.width, y: canvas.minY + CGFloat(1 - transform.center.y) * canvas.height)
+        affine = affine.rotated(by: CGFloat(-transform.rotation * .pi / 180))
+        affine = affine.scaledBy(x: scale * (transform.isFlippedHorizontally ? -1 : 1), y: scale * (transform.isFlippedVertically ? -1 : 1))
+        affine = affine.translatedBy(x: -image.extent.midX, y: -image.extent.midY)
+        return image.transformed(by: affine).cropped(to: canvas)
+    }
+
+    private var pictureCache: [UUID: CIImage] = [:]
+
+    /// A picture overlay's pixels, decoded once.
+    private func overlayPicture(_ overlay: TimelineOverlay, url: URL?) -> CIImage? {
+        if let cached = pictureCache[overlay.id] { return cached }
+        guard let url, let cg = try? ImageSupport.loadCGImage(at: url, maxPixelSize: 2048) else { return nil }
+        let image = CIImage(cgImage: cg)
+        if pictureCache.count > 12 { pictureCache.removeAll() }
+        pictureCache[overlay.id] = image
+        return image
+    }
+
     static func easeInOut(_ t: Double) -> Double {
         t < 0.5 ? 2 * t * t : 1 - pow(-2 * t + 2, 2) / 2
     }
@@ -223,7 +275,7 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
                 image = raster.transformed(by: CGAffineTransform(translationX: center.x * renderSize.width - raster.extent.midX, y: (1 - center.y) * renderSize.height - raster.extent.midY))
             }
             #endif
-        case .image:
+        case .image, .video:
             image = nil
         }
         if overlayCache.count > 24 { overlayCache.removeAll() }

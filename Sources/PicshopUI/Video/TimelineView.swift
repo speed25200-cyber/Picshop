@@ -146,14 +146,21 @@ struct TimelineView: View {
         }
         ForEach(session.timeline.overlays) { overlay in
             let x = width / 2 + CGFloat(overlay.span.start) * pixelsPerSecond
+            let isVideo = overlay.mediaAsset?.kind == .video
             HStack(spacing: 4) {
-                Image(systemName: "textformat").font(.system(size: 9, weight: .bold))
-                Text(overlay.textElement?.text ?? L("Overlay")).font(PSFont.caption(10)).lineLimit(1)
+                Image(systemName: overlay.isMedia ? (isVideo ? "film" : "photo") : "textformat").font(.system(size: 9, weight: .bold))
+                Text(overlay.textElement?.text ?? (overlay.chromaKey != nil ? L("Green screen") : (isVideo ? L("Video") : L("Photo")))).font(PSFont.caption(10)).lineLimit(1)
             }
             .foregroundStyle(.black)
             .padding(.horizontal, 6).frame(height: 18)
             .frame(width: max(30, CGFloat(overlay.span.duration) * pixelsPerSecond), alignment: .leading)
-            .background(PSTheme.warning, in: Capsule())
+            .background(overlay.isMedia ? Color(red: 0.45, green: 0.78, blue: 1.0) : PSTheme.warning, in: Capsule())
+            .onTapGesture {
+                guard overlay.isMedia else { return }
+                Haptics.tick()
+                session.selectedOverlayID = overlay.id
+                session.activeTool = .overlay
+            }
             .offset(x: x, y: laneTop + CGFloat(captionLane) * TimelineView.laneHeight)
         }
         // One lane per sound track, stacked like an NLE: music, voice-over, effects.

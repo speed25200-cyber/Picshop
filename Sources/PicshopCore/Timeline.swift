@@ -219,6 +219,9 @@ public struct TimelineOverlay: Hashable, Codable, Sendable, Identifiable {
         case text(TextElement)
         case image(MediaAsset, transform: LayerTransform)
         case shape(ShapeElement, center: PSPoint)
+        /// A second video over the main one (picture in picture, B-roll, green screen).
+        /// `sourceStart` is where in the file the overlay's span begins.
+        case video(MediaAsset, transform: LayerTransform, sourceStart: Double)
     }
 
     public var id: UUID
@@ -226,6 +229,12 @@ public struct TimelineOverlay: Hashable, Codable, Sendable, Identifiable {
     public var span: TimeSpan
     public var fadeIn: Double
     public var fadeOut: Double
+    /// Keys out a background colour (green screen) on video and photo overlays.
+    public var chromaKey: ChromaKey?
+    /// 0…1, nil means opaque.
+    public var opacity: Double?
+    /// The overlay's own sound level (video overlays), nil means muted.
+    public var volume: Double?
 
     public init(id: UUID = UUID(), content: Content, span: TimeSpan, fadeIn: Double = 0.25, fadeOut: Double = 0.25) {
         self.id = id
@@ -238,6 +247,33 @@ public struct TimelineOverlay: Hashable, Codable, Sendable, Identifiable {
     public var textElement: TextElement? {
         if case .text(let element) = content { return element }
         return nil
+    }
+
+    /// Placement of a picture or video overlay.
+    public var transform: LayerTransform? {
+        get {
+            switch content {
+            case .image(_, let transform), .video(_, let transform, _): return transform
+            default: return nil
+            }
+        }
+        set {
+            guard let newValue else { return }
+            switch content {
+            case .image(let asset, _): content = .image(asset, transform: newValue)
+            case .video(let asset, _, let start): content = .video(asset, transform: newValue, sourceStart: start)
+            default: break
+            }
+        }
+    }
+
+    public var isMedia: Bool { transform != nil }
+
+    public var mediaAsset: MediaAsset? {
+        switch content {
+        case .image(let asset, _), .video(let asset, _, _): return asset
+        default: return nil
+        }
     }
 }
 

@@ -11,6 +11,21 @@ UI = ROOT / "Sources/PicshopUI"
 OUT = UI / "Resources/Localizable.xcstrings"
 
 FR = {
+    "Add video or photo": "Ajouter une vidéo ou une photo",
+    "Blue screen": "Fond bleu",
+    "Bottom left": "En bas à gauche",
+    "Bottom right": "En bas à droite",
+    "Centre": "Centre",
+    "Drag on the picture to move it, pinch to resize.": "Faites glisser sur l'image pour déplacer, pincez pour redimensionner.",
+    "Full frame": "Plein cadre",
+    "Green screen": "Fond vert",
+    "Lay a second video or a photo over yours: picture in picture, B-roll, green screen.": "Superposez une seconde vidéo ou une photo : incrustation, plans de coupe, fond vert.",
+    "Layer %d": "Calque %d",
+    "Overlays": "Incrustations",
+    "Sound off": "Son coupé",
+    "Sound on": "Son activé",
+    "Top left": "En haut à gauche",
+    "Top right": "En haut à droite",
     "Photo, magically.": "La photo, par magie.",
     "Erase anything, cut out the subject, relight, put the title behind a person, grade like a colourist. One tap or one sentence.": "Effacez n'importe quoi, détourez le sujet, rééclairez, placez le titre derrière une personne, étalonnez comme un pro. Un geste ou une phrase.",
     "Video, like a pro.": "La vidéo, comme un pro.",

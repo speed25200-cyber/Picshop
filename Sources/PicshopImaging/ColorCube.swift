@@ -62,6 +62,12 @@ public final class ColorCube: @unchecked Sendable {
         return apply(dimension: entry.dimension, data: entry.data, to: image)
     }
 
+    /// Green-screen key: the cube writes alpha.
+    public func apply(_ key: ChromaKey, to image: CIImage) -> CIImage {
+        let entry = cube(for: key.hashValue) { (32, key.cube(dimension: 32)) }
+        return apply(dimension: entry.dimension, data: entry.data, to: image)
+    }
+
     public func apply(_ lut: CubeLUT, intensity: Double = 1, to image: CIImage) -> CIImage {
         let entry = cube(for: lut.hashValue) { (lut.dimension, lut.data) }
         let graded = apply(dimension: entry.dimension, data: entry.data, to: image)

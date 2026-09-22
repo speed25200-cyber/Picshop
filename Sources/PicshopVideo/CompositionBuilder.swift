@@ -28,6 +28,12 @@ public struct ClipRenderParameters: @unchecked Sendable {
     public var colorGrade: ColorGrade? = nil
 }
 
+/// Where a video overlay's frames come from in the composition.
+public struct OverlaySource: @unchecked Sendable {
+    public var trackID: CMPersistentTrackID
+    public var preferredTransform: CGAffineTransform
+}
+
 public struct TransitionSegment: Sendable {
     public var kind: TransitionKind
     public var fromTrackID: CMPersistentTrackID
@@ -47,21 +53,33 @@ public final class PicshopCompositionInstruction: NSObject, AVVideoCompositionIn
     public let transition: TransitionSegment?
     public let overlays: [TimelineOverlay]
     public let captions: CaptionTrack?
+    /// Video overlays' tracks, by overlay id.
+    public let overlaySources: [UUID: OverlaySource]
+    /// Files of picture overlays, by overlay id.
+    public let overlayImageURLs: [UUID: URL]
     public let backgroundColor: PSColor
     public let renderSize: CGSize
 
     init(timeRange: CMTimeRange, primary: ClipRenderParameters, secondary: ClipRenderParameters?, transition: TransitionSegment?, overlays: [TimelineOverlay],
-         captions: CaptionTrack? = nil, backgroundColor: PSColor, renderSize: CGSize) {
+         captions: CaptionTrack? = nil, overlaySources: [UUID: OverlaySource] = [:], overlayImageURLs: [UUID: URL] = [:], backgroundColor: PSColor, renderSize: CGSize) {
         self.timeRange = timeRange
         self.primary = primary
         self.secondary = secondary
         self.transition = transition
         self.overlays = overlays
         self.captions = captions
+        self.overlaySources = overlaySources
+        self.overlayImageURLs = overlayImageURLs
         self.backgroundColor = backgroundColor
         self.renderSize = renderSize
         var ids: [NSValue] = [NSNumber(value: primary.trackID)]
         if let secondary { ids.append(NSNumber(value: secondary.trackID)) }
+        // Only the overlays that overlap this instruction need decoding.
+        let end = CMTimeGetSeconds(CMTimeAdd(timeRange.start, timeRange.duration))
+        let start = CMTimeGetSeconds(timeRange.start)
+        for overlay in overlays where overlay.span.start < end && overlay.span.end > start {
+            if let source = overlaySources[overlay.id] { ids.append(NSNumber(value: source.trackID)) }
+        }
         requiredSourceTrackIDs = ids
         super.init()
     }
@@ -217,6 +235,36 @@ public struct CompositionBuilder: Sendable {
             audioParameters.append(mix)
         }
 
+        // Overlays: each video on its own track above the storyline (with its sound
+        // when asked), each picture resolved to its file for the compositor.
+        var overlaySources: [UUID: OverlaySource] = [:]
+        var overlayImageURLs: [UUID: URL] = [:]
+        for overlay in timeline.overlays {
+            switch overlay.content {
+            case .video(let media, _, let sourceStart):
+                let asset = AVURLAsset(url: store.url(for: media.relativePath, in: projectID), options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
+                guard let source = try await asset.loadTracks(withMediaType: .video).first,
+                      let track = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else { continue }
+                let length = try await asset.load(.duration).seconds
+                let visible = min(overlay.span.duration, max(0, length - sourceStart), max(0, timeline.duration - overlay.span.start))
+                guard visible > 0.05 else { continue }
+                let range = VideoTime.range(TimeSpan(start: sourceStart, duration: visible))
+                try track.insertTimeRange(range, of: source, at: VideoTime.cm(overlay.span.start))
+                overlaySources[overlay.id] = OverlaySource(trackID: track.trackID, preferredTransform: try await source.load(.preferredTransform))
+                if let volume = overlay.volume, volume > 0, let sound = try await asset.loadTracks(withMediaType: .audio).first,
+                   let audioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
+                    try audioTrack.insertTimeRange(range, of: sound, at: VideoTime.cm(overlay.span.start))
+                    let mix = AVMutableAudioMixInputParameters(track: audioTrack)
+                    mix.setVolume(Float(volume), at: VideoTime.cm(overlay.span.start))
+                    audioParameters.append(mix)
+                }
+            case .image(let media, _):
+                overlayImageURLs[overlay.id] = store.url(for: media.relativePath, in: projectID)
+            default:
+                break
+            }
+        }
+
         // Instructions.
         var instructions: [PicshopCompositionInstruction] = []
         var cursor = 0.0
@@ -231,13 +279,15 @@ public struct CompositionBuilder: Sendable {
             let soloEnd = nextTransition.map { end - $0.1 } ?? end
             if soloEnd > cursor + 0.0001 {
                 instructions.append(PicshopCompositionInstruction(timeRange: VideoTime.range(TimeSpan(start: cursor, end: soloEnd)), primary: parameters[index], secondary: nil,
-                                                                  transition: nil, overlays: timeline.overlays, captions: timeline.captions, backgroundColor: timeline.backgroundColor, renderSize: renderSize))
+                                                                  transition: nil, overlays: timeline.overlays, captions: timeline.captions, overlaySources: overlaySources, overlayImageURLs: overlayImageURLs,
+                                                                  backgroundColor: timeline.backgroundColor, renderSize: renderSize))
                 cursor = soloEnd
             }
             if let (transition, overlap) = nextTransition {
                 let segment = TransitionSegment(kind: transition.kind, fromTrackID: parameters[index].trackID, toTrackID: parameters[index + 1].trackID)
                 instructions.append(PicshopCompositionInstruction(timeRange: VideoTime.range(TimeSpan(start: cursor, duration: overlap)), primary: parameters[index], secondary: parameters[index + 1],
-                                                                  transition: segment, overlays: timeline.overlays, captions: timeline.captions, backgroundColor: timeline.backgroundColor, renderSize: renderSize))
+                                                                  transition: segment, overlays: timeline.overlays, captions: timeline.captions, overlaySources: overlaySources, overlayImageURLs: overlayImageURLs,
+                                                                  backgroundColor: timeline.backgroundColor, renderSize: renderSize))
                 cursor += overlap
             }
         }

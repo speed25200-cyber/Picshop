@@ -13,11 +13,12 @@ import PicshopSpeech
 @Observable
 public final class VideoEditorSession {
     public enum Tool: String, CaseIterable, Identifiable {
-        case magic, cut, speed, audio, looks, adjust, color, text, transitions, frame
+        case magic, cut, speed, audio, looks, adjust, color, text, overlay, transitions, frame
         public var id: String { rawValue }
         var title: String {
             switch self {
             case .magic: return L("Magic")
+            case .overlay: return L("Overlays")
             case .color: return L("Colour")
             case .cut: return L("Cut")
             case .speed: return L("Speed")
@@ -32,6 +33,7 @@ public final class VideoEditorSession {
         var symbol: String {
             switch self {
             case .magic: return "sparkles"
+            case .overlay: return "rectangle.on.rectangle"
             case .color: return "paintpalette"
             case .cut: return "scissors"
             case .speed: return "gauge.with.dots.needle.67percent"
@@ -70,6 +72,8 @@ public final class VideoEditorSession {
     public var showsExport = false
     /// A command to run as soon as the editor is ready (Magic shortcuts on Home).
     public var pendingCommand: String?
+    /// The picture or video overlay being arranged.
+    public var selectedOverlayID: UUID?
     public var showsHelp = false
     public var showsMusicPicker = false
     /// Where the next imported sound goes: a timeline second (nil = the playhead)

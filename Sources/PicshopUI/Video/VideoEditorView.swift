@@ -185,6 +185,9 @@ struct PlayerPreview: View {
                     }
                 }
                 .allowsHitTesting(false)
+                if session.activeTool == .overlay {
+                    OverlayArrangeLayer(session: session, frame: frame)
+                }
                 // The explicitly selected clip only: resolving the clip under the
                 // playhead here would re-evaluate the preview on every tick.
                 if let id = session.selectedClipID, let clip = session.timeline.clips.first(where: { $0.id == id }), let label = clip.processedLabel {
@@ -441,7 +444,7 @@ extension VideoEditorSession.Tool {
             ToolGroup(id: "cut", title: L("Edit"), symbol: "scissors", tools: [.cut, .speed, .transitions, .frame]),
             ToolGroup(id: "color", title: L("Colour"), symbol: "camera.filters", tools: [.adjust, .color, .looks]),
             ToolGroup(id: "audio", title: L("Audio"), symbol: "speaker.wave.2", tools: [.audio]),
-            ToolGroup(id: "text", title: L("Text"), symbol: "textformat", tools: [.text]),
+            ToolGroup(id: "layers", title: L("Layers"), symbol: "square.3.layers.3d", tools: [.text, .overlay]),
         ]
     }
 }

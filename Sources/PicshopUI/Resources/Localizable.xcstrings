@@ -209,6 +209,22 @@
         }
       }
     },
+    "Add video or photo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add video or photo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter une vidéo ou une photo"
+          }
+        }
+      }
+    },
     "Adjust": {
       "localizations": {
         "en": {
@@ -625,6 +641,22 @@
         }
       }
     },
+    "Blue screen": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blue screen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fond bleu"
+          }
+        }
+      }
+    },
     "Blur": {
       "localizations": {
         "en": {
@@ -701,6 +733,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bas"
+          }
+        }
+      }
+    },
+    "Bottom left": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottom left"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En bas à gauche"
+          }
+        }
+      }
+    },
+    "Bottom right": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottom right"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En bas à droite"
           }
         }
       }
@@ -813,6 +877,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Des sous-titres tirés de la voix, les blancs coupés, des coupes en rythme, une vidéo verticale qui vous suit, une voix nette, un film créé à partir de vos clips."
+          }
+        }
+      }
+    },
+    "Centre": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Centre"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Centre"
           }
         }
       }
@@ -1501,6 +1581,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Télécharger les grands modèles automatiquement"
+          }
+        }
+      }
+    },
+    "Drag on the picture to move it, pinch to resize.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag on the picture to move it, pinch to resize."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faites glisser sur l'image pour déplacer, pincez pour redimensionner."
           }
         }
       }
@@ -2241,6 +2337,22 @@
         }
       }
     },
+    "Full frame": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full frame"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plein cadre"
+          }
+        }
+      }
+    },
     "Full quality previews at the display's refresh rate.": {
       "localizations": {
         "en": {
@@ -2429,6 +2541,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dégradé"
+          }
+        }
+      }
+    },
+    "Green screen": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Green screen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fond vert"
           }
         }
       }
@@ -2925,6 +3053,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dernier style"
+          }
+        }
+      }
+    },
+    "Lay a second video or a photo over yours: picture in picture, B-roll, green screen.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lay a second video or a photo over yours: picture in picture, B-roll, green screen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Superposez une seconde vidéo ou une photo : incrustation, plans de coupe, fond vert."
+          }
+        }
+      }
+    },
+    "Layer %d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Layer %d"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calque %d"
           }
         }
       }
@@ -3921,18 +4081,18 @@
         }
       }
     },
-    "Overlay": {
+    "Overlays": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Overlay"
+            "value": "Overlays"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Élément"
+            "value": "Incrustations"
           }
         }
       }
@@ -5457,6 +5617,22 @@
         }
       }
     },
+    "Size": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Size"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taille"
+          }
+        }
+      }
+    },
     "Slide Left": {
       "localizations": {
         "en": {
@@ -5581,6 +5757,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Un problème est survenu"
+          }
+        }
+      }
+    },
+    "Sound off": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sound off"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Son coupé"
+          }
+        }
+      }
+    },
+    "Sound on": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sound on"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Son activé"
           }
         }
       }
@@ -6317,6 +6525,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Haut"
+          }
+        }
+      }
+    },
+    "Top left": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Top left"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En haut à gauche"
+          }
+        }
+      }
+    },
+    "Top right": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Top right"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En haut à droite"
           }
         }
       }

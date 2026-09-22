@@ -430,3 +430,40 @@ final class ColorGradingTests: XCTestCase {
         XCTAssertNil(stack.resolvedColorMixer)
     }
 }
+
+final class ChromaKeyTests: XCTestCase {
+    func testGreenGoesTransparentSkinStays() {
+        let key = ChromaKey.green
+        XCTAssertLessThan(key.key((0.1, 0.8, 0.2)).a, 0.05, "studio green is keyed out")
+        XCTAssertGreaterThan(key.key((0.85, 0.6, 0.5)).a, 0.99, "skin stays")
+        XCTAssertGreaterThan(key.key((0.5, 0.5, 0.5)).a, 0.99, "greys stay")
+        XCTAssertGreaterThan(key.key((0.05, 0.08, 0.05)).a, 0.95, "near-black stays")
+        XCTAssertGreaterThan(key.key((0.1, 0.3, 0.9)).a, 0.99, "blue stays with a green key")
+    }
+
+    func testSpillIsReduced() {
+        let key = ChromaKey(spill: 1)
+        let edge = key.key((0.55, 0.7, 0.45))
+        XCTAssertLessThan(edge.g, 0.7)
+        XCTAssertEqual(ChromaKey(spill: 0).key((0.55, 0.7, 0.45)).g, 0.7, accuracy: 1e-9)
+    }
+
+    func testCubeIsPremultiplied() {
+        let cube = ChromaKey.green.cube(dimension: 3)
+        XCTAssertEqual(cube.count, 3 * 3 * 3 * 4)
+        // (r=0, g=2, b=0) is pure green: fully transparent, so all channels are zero.
+        let index = (0 * 9 + 2 * 3 + 0) * 4
+        XCTAssertEqual(cube[index + 3], 0, accuracy: 0.01)
+        XCTAssertEqual(cube[index + 1], 0, accuracy: 0.01)
+    }
+
+    func testOverlayTransformAccess() {
+        let asset = MediaAsset(kind: .video, relativePath: "media/b.mov", pixelSize: PSSize(width: 1920, height: 1080), duration: 5)
+        var overlay = TimelineOverlay(content: .video(asset, transform: LayerTransform(center: PSPoint(x: 0.7, y: 0.3), scale: 0.4), sourceStart: 1), span: TimeSpan(start: 2, duration: 3))
+        XCTAssertTrue(overlay.isMedia)
+        overlay.transform?.scale = 0.6
+        XCTAssertEqual(overlay.transform?.scale, 0.6)
+        XCTAssertEqual(overlay.mediaAsset, asset)
+        if case .video(_, _, let start) = overlay.content { XCTAssertEqual(start, 1) } else { XCTFail() }
+    }
+}
