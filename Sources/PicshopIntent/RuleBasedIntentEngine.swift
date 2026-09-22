@@ -38,7 +38,8 @@ public struct RuleBasedIntentEngine: IntentEngine {
         }
 
         var intents: [EditIntent] = []
-        for segment in UtteranceSegmenter.segments(of: normalized.text) {
+        let clauses = UtteranceSegmenter.clauses(of: utterance).map { NormalizedUtterance($0).text }.filter { !$0.isEmpty }
+        for segment in clauses.flatMap({ UtteranceSegmenter.segments(of: $0) }) {
             let piece = NormalizedUtterance(segment)
             let parsed = parseSegment(piece, original: utterance, context: context)
             intents.append(contentsOf: parsed)

@@ -135,6 +135,28 @@ public enum UtteranceSegmenter {
 
     static let separators: [String] = [" puis ", " ensuite ", " apres ca ", " apres ", " then ", " and then ", " et aussi ", " and also ", " mais ", " but ", " et ", " and ", " , ", " ; "]
 
+    /// Clauses of the raw utterance split at commas and semicolons ("lisse la
+    /// peau, éclaircis les yeux"), except inside quotes and in decimal numbers.
+    public static func clauses(of utterance: String) -> [String] {
+        var clauses: [String] = []
+        var current = ""
+        var quoted = false
+        let characters = Array(utterance)
+        for (index, character) in characters.enumerated() {
+            if "«»\"“”".contains(character) { quoted.toggle() }
+            let isBreak = character == ";" || (character == "," && !(index > 0 && characters[index - 1].isNumber && index + 1 < characters.count && characters[index + 1].isNumber))
+            if isBreak, !quoted {
+                clauses.append(current)
+                current = ""
+            } else {
+                current.append(character)
+            }
+        }
+        clauses.append(current)
+        let kept = clauses.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        return kept.isEmpty ? [utterance] : kept
+    }
+
     public static func segments(of normalizedText: String) -> [String] {
         var text = " " + normalizedText + " "
         var placeholders: [String: String] = [:]

@@ -74,3 +74,14 @@ final class PortraitRetouchTests: XCTestCase {
         XCTAssertLessThan(adjustments[.saturation], 0)
     }
 }
+
+final class ClauseSplittingTests: XCTestCase {
+    func testCommasSeparateCommandsButNotQuotesOrDecimals() {
+        XCTAssertEqual(UtteranceSegmenter.clauses(of: "lisse la peau, éclaircis les yeux"), ["lisse la peau", "éclaircis les yeux"])
+        XCTAssertEqual(UtteranceSegmenter.clauses(of: "ajoute le texte « Paris, je t'aime »").count, 1)
+        XCTAssertEqual(UtteranceSegmenter.clauses(of: "coupe à 10,5 secondes").count, 1)
+        let engine = RuleBasedIntentEngine()
+        let plan = engine.parse("lisse la peau, éclaircis les yeux", context: .photo)
+        XCTAssertEqual(plan.intents.map { $0.target?.label }, ["skin", "eyes"])
+    }
+}
