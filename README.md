@@ -1,33 +1,38 @@
 # PicShop
 
-**Voice-first, on-device photo & video editing for iPhone 17 Pro.**
-Say *« efface le chien à gauche »* or *"make it warmer and crop for Instagram"* — PicShop
-understands French and English, plans the edit with an on-device language model, finds the
-pixels with Apple Vision, and renders the result with Core Image and Metal. Nothing leaves the phone.
+**Photo and video, magically — on iPhone.**
+A Photoshop-grade photo editor and a Vegas-grade video editor in one app, designed like Apple's own:
+system Liquid Glass, one edit-yellow accent, and an iridescent glow that appears only when the AI works.
+Tap a Magic tool, type what you want, or just say it — *« efface le chien »*, *"add captions"*,
+*« coupe sur le rythme »*. Everything runs on the device.
 
 <p align="center">
   <img src="App/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="120" alt="PicShop icon">
 </p>
 
-## What it does
+## Magic
 
 | Photo | Video |
 |---|---|
-| Object removal by voice, tap or brush (PatchMatch built in, LaMa optional) | Object removal across a clip (Vision tracking + per-frame inpainting) |
-| Background removal, replacement (colour/gradient), portrait blur | Split, trim, delete ranges, reorder, duplicate, freeze frame, extract frame |
-| 19 non-destructive adjustments, 20 looks, tone curves, selective edits | Speed (slow-mo / time-lapse), reverse, stabilisation |
-| Crop/aspect presets, rotate, straighten (auto horizon), flip, perspective | Per-clip looks & adjustments, A/B-roll transitions (dissolve, fade, slide, wipe, zoom, blur) |
-| Text & shape layers, blend modes, opacity, masks | Text overlays with fades, music with ducking and fades, per-clip audio |
-| Upscale (Lanczos, Real-ESRGAN optional), denoise, relight | Aspect presets (9:16, 1:1, 16:9 …), HEVC export |
-| **Precise**: magic wand, lasso, pixel brush, clone stamp, pixel grid loupe | |
-| **Generative fill**: "remplace le ciel par un coucher de soleil", recolor "make the car red" | |
+| Erase people and objects by tap, brush or voice (LaMa + PatchMatch) | **Auto captions** from the voice, word-timed, five styles (karaoke, reveal…) |
+| **Text behind the subject** (the Lock Screen depth effect) | **Jump cuts**: every pause removed, a breath kept |
+| Cut out, replace or blur the background | **Cuts on the beat**: tempo and beats tracked, cuts moved onto them |
+| **Match colours** from any reference picture (Lab transfer as a 3D LUT) | **Smart reframe** to 9:16 / 1:1 following faces, people or the salient subject |
+| **Best looks** ranked by Vision's aesthetics model | **Clean voice**: Apple's sound isolation, offline |
+| Generative fill (Stable Diffusion), relight, upscale (Real-ESRGAN), denoise | **Magic Movie**: clips + photos + a song → an edit cut on the beat, Ken Burns on stills |
+| A prompt field and voice for anything else, FR/EN | **Colour match** across clips, Ken Burns moves, stabilisation, object removal across a clip |
 
-| PDF |
-|---|
-| Reorder, rotate, delete, duplicate, insert blank pages, merge documents, page numbers |
-| Draw, highlight / underline / strike / redact by voice (« surligne « total » partout »), text, photos, signature |
-| Search, extract a page as a photo (then edit it), export a standard PDF with real annotations |
+## Pro
 
+| Photo | Video |
+|---|---|
+| Photos-style adjustment dials (19 parameters), tone curves, 20 looks | Multi-lane timeline: centred playhead, pinch zoom, trim handles, captions lane, beat markers |
+| **HSL mixer** (8 bands) and **three-way colour wheels**, baked into one GPU LUT | Per-clip adjustments, looks, **HSL mixer and colour wheels** |
+| Layers: text, shapes, blend modes, opacity, masks | Several sound tracks with fades, ducking and a mixer |
+| Magic wand, lasso, pixel brush, clone stamp, pixel grid | Split, trim, speed, reverse, freeze frame, transitions, text overlays |
+| Crop with ratio presets, straighten, perspective | HEVC export in 9:16, 1:1, 16:9 … |
+
+PDF editing (mark-up, signature, word replacement even on scans) comes along.
 Everything is undoable, saved as a project package, and exportable to Photos.
 
 ## The voice pipeline
@@ -84,12 +89,14 @@ swift test                    # ~115 tests, ~1 s
 ```
 App/                 iOS app target (entry point, Info.plist, assets, optional MLX engine)
 Sources/PicshopCore      documents · layers · edit stack · undo history · timeline · intents · project store
+  Magic/                 audio analysis (silences, beats) · captions · motion & smart reframe · Magic Movie planner ·
+                         beat sync · colour transfer & .cube LUTs · HSL mixer & three-way grading
 Sources/PicshopIntent    FR/EN grammar · LLM schema & normaliser · Foundation Models engine · router · executors
 Sources/PicshopImaging   Core Image graph · Vision grounding · masks · PatchMatch & Core ML inpainting · export
 Sources/PicshopVideo     AVComposition builder · custom compositor · transcoder · AI video services · export
 Sources/PicshopSpeech    SpeechAnalyzer / SFSpeechRecognizer voice controller · spoken replies
 Sources/PicshopPDF       PDFKit composer (real annotations) · search · signature · page extraction · merge
-Sources/PicshopUI        Liquid Glass design system · library · photo & video editors · voice orb · settings
+Sources/PicshopUI        Liquid Glass design system · intelligence glow · Home & Magic Movie · photo & video editors · settings
 Tests/                   XCTest suites (core, intent, imaging)
 Scripts/                 bootstrap, string catalogue, icon, model conversion & packaging, syntax gate
 docs/                    ARCHITECTURE · VOICE_COMMANDS · MODELS

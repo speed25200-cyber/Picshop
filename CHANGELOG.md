@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.0.0 — PicShop, reimagined
+
+- New visual language: system Liquid Glass, Photos' edit yellow for values, an intelligence spectrum reserved for the AI,
+  and a glow around the screen while PicShop listens or works.
+- Home: backdrop from your latest work, big Photo and Video tiles, a Magic row (Magic Movie, auto captions, jump cuts,
+  vertical video, erase people, cut out, enhance, portrait blur) that opens the editor already doing the thing.
+- Magic Movie: clips, photos and a song become an edit cut on the beat.
+- Video magic: auto captions (five styles), jump cuts, cuts on the beat, smart reframe following the subject, voice
+  isolation, colour match across clips, Ken Burns moves; captions lane and beat markers on the timeline.
+- Photo magic: text behind the subject, colours from a reference picture, best looks ranked by Vision's aesthetics model,
+  a Magic tab with a prompt field.
+- Pro colour for photo and video: eight-band HSL mixer and three-way colour wheels, on the GPU.
+- Photos-style adjustment dials; editors rebuilt on the new chrome; new onboarding.
+
 ## Unreleased — polish loop
 
 - Video: several sound tracks, like the lanes of a real NLE. A second sound (music, voice-over, sound effect) joins the existing ones instead of replacing them; each track has its own lane on the timeline with its fades drawn as ramps, its own row in the Audio mixer (volume, mute, move to playhead, remove), and is addressable by voice or prompt: "ajoute un deuxième son à 10 secondes", "baisse la deuxième piste", "mets la musique à 30 %", "coupe la musique" (mute, not remove), "fais un fondu de sortie de 2 secondes", "move the last track to 12 seconds", "supprime la dernière piste", "remplace la musique". Tracks can be muted without losing their level; muting the music no longer touches the clip's own sound.

@@ -139,6 +139,42 @@ AI operations that change pixels over time render a new file through `VideoTrans
 
 The rendered file replaces the clip's `renderAsset`; the original stays in the package for undo.
 
+## Magic
+
+The automatic tools are split the same way as the rest of the app: the algorithms are pure Swift in
+`PicshopCore/Magic` (tested on Linux), the Apple back ends only decode, look and listen.
+
+- **Audio analysis** (`AudioAnalysis.swift`): short-term loudness; `SilenceDetector` places its threshold between the
+  recording's noise floor (10th percentile) and speech level (95th), so jump cuts adapt to each file and keep 120 ms of
+  breath; a radix-2 FFT feeds `BeatTracker` — spectral-flux onsets, tempo by autocorrelation weighted with a
+  log-Gaussian prior around 120 BPM, beats by dynamic programming (Ellis 2007), downbeat phase by onset energy.
+- **Captions** (`Captions.swift`): word-timed cues broken at sentence ends, pauses, the style's line length and on-screen
+  time. The video module transcribes the timeline's own mixed sound (`AudioDecoder.timelineSound`, so trims, speed and
+  fades are already applied) with `SpeechAnalyzer` + `SpeechTranscriber` and the audio-time-range attribute, falling back to
+  `SFSpeechRecognizer` segments. `CaptionRasterizer` draws each cue per spoken word; the compositor caches it.
+- **Motion** (`Motion.swift`): a clip's framing is keyframed focus + zoom (geometric zoom easing).
+  `SmartReframe` turns per-frame subject positions (`SubjectFinder`: faces, then people, then attention saliency) into a
+  camera-operator path — dead zone, zero-phase smoothing, speed limit, Ramer–Douglas–Peucker simplification. Ken Burns is
+  the same description. The compositor crops the window of the source the virtual camera sees and scales it to fill.
+- **Magic Movie** (`MagicMovie.swift`): shot boundaries follow a beat pattern per pace (or fixed lengths without music);
+  sources are used in order and each shot takes the most interesting unused window. Photos become short clips
+  (`VideoTranscoder.writeStill`) with a Ken Burns move.
+- **Colour** (`ColorTransfer.swift`, `ColorGrading.swift`): Reinhard statistics transfer in CIE Lab, an eight-band HSL
+  mixer (a partition of unity between the two nearest bands, scaled by the pixel's saturation) and three-way grading.
+  Each bakes into a 32³/33³ LUT (`ColorCube`, cached) applied with `CIColorCubeWithColorSpace`, for photos and clips alike.
+  `.cube` files parse into the same LUT format.
+- **Voice** (`VoiceIsolator`): offline `AVAudioEngine` manual rendering through Apple's sound-isolation audio unit when
+  present, else a dialogue EQ and dynamics chain. The composition plays the cleaned file instead of the clip's sound.
+- **Aesthetics** (`AestheticsRanker`): Vision's `CalculateImageAestheticsScoresRequest` scores each look's thumbnail.
+
+## Visual language
+
+Three colour roles only: neutrals and system Liquid Glass for chrome; the edit yellow for values that differ from
+neutral, the playhead and "Done"; the intelligence spectrum (blue → violet → pink → amber) for what the AI does.
+Selected controls are a lit glass thumb, never a coloured pill. While PicShop listens or works, `IntelligenceGlow` turns
+around the screen edge (three blurred strokes in one Metal pass), the status shimmers and the microphone's ring turns —
+all still under Reduce Motion and dropped first when the phone runs hot.
+
 ## Fluidity and thermal budget
 
 `PerformanceGovernor` (`PicshopUI/App`) observes `ProcessInfo.thermalState`, Low Power Mode and Reduce Motion, combines
@@ -173,7 +209,7 @@ library's decoded thumbnails) so a long session does not drift into memory press
 
 ## Testing
 
-`swift test` runs 77 tests: geometry/colour, documents and undo, timeline maths (split, trim, speed,
+`swift test` runs 162 tests: geometry/colour, documents and undo, timeline maths (split, trim, speed,
 transitions), the FR/EN grammar (≈150 utterances), LLM response parsing and normalisation, the router
 (fallback, timeout), candidate selection, both executors with fake vision services, and PatchMatch on
 synthetic textures and gradients. CI also runs a tree-sitter syntax gate over the Apple-only sources

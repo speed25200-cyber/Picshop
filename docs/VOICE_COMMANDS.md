@@ -104,6 +104,19 @@ Paris au centre · Make the text bigger · Change le texte en Hello · Mets le t
 | Va à 10 secondes · Go to the beginning · Avance de 5 secondes · Lecture · Pause | Navigation |
 | Mets en 9:16 · Crop for TikTok · Filtre cinéma · Plus lumineux · Ajoute le texte Vacances pendant 3 secondes | Shared commands |
 
+## Video magic
+
+| Say | Does |
+|---|---|
+| Ajoute des sous-titres · Add captions · Sous-titres style karaoké · Captions word by word | Transcribes the speech on device into timed captions (styles: classic, karaoke, reveal, boxed, minimal); on existing captions, changes the style |
+| Enlève les sous-titres · Remove the captions | Removes them |
+| Enlève les blancs · Coupe les silences · Remove the pauses · Jump cuts | Cuts every pause in the speech, keeping a breath on each side |
+| Coupe sur le rythme · Cale les coupes sur la musique · Cut to the beat | Finds the music's tempo and moves every cut onto the nearest beat |
+| Passe en vertical en suivant le sujet · Smart reframe to square · Garde la personne au centre | Changes the format and follows faces / people / the salient subject with a calm virtual camera |
+| Isole la voix · Enlève le bruit de fond · Clean up the audio · Studio sound | Voice isolation on the clips' sound |
+| Ajoute un effet Ken Burns partout · Slow zoom · Camera move | Slow push-in and drift on the clips |
+| Harmonise les couleurs sur le clip 1 · Match the colours | Gives every clip the colour mood of a reference clip |
+
 ## Generative & recolor
 
 *Remplace le ciel par un coucher de soleil · Change le ciel (a clear blue sky by default) · Turn the car into a boat ·
