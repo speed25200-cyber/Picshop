@@ -99,6 +99,8 @@ FR = {
     "Sunset sky": "Ciel couchant",
     "Upscale": "Agrandir",
     "Expand": "Étendre",
+    "Speed ramp here": "Ralenti progressif ici",
+    "Eases into slow motion at the playhead and back out.": "Glisse vers le ralenti à la tête de lecture, puis revient.",
     "Watching for the best moments…": "Je cherche les meilleurs moments…",
     "No animation": "Sans animation",
     "Title Animation": "Animation du titre",

@@ -426,6 +426,23 @@ public struct VideoCommandExecutor: Sendable {
                 return (timeline, .failed(errorMessage(error)))
             }
 
+        case .speedRamp:
+            let center = (intent.time ?? playhead).clamped(to: 0...max(0, timeline.duration))
+            guard let clip = timeline.clip(at: center), let span = timeline.span(of: clip.id) else { return (timeline, .failed(fr ? "Il n'y a pas de clip ici." : "There is no clip here.")) }
+            let slowest = (intent.amount?.value ?? 0.3).clamped(to: 0.1...0.9)
+            // Three steps — ease in, the slow heart, ease out — kept inside the clip.
+            let reach = min(0.8, (center - span.start) - 0.1, (span.end - center) - 0.1)
+            guard reach >= 0.3 else { return (timeline, .failed(fr ? "Place la tête de lecture plus loin des bords du clip." : "Move the playhead further from the clip's ends.")) }
+            let bounds = [center - reach, center - reach / 2, center + reach / 2, center + reach]
+            let factors = [(slowest + 1) / 2, slowest, (slowest + 1) / 2]
+            for time in bounds.reversed() { timeline.split(at: time) }
+            // The pieces are found before any is slowed: slowing one moves the ones after it.
+            let pieces = (0..<factors.count).compactMap { timeline.clip(at: (bounds[$0] + bounds[$0 + 1]) / 2)?.id }
+            for (id, factor) in zip(pieces, factors) {
+                timeline.update(clipID: id) { $0.speed = ($0.speed * factor).clamped(to: 0.1...8) }
+            }
+            return (timeline, .applied(fr ? "Ralenti progressif (×\(Replies.formatted(slowest)))" : "Speed ramp (×\(Replies.formatted(slowest)))"))
+
         case .highlights:
             let target = (intent.amount?.value ?? 30).clamped(to: 5...600)
             guard timeline.duration > target + 2 else {

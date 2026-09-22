@@ -89,6 +89,15 @@ struct SpeedPanel: View {
                 }
                 Image(systemName: "hare.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(PSTheme.textTertiary)
             }
+            HStack(spacing: 8) {
+                PanelChip(title: L("Speed ramp here"), symbol: "chart.line.downtrend.xyaxis", tint: PSTheme.voice, isEnabled: !session.isProcessing) {
+                    Haptics.magic()
+                    session.perform(EditIntent(action: .speedRamp, time: session.player.currentTime))
+                }
+                Text(L("Eases into slow motion at the playhead and back out."))
+                    .font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary).lineLimit(2)
+                Spacer(minLength: 0)
+            }
             if let clip = session.selectedClip {
                 HStack(spacing: 6) {
                     Image(systemName: currentSpeed < 1 ? "slowmo" : (currentSpeed > 1 ? "timelapse" : "speedometer"))

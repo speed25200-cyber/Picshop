@@ -93,6 +93,7 @@ public enum Replies {
         case .trackSubject: return fr ? "Je suis le sujet." : "Following the subject."
         case .splitScenes: return fr ? "Je cherche les changements de plan." : "Finding the shot changes."
         case .highlights: return fr ? "Je garde les meilleurs moments." : "Keeping the best moments."
+        case .speedRamp: return fr ? "Ralenti progressif." : "Speed ramp."
         case .animateText: return fr ? "J'anime le titre." : "Animating the title."
         case .cutWords: return fr ? "Je coupe ce passage." : "Cutting that passage."
         case .syncToBeat: return fr ? "Je cale les coupes sur le rythme." : "Cutting to the beat."

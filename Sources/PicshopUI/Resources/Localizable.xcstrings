@@ -1857,6 +1857,22 @@
         }
       }
     },
+    "Eases into slow motion at the playhead and back out.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eases into slow motion at the playhead and back out."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glisse vers le ralenti à la tête de lecture, puis revient."
+          }
+        }
+      }
+    },
     "Edit": {
       "localizations": {
         "en": {
@@ -6557,6 +6573,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vitesse"
+          }
+        }
+      }
+    },
+    "Speed ramp here": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speed ramp here"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ralenti progressif ici"
           }
         }
       }

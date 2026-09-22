@@ -383,6 +383,15 @@ extension RuleBasedIntentEngine {
         if let words = parseCutWords(u) { return [words] }
         if let duck = parseDucking(u) { return [duck] }
         if let tracking = parseTracking(u) { return [tracking] }
+        let slow = u.contains(["ralenti", "ralentis", "ralentir", "slow motion", "slow mo", "slowmo", "slow down", "ralentissement"])
+        if u.contains(["speed ramp", "rampe de vitesse", "rampe", "ramp", "time ramp"]) ||
+            (slow && u.contains(["progressif", "progressive", "gradual", "gradually", "ici", "here", "ce moment", "this moment", "sur ce passage", "at this point", "a cet endroit", "dramatique", "dramatic"])) {
+            var intent = EditIntent(action: .speedRamp)
+            if let time = TimeExpressions.allTimes(in: u.tokens, frameRate: 30).first { intent.time = time }
+            if u.contains(["tres", "very", "extreme", "beaucoup", "a lot", "super"]) { intent.amount = .absolute(0.2) }
+            if u.contains(["leger", "legerement", "un peu", "slightly", "a bit", "subtle"]) { intent.amount = .absolute(0.5) }
+            return [intent]
+        }
         if u.contains(["un resume", "le resume", "resume de", "resume la video", "resume cette video", "resumer", "fais un resume", "meilleurs moments", "moments forts", "temps forts", "best moments", "best bits", "highlights", "highlight reel", "recap", "summary",
                        "summarize", "sum up", "condense", "version courte", "short version", "garde le meilleur", "keep the best", "the best parts", "les meilleurs passages"]),
            !u.contains(["resume des modifications", "summary of the edits", "what did you do", "qu est ce que tu as fait", "recap of the edits", "resume de mes modifs", "modifications"]) {

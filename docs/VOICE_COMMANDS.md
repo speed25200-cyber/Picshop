@@ -117,6 +117,7 @@ Paris au centre · Make the text bigger · Change le texte en Hello · Mets le t
 | Passe en vertical en suivant le sujet · Smart reframe to square · Garde la personne au centre | Changes the format and follows faces / people / the salient subject with a calm virtual camera |
 | Isole la voix · Enlève le bruit de fond · Clean up the audio · Studio sound | Voice isolation on the clips' sound |
 | Anime le titre avec un rebond · Animate the title with a blur · Pas d'animation sur le texte | Title entrances: pop, rise, wipe, focus, drift (new titles rise in by default) |
+| Ralenti progressif ici · Speed ramp at 12 seconds · Un ralenti très dramatique ici | Eases into slow motion around the playhead (or the time said) and back out |
 | Fais un résumé de 30 secondes · Garde les meilleurs moments · Make a 20 second recap | A recap of the best moments: Vision's aesthetics, faces, the sound's energy and movement, each shot inside one camera shot, in order, with short dissolves |
 | Coupe à chaque changement de plan · Détecte les plans · Split scenes | Finds every shot change (colour and light fingerprints, pinned to the exact frame) and splits the clips there |
 | Fais suivre le texte à la personne · Le logo suit la voiture · Make the sticker follow his face · Arrête de suivre | Tracks whatever is under the overlay (face, person, object) from the playhead both ways; the overlay moves with it |

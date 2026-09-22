@@ -50,3 +50,23 @@ final class HighlightsTests: XCTestCase {
         XCTAssertNil(cut.clips.last?.transitionOut)
     }
 }
+
+final class SpeedRampTests: XCTestCase {
+    func testRampEasesIntoSlowMotionAndBack() async {
+        let engine = RuleBasedIntentEngine()
+        let context = IntentContext(mode: .video, clipCount: 1, playheadSeconds: 5, timelineDuration: 10)
+        XCTAssertEqual(engine.parse("ralenti progressif ici", context: context).intents.first?.action, .speedRamp)
+        XCTAssertEqual(engine.parse("speed ramp", context: context).intents.first?.action, .speedRamp)
+        XCTAssertEqual(engine.parse("ralenti", context: context).intents.first?.action, .setSpeed)
+
+        let asset = MediaAsset(kind: .video, relativePath: "media/v.mov", pixelSize: PSSize(width: 1920, height: 1080), duration: 10, frameRate: 30)
+        let timeline = VideoTimeline(title: "t", clips: [VideoClip(asset: asset, sourceRange: TimeSpan(start: 0, duration: 10))], renderSize: PSSize(width: 1920, height: 1080))
+        let executor = VideoCommandExecutor(services: FakeMagicVideoServices(), language: .english)
+        let (ramped, result) = await executor.execute(EditIntent(action: .speedRamp), on: timeline, context: context)
+        XCTAssertTrue(result.outcome.isSuccess)
+        XCTAssertEqual(ramped.clips.map(\.speed), [1, 0.65, 0.3, 0.65, 1])
+        // Nothing of the source is lost; the slow part just lasts longer.
+        XCTAssertEqual(ramped.clips.reduce(0) { $0 + $1.sourceRange.duration }, 10, accuracy: 0.001)
+        XCTAssertGreaterThan(ramped.duration, 11)
+    }
+}
