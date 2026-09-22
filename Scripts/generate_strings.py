@@ -11,6 +11,15 @@ UI = ROOT / "Sources/PicshopUI"
 OUT = UI / "Resources/Localizable.xcstrings"
 
 FR = {
+    "Aperture": "Ouverture",
+    "Estimated from the subject.": "Estimé à partir du sujet.",
+    "Finding the subject…": "Je cherche le sujet…",
+    "Focus": "Mise au point",
+    "PicShop couldn't find a subject to focus on.": "PicShop n'a pas trouvé de sujet sur lequel faire la mise au point.",
+    "Remove Focus Blur": "Retirer le flou",
+    "Tap again to move the focus.": "Touchez ailleurs pour déplacer la mise au point.",
+    "Tap where the picture should be sharp.": "Touchez l'endroit qui doit être net.",
+    "Using the depth captured by the camera.": "Avec la profondeur captée par l'appareil photo.",
     "Add video or photo": "Ajouter une vidéo ou une photo",
     "Blue screen": "Fond bleu",
     "Bottom left": "En bas à gauche",

@@ -93,6 +93,13 @@ public enum ImageSupport {
         return image
     }
 
+    /// Whether the file carries a depth or disparity map (Portrait photos).
+    public static func hasDepthData(at url: URL) -> Bool {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return false }
+        return CGImageSourceCopyAuxiliaryDataInfoAtIndex(source, 0, kCGImageAuxiliaryDataTypeDisparity) != nil
+            || CGImageSourceCopyAuxiliaryDataInfoAtIndex(source, 0, kCGImageAuxiliaryDataTypeDepth) != nil
+    }
+
     /// Reads pixel dimensions without decoding the image.
     public static func pixelSize(at url: URL) -> PSSize? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),

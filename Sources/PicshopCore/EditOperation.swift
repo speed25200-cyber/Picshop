@@ -56,6 +56,9 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
         case colorGrade(ColorGrade)
         /// Colour mood transferred from a reference picture (last one wins).
         case colorMatch(ColorMatch)
+        /// Lens blur with the focus on a point: the camera's depth map when the
+        /// photo has one, else the subject mask (last one wins).
+        case lensBlur(focus: PSPoint, aperture: Double, mask: MaskReference?)
 
         public var defaultLabel: String {
             switch self {
@@ -88,6 +91,7 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
             case .colorMixer: return "Colour Mixer"
             case .colorGrade: return "Colour Grading"
             case .colorMatch: return "Match Colour"
+            case .lensBlur: return "Focus"
             }
         }
 
@@ -187,12 +191,22 @@ public struct EditStack: Hashable, Codable, Sendable {
         return nil
     }
 
+    public var resolvedLensBlur: (focus: PSPoint, aperture: Double, mask: MaskReference?)? {
+        for operation in operations.reversed() {
+            if case .lensBlur(let focus, let aperture, let mask) = operation.kind { return aperture > 0.001 ? (focus, aperture, mask) : nil }
+        }
+        return nil
+    }
+
+    /// Whether any operation moves pixels (crop, rotate…), which a depth map would no longer match.
+    public var hasGeometry: Bool { operations.contains { $0.kind.isGeometric } }
+
     /// Replaces the last mixer or grade when it is the most recent operation,
     /// so dragging a colour control makes one undo step, not hundreds.
     public mutating func setColor(_ kind: EditOperation.Kind) {
         if let last = operations.last {
             switch (last.kind, kind) {
-            case (.colorMixer, .colorMixer), (.colorGrade, .colorGrade), (.colorMatch, .colorMatch):
+            case (.colorMixer, .colorMixer), (.colorGrade, .colorGrade), (.colorMatch, .colorMatch), (.lensBlur, .lensBlur):
                 operations[operations.count - 1] = EditOperation(id: last.id, kind: kind, createdAt: last.createdAt)
                 return
             default: break

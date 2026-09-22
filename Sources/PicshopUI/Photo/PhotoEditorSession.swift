@@ -15,11 +15,12 @@ import PicshopSpeech
 @Observable
 public final class PhotoEditorSession {
     public enum Tool: String, CaseIterable, Identifiable {
-        case magic, adjust, looks, color, erase, precise, cutout, crop, text, shapes, layers
+        case magic, focus, adjust, looks, color, erase, precise, cutout, crop, text, shapes, layers
         public var id: String { rawValue }
         var title: String {
             switch self {
             case .magic: return L("Magic")
+            case .focus: return L("Focus")
             case .adjust: return L("Adjust")
             case .looks: return L("Filters")
             case .color: return L("Colour")
@@ -35,6 +36,7 @@ public final class PhotoEditorSession {
         var symbol: String {
             switch self {
             case .magic: return "sparkles"
+            case .focus: return "camera.aperture"
             case .color: return "paintpalette"
             case .adjust: return "slider.horizontal.3"
             case .looks: return "camera.filters"
@@ -426,6 +428,70 @@ public final class PhotoEditorSession {
         apply(.colorMatch(result), label: L("Match Colour"))
         Haptics.magic()
         showToast(L("Colours matched."), undoable: true)
+    }
+
+    // MARK: - Focus after the shot
+
+    /// Where the lens blur is focused, when there is one.
+    public var focusPoint: PSPoint? { document.baseLayer?.edits.resolvedLensBlur?.focus }
+    /// 0 = everything sharp … 1 = the widest aperture.
+    public var focusAperture: Double { document.baseLayer?.edits.resolvedLensBlur?.aperture ?? 0.55 }
+    /// Whether the photo carries the camera's depth map (else the subject is used).
+    public var hasDepthMap: Bool {
+        guard let asset = document.baseLayer?.imageAsset else { return false }
+        return ImageSupport.hasDepthData(at: app.store.url(for: asset.relativePath, in: projectID))
+    }
+
+    @ObservationIgnored private var focusMask: MaskReference?
+
+    /// Refocuses the photo on a point: the depth map sets what is near and
+    /// far; without one, the tapped side of the subject outline stays sharp.
+    public func setFocus(at point: PSPoint) async {
+        guard let services, let baseID = document.baseLayerID else { return }
+        let aperture = document.baseLayer?.edits.resolvedLensBlur?.aperture ?? 0.55
+        var mask: MaskReference?
+        if !hasDepthMap || document.baseLayer?.edits.hasGeometry == true {
+            if focusMask == nil {
+                isProcessing = true
+                processingTitle = L("Finding the subject…")
+                focusMask = try? await services.subjectMask(in: document)
+                isProcessing = false
+            }
+            mask = focusMask
+            guard mask != nil else {
+                showToast(L("PicShop couldn't find a subject to focus on."), isError: true)
+                return
+            }
+        }
+        var updated = document
+        updated.update(layerID: baseID) { $0.edits.setColor(.lensBlur(focus: point, aperture: aperture, mask: mask)) }
+        commit(updated, label: L("Focus"))
+        Haptics.soft(0.8)
+    }
+
+    public func beginApertureInteraction() { history.beginTransaction(label: "Aperture") }
+
+    public func endApertureInteraction() {
+        history.endTransaction()
+        requestPreview()
+    }
+
+    public func setAperture(_ aperture: Double) {
+        guard let baseID = document.baseLayerID, let lens = document.baseLayer?.edits.resolvedLensBlur ?? document.baseLayer?.edits.operations.reversed().compactMap({ operation -> (focus: PSPoint, aperture: Double, mask: MaskReference?)? in
+            if case .lensBlur(let focus, let aperture, let mask) = operation.kind { return (focus, aperture, mask) }
+            return nil
+        }).first else { return }
+        var updated = document
+        updated.update(layerID: baseID) { $0.edits.setColor(.lensBlur(focus: lens.focus, aperture: aperture, mask: lens.mask)) }
+        history.commit(updated, label: "Aperture")
+        requestPreview(interactive: true)
+    }
+
+    public func removeFocusBlur() {
+        guard let baseID = document.baseLayerID, let lens = document.baseLayer?.edits.resolvedLensBlur else { return }
+        var updated = document
+        updated.update(layerID: baseID) { $0.edits.setColor(.lensBlur(focus: lens.focus, aperture: 0, mask: lens.mask)) }
+        commit(updated, label: L("Remove Focus Blur"))
     }
 
     // MARK: - Colour (mixer and wheels)
@@ -924,6 +990,10 @@ public final class PhotoEditorSession {
 
     public func tapCanvas(at point: PSPoint) {
         lastTapPoint = point
+        if activeTool == .focus {
+            Task { await setFocus(at: point) }
+            return
+        }
         if activeTool == .precise, pendingClarification == nil {
             handlePreciseTap(at: point)
             return

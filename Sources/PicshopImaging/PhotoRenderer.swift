@@ -144,6 +144,23 @@ public actor PhotoRenderer {
 
     // MARK: - Layers
 
+    private var disparityCache: [String: CIImage?] = [:]
+
+    /// The capture's disparity map (Portrait photos), oriented like the image and scaled to `extent`.
+    private func disparityMap(for asset: MediaAsset, fitting extent: CGRect) -> CIImage? {
+        let entry: CIImage?
+        if let cached = disparityCache[asset.relativePath] {
+            entry = cached
+        } else {
+            let url = store.url(for: asset.relativePath, in: projectID)
+            entry = CIImage(contentsOf: url, options: [.auxiliaryDisparity: true, .applyOrientationProperty: true])
+            disparityCache[asset.relativePath] = entry
+        }
+        guard let disparity = entry, disparity.extent.width > 1 else { return nil }
+        let scaled = disparity.transformed(by: CGAffineTransform(scaleX: extent.width / disparity.extent.width, y: extent.height / disparity.extent.height))
+        return scaled.transformed(by: CGAffineTransform(translationX: extent.minX - scaled.extent.minX, y: extent.minY - scaled.extent.minY))
+    }
+
     private func source(for asset: MediaAsset, scale: Double) throws -> CIImage {
         let longest = max(asset.pixelSize.width, asset.pixelSize.height)
         let targetSide = Int((longest * scale).rounded())
@@ -168,6 +185,10 @@ public actor PhotoRenderer {
         let effectiveScale = image.extent.width / max(1, asset.pixelSize.width)
         if options.showOriginal { return image }
 
+        // Focus from the camera's depth map happens on the capture itself, before any other edit.
+        if let lens = layer.edits.resolvedLensBlur, !layer.edits.hasGeometry, let disparity = disparityMap(for: asset, fitting: image.extent) {
+            image = LensBlur.apply(to: image, disparity: disparity, focus: lens.focus, aperture: lens.aperture)
+        }
         for operation in layer.edits.operations {
             image = try await apply(operation, to: image, layer: layer, scale: effectiveScale, options: options)
         }
@@ -195,6 +216,13 @@ public actor PhotoRenderer {
         switch operation.kind {
         case .adjust, .adjustments, .toneCurve, .look, .autoEnhance, .colorMixer, .colorGrade, .colorMatch:
             return input
+
+        case .lensBlur(let focus, let aperture, let mask):
+            // Done with the depth map at the source when there is one; the subject mask is the fallback.
+            guard layer.edits.resolvedLensBlur?.focus == focus else { return input }
+            if !layer.edits.hasGeometry, let asset = layer.imageAsset, disparityMap(for: asset, fitting: extent) != nil { return input }
+            guard let mask, let maskImage = maskStore.load(mask, fitting: extent) else { return input }
+            return LensBlur.apply(to: input, subjectMask: maskImage, focus: focus, aperture: aperture)
 
         case .crop(let rect):
             let cropRect = rect.ciRect(in: extent).integral.intersection(extent)

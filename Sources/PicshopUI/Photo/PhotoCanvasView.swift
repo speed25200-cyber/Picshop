@@ -354,6 +354,7 @@ struct PhotoCanvasView: View {
         let showsGrid = zoom >= 6 && session.activeTool == .precise
         let cloneSource = session.activeTool == .precise && session.preciseMode == .clone ? session.cloneSource : nil
         let brushRadiusPoints = CGFloat(session.activeTool == .precise ? session.pixelBrushRadius : session.brushRadius) * max(frame.width, frame.height)
+        let focusReticle = session.activeTool == .focus ? session.focusPoint : nil
         let overlayLayers = session.activeTool == .text ? session.document.textLayers : (session.activeTool == .shapes ? session.document.shapeLayers : [])
         let textBoxes: [(UUID, PSRect, Double, Bool)] = overlayLayers.compactMap { layer -> (UUID, PSRect, Double, Bool)? in
             guard let bounds = session.overlayBounds(for: layer), let geometry = session.overlayGeometry(for: layer) else { return nil }
@@ -398,6 +399,17 @@ struct PhotoCanvasView: View {
                     path.move(to: first)
                     for point in points.dropFirst() { path.addLine(to: point) }
                     context.stroke(path, with: .color(paintColor), style: StrokeStyle(lineWidth: max(1, radius * 2), lineCap: .round, lineJoin: .round))
+                }
+            }
+            // Focus reticle, like the Camera app's.
+            if let focusReticle {
+                let center = viewPoint(focusReticle, in: frame)
+                let side: CGFloat = 64
+                let rect = CGRect(x: center.x - side / 2, y: center.y - side / 2, width: side, height: side)
+                context.stroke(Path(rect), with: .color(PSTheme.accent), lineWidth: 1.5)
+                for (from, to) in [(CGPoint(x: rect.midX, y: rect.minY), CGPoint(x: rect.midX, y: rect.minY + 6)), (CGPoint(x: rect.midX, y: rect.maxY), CGPoint(x: rect.midX, y: rect.maxY - 6)),
+                                   (CGPoint(x: rect.minX, y: rect.midY), CGPoint(x: rect.minX + 6, y: rect.midY)), (CGPoint(x: rect.maxX, y: rect.midY), CGPoint(x: rect.maxX - 6, y: rect.midY))] {
+                    context.stroke(Path { $0.move(to: from); $0.addLine(to: to) }, with: .color(PSTheme.accent), lineWidth: 1.5)
                 }
             }
             // Brush cursor: under the finger while painting, or centred while the size dial is dragged.

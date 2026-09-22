@@ -10,7 +10,7 @@ extension PhotoEditorSession.Tool {
     /// Dock entries, grouped by purpose. Sub-modes appear as segments in the panel.
     static var groups: [ToolGroup<PhotoEditorSession.Tool>] {
         [
-            ToolGroup(id: "magic", title: L("Magic"), symbol: "sparkles", tools: [.magic], isMagic: true),
+            ToolGroup(id: "magic", title: L("Magic"), symbol: "sparkles", tools: [.magic, .focus], isMagic: true),
             ToolGroup(id: "adjust", title: L("Adjust"), symbol: "dial.medium", tools: [.adjust, .color, .looks]),
             ToolGroup(id: "retouch", title: L("Retouch"), symbol: "wand.and.rays", tools: [.erase, .cutout, .precise]),
             ToolGroup(id: "crop", title: L("Crop"), symbol: "crop.rotate", tools: [.crop]),
@@ -38,6 +38,7 @@ struct PhotoToolPanel: View {
                            onClose: { session.activeTool = nil }, trailing: trailing, modes: modes) {
             switch tool {
             case .magic: MagicPanel(session: session)
+            case .focus: FocusPanel(session: session)
             case .adjust: AdjustPanel(session: session)
             case .color:
                 ColorControls(mixer: session.colorMixer, grade: session.colorGrade,

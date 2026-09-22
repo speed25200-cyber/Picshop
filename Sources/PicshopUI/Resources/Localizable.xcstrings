@@ -289,6 +289,22 @@
         }
       }
     },
+    "Aperture": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aperture"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouverture"
+          }
+        }
+      }
+    },
     "Apple's on-device foundation model with guided generation.": {
       "localizations": {
         "en": {
@@ -2001,6 +2017,22 @@
         }
       }
     },
+    "Estimated from the subject.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estimated from the subject."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estimé à partir du sujet."
+          }
+        }
+      }
+    },
     "Every pause, gone": {
       "localizations": {
         "en": {
@@ -2209,6 +2241,22 @@
         }
       }
     },
+    "Finding the subject…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finding the subject…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je cherche le sujet…"
+          }
+        }
+      }
+    },
     "Flip": {
       "localizations": {
         "en": {
@@ -2221,6 +2269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Retourner"
+          }
+        }
+      }
+    },
+    "Focus": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Focus"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mise au point"
           }
         }
       }
@@ -4465,6 +4529,22 @@
         }
       }
     },
+    "PicShop couldn't find a subject to focus on.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop couldn't find a subject to focus on."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop n'a pas trouvé de sujet sur lequel faire la mise au point."
+          }
+        }
+      }
+    },
     "PicShop is rendering lighter previews to keep your iPhone cool.": {
       "localizations": {
         "en": {
@@ -5021,6 +5101,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Retirer"
+          }
+        }
+      }
+    },
+    "Remove Focus Blur": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Focus Blur"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer le flou"
           }
         }
       }
@@ -6145,6 +6241,22 @@
         }
       }
     },
+    "Tap again to move the focus.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap again to move the focus."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez ailleurs pour déplacer la mise au point."
+          }
+        }
+      }
+    },
     "Tap an object to erase it, paint over it, or say “efface le poteau à droite”.": {
       "localizations": {
         "en": {
@@ -6253,6 +6365,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Toucher pour parler"
+          }
+        }
+      }
+    },
+    "Tap where the picture should be sharp.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap where the picture should be sharp."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez l'endroit qui doit être net."
           }
         }
       }
@@ -6749,6 +6877,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Utiliser la signature"
+          }
+        }
+      }
+    },
+    "Using the depth captured by the camera.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Using the depth captured by the camera."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avec la profondeur captée par l'appareil photo."
           }
         }
       }
