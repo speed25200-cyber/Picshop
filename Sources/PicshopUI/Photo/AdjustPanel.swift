@@ -51,9 +51,9 @@ struct AdjustPanel: View {
             }
             .frame(height: itemSize + 12)
 
-            DialSlider(value: $value, range: session.selectedParameter.range, neutral: 0, label: Self.name(session.selectedParameter)) { editing in
+            DialSlider(value: $value, range: session.selectedParameter.range, neutral: 0, label: Self.name(session.selectedParameter), onEditingChanged: { editing in
                 if editing { session.beginSliderInteraction(session.selectedParameter) } else { session.endSliderInteraction() }
-            }
+            })
 
             HStack(spacing: 8) {
                 PanelChip(title: L("Auto"), symbol: "wand.and.stars", tint: PSTheme.voice) { session.perform(EditIntent(action: .autoEnhance)) }

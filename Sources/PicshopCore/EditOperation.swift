@@ -50,6 +50,12 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
         case cloneStamp(strokes: [BrushStroke], offset: PSPoint)
         /// Paints an opaque colour along the strokes (pixel brush).
         case pixelPaint(strokes: [BrushStroke], color: PSColor)
+        /// Hue, saturation and luminance per colour band (last one wins).
+        case colorMixer(ColorMixer)
+        /// Three-way colour grade (last one wins).
+        case colorGrade(ColorGrade)
+        /// Colour mood transferred from a reference picture (last one wins).
+        case colorMatch(ColorMatch)
 
         public var defaultLabel: String {
             switch self {
@@ -79,6 +85,9 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
             case .recolor(let mask, _, _): return "Recolor \(mask.displayName)"
             case .cloneStamp: return "Clone Stamp"
             case .pixelPaint: return "Paint"
+            case .colorMixer: return "Colour Mixer"
+            case .colorGrade: return "Colour Grading"
+            case .colorMatch: return "Match Colour"
             }
         }
 
@@ -155,6 +164,41 @@ public struct EditStack: Hashable, Codable, Sendable {
             if case .toneCurve(let curve) = operation.kind { return curve }
         }
         return resolvedLook?.preset.toneCurve ?? .identity
+    }
+
+    public var resolvedColorMixer: ColorMixer? {
+        for operation in operations.reversed() {
+            if case .colorMixer(let mixer) = operation.kind { return mixer.isNeutral ? nil : mixer }
+        }
+        return nil
+    }
+
+    public var resolvedColorGrade: ColorGrade? {
+        for operation in operations.reversed() {
+            if case .colorGrade(let grade) = operation.kind { return grade.isNeutral ? nil : grade }
+        }
+        return nil
+    }
+
+    public var resolvedColorMatch: ColorMatch? {
+        for operation in operations.reversed() {
+            if case .colorMatch(let match) = operation.kind { return match.strength > 0.001 ? match : nil }
+        }
+        return nil
+    }
+
+    /// Replaces the last mixer or grade when it is the most recent operation,
+    /// so dragging a colour control makes one undo step, not hundreds.
+    public mutating func setColor(_ kind: EditOperation.Kind) {
+        if let last = operations.last {
+            switch (last.kind, kind) {
+            case (.colorMixer, .colorMixer), (.colorGrade, .colorGrade), (.colorMatch, .colorMatch):
+                operations[operations.count - 1] = EditOperation(id: last.id, kind: kind, createdAt: last.createdAt)
+                return
+            default: break
+            }
+        }
+        append(kind)
     }
 
     /// Effective crop rectangle (normalised), last one wins.

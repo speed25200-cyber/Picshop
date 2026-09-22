@@ -11,7 +11,7 @@ extension PhotoEditorSession.Tool {
     static var groups: [ToolGroup<PhotoEditorSession.Tool>] {
         [
             ToolGroup(id: "magic", title: L("Magic"), symbol: "sparkles", tools: [.magic], isMagic: true),
-            ToolGroup(id: "adjust", title: L("Adjust"), symbol: "dial.medium", tools: [.adjust, .looks]),
+            ToolGroup(id: "adjust", title: L("Adjust"), symbol: "dial.medium", tools: [.adjust, .color, .looks]),
             ToolGroup(id: "retouch", title: L("Retouch"), symbol: "wand.and.rays", tools: [.erase, .cutout, .precise]),
             ToolGroup(id: "crop", title: L("Crop"), symbol: "crop.rotate", tools: [.crop]),
             ToolGroup(id: "layers", title: L("Layers"), symbol: "square.3.layers.3d", tools: [.text, .shapes, .layers]),
@@ -39,6 +39,10 @@ struct PhotoToolPanel: View {
             switch tool {
             case .magic: MagicPanel(session: session)
             case .adjust: AdjustPanel(session: session)
+            case .color:
+                ColorControls(mixer: session.colorMixer, grade: session.colorGrade,
+                              onMixer: { session.setColorMixer($0) }, onGrade: { session.setColorGrade($0) },
+                              onBegin: { session.beginColorInteraction($0) }, onEnd: { session.endColorInteraction() })
             case .looks: LooksPanel(session: session)
             case .erase: ErasePanel(session: session)
             case .precise: PrecisePanel(session: session)

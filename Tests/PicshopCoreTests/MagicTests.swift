@@ -359,3 +359,74 @@ final class BeatSyncTests: XCTestCase {
         XCTAssertEqual(beats, [2, 3])
     }
 }
+
+final class ColorGradingTests: XCTestCase {
+    func testHSLRoundTrip() {
+        for rgb in [(0.9, 0.2, 0.1), (0.1, 0.6, 0.3), (0.2, 0.3, 0.8), (0.5, 0.5, 0.5), (1.0, 1.0, 0.0)] {
+            let back = ColorEngine.rgb(fromHSL: ColorEngine.hsl(fromRGB: rgb))
+            XCTAssertEqual(back.0, rgb.0, accuracy: 1e-9)
+            XCTAssertEqual(back.1, rgb.1, accuracy: 1e-9)
+            XCTAssertEqual(back.2, rgb.2, accuracy: 1e-9)
+        }
+    }
+
+    func testBandWeightsArePartitionOfUnity() {
+        for hue in stride(from: 0.0, to: 360.0, by: 7.5) {
+            let total = ColorMixer.weights(forHue: hue).reduce(0) { $0 + $1.1 }
+            XCTAssertEqual(total, 1, accuracy: 1e-9, "hue \(hue)")
+        }
+        XCTAssertEqual(ColorMixer.weights(forHue: 120).first?.0, ColorMixer.Band.green.rawValue)
+        XCTAssertEqual(ColorMixer.Band.matching("désature les verts"), .green)
+        XCTAssertEqual(ColorMixer.Band.matching("make the blues deeper"), .blue)
+    }
+
+    func testNeutralIsIdentity() {
+        let color = (0.3, 0.6, 0.2)
+        let out = ColorEngine.apply(mixer: .neutral, grade: .neutral, to: color)
+        XCTAssertEqual(out.0, 0.3)
+        XCTAssertEqual(out.1, 0.6)
+    }
+
+    func testDesaturatingRedsLeavesBluesAlone() {
+        var mixer = ColorMixer()
+        mixer[.red, .saturation] = -1
+        let red = ColorEngine.apply(mixer: mixer, grade: nil, to: (0.85, 0.15, 0.12))
+        XCTAssertLessThan(ColorEngine.hsl(fromRGB: red).1, 0.1, "reds turn grey")
+        let blue = ColorEngine.apply(mixer: mixer, grade: nil, to: (0.1, 0.3, 0.9))
+        XCTAssertEqual(blue.2, 0.9, accuracy: 1e-6)
+        let grey = ColorEngine.apply(mixer: mixer, grade: nil, to: (0.5, 0.5, 0.5))
+        XCTAssertEqual(grey.0, 0.5, accuracy: 1e-9)
+    }
+
+    func testHueShiftMovesGreensTowardsYellow() {
+        var mixer = ColorMixer()
+        mixer[.green, .hue] = -1
+        let before = ColorEngine.hsl(fromRGB: (0.2, 0.7, 0.2)).0
+        let after = ColorEngine.hsl(fromRGB: ColorEngine.apply(mixer: mixer, grade: nil, to: (0.2, 0.7, 0.2))).0
+        XCTAssertLessThan(after, before - 20)
+    }
+
+    func testTealAndOrangeGradesByTone() {
+        let dark = ColorEngine.apply(mixer: nil, grade: .tealAndOrange, to: (0.15, 0.15, 0.15))
+        let bright = ColorEngine.apply(mixer: nil, grade: .tealAndOrange, to: (0.85, 0.85, 0.85))
+        XCTAssertGreaterThan(dark.2, dark.0, "shadows go teal")
+        XCTAssertGreaterThan(bright.0, bright.2, "highlights go warm")
+    }
+
+    func testCubeAndStackResolution() {
+        XCTAssertEqual(ColorEngine.cube(mixer: nil, grade: .tealAndOrange, dimension: 5).count, 5 * 5 * 5 * 4)
+        var stack = EditStack()
+        var mixer = ColorMixer()
+        mixer[.blue, .saturation] = 0.4
+        stack.setColor(.colorMixer(mixer))
+        mixer[.blue, .saturation] = 0.6
+        stack.setColor(.colorMixer(mixer))
+        XCTAssertEqual(stack.operations.count, 1, "dragging replaces the last mixer step")
+        XCTAssertEqual(stack.resolvedColorMixer?[.blue, .saturation], 0.6)
+        stack.setColor(.colorGrade(.tealAndOrange))
+        XCTAssertEqual(stack.operations.count, 2)
+        XCTAssertEqual(stack.resolvedColorGrade, .tealAndOrange)
+        stack.setColor(.colorMixer(.neutral))
+        XCTAssertNil(stack.resolvedColorMixer)
+    }
+}

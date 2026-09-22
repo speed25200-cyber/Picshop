@@ -577,6 +577,22 @@
         }
       }
     },
+    "Bleach": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bleach"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sans blanchiment"
+          }
+        }
+      }
+    },
     "Blend": {
       "localizations": {
         "en": {
@@ -689,6 +705,22 @@
         }
       }
     },
+    "Camera move": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera move"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mouvement"
+          }
+        }
+      }
+    },
     "Cancel": {
       "localizations": {
         "en": {
@@ -721,6 +753,38 @@
         }
       }
     },
+    "Caption style": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caption style"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Style des sous-titres"
+          }
+        }
+      }
+    },
+    "Captions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Captions"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sous-titres"
+          }
+        }
+      }
+    },
     "Choose clips and photos": {
       "localizations": {
         "en": {
@@ -749,6 +813,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cinéma"
+          }
+        }
+      }
+    },
+    "Clean voice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clean voice"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voix nette"
           }
         }
       }
@@ -881,18 +961,34 @@
         }
       }
     },
-    "Color": {
+    "Colour": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Color"
+            "value": "Colour"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Couleur"
+          }
+        }
+      }
+    },
+    "Colour wheel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colour wheel"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Roue chromatique"
           }
         }
       }
@@ -1485,6 +1581,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Durée"
+          }
+        }
+      }
+    },
+    "Edit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Montage"
           }
         }
       }
@@ -2225,6 +2337,22 @@
         }
       }
     },
+    "Golden hour": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Golden hour"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heure dorée"
+          }
+        }
+      }
+    },
     "Gradient": {
       "localizations": {
         "en": {
@@ -2305,6 +2433,22 @@
         }
       }
     },
+    "Highlights": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Highlights"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hautes lumières"
+          }
+        }
+      }
+    },
     "Hold the mic and say what to change": {
       "localizations": {
         "en": {
@@ -2381,6 +2525,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chaud"
+          }
+        }
+      }
+    },
+    "Hue": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hue"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teinte"
           }
         }
       }
@@ -2929,6 +3089,22 @@
         }
       }
     },
+    "Luminance": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Luminance"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Luminance"
+          }
+        }
+      }
+    },
     "Magic": {
       "localizations": {
         "en": {
@@ -3025,6 +3201,22 @@
         }
       }
     },
+    "Match colour": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Match colour"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Harmoniser"
+          }
+        }
+      }
+    },
     "Matching colours…": {
       "localizations": {
         "en": {
@@ -3105,6 +3297,22 @@
         }
       }
     },
+    "Midtones": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Midtones"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tons moyens"
+          }
+        }
+      }
+    },
     "Minimal rendering until the iPhone cools down.": {
       "localizations": {
         "en": {
@@ -3117,6 +3325,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rendu minimal jusqu'à ce que l'iPhone refroidisse."
+          }
+        }
+      }
+    },
+    "Mixer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mixer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mélangeur"
           }
         }
       }
@@ -3169,6 +3393,22 @@
         }
       }
     },
+    "Move down": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move down"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descendre"
+          }
+        }
+      }
+    },
     "Move to playhead": {
       "localizations": {
         "en": {
@@ -3181,6 +3421,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Placer au curseur"
+          }
+        }
+      }
+    },
+    "Move up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move up"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Monter"
           }
         }
       }
@@ -3409,6 +3665,22 @@
         }
       }
     },
+    "Nordic": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nordic"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nordique"
+          }
+        }
+      }
+    },
     "Nothing here yet.": {
       "localizations": {
         "en": {
@@ -3437,6 +3709,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "OK"
+          }
+        }
+      }
+    },
+    "On the beat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On the beat"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En rythme"
           }
         }
       }
@@ -4753,6 +5041,22 @@
         }
       }
     },
+    "Saturation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saturation"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saturation"
+          }
+        }
+      }
+    },
     "Save": {
       "localizations": {
         "en": {
@@ -4945,6 +5249,22 @@
         }
       }
     },
+    "Shadows": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shadows"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ombres"
+          }
+        }
+      }
+    },
     "Shapes": {
       "localizations": {
         "en": {
@@ -5085,6 +5405,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aperçus légèrement allégés ; effets inchangés."
+          }
+        }
+      }
+    },
+    "Slow motion": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slow motion"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ralenti"
           }
         }
       }
@@ -5613,6 +5949,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Touchez l'endroit où signer."
+          }
+        }
+      }
+    },
+    "Teal & orange": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teal & orange"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sarcelle et orange"
           }
         }
       }
@@ -6237,6 +6589,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tiède"
+          }
+        }
+      }
+    },
+    "Wheels": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wheels"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Roues"
           }
         }
       }

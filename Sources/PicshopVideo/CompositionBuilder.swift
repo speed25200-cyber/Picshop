@@ -24,6 +24,8 @@ public struct ClipRenderParameters: @unchecked Sendable {
     public var timelineStart: Double = 0
     /// Colour matched to a reference shot.
     public var colorMatch: ColorMatch? = nil
+    public var colorMixer: ColorMixer? = nil
+    public var colorGrade: ColorGrade? = nil
 }
 
 public struct TransitionSegment: Sendable {
@@ -182,7 +184,8 @@ public struct CompositionBuilder: Sendable {
             parameters.append(ClipRenderParameters(clipID: clip.id, trackID: track.trackID, naturalSize: naturalSize, preferredTransform: preferredTransform,
                                                    adjustments: clip.adjustments, look: clip.look, lookIntensity: clip.lookIntensity, crop: clip.crop,
                                                    rotation: clip.rotation, flipHorizontal: clip.flipHorizontal, fill: timeline.aspect != .original,
-                                                   motion: clip.motion, timelineStart: starts[index], colorMatch: clip.colorMatch))
+                                                   motion: clip.motion, timelineStart: starts[index], colorMatch: clip.colorMatch,
+                                                   colorMixer: clip.colorMixer, colorGrade: clip.colorGrade))
         }
 
         audioParameters.append(contentsOf: clipMixes.compactMap { $0 })

@@ -12,6 +12,8 @@ struct VideoToolPanel: View {
 
     var body: some View {
         switch tool {
+        case .magic: VideoMagicPanel(session: session)
+        case .color: VideoColorPanel(session: session)
         case .cut: CutPanel(session: session)
         case .speed: SpeedPanel(session: session)
         case .audio: AudioPanel(session: session)

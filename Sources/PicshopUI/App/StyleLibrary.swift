@@ -31,7 +31,7 @@ public final class StyleLibrary {
     public static func recipe(from stack: EditStack) -> [EditOperation.Kind] {
         stack.operations.map(\.kind).filter { kind in
             switch kind {
-            case .adjust, .adjustments, .toneCurve, .look, .autoEnhance, .denoise, .sharpen, .relight: return true
+            case .adjust, .adjustments, .toneCurve, .look, .autoEnhance, .denoise, .sharpen, .relight, .colorMixer, .colorGrade: return true
             default: return false
             }
         }

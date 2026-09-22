@@ -154,6 +154,9 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
         if let match = clip.colorMatch {
             image = ColorCube.shared.apply(match, to: image)
         }
+        if clip.colorMixer != nil || clip.colorGrade != nil {
+            image = ColorCube.shared.apply(mixer: clip.colorMixer, grade: clip.colorGrade, to: image)
+        }
         return image
     }
 

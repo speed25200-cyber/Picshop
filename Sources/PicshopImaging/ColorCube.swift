@@ -51,6 +51,17 @@ public final class ColorCube: @unchecked Sendable {
         return apply(dimension: entry.dimension, data: entry.data, to: image)
     }
 
+    /// HSL mixer and three-way grade, baked into one cube.
+    public func apply(mixer: ColorMixer?, grade: ColorGrade?, to image: CIImage) -> CIImage {
+        guard mixer?.isNeutral == false || grade?.isNeutral == false else { return image }
+        var hasher = Hasher()
+        hasher.combine("mixer-grade")
+        hasher.combine(mixer)
+        hasher.combine(grade)
+        let entry = cube(for: hasher.finalize()) { (33, ColorEngine.cube(mixer: mixer, grade: grade, dimension: 33)) }
+        return apply(dimension: entry.dimension, data: entry.data, to: image)
+    }
+
     public func apply(_ lut: CubeLUT, intensity: Double = 1, to image: CIImage) -> CIImage {
         let entry = cube(for: lut.hashValue) { (lut.dimension, lut.data) }
         let graded = apply(dimension: entry.dimension, data: entry.data, to: image)

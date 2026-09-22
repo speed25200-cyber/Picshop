@@ -177,6 +177,15 @@ public actor PhotoRenderer {
         if !adjustments.isNeutral || !curve.isIdentity {
             image = AdjustmentPipeline.apply(adjustments, toneCurve: curve, to: image, scale: effectiveScale)
         }
+        // Colour work after tone, as in a grading suite: match, then mixer and wheels in one LUT.
+        if let match = layer.edits.resolvedColorMatch {
+            image = ColorCube.shared.apply(match, to: image)
+        }
+        let mixer = layer.edits.resolvedColorMixer
+        let grade = layer.edits.resolvedColorGrade
+        if mixer != nil || grade != nil {
+            image = ColorCube.shared.apply(mixer: mixer, grade: grade, to: image)
+        }
         return image
     }
 
@@ -184,7 +193,7 @@ public actor PhotoRenderer {
         let extent = input.extent
         let cacheKey = "\(operation.id.uuidString)@\(Int(extent.width))x\(Int(extent.height))"
         switch operation.kind {
-        case .adjust, .adjustments, .toneCurve, .look, .autoEnhance:
+        case .adjust, .adjustments, .toneCurve, .look, .autoEnhance, .colorMixer, .colorGrade, .colorMatch:
             return input
 
         case .crop(let rect):

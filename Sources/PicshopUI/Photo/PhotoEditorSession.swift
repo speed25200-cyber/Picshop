@@ -15,13 +15,14 @@ import PicshopSpeech
 @Observable
 public final class PhotoEditorSession {
     public enum Tool: String, CaseIterable, Identifiable {
-        case magic, adjust, looks, erase, precise, cutout, crop, text, shapes, layers
+        case magic, adjust, looks, color, erase, precise, cutout, crop, text, shapes, layers
         public var id: String { rawValue }
         var title: String {
             switch self {
             case .magic: return L("Magic")
             case .adjust: return L("Adjust")
             case .looks: return L("Filters")
+            case .color: return L("Colour")
             case .erase: return L("Erase")
             case .precise: return L("Precise")
             case .cutout: return L("Cutout")
@@ -34,6 +35,7 @@ public final class PhotoEditorSession {
         var symbol: String {
             switch self {
             case .magic: return "sparkles"
+            case .color: return "paintpalette"
             case .adjust: return "slider.horizontal.3"
             case .looks: return "camera.filters"
             case .erase: return "eraser.line.dashed"
@@ -362,6 +364,36 @@ public final class PhotoEditorSession {
         document.update(layerID: layerID) { $0.edits.setAdjustment(parameter, value: value) }
         history.commit(document, label: parameter.englishName)
         if abs(value - previous) > 0.0005 { lastAdjustment = (parameter, value > previous ? 1 : -1) }
+        requestPreview(interactive: true)
+    }
+
+    // MARK: - Colour (mixer and wheels)
+
+    /// The active layer's colour mixer, neutral when none.
+    public var colorMixer: ColorMixer {
+        document.activeImageLayerID.flatMap { document.layer(id: $0)?.edits.resolvedColorMixer } ?? .neutral
+    }
+
+    /// The active layer's three-way grade, neutral when none.
+    public var colorGrade: ColorGrade {
+        document.activeImageLayerID.flatMap { document.layer(id: $0)?.edits.resolvedColorGrade } ?? .neutral
+    }
+
+    public func beginColorInteraction(_ label: String) { history.beginTransaction(label: label) }
+
+    public func endColorInteraction() {
+        history.endTransaction()
+        requestPreview()
+    }
+
+    public func setColorMixer(_ mixer: ColorMixer) { setColor(.colorMixer(mixer), label: "Colour Mixer") }
+    public func setColorGrade(_ grade: ColorGrade) { setColor(.colorGrade(grade), label: "Colour Grading") }
+
+    private func setColor(_ kind: EditOperation.Kind, label: String) {
+        var document = self.document
+        guard let layerID = document.activeImageLayerID else { return }
+        document.update(layerID: layerID) { $0.edits.setColor(kind) }
+        history.commit(document, label: label)
         requestPreview(interactive: true)
     }
 

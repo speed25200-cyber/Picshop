@@ -120,6 +120,10 @@ public struct VideoClip: Hashable, Codable, Sendable, Identifiable {
     public var colorMatch: ColorMatch?
     /// The clip's sound with the voice isolated (plays instead of the original sound).
     public var enhancedAudio: MediaAsset?
+    /// Hue, saturation and luminance per colour band.
+    public var colorMixer: ColorMixer?
+    /// Three-way colour grade.
+    public var colorGrade: ColorGrade?
 
     public init(id: UUID = UUID(), asset: MediaAsset, sourceRange: TimeSpan? = nil, speed: Double = 1, volume: Double = 1,
                 isMuted: Bool = false, isReversed: Bool = false, adjustments: Adjustments = .neutral, look: FilterPreset = .original,
