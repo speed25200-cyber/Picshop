@@ -53,11 +53,27 @@ extension ProjectLibrary {
             try store.createPackage(for: id)
             var sources: [MagicMovie.Source] = []
             for (index, item) in items.enumerated() {
-                progress(Double(index) / Double(max(1, items.count)) * 0.7, L("Gathering your moments…"))
+                progress(Double(index) / Double(max(1, items.count)) * 0.55, L("Gathering your moments…"))
                 let source = try await importSource(item, index: index, projectID: id)
                 if let source { sources.append(source) }
             }
             guard !sources.isEmpty else { throw PicshopError.mediaUnavailable(L("clips")) }
+
+            // Where each clip is at its best — looks, faces, sound, movement — so every shot
+            // takes its strongest moment rather than its middle.
+            let scorer = AVVideoServices(store: store, projectID: id, inpainting: InpaintingPipeline())
+            let clipCount = sources.filter { !$0.isStill }.count
+            var scored = 0
+            for index in sources.indices where !sources[index].isStill {
+                progress(0.55 + 0.2 * Double(scored) / Double(max(1, clipCount)), L("Finding the best moments…"))
+                let clip = VideoClip(asset: sources[index].asset)
+                let single = VideoTimeline(title: "", clips: [clip], renderSize: sources[index].asset.pixelSize)
+                let moments = try? await scorer.momentScores(for: clip, timeline: single, progress: { _ in })
+                if let moments {
+                    sources[index].interest = moments.map { (time: $0.time, score: $0.score) }
+                }
+                scored += 1
+            }
 
             var musicAsset: MediaAsset?
             var beats: BeatGrid?
