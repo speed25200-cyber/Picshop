@@ -26,6 +26,9 @@ public struct ClipRenderParameters: @unchecked Sendable {
     public var colorMatch: ColorMatch? = nil
     public var colorMixer: ColorMixer? = nil
     public var colorGrade: ColorGrade? = nil
+    /// An imported `.cube` look and its strength.
+    public var lutURL: URL? = nil
+    public var lutIntensity: Double = 1
 }
 
 /// Where a video overlay's frames come from in the composition.
@@ -203,7 +206,8 @@ public struct CompositionBuilder: Sendable {
                                                    adjustments: clip.adjustments, look: clip.look, lookIntensity: clip.lookIntensity, crop: clip.crop,
                                                    rotation: clip.rotation, flipHorizontal: clip.flipHorizontal, fill: timeline.aspect != .original,
                                                    motion: clip.motion, timelineStart: starts[index], colorMatch: clip.colorMatch,
-                                                   colorMixer: clip.colorMixer, colorGrade: clip.colorGrade))
+                                                   colorMixer: clip.colorMixer, colorGrade: clip.colorGrade,
+                                                   lutURL: clip.lut.map { store.url(for: $0.relativePath, in: projectID) }, lutIntensity: clip.lut?.intensity ?? 1))
         }
 
         audioParameters.append(contentsOf: clipMixes.compactMap { $0 })

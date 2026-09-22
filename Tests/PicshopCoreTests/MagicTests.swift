@@ -467,3 +467,23 @@ final class ChromaKeyTests: XCTestCase {
         if case .video(_, _, let start) = overlay.content { XCTAssertEqual(start, 1) } else { XCTFail() }
     }
 }
+
+final class LUTStackTests: XCTestCase {
+    func testLastLUTWinsAndZeroRemovesIt() {
+        var stack = EditStack()
+        stack.setColor(.lut(LUTReference(relativePath: "media/a.cube", title: "A")))
+        stack.setColor(.lut(LUTReference(relativePath: "media/b.cube", title: "B", intensity: 0.5)))
+        XCTAssertEqual(stack.operations.count, 1, "consecutive LUT changes are one step")
+        XCTAssertEqual(stack.resolvedLUT?.title, "B")
+        XCTAssertEqual(stack.resolvedLUT?.intensity, 0.5)
+        stack.setColor(.lut(LUTReference(relativePath: "media/b.cube", title: "B", intensity: 0)))
+        XCTAssertNil(stack.resolvedLUT)
+    }
+
+    func testClipLUTSurvivesCoding() throws {
+        var clip = VideoClip(asset: MediaAsset(kind: .video, relativePath: "media/v.mov", pixelSize: PSSize(width: 10, height: 10), duration: 1))
+        clip.lut = LUTReference(relativePath: "media/look.cube", title: "Look", intensity: 0.7)
+        let decoded = try JSONDecoder().decode(VideoClip.self, from: JSONEncoder().encode(clip))
+        XCTAssertEqual(decoded.lut, clip.lut)
+    }
+}

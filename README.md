@@ -30,7 +30,7 @@ Tap a Magic tool, type what you want, or just say it — *« efface le chien »*
 | Photo | Video |
 |---|---|
 | Photos-style adjustment dials (19 parameters), tone curves, 20 looks, History (hold Undo) | Multi-lane timeline: centred playhead, pinch zoom, trim handles, captions lane, beat markers |
-| **HSL mixer** (8 bands) and **three-way colour wheels**, baked into one GPU LUT | Per-clip adjustments, looks, **HSL mixer and colour wheels** |
+| **HSL mixer** (8 bands), **three-way colour wheels** and **.cube LUT import**, on the GPU | Per-clip adjustments, looks, **HSL mixer and colour wheels** |
 | Layers: text, shapes, blend modes, opacity, masks | Several sound tracks with fades, automatic ducking drawn on the lanes, a mixer |
 | Magic wand, lasso, pixel brush, clone stamp, pixel grid | Split, trim, speed, reverse, freeze frame, transitions, text overlays |
 | Crop with ratio presets, straighten, perspective | HEVC export in 9:16, 1:1, 16:9 … |

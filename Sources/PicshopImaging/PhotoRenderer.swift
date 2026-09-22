@@ -207,6 +207,10 @@ public actor PhotoRenderer {
         if mixer != nil || grade != nil {
             image = ColorCube.shared.apply(mixer: mixer, grade: grade, to: image)
         }
+        // An imported look sits on top, as the last node of a grade.
+        if let lut = layer.edits.resolvedLUT {
+            image = ColorCube.shared.apply(lutAt: store.url(for: lut.relativePath, in: projectID), intensity: lut.intensity, to: image)
+        }
         return image
     }
 
@@ -214,7 +218,7 @@ public actor PhotoRenderer {
         let extent = input.extent
         let cacheKey = "\(operation.id.uuidString)@\(Int(extent.width))x\(Int(extent.height))"
         switch operation.kind {
-        case .adjust, .adjustments, .toneCurve, .look, .autoEnhance, .colorMixer, .colorGrade, .colorMatch:
+        case .adjust, .adjustments, .toneCurve, .look, .autoEnhance, .colorMixer, .colorGrade, .colorMatch, .lut:
             return input
 
         case .lensBlur(let focus, let aperture, let mask):

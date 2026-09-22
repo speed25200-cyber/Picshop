@@ -124,6 +124,8 @@ public struct VideoClip: Hashable, Codable, Sendable, Identifiable {
     public var colorMixer: ColorMixer?
     /// Three-way colour grade.
     public var colorGrade: ColorGrade?
+    /// A `.cube` look, applied after the grade.
+    public var lut: LUTReference?
     /// Where someone speaks, in *source* seconds, so music can dip under the
     /// voice. Kept in source time so trims, splits, moves and speed changes
     /// never put it out of step. Nil until analysed.

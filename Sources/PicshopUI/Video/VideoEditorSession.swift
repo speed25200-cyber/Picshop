@@ -270,6 +270,27 @@ public final class VideoEditorSession {
         update(label) { $0.update(clipID: id, body) }
     }
 
+    /// Imports a `.cube` look onto the selected clip.
+    public func importLUT(from url: URL) {
+        do {
+            let reference = try LUTImporter.save(url, store: app.store, projectID: projectID)
+            updateSelectedClip("LUT") { $0.lut = reference }
+            Haptics.success()
+            showToast(String(format: L("Look “%@” applied"), reference.title), undoable: true)
+        } catch {
+            showToast(L("That file is not a 3D .cube LUT."), isError: true)
+        }
+    }
+
+    /// The selected clip's look on every clip, for a consistent grade.
+    public func applyLUTToAllClips() {
+        guard let reference = selectedClip?.lut else { return }
+        update("LUT on every clip") { timeline in
+            for index in timeline.clips.indices { timeline.clips[index].lut = reference }
+        }
+        Haptics.success()
+    }
+
     public func beginSliderInteraction(_ label: String) { history.beginTransaction(label: label) }
     public func endSliderInteraction() { history.endTransaction(); player.load(timeline) }
 

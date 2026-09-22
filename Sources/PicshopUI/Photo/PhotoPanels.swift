@@ -43,7 +43,9 @@ struct PhotoToolPanel: View {
             case .color:
                 ColorControls(mixer: session.colorMixer, grade: session.colorGrade,
                               onMixer: { session.setColorMixer($0) }, onGrade: { session.setColorGrade($0) },
-                              onBegin: { session.beginColorInteraction($0) }, onEnd: { session.endColorInteraction() })
+                              onBegin: { session.beginColorInteraction($0) }, onEnd: { session.endColorInteraction() },
+                              lut: session.lut, onImportLUT: { session.importLUT(from: $0) },
+                              onLUTIntensity: { session.setLUTIntensity($0) }, onRemoveLUT: { session.removeLUT() })
             case .looks: LooksPanel(session: session)
             case .erase: ErasePanel(session: session)
             case .precise: PrecisePanel(session: session)

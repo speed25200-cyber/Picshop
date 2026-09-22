@@ -68,6 +68,28 @@ public final class ColorCube: @unchecked Sendable {
         return apply(dimension: entry.dimension, data: entry.data, to: image)
     }
 
+    /// A `.cube` file from the project, read once and kept with the other cubes.
+    /// A file that does not parse leaves the picture as it is.
+    public func apply(lutAt url: URL, intensity: Double = 1, to image: CIImage) -> CIImage {
+        var hasher = Hasher()
+        hasher.combine("lut-file")
+        hasher.combine(url.path)
+        let entry = cube(for: hasher.finalize()) {
+            if let text = try? String(contentsOf: url, encoding: .utf8), let lut = try? CubeLUT.parse(text) { return (lut.dimension, lut.data) }
+            return (2, Self.identity2)
+        }
+        let graded = apply(dimension: entry.dimension, data: entry.data, to: image)
+        guard intensity < 0.999 else { return graded }
+        return AdjustmentPipeline.blend(graded, over: image, alpha: max(0, intensity))
+    }
+
+    /// The 2 × 2 × 2 cube that changes nothing.
+    static let identity2: [Float] = {
+        var values: [Float] = []
+        for b in 0...1 { for g in 0...1 { for r in 0...1 { values += [Float(r), Float(g), Float(b), 1] } } }
+        return values
+    }()
+
     public func apply(_ lut: CubeLUT, intensity: Double = 1, to image: CIImage) -> CIImage {
         let entry = cube(for: lut.hashValue) { (lut.dimension, lut.data) }
         let graded = apply(dimension: entry.dimension, data: entry.data, to: image)

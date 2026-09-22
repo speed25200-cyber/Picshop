@@ -215,6 +215,9 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
         if clip.colorMixer != nil || clip.colorGrade != nil {
             image = ColorCube.shared.apply(mixer: clip.colorMixer, grade: clip.colorGrade, to: image)
         }
+        if let url = clip.lutURL, clip.lutIntensity > 0.001 {
+            image = ColorCube.shared.apply(lutAt: url, intensity: clip.lutIntensity, to: image)
+        }
         return image
     }
 

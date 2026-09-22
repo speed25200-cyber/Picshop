@@ -54,6 +54,8 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
         case colorMixer(ColorMixer)
         /// Three-way colour grade (last one wins).
         case colorGrade(ColorGrade)
+        /// A `.cube` look (last one wins; intensity 0 removes it).
+        case lut(LUTReference)
         /// Colour mood transferred from a reference picture (last one wins).
         case colorMatch(ColorMatch)
         /// Generative expand: the canvas grows and the new border is invented.
@@ -96,6 +98,7 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
             case .pixelPaint: return "Paint"
             case .colorMixer: return "Colour Mixer"
             case .colorGrade: return "Colour Grading"
+            case .lut(let reference): return "LUT \(reference.title)"
             case .colorMatch: return "Match Colour"
             case .lensBlur: return "Focus"
             case .expand: return "Expand"
@@ -192,6 +195,13 @@ public struct EditStack: Hashable, Codable, Sendable {
         return nil
     }
 
+    public var resolvedLUT: LUTReference? {
+        for operation in operations.reversed() {
+            if case .lut(let reference) = operation.kind { return reference.intensity > 0.001 ? reference : nil }
+        }
+        return nil
+    }
+
     public var resolvedColorMatch: ColorMatch? {
         for operation in operations.reversed() {
             if case .colorMatch(let match) = operation.kind { return match.strength > 0.001 ? match : nil }
@@ -214,7 +224,7 @@ public struct EditStack: Hashable, Codable, Sendable {
     public mutating func setColor(_ kind: EditOperation.Kind) {
         if let last = operations.last {
             switch (last.kind, kind) {
-            case (.colorMixer, .colorMixer), (.colorGrade, .colorGrade), (.colorMatch, .colorMatch), (.lensBlur, .lensBlur):
+            case (.colorMixer, .colorMixer), (.colorGrade, .colorGrade), (.colorMatch, .colorMatch), (.lensBlur, .lensBlur), (.lut, .lut):
                 operations[operations.count - 1] = EditOperation(id: last.id, kind: kind, createdAt: last.createdAt)
                 return
             default: break

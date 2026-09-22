@@ -518,6 +518,36 @@ public final class PhotoEditorSession {
         requestPreview()
     }
 
+    /// The active layer's imported look, nil when none.
+    public var lut: LUTReference? {
+        document.activeImageLayerID.flatMap { document.layer(id: $0)?.edits.resolvedLUT }
+    }
+
+    public func importLUT(from url: URL) {
+        do {
+            let reference = try LUTImporter.save(url, store: app.store, projectID: projectID)
+            setColor(.lut(reference), label: "LUT")
+            requestPreview()
+            Haptics.success()
+            showToast(String(format: L("Look “%@” applied"), reference.title), undoable: true)
+        } catch {
+            showToast(L("That file is not a 3D .cube LUT."), isError: true)
+        }
+    }
+
+    public func setLUTIntensity(_ value: Double) {
+        guard var reference = lut else { return }
+        reference.intensity = value.clamped(to: 0.05...1)
+        setColor(.lut(reference), label: "LUT Intensity")
+    }
+
+    public func removeLUT() {
+        guard var reference = lut else { return }
+        reference.intensity = 0
+        setColor(.lut(reference), label: "Remove LUT")
+        requestPreview()
+    }
+
     public func setColorMixer(_ mixer: ColorMixer) { setColor(.colorMixer(mixer), label: "Colour Mixer") }
     public func setColorGrade(_ grade: ColorGrade) { setColor(.colorGrade(grade), label: "Colour Grading") }
 

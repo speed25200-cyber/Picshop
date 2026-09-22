@@ -29,7 +29,8 @@
   focus after the shot (lens blur from the depth map or the subject), magic move (an object lifts off, the hole is filled, it lands where you say — by voice or a long press on
   it), generative expand to any shape ("étends l'image en
   16:9"), a Magic tab with a prompt field.
-- Pro colour for photo and video: eight-band HSL mixer and three-way colour wheels, on the GPU.
+- Pro colour for photo and video: eight-band HSL mixer, three-way colour wheels and imported `.cube` LUTs with an
+  intensity (one clip or every clip), on the GPU.
 - Photos-style adjustment dials; editors rebuilt on the new chrome; new onboarding.
 
 ## Unreleased — polish loop

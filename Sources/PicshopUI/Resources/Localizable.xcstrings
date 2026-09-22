@@ -81,6 +81,22 @@
         }
       }
     },
+    "A .cube look from Resolve, Premiere or a LUT pack.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A .cube look from Resolve, Premiere or a LUT pack."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un look .cube de Resolve, Premiere ou d'un pack de LUT."
+          }
+        }
+      }
+    },
     "A 30-second recap of the best moments": {
       "localizations": {
         "en": {
@@ -333,6 +349,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Animaux"
+          }
+        }
+      }
+    },
+    "Another LUT": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another LUT"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autre LUT"
           }
         }
       }
@@ -2225,6 +2257,22 @@
         }
       }
     },
+    "Every clip": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every clip"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tous les clips"
+          }
+        }
+      }
+    },
     "Every pause, gone": {
       "localizations": {
         "en": {
@@ -3281,6 +3329,22 @@
         }
       }
     },
+    "Import a LUT": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import a LUT"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importer un LUT"
+          }
+        }
+      }
+    },
     "Importing…": {
       "localizations": {
         "en": {
@@ -3469,6 +3533,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dites-le, simplement."
+          }
+        }
+      }
+    },
+    "LUT": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LUT"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LUT"
+          }
+        }
+      }
+    },
+    "LUT Intensity": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LUT Intensity"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intensité du LUT"
           }
         }
       }
@@ -3773,6 +3869,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Je vous écoute…"
+          }
+        }
+      }
+    },
+    "Look “%@” applied": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Look “%@” applied"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Look « %@ » appliqué"
           }
         }
       }
@@ -5873,6 +5985,22 @@
         }
       }
     },
+    "Remove the LUT": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove the LUT"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer le LUT"
+          }
+        }
+      }
+    },
     "Remove track": {
       "localizations": {
         "en": {
@@ -7309,6 +7437,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Texte derrière le sujet"
+          }
+        }
+      }
+    },
+    "That file is not a 3D .cube LUT.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That file is not a 3D .cube LUT."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce fichier n'est pas un LUT .cube 3D."
           }
         }
       }

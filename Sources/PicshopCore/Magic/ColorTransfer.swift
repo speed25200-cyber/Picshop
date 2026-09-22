@@ -131,6 +131,21 @@ public enum ColorSpaceMath {
     }
 }
 
+/// A `.cube` look saved in the project, and how strongly it is applied.
+public struct LUTReference: Hashable, Codable, Sendable {
+    /// Path inside the project package (`media/lut-….cube`).
+    public var relativePath: String
+    public var title: String
+    /// 0…1, blended over the ungraded picture.
+    public var intensity: Double
+
+    public init(relativePath: String, title: String, intensity: Double = 1) {
+        self.relativePath = relativePath
+        self.title = title
+        self.intensity = intensity.clamped(to: 0...1)
+    }
+}
+
 /// A 3D look-up table read from an Adobe/Resolve `.cube` file.
 public struct CubeLUT: Hashable, Sendable {
     public var title: String

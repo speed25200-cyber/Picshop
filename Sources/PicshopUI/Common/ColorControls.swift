@@ -1,5 +1,6 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
+import UniformTypeIdentifiers
 import PicshopCore
 
 /// Pro colour: an eight-band HSL mixer and three colour wheels (shadows,
@@ -12,27 +13,93 @@ struct ColorControls: View {
     var onGrade: (ColorGrade) -> Void
     var onBegin: (String) -> Void
     var onEnd: () -> Void
+    /// An imported `.cube` look; the LUT tab appears when `onImportLUT` is set.
+    var lut: LUTReference? = nil
+    var onImportLUT: ((URL) -> Void)? = nil
+    var onLUTIntensity: ((Double) -> Void)? = nil
+    var onRemoveLUT: (() -> Void)? = nil
+    /// A second action for the look, e.g. "Apply to every clip".
+    var lutExtra: (title: String, run: () -> Void)? = nil
 
     enum Mode: String, CaseIterable, Identifiable {
-        case mixer, wheels
+        case mixer, wheels, lut
         var id: String { rawValue }
-        var title: String { self == .mixer ? L("Mixer") : L("Wheels") }
-        var symbol: String { self == .mixer ? "circle.hexagongrid" : "circle.circle" }
+        var title: String {
+            switch self {
+            case .mixer: return L("Mixer")
+            case .wheels: return L("Wheels")
+            case .lut: return L("LUT")
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .mixer: return "circle.hexagongrid"
+            case .wheels: return "circle.circle"
+            case .lut: return "cube.transparent"
+            }
+        }
     }
 
     @State private var mode: Mode? = .mixer
     @State private var band: ColorMixer.Band = .red
+    @State private var importsLUT = false
 
     var body: some View {
         VStack(spacing: 12) {
-            ModeSegments(modes: Mode.allCases, selection: $mode, title: { $0.title }, symbol: { $0.symbol })
-            if mode == .wheels {
-                wheels.transition(.opacity)
-            } else {
-                mixerControls.transition(.opacity)
+            ModeSegments(modes: onImportLUT == nil ? [.mixer, .wheels] : Mode.allCases, selection: $mode, title: { $0.title }, symbol: { $0.symbol })
+            switch mode {
+            case .wheels: wheels.transition(.opacity)
+            case .lut: lutControls.transition(.opacity)
+            default: mixerControls.transition(.opacity)
             }
         }
         .animation(PSMotion.standard, value: mode)
+        .fileImporter(isPresented: $importsLUT, allowedContentTypes: [UTType(filenameExtension: "cube", conformingTo: .data) ?? .data, .plainText]) { result in
+            if case .success(let url) = result { onImportLUT?(url) }
+        }
+    }
+
+    // MARK: LUT
+
+    private var lutControls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let lut {
+                HStack(spacing: 10) {
+                    Image(systemName: "cube.transparent.fill").font(.system(size: 16, weight: .semibold)).foregroundStyle(PSTheme.accent)
+                    Text(lut.title).font(PSFont.headline(14)).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
+                    Spacer()
+                    Button { Haptics.tap(); onRemoveLUT?() } label: {
+                        Image(systemName: "xmark").font(.system(size: 12, weight: .bold)).frame(width: 30, height: 30).background(Circle().fill(Color.white.opacity(0.08)))
+                    }
+                    .buttonStyle(PSPressStyle(scale: 0.9)).foregroundStyle(PSTheme.textSecondary)
+                    .accessibilityLabel(L("Remove the LUT"))
+                }
+                ParameterSlider(title: L("Intensity"), value: Binding(get: { lut.intensity }, set: { onLUTIntensity?($0) }), range: 0.05...1, bipolar: false) { editing in
+                    if editing { onBegin(L("LUT Intensity")) } else { onEnd() }
+                }
+                HStack(spacing: 8) {
+                    PanelChip(title: L("Another LUT"), symbol: "square.and.arrow.down") { importsLUT = true }
+                    if let lutExtra { PanelChip(title: lutExtra.title, symbol: "square.stack.3d.down.right") { lutExtra.run() } }
+                    Spacer(minLength: 0)
+                }
+            } else {
+                Button { Haptics.tap(); importsLUT = true } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "cube.transparent").font(.system(size: 22, weight: .semibold)).foregroundStyle(PSTheme.accent)
+                            .frame(width: 46, height: 46).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(L("Import a LUT")).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
+                            Text(L("A .cube look from Resolve, Premiere or a LUT pack.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right").font(.system(size: 12, weight: .bold)).foregroundStyle(PSTheme.textTertiary)
+                    }
+                    .padding(10)
+                    .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+                .buttonStyle(PSPressStyle(scale: 0.97))
+            }
+        }
     }
 
     // MARK: Mixer
@@ -275,6 +342,20 @@ struct LuminanceSlider: View {
         .accessibilityElement()
         .accessibilityLabel(L("Luminance"))
         .accessibilityValue("\(Int(value * 100))")
+    }
+}
+/// Copies a `.cube` file into the project after checking it is a 3D LUT.
+enum LUTImporter {
+    static func save(_ url: URL, store: ProjectStore, projectID: UUID) throws -> LUTReference {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        let data = try Data(contentsOf: url)
+        guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else { throw CubeLUT.ParseError.missingSize }
+        let lut = try CubeLUT.parse(text, fallbackTitle: url.deletingPathExtension().lastPathComponent)
+        try store.createPackage(for: projectID)
+        let name = "lut-\(UUID().uuidString.prefix(8)).cube"
+        try text.write(to: store.mediaURL(for: projectID).appendingPathComponent(name), atomically: true, encoding: .utf8)
+        return LUTReference(relativePath: "\(Project.mediaDirectory)/\(name)", title: lut.title)
     }
 }
 #endif

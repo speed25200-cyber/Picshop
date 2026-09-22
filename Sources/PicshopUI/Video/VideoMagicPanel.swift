@@ -145,7 +145,12 @@ struct VideoColorPanel: View {
                       onMixer: { mixer in session.updateSelectedClip("Colour Mixer") { $0.colorMixer = mixer.isNeutral ? nil : mixer } },
                       onGrade: { grade in session.updateSelectedClip("Colour Grading") { $0.colorGrade = grade.isNeutral ? nil : grade } },
                       onBegin: { session.beginSliderInteraction($0) },
-                      onEnd: { session.endSliderInteraction() })
+                      onEnd: { session.endSliderInteraction() },
+                      lut: session.selectedClip?.lut,
+                      onImportLUT: { session.importLUT(from: $0) },
+                      onLUTIntensity: { value in session.updateSelectedClip("LUT Intensity") { $0.lut?.intensity = value } },
+                      onRemoveLUT: { session.updateSelectedClip("Remove LUT") { $0.lut = nil } },
+                      lutExtra: session.timeline.clips.count > 1 ? (title: L("Every clip"), run: { session.applyLUTToAllClips() }) : nil)
     }
 }
 #endif
