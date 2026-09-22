@@ -123,6 +123,7 @@ Paris au centre · Make the text bigger · Change le texte en Hello · Mets le t
 | Fais un résumé de 30 secondes · Garde les meilleurs moments · Make a 20 second recap | A recap of the best moments: Vision's aesthetics, faces, the sound's energy and movement, each shot inside one camera shot, in order, with short dissolves |
 | Coupe à chaque changement de plan · Détecte les plans · Split scenes | Finds every shot change (colour and light fingerprints, pinned to the exact frame) and splits the clips there |
 | Fais suivre le texte à la personne · Le logo suit la voiture · Make the sticker follow his face · Arrête de suivre | Tracks whatever is under the overlay (face, person, object) from the playhead both ways; the overlay moves with it |
+| Adapte la musique à la vidéo · Fit the music · Make the music end with the video | The song is cut on a bar line so its last phrase closes with the picture, with a fade over that bar |
 | Baisse la musique quand je parle · Duck the music under the voice · Désactive le ducking | The music dips under every sentence and comes back between them (from the captions' words, else the voice's energy) |
 | Ajoute un effet Ken Burns partout · Slow zoom · Camera move | Slow push-in and drift on the clips |
 | Harmonise les couleurs sur le clip 1 · Match the colours | Gives every clip the colour mood of a reference clip |

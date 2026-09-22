@@ -645,6 +645,33 @@ public struct VideoCommandExecutor: Sendable {
                 return (timeline, .failed(errorMessage(error)))
             }
 
+        case .fitMusic:
+            guard let index = timeline.audioTracks.firstIndex(where: { !$0.isMuted }) else {
+                return (timeline, .failed(fr ? "Ajoute d'abord une musique." : "Add some music first."))
+            }
+            let track = timeline.audioTracks[index]
+            let needed = timeline.duration - track.timelineStart
+            guard needed > 1 else { return (timeline, .failed(fr ? "La musique commence après la fin de la vidéo." : "The music starts after the video ends.")) }
+            do {
+                let grid: BeatGrid
+                if let cached = timeline.beatGrid { grid = cached } else {
+                    let signal = try await services.musicSignal(track: track)
+                    guard let analysed = BeatTracker().analyze(signal) else { return (timeline, .failed(fr ? "Je ne trouve pas le rythme de cette musique." : "I can't find the beat in this music.")) }
+                    grid = analysed
+                    timeline.beatGrid = grid
+                }
+                let available = max(track.sourceRange.end, track.asset.duration)
+                guard let ending = MusicFit.ending(grid: grid, sourceStart: track.sourceRange.start, sourceEnd: available, needed: needed) else {
+                    return (timeline, ExecutionResult(outcome: .info(message: fr ? "La musique est plus courte que la vidéo." : "The song is shorter than the video.")))
+                }
+                timeline.audioTracks[index].sourceRange = TimeSpan(start: track.sourceRange.start, end: ending.end)
+                timeline.audioTracks[index].fadeOut = ending.fade
+                timeline.touch()
+                return (timeline, .applied(fr ? "La musique finit avec la vidéo, sur la mesure" : "The music ends with the video, on the bar"))
+            } catch {
+                return (timeline, .failed(errorMessage(error)))
+            }
+
         case .syncToBeat:
             guard timeline.clips.count > 1 || timeline.audioTracks.isEmpty == false else {
                 return (timeline, .failed(fr ? "Ajoute d'abord une musique." : "Add some music first."))

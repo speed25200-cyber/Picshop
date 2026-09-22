@@ -16,6 +16,7 @@
   on the timeline.
 - Subject tracking: a title, sticker, picture or video overlay attaches to a face, a person or any object and moves with
   it (Vision's tracker on the finished picture, smoothed); Follow subject in the Text and Overlay panels, or by voice.
+- Music that ends with the picture: cut on a bar line, faded over it ("adapte la musique à la vidéo").
 - Automatic ducking: the music dips under every sentence and comes back between them; the voice map lives in each
   clip's own time so trims, cuts and speed changes keep it in step.
 - Caption translation on device: "traduis les sous-titres en anglais", or Translate beside the caption styles.

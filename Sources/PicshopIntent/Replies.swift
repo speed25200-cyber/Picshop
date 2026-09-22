@@ -99,6 +99,7 @@ public enum Replies {
         case .animateText: return fr ? "J'anime le titre." : "Animating the title."
         case .cutWords: return fr ? "Je coupe ce passage." : "Cutting that passage."
         case .syncToBeat: return fr ? "Je cale les coupes sur le rythme." : "Cutting to the beat."
+        case .fitMusic: return fr ? "La musique finira avec la vidéo." : "The music will end with the video."
         case .smartReframe: return fr ? "Je recadre en suivant le sujet." : "Reframing around the subject."
         case .kenBurns: return fr ? "Mouvement de caméra ajouté." : "Camera move added."
         case .enhanceVoice: return fr ? "J'isole la voix." : "Cleaning up the voice."

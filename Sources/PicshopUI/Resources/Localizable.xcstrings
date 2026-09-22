@@ -2161,6 +2161,22 @@
         }
       }
     },
+    "End with the video": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "End with the video"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finir avec la vidéo"
+          }
+        }
+      }
+    },
     "Energetic": {
       "localizations": {
         "en": {
@@ -4573,22 +4589,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Musique"
-          }
-        }
-      }
-    },
-    "Music dips while someone speaks": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Music dips while someone speaks"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "La musique baisse quand quelqu'un parle"
           }
         }
       }

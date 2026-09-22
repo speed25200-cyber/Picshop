@@ -90,6 +90,8 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     case cutWords
     /// Moves every cut onto the nearest beat of the music.
     case syncToBeat
+    /// The music ends with the video, cut on a bar with a fade.
+    case fitMusic
     /// Changes the aspect ratio and follows the subject inside the new frame.
     case smartReframe
     /// Slow push-in / drift on the clip(s).
@@ -148,7 +150,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
         switch self {
         case .trim, .split, .deleteClip, .deleteRange, .setSpeed, .reverse, .mute, .unmute, .setVolume,
              .addTransition, .removeTransition, .addMusic, .removeMusic, .moveAudio, .fadeAudio, .extractFrame, .seek, .play, .pause,
-             .duplicateClip, .moveClip, .stabilize, .freezeFrame, .autoCaptions, .removeCaptions, .translateCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .splitScenes, .animateText, .highlights, .speedRamp, .punchIns, .syncToBeat,
+             .duplicateClip, .moveClip, .stabilize, .freezeFrame, .autoCaptions, .removeCaptions, .translateCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .splitScenes, .animateText, .highlights, .speedRamp, .punchIns, .syncToBeat, .fitMusic,
              .smartReframe, .kenBurns, .enhanceVoice:
             return true
         default:
@@ -437,6 +439,7 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .animateText: return "Animate title \(text ?? "none")"
         case .cutWords: return "Cut “\(text ?? "")”"
         case .syncToBeat: return "Cut to the beat"
+        case .fitMusic: return "Fit the music"
         case .smartReframe: return "Smart reframe \(aspect?.displayName ?? "")"
         case .kenBurns: return "Ken Burns"
         case .enhanceVoice: return "Enhance voice"

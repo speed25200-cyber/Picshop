@@ -148,8 +148,8 @@ struct AudioPanel: View {
                         if isDucking { intent.amount = .absolute(0) }
                         session.perform(intent)
                     }
-                    if isDucking {
-                        Text(L("Music dips while someone speaks")).font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary).lineLimit(2)
+                    PanelChip(title: L("End with the video"), symbol: "music.note.list", tint: PSTheme.voice, isEnabled: !session.isProcessing) {
+                        session.perform(EditIntent(action: .fitMusic))
                     }
                     Spacer(minLength: 0)
                 }

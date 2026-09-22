@@ -398,6 +398,10 @@ extension RuleBasedIntentEngine {
         if let duck = parseDucking(u) { return [duck] }
         if let tracking = parseTracking(u) { return [tracking] }
         if let textMove = parseTextMove(u) { return [textMove] }
+        if u.contains(["adapte la musique", "ajuste la musique", "cale la fin de la musique", "fais finir la musique", "la musique finit avec", "musique a la duree", "fin de la musique en rythme",
+                       "fit the music", "fit the song", "make the music end", "end the music with", "music ends with", "trim the music to", "musique a la longueur", "music to the length"]) {
+            return [EditIntent(action: .fitMusic)]
+        }
         if u.contains(["zoom cut", "zoom cuts", "zooms de coupe", "zoom de coupe", "punch in", "punch ins", "punchin", "zoome a chaque coupe", "zoom a chaque coupe", "zoom on every cut",
                        "zoom at every cut", "zoom in on the cuts", "zooms sur les coupes", "alterne les cadrages", "alternate the framing", "cache les jump cuts", "hide the jump cuts"]) {
             var intent = EditIntent(action: .punchIns)

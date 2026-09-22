@@ -378,9 +378,9 @@ public final class VideoEditorSession {
         guard var executor else { return .failed(message: "not ready") }
         executor.language = language
         let heavy: Set<IntentAction> = [.removeObject, .chooseCandidate, .stabilize, .reverse, .blurBackground, .removeBackground, .replaceBackground, .freezeFrame, .extractFrame,
-                                        .autoCaptions, .translateCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .splitScenes, .highlights, .punchIns, .syncToBeat, .smartReframe, .enhanceVoice, .matchColor, .kenBurns]
+                                        .autoCaptions, .translateCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .splitScenes, .highlights, .punchIns, .syncToBeat, .fitMusic, .smartReframe, .enhanceVoice, .matchColor, .kenBurns]
         // Analyses that finish without reporting a fraction show the pulsing glyph instead of 0 %.
-        let indeterminate: Set<IntentAction> = [.removeSilences, .autoDuck, .syncToBeat, .matchColor, .kenBurns]
+        let indeterminate: Set<IntentAction> = [.removeSilences, .autoDuck, .syncToBeat, .fitMusic, .matchColor, .kenBurns]
         if heavy.contains(intent.action) {
             isProcessing = true
             processingProgress = indeterminate.contains(intent.action) ? nil : 0
@@ -454,7 +454,7 @@ public final class VideoEditorSession {
         case .highlights: return L("Watching for the best moments…")
         case .punchIns: return L("Framing the speaker…")
         case .cutWords: return L("Finding the words…")
-        case .syncToBeat: return L("Finding the beat…")
+        case .syncToBeat, .fitMusic: return L("Finding the beat…")
         case .smartReframe: return L("Following the subject…")
         case .enhanceVoice: return L("Isolating the voice…")
         case .matchColor: return L("Matching colours…")

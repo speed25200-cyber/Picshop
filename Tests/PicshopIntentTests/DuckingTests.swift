@@ -95,3 +95,29 @@ final class DuckingTests: XCTestCase {
         XCTAssertFalse(result.outcome.isSuccess)
     }
 }
+
+final class MusicFitTests: XCTestCase {
+    /// 120 BPM: a beat every half second, a bar every two seconds.
+    let grid = BeatGrid(bpm: 120, beats: stride(from: 0.0, through: 180, by: 0.5).map { $0 }, downbeatOffset: 0)
+
+    func testEndsOnABarBeforeTheVideoEnds() {
+        let ending = MusicFit.ending(grid: grid, sourceStart: 10, sourceEnd: 180, needed: 25.3)
+        XCTAssertEqual(ending?.end ?? 0, 34, accuracy: 1e-9)   // the bar at 34 s, 1.3 s before the video's end at 35.3
+        XCTAssertEqual(ending?.fade ?? 0, 2, accuracy: 1e-9)
+        XCTAssertNil(MusicFit.ending(grid: grid, sourceStart: 170, sourceEnd: 180, needed: 30))
+    }
+
+    func testExecutorAndGrammar() async {
+        let engine = RuleBasedIntentEngine()
+        let context = IntentContext(mode: .video, clipCount: 1, playheadSeconds: 0, timelineDuration: 25.3)
+        XCTAssertEqual(engine.parse("adapte la musique à la vidéo", context: context).intents.first?.action, .fitMusic)
+        let asset = MediaAsset(kind: .video, relativePath: "media/v.mov", pixelSize: PSSize(width: 1920, height: 1080), duration: 25.3, frameRate: 30)
+        var timeline = VideoTimeline(title: "t", clips: [VideoClip(asset: asset, sourceRange: TimeSpan(start: 0, duration: 25.3))], renderSize: PSSize(width: 1920, height: 1080))
+        let song = MediaAsset(kind: .audio, relativePath: "media/song.m4a", pixelSize: .zero, duration: 180)
+        timeline.audioTracks = [AudioTrack(asset: song, sourceRange: TimeSpan(start: 10, end: 180))]
+        timeline.beatGrid = grid
+        let (fitted, result) = await VideoCommandExecutor(services: FakeMagicVideoServices(), language: .english).execute(EditIntent(action: .fitMusic), on: timeline, context: context)
+        XCTAssertTrue(result.outcome.isSuccess)
+        XCTAssertEqual(fitted.audioTracks[0].sourceRange.end, 34, accuracy: 1e-9)
+    }
+}

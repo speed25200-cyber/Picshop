@@ -236,6 +236,24 @@ public struct FFT: Sendable {
 // MARK: - Beat tracking
 
 /// Tempo and beat positions of a piece of music.
+/// Music that ends with the picture: the song is cut on a bar line so its
+/// last phrase closes as the video does, and fades over that bar.
+public enum MusicFit {
+    /// The new end of the track (source seconds) and its fade-out, or nil
+    /// when the song is shorter than the video from where it starts.
+    public static func ending(grid: BeatGrid, sourceStart: Double, sourceEnd: Double, needed: Double) -> (end: Double, fade: Double)? {
+        let wanted = sourceStart + needed
+        guard sourceEnd >= wanted - 0.05 else { return nil }
+        let bar = grid.period * 4
+        let bars = grid.downbeats.filter { $0 > sourceStart + bar && $0 <= wanted + 0.05 }
+        // The last bar line that leaves at most two bars of picture without music.
+        guard let end = bars.last(where: { wanted - $0 <= max(2 * bar, 0.5) }) else {
+            return (min(sourceEnd, wanted), min(2, needed / 4))
+        }
+        return (end, min(2.5, max(0.8, bar)))
+    }
+}
+
 public struct BeatGrid: Hashable, Codable, Sendable {
     public var bpm: Double
     /// Beat times in seconds, ascending.
