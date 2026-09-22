@@ -45,6 +45,7 @@ public enum ObjectVocabulary {
         Entry(label: "hair", spoken: ["hair", "cheveux", "chevelure", "barbe", "beard"], classifierTerms: ["hair", "beard"], category: .person),
         Entry(label: "eyes", spoken: ["eyes", "eye", "yeux", "oeil", "regard"], classifierTerms: ["eye"], category: .person),
         Entry(label: "teeth", spoken: ["teeth", "tooth", "dents", "smile", "sourire"], classifierTerms: ["teeth", "smile"], category: .person),
+        Entry(label: "lips", spoken: ["lips", "lip", "levres", "levre", "lipstick", "rouge a levres"], classifierTerms: ["lips", "mouth"], category: .person),
         Entry(label: "grass", spoken: ["grass", "herbe", "pelouse", "lawn", "gazon", "field", "champ"], classifierTerms: ["grass", "lawn", "field", "meadow"], category: .region),
         Entry(label: "water", spoken: ["water", "eau", "sea", "mer", "ocean", "lake", "lac", "river", "riviere", "pool", "piscine"], classifierTerms: ["water", "sea", "ocean", "lake", "river", "pool"], category: .region),
         Entry(label: "rock", spoken: ["rock", "rocks", "rocher", "rochers", "stone", "stones", "pierre", "pierres", "caillou", "cailloux", "boulder"], classifierTerms: ["rock", "stone", "boulder", "pebble"], category: .nature),

@@ -1505,22 +1505,6 @@
         }
       }
     },
-    "Denoise": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Denoise"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Débruiter"
-          }
-        }
-      }
-    },
     "Describe an edit…": {
       "localizations": {
         "en": {

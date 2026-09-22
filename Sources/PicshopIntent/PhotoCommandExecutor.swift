@@ -121,12 +121,12 @@ public struct PhotoCommandExecutor: Sendable {
                 case .single(let candidate):
                     let mask = try await services.mask(for: [candidate], target: target, in: document)
                     let value = (intent.amount ?? .relative(parameter.defaultStep)).resolve(current: 0, range: parameter.range)
-                    document.apply(.selectiveAdjust(mask, Adjustments([parameter: value])))
+                    document.apply(.selectiveAdjust(mask, Self.selectiveAdjustments(parameter, value, on: target)))
                     return (document, .applied("Selective \(parameter.englishName)"))
                 case .multiple(let list):
                     let mask = try await services.mask(for: list, target: target, in: document)
                     let value = (intent.amount ?? .relative(parameter.defaultStep)).resolve(current: 0, range: parameter.range)
-                    document.apply(.selectiveAdjust(mask, Adjustments([parameter: value])))
+                    document.apply(.selectiveAdjust(mask, Self.selectiveAdjustments(parameter, value, on: target)))
                     return (document, .applied("Selective \(parameter.englishName)"))
                 case .ambiguous(let options):
                     return (document, .clarify(ClarificationRequest(question: CandidateSelector.question(for: target, options: options, language: language), candidates: options, pendingIntent: intent)))
@@ -361,7 +361,7 @@ public struct PhotoCommandExecutor: Sendable {
             case .selectiveAdjust:
                 guard let parameter = intent.parameter else { return (document, .failed("Unknown adjustment")) }
                 let value = (intent.amount ?? .relative(parameter.defaultStep)).resolve(current: 0, range: parameter.range)
-                document.apply(.selectiveAdjust(mask, Adjustments([parameter: value])))
+                document.apply(.selectiveAdjust(mask, Self.selectiveAdjustments(parameter, value, on: target)))
                 return (document, .applied("Selective \(parameter.englishName)"))
             case .crop:
                 let rect = candidates.map(\.boundingBox).reduce(PSRect.zero) { $0.union($1) }.insetBy(dx: -0.05, dy: -0.05).clampedToUnit()
@@ -401,6 +401,17 @@ public struct PhotoCommandExecutor: Sendable {
         } catch {
             return (document, .failed(errorMessage(error)))
         }
+    }
+
+    /// The adjustment for a region, with what a retoucher would add: whiter
+    /// teeth are brighter and less yellow, not only brighter.
+    static func selectiveAdjustments(_ parameter: AdjustmentParameter, _ value: Double, on target: ObjectTarget) -> Adjustments {
+        var adjustments = Adjustments([parameter: value])
+        if target.label == "teeth", parameter == .brightness || parameter == .exposure, value > 0 {
+            let strength = value / max(1e-6, parameter.range.upperBound)
+            adjustments[.saturation] = -min(0.6, strength * 2.5) * AdjustmentParameter.saturation.range.upperBound
+        }
+        return adjustments
     }
 
     func currentBlurAmount(in document: PhotoDocument) -> Double {

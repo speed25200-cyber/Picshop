@@ -20,6 +20,8 @@
   "coupe le passage où je dis …".
 - Video magic: auto captions (five styles), jump cuts, cuts on the beat, smart reframe following the subject, voice
   isolation, colour match across clips, Ken Burns moves; captions lane and beat markers on the timeline.
+- Portrait retouch that touches only what it should: skin (the face oval without eyes, brows and mouth), eyes, teeth
+  (brighter and less yellow) and lips, drawn from Vision's face landmarks; a Retouch tile in Magic.
 - Photo magic: text behind the subject, colours from a reference picture, best looks ranked by Vision's aesthetics model,
   focus after the shot (lens blur from the depth map or the subject), magic move (an object lifts off, the hole is filled, it lands where you say — by voice or a long press on
   it), generative expand to any shape ("étends l'image en

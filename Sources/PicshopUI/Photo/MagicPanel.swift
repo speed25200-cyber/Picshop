@@ -37,7 +37,7 @@ struct MagicPanel: View {
             Suggestion(id: "relight", title: L("Relight"), symbol: "lightbulb.max") { $0.perform(EditIntent(action: .relight)) },
             Suggestion(id: "sky", title: L("Sunset sky"), symbol: "sun.horizon", run: say("remplace le ciel par un coucher de soleil", "replace the sky with a sunset")),
             Suggestion(id: "upscale", title: L("Upscale"), symbol: "arrow.up.left.and.arrow.down.right") { $0.perform(EditIntent(action: .upscale, amount: .absolute(2))) },
-            Suggestion(id: "denoise", title: L("Denoise"), symbol: "circle.dotted.circle") { $0.perform(EditIntent(action: .denoise)) },
+            Suggestion(id: "retouch", title: L("Retouch"), symbol: "face.smiling", run: say("lisse la peau et éclaircis les yeux et blanchis les dents", "smooth the skin and brighten the eyes and whiten the teeth")),
             Suggestion(id: "mono", title: L("Black & white"), symbol: "circle.lefthalf.filled", run: say("noir et blanc", "black and white")),
             Suggestion(id: "expand", title: L("Expand"), symbol: "arrow.up.left.and.arrow.down.right") { $0.expandCanvas() },
         ]

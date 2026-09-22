@@ -54,3 +54,23 @@ final class MagicMoveTests: XCTestCase {
         XCTAssertEqual(offset.y, -0.15, accuracy: 1e-9)
     }
 }
+
+final class PortraitRetouchTests: XCTestCase {
+    func testSkinTeethAndLips() async {
+        let engine = RuleBasedIntentEngine()
+        XCTAssertEqual(engine.parse("lisse la peau", context: .photo).intents.first?.target?.label, "skin")
+        let teeth = engine.parse("blanchis les dents", context: .photo).intents.first
+        XCTAssertEqual(teeth?.target?.label, "teeth")
+        XCTAssertEqual(engine.parse("make the lips red", context: .photo).intents.first?.target?.label, "lips")
+
+        let smile = ObjectCandidate(label: "teeth", boundingBox: PSRect(x: 0.45, y: 0.6, width: 0.1, height: 0.03), confidence: 0.9)
+        let executor = PhotoCommandExecutor(services: FakePhotoServices(candidates: [smile]))
+        guard let intent = teeth else { return XCTFail("no intent") }
+        let document = PhotoDocument(title: "t", baseImage: MediaAsset(kind: .image, relativePath: "media/a.jpg", pixelSize: PSSize(width: 3000, height: 4000)))
+        let (whitened, result) = await executor.execute(intent, on: document, context: .photo)
+        XCTAssertTrue(result.outcome.isSuccess)
+        guard case .selectiveAdjust(_, let adjustments)? = whitened.baseLayer?.edits.operations.last?.kind else { return XCTFail("expected a selective adjustment") }
+        XCTAssertGreaterThan(adjustments[.brightness], 0)
+        XCTAssertLessThan(adjustments[.saturation], 0)
+    }
+}

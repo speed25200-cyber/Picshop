@@ -125,7 +125,7 @@ final class DeepUnderstandingTests: XCTestCase {
     func testPortraitRetouching() {
         let skin = first("lisse la peau")
         XCTAssertEqual(skin.action, .selectiveAdjust)
-        XCTAssertEqual(skin.target?.label, "face")
+        XCTAssertEqual(skin.target?.label, "skin")
         XCTAssertEqual(skin.parameter, .noiseReduction)
         XCTAssertEqual(skin.amount, .relative(0.5))
         let teeth = first("whiten the teeth")

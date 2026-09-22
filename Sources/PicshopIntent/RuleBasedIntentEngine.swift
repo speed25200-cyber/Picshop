@@ -503,7 +503,7 @@ public struct RuleBasedIntentEngine: IntentEngine {
         let magnitude = AmountParser.magnitude(in: u)
         let amount = magnitude.explicitNumber.map { abs($0) } ?? (magnitude.qualifier == .slight ? 0.3 : magnitude.qualifier == .strong ? 0.8 : 0.5)
         let phrase = u.language == .french ? "la peau" : "the skin"
-        return EditIntent(action: .selectiveAdjust, target: ObjectTarget(label: "face", originalPhrase: phrase), parameter: .noiseReduction, amount: .relative(amount), confidence: 0.9)
+        return EditIntent(action: .selectiveAdjust, target: ObjectTarget(label: "skin", originalPhrase: phrase), parameter: .noiseReduction, amount: .relative(amount), confidence: 0.9)
     }
 
     // MARK: - Follow-ups ("encore un peu", "a bit more", "trop", "less")

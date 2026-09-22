@@ -198,6 +198,8 @@ public enum VisionGrounding {
         var candidates: [ObjectCandidate] = []
 
         switch entry?.category {
+        case _ where Detector.faceParts.contains(target.label):
+            candidates = try detector.faceParts(target.label)
         case .person:
             if target.label == "face" {
                 candidates = try detector.faces()
@@ -493,6 +495,58 @@ final class Detector {
             let box = PSRect.fromVision(face.boundingBox).insetBy(dx: -0.02, dy: -0.04).clampedToUnit()
             return ObjectCandidate(label: "face", boundingBox: box, confidence: Double(face.confidence))
         }
+    }
+
+    /// Parts of a face drawn from Vision's landmarks, so a retouch touches only them.
+    static let faceParts: Set<String> = ["eyes", "teeth", "lips", "skin"]
+
+    /// One candidate per face: its eyes, the teeth inside the lips, the lips, or
+    /// the skin (the face oval without eyes, brows and mouth).
+    func faceParts(_ label: String) throws -> [ObjectCandidate] {
+        let request = VNDetectFaceLandmarksRequest()
+        try handler.perform([request])
+        let size = CGSize(width: width, height: height)
+        var candidates: [ObjectCandidate] = []
+        for face in request.results ?? [] {
+            guard let landmarks = face.landmarks else { continue }
+            func outline(_ region: VNFaceLandmarkRegion2D?) -> [PSPoint] {
+                guard let region else { return [] }
+                return region.pointsInImage(imageSize: size).map { PSPoint(x: Double($0.x) / Double(width), y: 1 - Double($0.y) / Double(height)) }
+            }
+            var include: [[PSPoint]] = []
+            var exclude: [[PSPoint]] = []
+            switch label {
+            case "eyes":
+                include = [outline(landmarks.leftEye), outline(landmarks.rightEye)]
+            case "teeth":
+                include = [outline(landmarks.innerLips)]
+            case "lips":
+                include = [outline(landmarks.outerLips)]
+                exclude = [outline(landmarks.innerLips)]
+            default:
+                // The face oval, a little taller than Vision's box to take in the forehead.
+                let box = PSRect.fromVision(face.boundingBox)
+                include = [PolygonRaster.ellipse(center: PSPoint(x: box.midX, y: box.midY - box.height * 0.06), radiusX: box.width * 0.5, radiusY: box.height * 0.6)]
+                exclude = [outline(landmarks.leftEye), outline(landmarks.rightEye), outline(landmarks.leftEyebrow), outline(landmarks.rightEyebrow), outline(landmarks.outerLips)]
+            }
+            include = include.filter { $0.count >= 3 }
+            guard !include.isEmpty else { continue }
+            var bytes = PolygonRaster.fill(include, width: width, height: height)
+            // Landmarks sit on the inner edge of the eyes and the teeth; grow a touch.
+            let grow = max(1, Int(Double(max(width, height)) * (label == "skin" ? 0.006 : 0.0025)))
+            if label != "skin" { bytes = MaskStore.dilated(bytes, width: width, height: height, radius: grow) }
+            let holes = exclude.filter { $0.count >= 3 }
+            if !holes.isEmpty {
+                // Features cut out generously so the skin retouch never softens an eyelash.
+                let cut = MaskStore.dilated(PolygonRaster.fill(holes, width: width, height: height), width: width, height: height, radius: grow)
+                for index in bytes.indices where cut[index] > 0 { bytes[index] = 0 }
+            }
+            guard MaskStore.coverage(of: bytes) > 0.00002 else { continue }
+            let box = MaskStore.boundingBox(of: bytes, width: width, height: height)
+            let reference = try maskStore.save(bytes: bytes, width: width, height: height, source: .object(label: label, boundingBox: box), feather: label == "skin" ? 0.02 : 0.004)
+            candidates.append(ObjectCandidate(label: label, boundingBox: box, confidence: Double(face.confidence), maskPath: reference.relativePath))
+        }
+        return candidates
     }
 
     func animals(label: String) throws -> [ObjectCandidate] {
