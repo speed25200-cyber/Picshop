@@ -16,10 +16,13 @@ public protocol PhotoAIServices: Sendable {
     func framingRect(for target: ObjectTarget, in document: PhotoDocument) async throws -> PSRect?
     /// What the photo shows, for "décris la photo".
     func describe(_ document: PhotoDocument) async throws -> SceneDescription
+    /// The framing a photographer would choose (normalised), nil when the photo is already well framed.
+    func bestCrop(in document: PhotoDocument) async throws -> PSRect?
 }
 
 public extension PhotoAIServices {
     func describe(_ document: PhotoDocument) async throws -> SceneDescription { SceneDescription() }
+    func bestCrop(in document: PhotoDocument) async throws -> PSRect? { nil }
 }
 
 /// Facts about a photo, assembled into a sentence by the executor.

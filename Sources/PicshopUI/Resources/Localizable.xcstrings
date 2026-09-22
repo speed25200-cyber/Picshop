@@ -673,6 +673,22 @@
         }
       }
     },
+    "Best crop": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Best crop"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cadrage idéal"
+          }
+        }
+      }
+    },
     "Best for this photo: %@": {
       "localizations": {
         "en": {
@@ -7789,6 +7805,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Raccourcir"
+          }
+        }
+      }
+    },
+    "Trying framings…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trying framings…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J'essaie des cadrages…"
           }
         }
       }

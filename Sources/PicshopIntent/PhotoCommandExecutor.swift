@@ -18,6 +18,17 @@ public struct PhotoCommandExecutor: Sendable {
         let language = self.language
         let fr = language == .french
         switch intent.action {
+        case .autoCrop:
+            do {
+                guard let rect = try await services.bestCrop(in: document) else {
+                    return (document, ExecutionResult(outcome: .info(message: fr ? "Le cadrage est déjà très bon." : "The framing is already good.")))
+                }
+                document.apply(.crop(rect.clampedToUnit()))
+                return (document, .applied("Best crop"))
+            } catch {
+                return (document, .failed(errorMessage(error)))
+            }
+
         case .cleanUp:
             let people = (try? await services.candidates(for: ObjectTarget(label: "person"), in: document)) ?? []
             let distractions = DistractionFinder.distractions(among: people)

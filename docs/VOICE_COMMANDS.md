@@ -77,7 +77,7 @@ Cinematic, Dramatic, Matte, Pastel, Portrait, Film, Vintage, Mono, Silvertone, N
 
 ## Frame
 
-*Recadre en carré · Crop to 16:9 · Crop for Instagram story · Format 4 par 5 · Tourne de 90 degrés vers la
+*Recadre au mieux · Improve the framing · Recadre en carré · Crop to 16:9 · Crop for Instagram story · Format 4 par 5 · Tourne de 90 degrés vers la
 gauche · Rotate right · Mets-la à l'envers · Redresse l'horizon · Straighten by 2 degrees · Flip it ·
 Retourne verticalement · Recadre sur le visage · Zoom sur le visage · Zoom out · Fit to screen.*
 

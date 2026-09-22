@@ -75,6 +75,11 @@ public struct RuleBasedIntentEngine: IntentEngine {
             // "écris « Paris » derrière la personne"; "remove the guy behind me" is something else.
             return [EditIntent(action: .textBehind, text: extractQuoted(from: original), confidence: 0.9)]
         }
+        if context.mode == .photo, u.contains(["recadre au mieux", "meilleur cadrage", "le meilleur cadrage", "recadrage automatique", "recadre automatiquement", "ameliore le cadrage", "cadre mieux",
+                                               "recadre intelligemment", "recadrage intelligent", "auto crop", "autocrop", "best crop", "smart crop", "improve the framing", "better framing",
+                                               "frame it better", "crop it nicely", "crop it for me", "recadre pour moi"]) {
+            return [EditIntent(action: .autoCrop, confidence: 0.9)]
+        }
         if context.mode == .photo, u.contains(["nettoie la photo", "nettoie l image", "nettoie le fond", "nettoie l arriere plan", "nettoyage", "clean up", "cleanup", "clean the photo", "clean the background",
                                                "passants", "les passants", "passers by", "passerby", "touristes", "tourists", "photobomb", "photobomber", "photobombers", "ce qui derange", "distractions", "les gens derriere",
                                                "people behind", "gens en trop", "les intrus", "intrus"]),

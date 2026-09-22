@@ -519,6 +519,7 @@ struct CropPanel: View {
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
+                    IconChip(title: L("Best crop"), symbol: "crop", isEnabled: !session.isProcessing, tint: PSTheme.voice) { session.autoCrop() }
                     IconChip(title: L("Expand"), symbol: "arrow.up.left.and.arrow.down.right", isEnabled: !session.isProcessing, tint: PSTheme.voice) { session.expandCanvas() }
                     IconChip(title: L("Rotate"), symbol: "rotate.right") { session.rotateQuarterTurn() }
                     IconChip(title: L("Flip"), symbol: "arrow.left.and.right.righttriangle.left.righttriangle.right") { session.flipHorizontally() }

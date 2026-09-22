@@ -171,6 +171,38 @@ public final class VisionPhotoServices: PhotoAIServices, @unchecked Sendable {
         }
     }
 
+    public func bestCrop(in document: PhotoDocument) async throws -> PSRect? {
+        let image = try await analysisImage(for: document)
+        let width = Double(image.width), height = Double(image.height)
+        // The subject: the faces together, else the most salient region.
+        let handler = VNImageRequestHandler(cgImage: image, orientation: .up, options: [:])
+        let faces = VNDetectFaceRectanglesRequest()
+        let saliency = VNGenerateAttentionBasedSaliencyImageRequest()
+        try? handler.perform([faces, saliency])
+        var subject: PSRect?
+        if let found = faces.results, !found.isEmpty {
+            subject = found.map { PSRect.fromVision($0.boundingBox).insetBy(dx: -0.03, dy: -0.06) }.reduce(PSRect.fromVision(found[0].boundingBox)) { $0.union($1) }.clampedToUnit()
+        } else if let salient = saliency.results?.first?.salientObjects?.max(by: { $0.confidence < $1.confidence }) {
+            subject = PSRect.fromVision(salient.boundingBox).clampedToUnit()
+        }
+        if let box = subject, box.width > 0.85 || box.height > 0.85 { subject = nil }
+        let candidates = CropCandidates.generate(subject: subject, imageAspect: width / max(1, height))
+        // Vision's aesthetics model judges each framing; the whole picture is the one to beat.
+        func crop(_ rect: PSRect) -> CGImage? {
+            image.cropping(to: CGRect(x: rect.minX * width, y: rect.minY * height, width: rect.width * width, height: rect.height * height).integral)
+        }
+        let baseline = await AestheticsRanker.scores(for: [image]).first ?? nil
+        guard let baseline else { return nil }
+        var best: (rect: PSRect, score: Double)?
+        for rect in candidates.prefix(30) {
+            guard let cropped = crop(rect) else { continue }
+            let scored = await AestheticsRanker.scores(for: [cropped]).first ?? nil
+            if let score = scored, score > (best?.score ?? -.infinity) { best = (rect, score) }
+        }
+        guard let best, best.score > baseline + 0.04 else { return nil }
+        return best.rect
+    }
+
     private func padded(_ box: PSRect, aspect: Double) -> PSRect {
         var rect = box.insetBy(dx: -box.width * 0.35, dy: -box.height * 0.35)
         // Keep the canvas aspect so the crop doesn't distort the composition.

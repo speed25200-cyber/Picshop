@@ -653,6 +653,15 @@ public final class PhotoEditorSession {
         }
     }
 
+    /// Best crop from the crop tool: the framing an aesthetics model prefers.
+    public func autoCrop() {
+        cancelCrop()
+        Task {
+            await run(EditIntent(action: .autoCrop))
+            if activeTool == .crop { beginCrop() }
+        }
+    }
+
     /// Largest centred rectangle with the preset's ratio, in normalised coordinates.
     public func setCropAspect(_ preset: AspectPreset) {
         cropAspect = preset
@@ -1156,7 +1165,7 @@ public final class PhotoEditorSession {
             return .failed(message: "thermal")
         }
         if [.removeObject, .removeBackground, .blurBackground, .replaceBackground, .upscale, .selectiveAdjust, .chooseCandidate, .straighten, .generativeFill, .recolor,
-            .moveObject, .cleanUp, .expandCanvas, .textBehind].contains(intent.action) {
+            .moveObject, .cleanUp, .expandCanvas, .textBehind, .autoCrop].contains(intent.action) {
             isProcessing = true
             processingTitle = intent.action == .chooseCandidate ? L("Erasing…") : processingLabel(for: intent)
         }
@@ -1193,6 +1202,7 @@ public final class PhotoEditorSession {
         case .moveObject: return String(format: L("Moving %@…"), intent.target?.originalPhrase ?? L("object"))
         case .cleanUp: return L("Finding the passers-by…")
         case .textBehind: return L("Lifting the subject…")
+        case .autoCrop: return L("Trying framings…")
         case .straighten: return L("Levelling…")
         default: return L("Working…")
         }

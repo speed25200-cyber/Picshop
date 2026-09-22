@@ -99,6 +99,8 @@ FR = {
     "Sunset sky": "Ciel couchant",
     "Upscale": "Agrandir",
     "Expand": "Étendre",
+    "Best crop": "Cadrage idéal",
+    "Trying framings…": "J'essaie des cadrages…",
     "Translate": "Traduire",
     "Translating the captions…": "Je traduis les sous-titres…",
     "LUT": "LUT",

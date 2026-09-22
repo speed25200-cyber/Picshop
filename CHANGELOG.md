@@ -22,6 +22,8 @@
   "coupe le passage où je dis …".
 - Video magic: auto captions (five styles), jump cuts, cuts on the beat, smart reframe following the subject, voice
   isolation, colour match across clips, Ken Burns moves; captions lane and beat markers on the timeline.
+- Best crop: framings a photographer would try (shapes, sizes, the subject on a third), judged by Vision's aesthetics
+  model; kept only when clearly better than the original.
 - Clean Up: the passers-by and photobombers go, the people the photo is of stay ("enlève les passants").
 - History: hold Undo to return to any step.
 - Portrait retouch that touches only what it should: skin (the face oval without eyes, brows and mouth), eyes, teeth

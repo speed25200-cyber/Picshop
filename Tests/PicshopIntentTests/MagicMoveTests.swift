@@ -193,3 +193,28 @@ final class VideoMagicSuggestionTests: XCTestCase {
         XCTAssertNotEqual(VideoMagicSuggestions.ranked(duration: 30, clipCount: 1, hasMusic: false, hasCaptions: true, isVertical: false).first, "captions")
     }
 }
+
+final class AutoCropTests: XCTestCase {
+    struct Framer: PhotoAIServices {
+        var best: PSRect?
+        func candidates(for target: ObjectTarget, in document: PhotoDocument) async throws -> [ObjectCandidate] { [] }
+        func mask(for candidates: [ObjectCandidate], target: ObjectTarget, in document: PhotoDocument) async throws -> MaskReference { MaskReference(source: .subject) }
+        func subjectMask(in document: PhotoDocument) async throws -> MaskReference { MaskReference(source: .subject) }
+        func horizonAngle(in document: PhotoDocument) async throws -> Double? { nil }
+        func framingRect(for target: ObjectTarget, in document: PhotoDocument) async throws -> PSRect? { nil }
+        func bestCrop(in document: PhotoDocument) async throws -> PSRect? { best }
+    }
+
+    func testBestCrop() async {
+        let engine = RuleBasedIntentEngine()
+        XCTAssertEqual(engine.parse("recadre au mieux", context: .photo).intents.first?.action, .autoCrop)
+        XCTAssertEqual(engine.parse("improve the framing", context: .photo).intents.first?.action, .autoCrop)
+        let document = PhotoDocument(title: "t", baseImage: MediaAsset(kind: .image, relativePath: "media/a.jpg", pixelSize: PSSize(width: 3000, height: 2000)))
+        let (cropped, result) = await PhotoCommandExecutor(services: Framer(best: PSRect(x: 0.1, y: 0.1, width: 0.6, height: 0.8))).execute(EditIntent(action: .autoCrop), on: document, context: .photo)
+        XCTAssertTrue(result.outcome.isSuccess)
+        XCTAssertEqual(cropped.canvasSize.width, 1800)
+        let (same, info) = await PhotoCommandExecutor(services: Framer(best: nil)).execute(EditIntent(action: .autoCrop), on: document, context: .photo)
+        XCTAssertFalse(info.outcome.isSuccess)
+        XCTAssertEqual(same.canvasSize.width, 3000)
+    }
+}
