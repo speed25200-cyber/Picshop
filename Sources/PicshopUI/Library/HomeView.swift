@@ -355,13 +355,13 @@ public struct HomeView: View {
 /// One-tap results from Home: pick a photo or a video and the editor opens
 /// already doing the thing, through the same command pipeline as the voice.
 enum MagicShortcut: String, CaseIterable, Identifiable {
-    case captions, jumpCuts, vertical, eraseObjects, cutout, enhance, portrait
+    case captions, jumpCuts, fillers, vertical, eraseObjects, expand, cutout, enhance, portrait
 
     var id: String { rawValue }
 
     var isVideo: Bool {
         switch self {
-        case .captions, .jumpCuts, .vertical: return true
+        case .captions, .jumpCuts, .fillers, .vertical: return true
         default: return false
         }
     }
@@ -370,8 +370,10 @@ enum MagicShortcut: String, CaseIterable, Identifiable {
         switch self {
         case .captions: return L("Auto captions")
         case .jumpCuts: return L("Jump cuts")
+        case .fillers: return L("No more “euh”")
         case .vertical: return L("Vertical video")
         case .eraseObjects: return L("Erase people")
+        case .expand: return L("Expand")
         case .cutout: return L("Cut out")
         case .enhance: return L("Enhance")
         case .portrait: return L("Portrait blur")
@@ -382,8 +384,10 @@ enum MagicShortcut: String, CaseIterable, Identifiable {
         switch self {
         case .captions: return L("Subtitles from the voice, word by word")
         case .jumpCuts: return L("Every pause, gone")
+        case .fillers: return L("Hesitations and stutters, cut")
         case .vertical: return L("9:16 that follows the subject")
         case .eraseObjects: return L("Clear the background of passers-by")
+        case .expand: return L("More picture around it, invented")
         case .cutout: return L("The subject, on a clean background")
         case .enhance: return L("Light, colour and detail in one tap")
         case .portrait: return L("A soft background, like a big lens")
@@ -394,8 +398,10 @@ enum MagicShortcut: String, CaseIterable, Identifiable {
         switch self {
         case .captions: return "captions.bubble.fill"
         case .jumpCuts: return "scissors"
+        case .fillers: return "waveform.badge.minus"
         case .vertical: return "rectangle.portrait.and.arrow.forward"
         case .eraseObjects: return "person.2.slash"
+        case .expand: return "arrow.up.left.and.arrow.down.right"
         case .cutout: return "person.crop.rectangle.stack"
         case .enhance: return "wand.and.stars"
         case .portrait: return "camera.aperture"
@@ -408,8 +414,10 @@ enum MagicShortcut: String, CaseIterable, Identifiable {
         switch self {
         case .captions: return fr ? "ajoute des sous-titres" : "add captions"
         case .jumpCuts: return fr ? "enlève les blancs" : "remove the pauses"
+        case .fillers: return fr ? "enlève les euh" : "remove the ums"
         case .vertical: return fr ? "passe en vertical en suivant le sujet" : "smart reframe to vertical"
         case .eraseObjects: return fr ? "efface les personnes en arrière-plan" : "remove the people in the background"
+        case .expand: return fr ? "étends l'image" : "expand the image"
         case .cutout: return fr ? "enlève le fond" : "remove the background"
         case .enhance: return fr ? "améliore la photo" : "auto enhance"
         case .portrait: return fr ? "floute l'arrière-plan" : "blur the background"

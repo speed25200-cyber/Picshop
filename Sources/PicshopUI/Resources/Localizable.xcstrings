@@ -2897,6 +2897,22 @@
         }
       }
     },
+    "Hesitations and stutters, cut": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hesitations and stutters, cut"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hésitations et bégaiements coupés"
+          }
+        }
+      }
+    },
     "Hide Captions": {
       "localizations": {
         "en": {
@@ -4001,6 +4017,22 @@
         }
       }
     },
+    "More picture around it, invented": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More picture around it, invented"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plus d'image autour, inventée"
+          }
+        }
+      }
+    },
     "Move": {
       "localizations": {
         "en": {
@@ -4285,6 +4317,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Image suivante"
+          }
+        }
+      }
+    },
+    "No more “euh”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No more “euh”"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fini les « euh »"
           }
         }
       }
