@@ -67,6 +67,14 @@ public struct RuleBasedIntentEngine: IntentEngine {
         if context.mode == .photo, let portrait = parsePortrait(u) { return [portrait] }
         if context.mode == .photo, let expand = parseExpand(u) { return [expand] }
         if context.mode == .photo, let generative = parseGenerative(u, original: original, context: context) { return [generative] }
+        if context.mode == .photo, u.contains(["derriere la personne", "derriere le sujet", "derriere moi", "derriere lui", "derriere elle", "derriere les personnes", "derriere nous",
+                                               "behind the person", "behind the subject", "behind me", "behind him", "behind her", "behind the people", "behind us",
+                                               "texte derriere", "text behind", "titre derriere", "title behind", "effet profondeur", "effet de profondeur", "depth effect", "lock screen effect", "effet ecran verrouille"]),
+           !u.contains(Self.removeVerbs),
+           u.contains(["texte", "text", "titre", "title", "ecris", "write", "mot", "word", "effet profondeur", "effet de profondeur", "depth effect", "lock screen effect", "effet ecran verrouille"]) || extractQuoted(from: original) != nil {
+            // "écris « Paris » derrière la personne"; "remove the guy behind me" is something else.
+            return [EditIntent(action: .textBehind, text: extractQuoted(from: original), confidence: 0.9)]
+        }
         if context.mode == .photo, let move = parseMoveObject(u, context: context) { return [move] }
         if let background = parseBackground(u) { return [background] }
         if let removal = parseRemoveObject(u, context: context) { return [removal] }

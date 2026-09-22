@@ -375,33 +375,21 @@ public final class PhotoEditorSession {
 
     // MARK: - Depth and colour magic
 
-    static let subjectLayerName = "Subject"
+    static let subjectLayerName = PhotoDocument.subjectLayerName
 
     /// The Lock Screen depth effect: the subject is lifted onto its own layer
     /// above everything, so the title sits behind the person. Adds a big title
     /// first when the photo has no text yet.
     public func textBehindSubject() async {
         guard let services, !isProcessing else { return }
-        guard let base = document.baseLayer, let asset = base.imageAsset else { return }
+        guard document.baseLayer?.imageAsset != nil else { return }
         isProcessing = true
         processingTitle = L("Lifting the subject…")
         defer { isProcessing = false }
         do {
             let mask = try await services.subjectMask(in: document)
             var updated = document
-            updated.layers.removeAll { $0.name == Self.subjectLayerName }
-            var titleID = updated.textLayers.last?.id
-            if titleID == nil {
-                let element = TextElement(text: L("TITLE"), relativeSize: 0.2, color: .white, style: .plain,
-                                          center: PSPoint(x: 0.5, y: 0.32), letterSpacing: -0.03, lineSpacing: 0.9, maxRelativeWidth: 0.96)
-                let layer = Layer(name: element.text, content: .text(element))
-                updated.addLayer(layer, select: false)
-                titleID = layer.id
-            }
-            var subject = Layer(name: Self.subjectLayerName, content: .image(asset), isLocked: true, edits: base.edits)
-            subject.edits.append(.removeBackground(mask))
-            updated.addLayer(subject, select: false)
-            updated.selectedLayerID = titleID
+            updated.placeTextBehindSubject(nil, subjectMask: mask, placeholder: L("TITLE"))
             commit(updated, label: L("Text behind subject"))
             activeTool = .text
             Haptics.magic()
@@ -1168,6 +1156,8 @@ public final class PhotoEditorSession {
                 commit(updatedDocument, label: label)
             }
             if !label.isEmpty { showToast(label, undoable: changed) }
+            // The new title is ready to be rewritten or moved.
+            if intent.action == .textBehind, changed { activeTool = .text }
             Haptics.success()
         case .needsClarification(let request):
             pendingClarification = request

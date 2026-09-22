@@ -193,6 +193,7 @@ public enum IntentNormalizer {
             "cutwords": .cutWords, "removewords": .cutWords, "deletewords": .cutWords, "cutphrase": .cutWords, "cuttext": .cutWords, "textcut": .cutWords,
             "beatsync": .syncToBeat, "cuttobeat": .syncToBeat, "synctomusic": .syncToBeat, "reframe": .smartReframe, "autoreframe": .smartReframe,
             "voiceisolation": .enhanceVoice, "isolatevoice": .enhanceVoice, "cleanaudio": .enhanceVoice, "denoiseaudio": .enhanceVoice,
+            "textbehind": .textBehind, "textbehindsubject": .textBehind, "deptheffect": .textBehind,
             "moveobject": .moveObject, "magicmove": .moveObject, "shiftobject": .moveObject, "reposition": .moveObject,
             "outpaint": .expandCanvas, "uncrop": .expandCanvas, "expand": .expandCanvas, "expandcanvas": .expandCanvas, "extend": .expandCanvas, "generativeexpand": .expandCanvas,
             "colormatch": .matchColor, "matchcolors": .matchColor, "matchcolours": .matchColor, "panzoom": .kenBurns,

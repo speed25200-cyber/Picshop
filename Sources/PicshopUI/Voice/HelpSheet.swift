@@ -13,6 +13,7 @@ struct HelpSheet: View {
 
     private var sections: [(String, [String])] {
         var result: [(String, [String])] = [
+            (L("Magic"), ["Déplace le chien vers la gauche", "Étends l'image en 16:9", "Mets-moi sur une plage au coucher du soleil", "Remplace le ciel par un ciel étoilé", "Écris « Paris » derrière la personne", "Rends la voiture bleue"]),
             (L("Erase & cut out"), ["Efface le chien à gauche", "Remove the person in the background", "Enlève toutes les voitures", "Remove the background", "Mets un fond blanc", "Blur the background"]),
             (L("Light & colour"), ["Plus lumineux", "Make it warmer", "Augmente le contraste de 20", "Less saturation", "Réduis le bruit", "Set exposure to -10", "C'est un peu jaunâtre", "It looks dull", "Plus chaud mais moins de contraste"]),
             (L("Goals"), ["Transforme-la en photo de profil", "Product photo for Vinted", "Photo d'identité", "Restore this old photo", "C'est une photo de nuit", "Mets-la en fond d'écran", "C'est moche, fais quelque chose"]),
@@ -27,6 +28,9 @@ struct HelpSheet: View {
                     (L("Control"), ["Annule", "Redo", "Exporte", "Partage", "Aide"])]
         }
         if mode == .video {
+            result.insert((L("Video magic"), ["Ajoute des sous-titres", "Enlève les euh", "Coupe le passage où je dis bonjour", "Fais un résumé de 30 secondes", "Coupe à chaque changement de plan",
+                                                "Fais suivre le texte à la personne", "Baisse la musique quand je parle", "Ralenti progressif ici", "Anime le titre avec un rebond", "Coupe sur le rythme", "Passe en vertical en suivant le sujet"]), at: 0)
+            result.removeAll { $0.0 == L("Magic") }
             result.insert((L("Video"), ["Coupe ici", "Coupe les 3 premières secondes", "Delete from 5 to 12 seconds", "Accélère x2", "Slow motion", "Coupe le son", "Ajoute un fondu entre tous les clips", "Extract this frame", "Stabilise la vidéo", "Va à 10 secondes", "Ajoute un deuxième son à 10 secondes", "Baisse la musique à 30 %", "Fade out the music over 2 seconds", "Supprime la deuxième piste"]), at: 0)
         }
         result.append((L("Control"), ["Annule", "Redo", "Montre l'original", "Zoom sur le visage", "Enregistre", "Reviens à l'original", "Enregistre cette version sous brouillon", "Reviens à la version brouillon", "Qu'est-ce que j'ai modifié ?", "Décris la photo", "Enregistre ce style sous plage", "Applique le même style que la dernière photo"]))
@@ -44,6 +48,7 @@ struct HelpSheet: View {
         case L("Frame"): return "crop.rotate"
         case L("Text"): return "textformat"
         case L("Video"): return "film"
+        case L("Magic"), L("Video magic"): return "sparkles"
         case L("PDF"): return "doc.text"
         default: return "command"
         }

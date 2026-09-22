@@ -18,6 +18,17 @@ public struct PhotoCommandExecutor: Sendable {
         let language = self.language
         let fr = language == .french
         switch intent.action {
+        case .textBehind:
+            do {
+                let mask = try await services.subjectMask(in: document)
+                guard document.placeTextBehindSubject(intent.text, subjectMask: mask, placeholder: fr ? "TITRE" : "TITLE") != nil else {
+                    return (document, .failed(fr ? "Il faut une photo." : "This needs a photo."))
+                }
+                return (document, .applied("Text behind subject"))
+            } catch {
+                return (document, .failed(errorMessage(error)))
+            }
+
         case .removeObject, .moveObject:
             guard let target = intent.target else { return (document, .failed(PicshopError.objectNotFound("object").message)) }
             return await removeObject(target: target, intent: intent, document: document)

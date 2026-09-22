@@ -7809,6 +7809,22 @@
         }
       }
     },
+    "Video magic": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video magic"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Magie vidéo"
+          }
+        }
+      }
+    },
     "Video quality": {
       "localizations": {
         "en": {

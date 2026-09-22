@@ -123,3 +123,34 @@ public struct PhotoDocument: Hashable, Codable, Sendable, Identifiable {
     /// Aspect ratio of the current canvas.
     public var aspectRatio: Double { canvasSize.aspectRatio }
 }
+
+// MARK: - Text behind the subject
+
+extension PhotoDocument {
+    /// Name of the cut-out copy of the subject laid over the title.
+    public static let subjectLayerName = "Subject"
+
+    /// The Lock Screen depth effect: a big title, with the subject cut out and
+    /// laid on top of it so the words pass behind the person. A given `text`
+    /// makes a new title; without one the latest title is reused, or a
+    /// `placeholder` is written. Returns the title layer's id.
+    @discardableResult
+    public mutating func placeTextBehindSubject(_ text: String?, subjectMask: MaskReference, placeholder: String) -> UUID? {
+        guard let base = baseLayer, let asset = base.imageAsset else { return nil }
+        layers.removeAll { $0.name == Self.subjectLayerName }
+        var titleID = text == nil ? textLayers.last?.id : nil
+        if titleID == nil {
+            let words = (text?.isEmpty == false ? text : nil) ?? placeholder
+            let element = TextElement(text: words, relativeSize: words.count > 8 ? 0.14 : 0.2, color: .white, style: .plain,
+                                      center: PSPoint(x: 0.5, y: 0.32), letterSpacing: -0.03, lineSpacing: 0.9, maxRelativeWidth: 0.96)
+            let layer = Layer(name: element.text, content: .text(element))
+            addLayer(layer, select: false)
+            titleID = layer.id
+        }
+        var subject = Layer(name: Self.subjectLayerName, content: .image(asset), isLocked: true, edits: base.edits)
+        subject.edits.append(.removeBackground(subjectMask))
+        addLayer(subject, select: false)
+        selectedLayerID = titleID
+        return titleID
+    }
+}

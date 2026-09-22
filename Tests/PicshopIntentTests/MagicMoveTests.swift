@@ -98,3 +98,19 @@ final class TeleportTests: XCTestCase {
         XCTAssertNotEqual(engine.parse("mets moi en noir et blanc", context: .photo).intents.first?.target?.label, "background")
     }
 }
+
+final class TextBehindTests: XCTestCase {
+    func testVoiceTitleGoesBehindTheSubject() async {
+        let engine = RuleBasedIntentEngine()
+        let intent = engine.parse("Écris « Paris » derrière la personne", context: .photo).intents.first
+        XCTAssertEqual(intent?.action, .textBehind)
+        XCTAssertEqual(intent?.text, "Paris")
+        let executor = PhotoCommandExecutor(services: FakePhotoServices(candidates: []))
+        let document = PhotoDocument(title: "t", baseImage: MediaAsset(kind: .image, relativePath: "media/a.jpg", pixelSize: PSSize(width: 3000, height: 4000)))
+        guard let intent else { return XCTFail("no intent") }
+        let (result, outcome) = await executor.execute(intent, on: document, context: .photo)
+        XCTAssertTrue(outcome.outcome.isSuccess)
+        XCTAssertEqual(result.textLayers.last?.textElement?.text, "Paris")
+        XCTAssertEqual(result.layers.last?.name, PhotoDocument.subjectLayerName)
+    }
+}
