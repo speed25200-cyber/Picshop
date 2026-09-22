@@ -11,6 +11,18 @@ UI = ROOT / "Sources/PicshopUI"
 OUT = UI / "Resources/Localizable.xcstrings"
 
 FR = {
+    "Drag on the picture to frame, pinch to zoom. The camera moves from the start framing to the end one.": "Faites glisser sur l'image pour cadrer, pincez pour zoomer. La caméra va du cadrage de début à celui de fin.",
+    "End": "Fin",
+    "Follow subject": "Suivre le sujet",
+    "None": "Aucun",
+    "Pan & Zoom": "Panoramique et zoom",
+    "Pan left": "Vers la gauche",
+    "Pan right": "Vers la droite",
+    "Pull out": "Zoom arrière",
+    "Push in": "Zoom avant",
+    "Select a clip on the timeline.": "Sélectionnez un clip dans la timeline.",
+    "Start": "Début",
+    "Zoom": "Zoom",
     "Aperture": "Ouverture",
     "Estimated from the subject.": "Estimé à partir du sujet.",
     "Finding the subject…": "Je cherche le sujet…",

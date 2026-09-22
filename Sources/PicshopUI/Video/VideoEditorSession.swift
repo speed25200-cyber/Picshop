@@ -13,12 +13,13 @@ import PicshopSpeech
 @Observable
 public final class VideoEditorSession {
     public enum Tool: String, CaseIterable, Identifiable {
-        case magic, cut, speed, audio, looks, adjust, color, text, overlay, transitions, frame
+        case magic, cut, speed, motion, audio, looks, adjust, color, text, overlay, transitions, frame
         public var id: String { rawValue }
         var title: String {
             switch self {
             case .magic: return L("Magic")
             case .overlay: return L("Overlays")
+            case .motion: return L("Pan & Zoom")
             case .color: return L("Colour")
             case .cut: return L("Cut")
             case .speed: return L("Speed")
@@ -34,6 +35,7 @@ public final class VideoEditorSession {
             switch self {
             case .magic: return "sparkles"
             case .overlay: return "rectangle.on.rectangle"
+            case .motion: return "arrow.up.left.and.down.right.magnifyingglass"
             case .color: return "paintpalette"
             case .cut: return "scissors"
             case .speed: return "gauge.with.dots.needle.67percent"

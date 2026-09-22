@@ -188,6 +188,9 @@ struct PlayerPreview: View {
                 if session.activeTool == .overlay {
                     OverlayArrangeLayer(session: session, frame: frame)
                 }
+                if session.activeTool == .motion {
+                    MotionFramingLayer(session: session, frame: frame)
+                }
                 // The explicitly selected clip only: resolving the clip under the
                 // playhead here would re-evaluate the preview on every tick.
                 if let id = session.selectedClipID, let clip = session.timeline.clips.first(where: { $0.id == id }), let label = clip.processedLabel {
@@ -440,7 +443,7 @@ extension VideoEditorSession.Tool {
     static var groups: [ToolGroup<VideoEditorSession.Tool>] {
         [
             ToolGroup(id: "magic", title: L("Magic"), symbol: "sparkles", tools: [.magic], isMagic: true),
-            ToolGroup(id: "cut", title: L("Edit"), symbol: "scissors", tools: [.cut, .speed, .transitions, .frame]),
+            ToolGroup(id: "cut", title: L("Edit"), symbol: "scissors", tools: [.cut, .speed, .motion, .transitions, .frame]),
             ToolGroup(id: "color", title: L("Colour"), symbol: "camera.filters", tools: [.adjust, .color, .looks]),
             ToolGroup(id: "audio", title: L("Audio"), symbol: "speaker.wave.2", tools: [.audio]),
             ToolGroup(id: "layers", title: L("Layers"), symbol: "square.3.layers.3d", tools: [.text, .overlay]),

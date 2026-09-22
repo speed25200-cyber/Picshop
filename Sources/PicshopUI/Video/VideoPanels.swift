@@ -14,6 +14,7 @@ struct VideoToolPanel: View {
         switch tool {
         case .magic: VideoMagicPanel(session: session)
         case .overlay: VideoOverlayPanel(session: session)
+        case .motion: MotionPanel(session: session)
         case .color: VideoColorPanel(session: session)
         case .cut: CutPanel(session: session)
         case .speed: SpeedPanel(session: session)

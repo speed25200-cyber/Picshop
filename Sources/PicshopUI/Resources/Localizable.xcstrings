@@ -1601,6 +1601,22 @@
         }
       }
     },
+    "Drag on the picture to frame, pinch to zoom. The camera moves from the start framing to the end one.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag on the picture to frame, pinch to zoom. The camera moves from the start framing to the end one."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faites glisser sur l'image pour cadrer, pincez pour zoomer. La caméra va du cadrage de début à celui de fin."
+          }
+        }
+      }
+    },
     "Drag on the picture to move it, pinch to resize.": {
       "localizations": {
         "en": {
@@ -1805,6 +1821,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ellipse"
+          }
+        }
+      }
+    },
+    "End": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "End"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fin"
           }
         }
       }
@@ -2285,6 +2317,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mise au point"
+          }
+        }
+      }
+    },
+    "Follow subject": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Follow subject"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suivre le sujet"
           }
         }
       }
@@ -3985,6 +4033,22 @@
         }
       }
     },
+    "None": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun"
+          }
+        }
+      }
+    },
     "Nordic": {
       "localizations": {
         "en": {
@@ -4317,6 +4381,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Peignez pour cloner depuis la source marquée."
+          }
+        }
+      }
+    },
+    "Pan & Zoom": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pan & Zoom"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Panoramique et zoom"
+          }
+        }
+      }
+    },
+    "Pan left": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pan left"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vers la gauche"
+          }
+        }
+      }
+    },
+    "Pan right": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pan right"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vers la droite"
           }
         }
       }
@@ -4877,6 +4989,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Projets"
+          }
+        }
+      }
+    },
+    "Pull out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull out"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom arrière"
+          }
+        }
+      }
+    },
+    "Push in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Push in"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom avant"
           }
         }
       }
@@ -5537,6 +5681,22 @@
         }
       }
     },
+    "Select a clip on the timeline.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a clip on the timeline."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélectionnez un clip dans la timeline."
+          }
+        }
+      }
+    },
     "Select an area first (wand, lasso or tap), then describe the change.": {
       "localizations": {
         "en": {
@@ -6029,6 +6189,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stable Diffusion : « remplace le ciel par un coucher de soleil », « ajoute un chapeau »."
+          }
+        }
+      }
+    },
+    "Start": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Début"
           }
         }
       }
