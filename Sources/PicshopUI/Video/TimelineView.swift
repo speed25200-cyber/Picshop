@@ -78,7 +78,7 @@ struct TimelineView: View {
     /// Height of the strip: ruler, filmstrip, then one lane per text overlay
     /// row and per sound track (capped so the picture keeps the room).
     static func height(for timeline: VideoTimeline) -> CGFloat {
-        let lanes = min(4, (timeline.overlays.isEmpty ? 0 : 1) + timeline.audioTracks.count)
+        let lanes = min(5, (timeline.captions?.isEmpty == false ? 1 : 0) + (timeline.overlays.isEmpty ? 0 : 1) + timeline.audioTracks.count)
         return rulerHeight + 84 + 6 + CGFloat(max(1, lanes)) * laneHeight + 8
     }
 
@@ -88,8 +88,20 @@ struct TimelineView: View {
         let major: Double = pixelsPerSecond >= 200 ? 1 : (pixelsPerSecond >= 80 ? 2 : (pixelsPerSecond >= 40 ? 5 : (pixelsPerSecond >= 16 ? 10 : 30)))
         let minor = major / 5
         let duration = max(0, session.timeline.duration)
+        // Beats of the music, when known: yellow dots on the ruler, bars larger — cut on them.
+        let beats: [Double] = {
+            guard let grid = session.timeline.beatGrid, let track = session.timeline.audioTracks.first else { return [] }
+            return BeatSync.timelineBeats(grid, track: track)
+        }()
+        let bars = Set(session.timeline.beatGrid.map { grid in stride(from: grid.downbeatOffset, to: grid.beats.count, by: 4).map { $0 } } ?? [])
         return Canvas(rendersAsynchronously: true) { context, size in
             let baseline = size.height - 1
+            for (index, beat) in beats.enumerated() where beat <= duration {
+                let x = leading + CGFloat(beat) * pixelsPerSecond
+                let isBar = bars.contains(index)
+                let dot: CGFloat = isBar ? 4 : 2.5
+                context.fill(Path(ellipseIn: CGRect(x: x - dot / 2, y: baseline - 11 - dot / 2, width: dot, height: dot)), with: .color(PSTheme.accent.opacity(isBar ? 0.95 : 0.6)))
+            }
             var index = 0
             while true {
                 let t = Double(index) * minor
@@ -116,8 +128,22 @@ struct TimelineView: View {
 
     @ViewBuilder
     private func overlaysLane(width: CGFloat) -> some View {
+        let captionLane = session.timeline.captions?.isEmpty == false ? 1 : 0
         let laneTop = 96 + TimelineView.rulerHeight
-        let textLane = session.timeline.overlays.isEmpty ? 0 : 1
+        let textLane = captionLane + (session.timeline.overlays.isEmpty ? 0 : 1)
+        // Captions: one chip per cue, in the spectrum — the words the AI heard.
+        if let captions = session.timeline.captions {
+            ForEach(captions.cues) { cue in
+                let x = width / 2 + CGFloat(cue.span.start) * pixelsPerSecond
+                Text(cue.text).font(PSFont.label(9)).lineLimit(1)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6).frame(height: 18)
+                    .frame(width: max(18, CGFloat(cue.span.duration) * pixelsPerSecond), alignment: .leading)
+                    .background(LinearGradient(colors: PSTheme.intelligence.map { $0.opacity(captions.isVisible ? 0.75 : 0.3) }, startPoint: .leading, endPoint: .trailing), in: Capsule())
+                    .clipShape(Capsule())
+                    .offset(x: x, y: laneTop)
+            }
+        }
         ForEach(session.timeline.overlays) { overlay in
             let x = width / 2 + CGFloat(overlay.span.start) * pixelsPerSecond
             HStack(spacing: 4) {
@@ -128,7 +154,7 @@ struct TimelineView: View {
             .padding(.horizontal, 6).frame(height: 18)
             .frame(width: max(30, CGFloat(overlay.span.duration) * pixelsPerSecond), alignment: .leading)
             .background(PSTheme.warning, in: Capsule())
-            .offset(x: x, y: laneTop)
+            .offset(x: x, y: laneTop + CGFloat(captionLane) * TimelineView.laneHeight)
         }
         // One lane per sound track, stacked like an NLE: music, voice-over, effects.
         ForEach(Array(session.timeline.audioTracks.enumerated()), id: \.element.id) { index, track in
@@ -245,6 +271,9 @@ struct ClipView: View {
                     if clip.isMuted { GlassChipMini(text: "", symbol: "speaker.slash.fill") }
                     if clip.look != .original { GlassChipMini(text: clip.look.englishName) }
                     if clip.transitionOut != nil { GlassChipMini(text: "", symbol: "square.stack.3d.down.right") }
+                    if clip.motion != nil { GlassChipMini(text: "", symbol: clip.motion?.kind == .smartReframe ? "person.crop.rectangle" : "arrow.up.left.and.arrow.down.right") }
+                    if clip.colorMatch != nil || clip.colorMixer != nil || clip.colorGrade != nil { GlassChipMini(text: "", symbol: "paintpalette.fill") }
+                    if clip.enhancedAudio != nil { GlassChipMini(text: "", symbol: "waveform.badge.mic") }
                 }
                 .padding(4)
             }

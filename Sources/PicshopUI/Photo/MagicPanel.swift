@@ -1,5 +1,6 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
+import PhotosUI
 import PicshopCore
 import PicshopIntent
 
@@ -11,6 +12,8 @@ struct MagicPanel: View {
     @Bindable var session: PhotoEditorSession
     @State private var prompt = ""
     @FocusState private var focused: Bool
+    @State private var showsReferencePicker = false
+    @State private var referenceItem: PhotosPickerItem?
 
     struct Suggestion: Identifiable {
         let id: String
@@ -26,6 +29,8 @@ struct MagicPanel: View {
         }
         return [
             Suggestion(id: "enhance", title: L("Enhance"), symbol: "wand.and.stars") { $0.perform(EditIntent(action: .autoEnhance)) },
+            Suggestion(id: "behind", title: L("Text behind"), symbol: "person.and.background.dotted") { session in Task { await session.textBehindSubject() } },
+            Suggestion(id: "match", title: L("Match colours"), symbol: "eyedropper.halffull") { _ in showsReferencePicker = true },
             Suggestion(id: "people", title: L("Erase people"), symbol: "person.2.slash") { $0.eraseAll(label: "person", phrase: L("people")) },
             Suggestion(id: "cutout", title: L("Cut out"), symbol: "person.crop.rectangle") { $0.perform(EditIntent(action: .removeBackground)) },
             Suggestion(id: "portrait", title: L("Portrait blur"), symbol: "camera.aperture", run: say("floute l'arrière-plan", "blur the background")),
@@ -33,10 +38,8 @@ struct MagicPanel: View {
             Suggestion(id: "sky", title: L("Sunset sky"), symbol: "sun.horizon", run: say("remplace le ciel par un coucher de soleil", "replace the sky with a sunset")),
             Suggestion(id: "upscale", title: L("Upscale"), symbol: "arrow.up.left.and.arrow.down.right", run: say("agrandis x2", "upscale 2x")),
             Suggestion(id: "denoise", title: L("Denoise"), symbol: "circle.dotted.circle") { $0.perform(EditIntent(action: .denoise)) },
-            Suggestion(id: "straighten", title: L("Straighten"), symbol: "level") { $0.perform(EditIntent(action: .straighten)) },
             Suggestion(id: "mono", title: L("Black & white"), symbol: "circle.lefthalf.filled", run: say("noir et blanc", "black and white")),
             Suggestion(id: "style", title: L("Last style"), symbol: "paintbrush.pointed") { $0.perform(EditIntent(action: .applyStyle, text: "last")) },
-            Suggestion(id: "describe", title: L("Describe"), symbol: "text.viewfinder") { $0.perform(EditIntent(action: .describe)) },
         ]
     }
 
@@ -82,6 +85,15 @@ struct MagicPanel: View {
         }
         .animation(PSMotion.standard, value: session.sceneObjects.map(\.id))
         .task(id: session.lookThumbnailKey) { await session.loadSceneObjects() }
+        .photosPicker(isPresented: $showsReferencePicker, selection: $referenceItem, matching: .images)
+        .onChange(of: referenceItem) { _, item in
+            guard let item else { return }
+            Task {
+                let data = try? await item.loadTransferable(type: Data.self)
+                if let data { await session.matchColors(to: data) }
+                referenceItem = nil
+            }
+        }
     }
 
     private var promptField: some View {

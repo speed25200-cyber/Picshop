@@ -11,6 +11,16 @@ UI = ROOT / "Sources/PicshopUI"
 OUT = UI / "Resources/Localizable.xcstrings"
 
 FR = {
+    "Best for this photo: %@": "Idéal pour cette photo : %@",
+    "Colours matched.": "Couleurs harmonisées.",
+    "Double-tap the title to write your own.": "Touchez deux fois le titre pour écrire le vôtre.",
+    "Lifting the subject…": "Je détache le sujet…",
+    "Match Colour": "Harmoniser les couleurs",
+    "Match colours": "Copier les couleurs",
+    "TITLE": "TITRE",
+    "Text behind": "Texte derrière",
+    "Text behind subject": "Texte derrière le sujet",
+    "That picture couldn't be read.": "Impossible de lire cette image.",
     "Bleach": "Sans blanchiment",
     "Camera move": "Mouvement",
     "Caption style": "Style des sous-titres",

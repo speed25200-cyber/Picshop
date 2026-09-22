@@ -367,6 +367,67 @@ public final class PhotoEditorSession {
         requestPreview(interactive: true)
     }
 
+    // MARK: - Depth and colour magic
+
+    static let subjectLayerName = "Subject"
+
+    /// The Lock Screen depth effect: the subject is lifted onto its own layer
+    /// above everything, so the title sits behind the person. Adds a big title
+    /// first when the photo has no text yet.
+    public func textBehindSubject() async {
+        guard let services, !isProcessing else { return }
+        guard let base = document.baseLayer, let asset = base.imageAsset else { return }
+        isProcessing = true
+        processingTitle = L("Lifting the subject…")
+        defer { isProcessing = false }
+        do {
+            let mask = try await services.subjectMask(in: document)
+            var updated = document
+            updated.layers.removeAll { $0.name == Self.subjectLayerName }
+            var titleID = updated.textLayers.last?.id
+            if titleID == nil {
+                let element = TextElement(text: L("TITLE"), relativeSize: 0.2, color: .white, style: .plain,
+                                          center: PSPoint(x: 0.5, y: 0.32), letterSpacing: -0.03, lineSpacing: 0.9, maxRelativeWidth: 0.96)
+                let layer = Layer(name: element.text, content: .text(element))
+                updated.addLayer(layer, select: false)
+                titleID = layer.id
+            }
+            var subject = Layer(name: Self.subjectLayerName, content: .image(asset), isLocked: true, edits: base.edits)
+            subject.edits.append(.removeBackground(mask))
+            updated.addLayer(subject, select: false)
+            updated.selectedLayerID = titleID
+            commit(updated, label: L("Text behind subject"))
+            activeTool = .text
+            Haptics.magic()
+            showToast(L("Double-tap the title to write your own."))
+        } catch {
+            showToast((error as? PicshopError)?.message ?? error.localizedDescription, isError: true)
+        }
+    }
+
+    /// Gives this photo the colour mood of another one (Reinhard transfer in Lab, as a LUT).
+    public func matchColors(to referenceData: Data) async {
+        guard let asset = document.baseLayer?.imageAsset else { return }
+        let store = app.store
+        let projectID = projectID
+        let result = await Task.detached(priority: .userInitiated) { () -> ColorMatch? in
+            let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("reference-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: temporary) }
+            guard (try? referenceData.write(to: temporary)) != nil,
+                  let reference = try? ImageSupport.loadCGImage(at: temporary, maxPixelSize: 256),
+                  let source = try? ImageSupport.loadCGImage(at: store.url(for: asset.relativePath, in: projectID), maxPixelSize: 256) else { return nil }
+            return ColorMatch(source: ColorStatistics.measure(rgba: ImageSupport.rgbaBytes(from: source)),
+                              reference: ColorStatistics.measure(rgba: ImageSupport.rgbaBytes(from: reference)), strength: 0.8)
+        }.value
+        guard let result else {
+            showToast(L("That picture couldn't be read."), isError: true)
+            return
+        }
+        apply(.colorMatch(result), label: L("Match Colour"))
+        Haptics.magic()
+        showToast(L("Colours matched."), undoable: true)
+    }
+
     // MARK: - Colour (mixer and wheels)
 
     /// The active layer's colour mixer, neutral when none.

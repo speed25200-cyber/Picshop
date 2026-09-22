@@ -529,6 +529,22 @@
         }
       }
     },
+    "Best for this photo: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Best for this photo: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Idéal pour cette photo : %@"
+          }
+        }
+      }
+    },
     "Best quality": {
       "localizations": {
         "en": {
@@ -993,6 +1009,22 @@
         }
       }
     },
+    "Colours matched.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colours matched."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couleurs harmonisées."
+          }
+        }
+      }
+    },
     "Compare with original": {
       "localizations": {
         "en": {
@@ -1297,22 +1329,6 @@
         }
       }
     },
-    "Describe": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Describe"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Décrire"
-          }
-        }
-      }
-    },
     "Describe an edit…": {
       "localizations": {
         "en": {
@@ -1437,6 +1453,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Touchez deux fois pour zoomer ou revenir. Pincez pour zoomer."
+          }
+        }
+      }
+    },
+    "Double-tap the title to write your own.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Double-tap the title to write your own."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez deux fois le titre pour écrire le vôtre."
           }
         }
       }
@@ -2897,6 +2929,22 @@
         }
       }
     },
+    "Lifting the subject…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lifting the subject…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je détache le sujet…"
+          }
+        }
+      }
+    },
     "Light & colour": {
       "localizations": {
         "en": {
@@ -3201,6 +3249,22 @@
         }
       }
     },
+    "Match Colour": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Match Colour"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Harmoniser les couleurs"
+          }
+        }
+      }
+    },
     "Match colour": {
       "localizations": {
         "en": {
@@ -3213,6 +3277,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Harmoniser"
+          }
+        }
+      }
+    },
+    "Match colours": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Match colours"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copier les couleurs"
           }
         }
       }
@@ -5793,6 +5873,22 @@
         }
       }
     },
+    "TITLE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TITLE"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TITRE"
+          }
+        }
+      }
+    },
     "Tap a clip on the timeline to change its speed.": {
       "localizations": {
         "en": {
@@ -6013,6 +6109,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Durée du texte"
+          }
+        }
+      }
+    },
+    "Text behind": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text behind"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Texte derrière"
+          }
+        }
+      }
+    },
+    "Text behind subject": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text behind subject"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Texte derrière le sujet"
+          }
+        }
+      }
+    },
+    "That picture couldn't be read.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That picture couldn't be read."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de lire cette image."
           }
         }
       }

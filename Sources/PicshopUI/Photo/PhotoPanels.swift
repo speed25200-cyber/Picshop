@@ -103,6 +103,8 @@ struct LooksPanel: View {
     @Bindable var session: PhotoEditorSession
     @State private var thumbnails: [FilterPreset: UIImage] = [:]
     @State private var intensity: Double = 1
+    /// The looks Vision's aesthetics model rates best for this photo.
+    @State private var suggested: [FilterPreset] = []
 
     var body: some View {
         VStack(spacing: 8) {
@@ -139,6 +141,15 @@ struct LooksPanel: View {
                                             .transition(.scale.combined(with: .opacity))
                                     }
                                 }
+                                .overlay(alignment: .topLeading) {
+                                    if suggested.contains(preset) {
+                                        MagicGlyph(size: 10)
+                                            .padding(4)
+                                            .background(Circle().fill(Color.black.opacity(0.55)))
+                                            .padding(4)
+                                            .transition(.scale.combined(with: .opacity))
+                                    }
+                                }
                                 .scaleEffect(active ? 1.04 : 1)
                                 Text(localizedName(preset)).font(PSFont.caption(10.5)).fontWeight(active ? .semibold : .medium)
                                     .foregroundStyle(active ? PSTheme.textPrimary : PSTheme.textSecondary).lineLimit(1)
@@ -151,6 +162,17 @@ struct LooksPanel: View {
                 }
                 .padding(.horizontal, 2)
             }
+            if let best = suggested.first, session.document.baseLayer?.edits.resolvedLook == nil {
+                Button {
+                    Haptics.magic()
+                    withAnimation(PSMotion.standard) { session.applyLook(best, intensity: intensity) }
+                } label: {
+                    Label(String(format: L("Best for this photo: %@"), localizedName(best)), systemImage: "sparkles")
+                        .font(PSFont.headline(13))
+                }
+                .buttonStyle(MagicButtonStyle(compact: true))
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
             if session.document.baseLayer?.edits.resolvedLook != nil {
                 DialSlider(value: $intensity, range: 0...1, neutral: 1, label: L("Intensity"), format: { "\(Int(($0 * 100).rounded()))%" }) { editing in
                     if editing { session.beginSliderInteraction(.saturation) } else { session.endSliderInteraction() }
@@ -160,7 +182,21 @@ struct LooksPanel: View {
                 Text(L("Pick a look, then tune its intensity.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
             }
         }
-        .task { await renderThumbnails() }
+        .task {
+            await renderThumbnails()
+            await rankThumbnails()
+        }
+        .animation(PSMotion.standard, value: suggested)
+    }
+
+    /// Asks Vision which looks make this photo most beautiful; the top three get a sparkle.
+    private func rankThumbnails() async {
+        let candidates = FilterPreset.gallery.filter { $0 != .original && thumbnails[$0] != nil }
+        let images = candidates.compactMap { thumbnails[$0]?.cgImage }
+        guard images.count == candidates.count, !images.isEmpty else { return }
+        let scores = await AestheticsRanker.scores(for: images)
+        let ranked = zip(candidates, scores).compactMap { preset, score in score.map { (preset, $0) } }.sorted { $0.1 > $1.1 }
+        suggested = Array(ranked.prefix(3).map(\.0))
     }
 
     /// Thumbnails are rendered once per photo state and kept on the session, so
