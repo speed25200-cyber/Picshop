@@ -150,16 +150,22 @@ struct TimelineView: View {
             HStack(spacing: 4) {
                 Image(systemName: overlay.isMedia ? (isVideo ? "film" : "photo") : "textformat").font(.system(size: 9, weight: .bold))
                 Text(overlay.textElement?.text ?? (overlay.chromaKey != nil ? L("Green screen") : (isVideo ? L("Video") : L("Photo")))).font(PSFont.caption(10)).lineLimit(1)
+                // What the layer does on its own: follows a subject, animates in.
+                if overlay.tracking != nil { Image(systemName: "scope").font(.system(size: 8, weight: .heavy)).accessibilityLabel(L("Following")) }
+                if overlay.animation != nil { Image(systemName: "sparkle").font(.system(size: 8, weight: .heavy)) }
             }
             .foregroundStyle(.black)
             .padding(.horizontal, 6).frame(height: 18)
             .frame(width: max(30, CGFloat(overlay.span.duration) * pixelsPerSecond), alignment: .leading)
             .background(overlay.isMedia ? Color(red: 0.45, green: 0.78, blue: 1.0) : PSTheme.warning, in: Capsule())
             .onTapGesture {
-                guard overlay.isMedia else { return }
                 Haptics.tick()
-                session.selectedOverlayID = overlay.id
-                session.activeTool = .overlay
+                if overlay.isMedia {
+                    session.selectedOverlayID = overlay.id
+                    session.activeTool = .overlay
+                } else if overlay.textElement != nil {
+                    session.activeTool = .text
+                }
             }
             .offset(x: x, y: laneTop + CGFloat(captionLane) * TimelineView.laneHeight)
         }
