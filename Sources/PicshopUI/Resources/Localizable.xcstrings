@@ -321,6 +321,22 @@
         }
       }
     },
+    "After": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "After"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Après"
+          }
+        }
+      }
+    },
     "All": {
       "localizations": {
         "en": {
@@ -669,6 +685,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Avant"
+          }
+        }
+      }
+    },
+    "Before and after": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before and after"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avant / après"
+          }
+        }
+      }
+    },
+    "Before and after, side by side": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before and after, side by side"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avant / après côte à côte"
           }
         }
       }

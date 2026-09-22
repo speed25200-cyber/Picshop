@@ -39,8 +39,21 @@ private struct CanvasSurface: View {
     let session: PhotoEditorSession
     let frame: CGRect
 
+    /// The edited picture, or — during a split compare — the original on the left of the line.
+    private var displayed: CIImage? {
+        guard let split = session.compareSplit, session.canSplitCompare, !session.isCropping, !session.showsOriginal,
+              let edited = session.preview, let original = session.originalPreview,
+              original.extent.width > 0, original.extent.height > 0 else { return session.preview }
+        let extent = edited.extent
+        let fitted = original
+            .transformed(by: CGAffineTransform(scaleX: extent.width / original.extent.width, y: extent.height / original.extent.height))
+        let aligned = fitted.transformed(by: CGAffineTransform(translationX: extent.minX - fitted.extent.minX, y: extent.minY - fitted.extent.minY))
+        let cut = CGRect(x: extent.minX, y: extent.minY, width: extent.width * CGFloat(split.clamped(to: 0...1)), height: extent.height)
+        return aligned.cropped(to: cut).composited(over: edited)
+    }
+
     var body: some View {
-        MetalCanvasRepresentable(image: session.preview, overlay: session.selectionPreview, frame: frame,
+        MetalCanvasRepresentable(image: displayed, overlay: session.selectionPreview, frame: frame,
                                  maxFrameRate: session.app.performance.maxFrameRate,
                                  maxContentScale: session.app.performance.maxContentScale)
     }
@@ -95,6 +108,10 @@ struct PhotoCanvasView: View {
                 }
                 overlays(frame: frame, container: container)
                     .allowsHitTesting(false)
+                if let split = session.compareSplit, session.canSplitCompare, !session.isCropping {
+                    SplitCompareLine(frame: frame, split: split) { session.compareSplit = $0 }
+                        .transition(.opacity)
+                }
                 if let rect = session.cropRect {
                     CropOverlay(frame: frame, rect: Binding(get: { rect }, set: { session.cropRect = $0 }), aspect: cropAspectValue,
                                 pixelSize: session.document.canvasSize, denseGrid: session.straightenPreview != 0)
@@ -109,7 +126,22 @@ struct PhotoCanvasView: View {
                 // button is offered whenever there is something to compare. Only
                 // the crop overlay, which owns the canvas, hides it.
                 if session.history.canUndo, !session.isCropping, !session.isProcessing, session.pendingClarification == nil {
-                    CompareButton(isShowingOriginal: session.showsOriginal) { session.showsOriginal = $0 }
+                    HStack(spacing: 8) {
+                        if session.canSplitCompare {
+                            Button {
+                                Haptics.tap()
+                                session.compareSplit = session.compareSplit == nil ? 0.5 : nil
+                            } label: {
+                                Image(systemName: "square.split.2x1").font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(session.compareSplit == nil ? PSTheme.textPrimary : PSTheme.accent)
+                                    .frame(width: 38, height: 38)
+                                    .psGlass(interactive: true, shape: AnyShape(Circle()))
+                            }
+                            .buttonStyle(PSPressStyle(scale: 0.9))
+                            .accessibilityLabel(L("Before and after, side by side"))
+                        }
+                        CompareButton(isShowingOriginal: session.showsOriginal) { session.showsOriginal = $0 }
+                    }
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                         .padding(12)
                         .transition(.scale(scale: 0.8, anchor: .bottomTrailing).combined(with: .opacity))
@@ -706,6 +738,44 @@ struct MagicSelectionBar: View {
         .foregroundStyle(PSTheme.textPrimary)
         .padding(.horizontal, 11).frame(height: 34)
         .contentShape(Capsule())
+    }
+}
+/// The line of a before/after split: drag it anywhere across the picture.
+struct SplitCompareLine: View {
+    let frame: CGRect
+    let split: Double
+    var onChange: (Double) -> Void
+
+    var body: some View {
+        let x = frame.minX + frame.width * CGFloat(split)
+        ZStack {
+            Rectangle().fill(Color.white).frame(width: 2, height: frame.height)
+                .shadow(color: .black.opacity(0.35), radius: 3)
+                .position(x: x, y: frame.midY)
+            Image(systemName: "arrow.left.and.right").font(.system(size: 12, weight: .bold)).foregroundStyle(.black)
+                .frame(width: 34, height: 34).background(Circle().fill(Color.white)).shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+                .position(x: x, y: frame.midY)
+            HStack {
+                Text(L("Before")).font(PSFont.label(11)).padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Color.black.opacity(0.45)))
+                Spacer()
+                Text(L("After")).font(PSFont.label(11)).padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Color.black.opacity(0.45)))
+            }
+            .foregroundStyle(.white)
+            .frame(width: max(0, frame.width - 16))
+            .position(x: frame.midX, y: frame.minY + 18)
+            .allowsHitTesting(false)
+        }
+        .contentShape(Rectangle().size(width: 60, height: frame.height).offset(x: x - 30, y: frame.minY))
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in onChange(Double((value.location.x - frame.minX) / max(1, frame.width)).clamped(to: 0...1)) }
+        )
+        .accessibilityElement()
+        .accessibilityLabel(L("Before and after"))
+        .accessibilityValue("\(Int(split * 100)) %")
+        .accessibilityAdjustableAction { direction in
+            onChange((split + (direction == .increment ? 0.1 : -0.1)).clamped(to: 0...1))
+        }
     }
 }
 #endif

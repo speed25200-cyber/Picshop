@@ -95,6 +95,20 @@ public final class PhotoEditorSession {
     public private(set) var preview: CIImage?
     public private(set) var isRendering = false
     public var showsOriginal = false { didSet { requestPreview() } }
+    /// Split before/after: the original shows left of this point (0…1), nil when off.
+    public var compareSplit: Double? {
+        didSet { if (oldValue == nil) != (compareSplit == nil) { Task { await loadOriginalPreview() } } }
+    }
+    /// The untouched photo at preview size, for the split compare.
+    public private(set) var originalPreview: CIImage?
+    /// The split compare lines pixels up, so it is offered only while the frame is the original one.
+    public var canSplitCompare: Bool { !(document.baseLayer?.edits.hasGeometry ?? false) && history.canUndo }
+
+    private func loadOriginalPreview() async {
+        guard compareSplit != nil, let renderer else { originalPreview = nil; return }
+        let options = PhotoRenderer.Options(targetLongestSide: app.performance.previewLongestSide, showOriginal: true, allowExpensiveWork: false)
+        originalPreview = try? await renderer.render(previewDocument(), options: options)
+    }
     public var activeTool: Tool? { didSet { toolDidChange(from: oldValue) } }
     // Crop tool state (normalised over the straightened preview).
     public var cropRect: PSRect?
