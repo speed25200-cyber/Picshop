@@ -132,7 +132,7 @@ extension AVVideoServices {
         let envelope = sound.map { LoudnessEnvelope.measure($0, hop: 0.1, window: 0.5) }
         let quiet = envelope?.percentile(0.1) ?? -60, loud = envelope?.percentile(0.95) ?? -10
 
-        var images: [CGImage] = []
+        var looks: [Double?] = []
         var times: [Double] = []
         var faces: [Double] = []
         var motion: [Double] = []
@@ -146,16 +146,16 @@ extension AVVideoServices {
             let request = VNDetectFaceRectanglesRequest()
             try? VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
             faces.append((request.results?.isEmpty == false) ? 1 : 0)
-            images.append(image)
+            // Scored now and let go: holding hundreds of frames for one batch would cost a lot of memory.
+            let look = await AestheticsRanker.scores(for: [image]).first
+            looks.append(look ?? nil)
             times.append(offset)
-            progress(Double(index + 1) / Double(offsets.count) * 0.6)
+            progress(Double(index + 1) / Double(offsets.count))
         }
-        let aesthetics = await AestheticsRanker.scores(for: images)
-        progress(1)
 
         return times.indices.map { index in
             // Vision's aesthetics score runs −1…1.
-            let look = aesthetics[index].map { ($0 + 1) / 2 } ?? 0.5
+            let look = looks[index].map { ($0 + 1) / 2 } ?? 0.5
             var level = 0.5
             if let envelope, loud > quiet {
                 let sourceOffset = abs(clip.sourceTime(forClipOffset: times[index]) - clip.sourceRange.start)
