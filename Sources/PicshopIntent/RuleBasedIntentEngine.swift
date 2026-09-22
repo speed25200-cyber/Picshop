@@ -529,7 +529,8 @@ public struct RuleBasedIntentEngine: IntentEngine {
     // MARK: - Portrait retouching
 
     static let skinSmoothingPhrases: [String] = ["smooth the skin", "smooth skin", "smooth out the skin", "skin smoothing", "soften the skin", "soften skin", "smooth my skin", "skin retouch", "beauty retouch", "beautify",
-                                                 "lisse la peau", "lisser la peau", "adoucis la peau", "adoucir la peau", "peau plus lisse", "peau plus douce", "retouche la peau", "lisse ma peau", "adoucis ma peau", "retouche beaute", "gomme les rides", "efface les rides", "remove the wrinkles", "remove wrinkles"]
+                                                 "lisse la peau", "lisser la peau", "adoucis la peau", "adoucir la peau", "peau plus lisse", "peau plus douce", "retouche la peau", "lisse ma peau", "adoucis ma peau", "retouche beaute", "gomme les rides", "efface les rides", "remove the wrinkles", "remove wrinkles",
+                                                 "nettoie la peau", "nettoyer la peau", "clean the skin", "clean up the skin", "unifie la peau", "unifie le teint", "even out the skin", "even skin"]
 
     /// "lisse la peau" → a gentle noise reduction masked to the face.
     func parsePortrait(_ u: NormalizedUtterance) -> EditIntent? {
@@ -718,7 +719,8 @@ public struct RuleBasedIntentEngine: IntentEngine {
     /// "qu'est-ce que j'ai modifié ?", "what did I change", "résume mes modifications".
     func parseSummary(_ u: NormalizedUtterance) -> EditIntent? {
         let phrases = ["qu est ce que j ai modifie", "qu est ce que j ai fait", "qu est ce que j ai change", "qu ai je modifie", "qu ai je fait", "resume mes modifications", "resume les modifications", "liste les modifications", "liste mes modifications", "mes modifications", "historique des modifications", "montre l historique", "recapitule", "recap",
-                       "what did i change", "what have i changed", "what did i do", "what have i done", "list my edits", "list the edits", "summarize my edits", "summarise my edits", "show the history", "edit history", "what changed", "recap my edits"]
+                       "what did i change", "what have i changed", "what did i do", "what have i done", "list my edits", "list the edits", "summarize my edits", "summarise my edits", "show the history", "edit history", "what changed", "recap my edits",
+                       "resume des modifications", "le resume des modifications", "resume de mes modifications", "summary of the edits", "summary of my edits"]
         guard u.contains(phrases) else { return nil }
         // "a 30 second recap" of a video is a highlights reel, not a list of edits.
         if u.contains(["second", "seconds", "seconde", "secondes", "minute", "minutes", "video", "clip", "film", "movie", "reel", "best", "meilleurs"]) { return nil }
@@ -931,6 +933,15 @@ public struct RuleBasedIntentEngine: IntentEngine {
 
     // MARK: - Resolution & detail operations
 
+    /// "déplace le texte vers le haut", "move the title down": the latest title goes to a place.
+    func parseTextMove(_ u: NormalizedUtterance) -> EditIntent? {
+        guard u.contains(["deplace", "deplacer", "bouge", "bouger", "decale", "monte", "descends", "descend", "move", "shift", "put"]), u.contains(["texte", "text", "titre", "title"]) else { return nil }
+        if u.contains(["haut", "up", "top", "higher"]) { return EditIntent(action: .editText, placement: .top) }
+        if u.contains(["bas", "down", "bottom", "lower"]) { return EditIntent(action: .editText, placement: .bottom) }
+        if u.contains(["centre", "center", "milieu", "middle"]) { return EditIntent(action: .editText, placement: .center) }
+        return nil
+    }
+
     /// "clean up the pimple" names a thing to erase; "clean up the photo" does not.
     func namesSomethingElse(_ u: NormalizedUtterance, after verbs: [String], context: IntentContext) -> Bool {
         guard let rest = remainder(of: u, after: verbs), let named = makeTarget(from: rest, context: context),
@@ -943,8 +954,10 @@ public struct RuleBasedIntentEngine: IntentEngine {
     func parseMoveObject(_ u: NormalizedUtterance, context: IntentContext) -> EditIntent? {
         let verbs = ["deplace", "deplacer", "deplaces", "bouge", "bouger", "decale", "decaler", "pousse", "glisse", "move", "shift", "slide", "nudge", "drag", "recentre"]
         guard let rest = remainder(of: u, after: verbs) else { return nil }
-        // Text and layers move with their own commands.
-        if NormalizedUtterance(rest).contains(["texte", "text", "titre", "title", "calque", "layer", "curseur", "slider", "photo", "image", "picture", "tout", "everything"]) { return nil }
+        // The title moves to a place ("déplace le texte vers le haut"); layers and sliders have their own commands.
+        let restUtterance = NormalizedUtterance(rest)
+        if restUtterance.contains(["texte", "text", "titre", "title"]) { return parseTextMove(u) }
+        if restUtterance.contains(["calque", "layer", "curseur", "slider", "photo", "image", "picture", "tout", "everything"]) { return nil }
         let padded = " " + rest + " "
         let markers = [" vers ", " a gauche", " a droite", " en haut", " en bas", " plus haut", " plus bas", " plus a ", " au centre", " au milieu", " un peu", " legerement", " beaucoup",
                        " to the ", " towards ", " toward ", " left ", " right ", " up ", " down ", " higher", " lower", " into the ", " a bit", " slightly", " a little", " further", " de ", " by "]

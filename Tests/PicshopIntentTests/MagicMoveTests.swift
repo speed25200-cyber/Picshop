@@ -157,3 +157,17 @@ final class CleanUpTests: XCTestCase {
         XCTAssertGreaterThan(mask.boundingBox.width, 0.8)
     }
 }
+
+final class GrammarSweepTests: XCTestCase {
+    func testEverydayPhrasesKeepTheirMeaning() {
+        let engine = RuleBasedIntentEngine()
+        XCTAssertEqual(engine.parse("nettoie la peau", context: .photo).intents.first?.target?.label, "skin")
+        XCTAssertEqual(engine.parse("déplace le texte vers le haut", context: .photo).intents.first?.placement, .top)
+        let video = IntentContext(mode: .video, clipCount: 2, playheadSeconds: 5, timelineDuration: 60)
+        XCTAssertEqual(engine.parse("move the title down", context: video).intents.first?.placement, .bottom)
+        XCTAssertEqual(engine.parse("montre le résumé des modifications", context: .photo).intents.first?.action, .summarizeEdits)
+        XCTAssertEqual(engine.parse("efface la personne derrière moi", context: .photo).intents.first?.action, .removeObject)
+        XCTAssertEqual(engine.parse("resume playback", context: video).intents.first?.action, .play)
+        XCTAssertEqual(engine.parse("coupe le son", context: video).intents.first?.action, .mute)
+    }
+}

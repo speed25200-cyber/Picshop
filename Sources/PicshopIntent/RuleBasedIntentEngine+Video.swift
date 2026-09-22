@@ -383,6 +383,7 @@ extension RuleBasedIntentEngine {
         if let words = parseCutWords(u) { return [words] }
         if let duck = parseDucking(u) { return [duck] }
         if let tracking = parseTracking(u) { return [tracking] }
+        if let textMove = parseTextMove(u) { return [textMove] }
         if u.contains(["zoom cut", "zoom cuts", "zooms de coupe", "zoom de coupe", "punch in", "punch ins", "punchin", "zoome a chaque coupe", "zoom a chaque coupe", "zoom on every cut",
                        "zoom at every cut", "zoom in on the cuts", "zooms sur les coupes", "alterne les cadrages", "alternate the framing", "cache les jump cuts", "hide the jump cuts"]) {
             var intent = EditIntent(action: .punchIns)
