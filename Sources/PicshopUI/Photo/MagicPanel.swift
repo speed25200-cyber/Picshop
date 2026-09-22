@@ -28,17 +28,17 @@ struct MagicPanel: View {
         }
         return [
             Suggestion(id: "enhance", title: L("Enhance"), symbol: "wand.and.stars") { $0.perform(EditIntent(action: .autoEnhance)) },
-            Suggestion(id: "behind", title: L("Text behind"), symbol: "person.and.background.dotted") { session in Task { await session.textBehindSubject() } },
-            Suggestion(id: "match", title: L("Match colours"), symbol: "eyedropper.halffull") { $0.showsColorReferencePicker = true },
             Suggestion(id: "cleanup", title: L("Clean up"), symbol: "person.2.slash") { $0.perform(EditIntent(action: .cleanUp)) },
-            Suggestion(id: "cutout", title: L("Cut out"), symbol: "person.crop.rectangle") { $0.perform(EditIntent(action: .removeBackground)) },
-            Suggestion(id: "portrait", title: L("Portrait blur"), symbol: "camera.aperture", run: say("floute l'arrière-plan", "blur the background")),
-            Suggestion(id: "relight", title: L("Relight"), symbol: "lightbulb.max") { $0.perform(EditIntent(action: .relight)) },
-            Suggestion(id: "sky", title: L("Sunset sky"), symbol: "sun.horizon", run: say("remplace le ciel par un coucher de soleil", "replace the sky with a sunset")),
-            Suggestion(id: "upscale", title: L("Upscale"), symbol: "arrow.up.left.and.arrow.down.right") { $0.perform(EditIntent(action: .upscale, amount: .absolute(2))) },
-            Suggestion(id: "retouch", title: L("Retouch"), symbol: "face.smiling", run: say("lisse la peau et éclaircis les yeux et blanchis les dents", "smooth the skin and brighten the eyes and whiten the teeth")),
-            Suggestion(id: "mono", title: L("Black & white"), symbol: "circle.lefthalf.filled", run: say("noir et blanc", "black and white")),
             Suggestion(id: "expand", title: L("Expand"), symbol: "arrow.up.left.and.arrow.down.right") { $0.expandCanvas() },
+            Suggestion(id: "behind", title: L("Text behind"), symbol: "person.and.background.dotted") { session in Task { await session.textBehindSubject() } },
+            Suggestion(id: "retouch", title: L("Retouch"), symbol: "face.smiling", run: say("lisse la peau et éclaircis les yeux et blanchis les dents", "smooth the skin and brighten the eyes and whiten the teeth")),
+            Suggestion(id: "portrait", title: L("Portrait blur"), symbol: "camera.aperture", run: say("floute l'arrière-plan", "blur the background")),
+            Suggestion(id: "sky", title: L("Sunset sky"), symbol: "sun.horizon", run: say("remplace le ciel par un coucher de soleil", "replace the sky with a sunset")),
+            Suggestion(id: "match", title: L("Match colours"), symbol: "eyedropper.halffull") { $0.showsColorReferencePicker = true },
+            Suggestion(id: "relight", title: L("Relight"), symbol: "lightbulb.max") { $0.perform(EditIntent(action: .relight)) },
+            Suggestion(id: "cutout", title: L("Cut out"), symbol: "person.crop.rectangle") { $0.perform(EditIntent(action: .removeBackground)) },
+            Suggestion(id: "upscale", title: L("Upscale"), symbol: "arrow.up.left.and.arrow.down.right") { $0.perform(EditIntent(action: .upscale, amount: .absolute(2))) },
+            Suggestion(id: "mono", title: L("Black & white"), symbol: "circle.lefthalf.filled", run: say("noir et blanc", "black and white")),
         ]
     }
 
