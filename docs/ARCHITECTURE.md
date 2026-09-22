@@ -185,6 +185,10 @@ The automatic tools are split the same way as the rest of the app: the algorithm
 - **Highlights** (`Highlights.swift`): per-second moment scores (aesthetics, faces, loudness, moderate motion) drive a
   greedy window picker that avoids straddling shot changes, spreads picks across the recording and restores their order.
   Magic Movie reuses the same scores.
+- **Zoom cuts** (`PunchIn.swift`): a jump cut is the same file continuing later in time; runs of them alternate
+  between the wide frame and a still, tighter one centred on the median face position of the segment.
+- **Clean Up** (`Distractions.swift`): the largest person and anyone as prominent standing with them are the subject;
+  much smaller figures, those apart from them and those cut by the frame edge are erased together in one fill.
 - **Titles** (`TextAnimation.swift`): pop, rise, wipe, focus and drift are states (scale, lift, blur, reveal, opacity)
   computed from time; the compositor applies them to any overlay.
 - **Photo geometry magic**: generative expand places the picture in a larger canvas and fills the border (Stable
