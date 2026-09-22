@@ -426,6 +426,44 @@ public struct VideoCommandExecutor: Sendable {
                 return (timeline, .failed(errorMessage(error)))
             }
 
+        case .highlights:
+            let target = (intent.amount?.value ?? 30).clamped(to: 5...600)
+            guard timeline.duration > target + 2 else {
+                return (timeline, ExecutionResult(outcome: .info(message: fr ? "La vidéo dure déjà moins de \(Int(target)) s." : "The video is already under \(Int(target)) s.")))
+            }
+            do {
+                var clips: [HighlightPlanner.Clip] = []
+                let count = Double(timeline.clips.count)
+                for (number, clip) in timeline.clips.enumerated() {
+                    let scores = try await services.momentScores(for: clip, timeline: timeline) { fraction in
+                        progress((Double(number) + fraction * 0.8) / count)
+                    }
+                    let cuts = (try? await services.sceneCuts(for: clip, timeline: timeline, sensitivity: 0.5) { _ in }) ?? []
+                    clips.append(HighlightPlanner.Clip(duration: clip.timelineDuration, moments: scores, cuts: cuts))
+                }
+                let picks = HighlightPlanner.pick(clips: clips, target: target)
+                guard !picks.isEmpty else { return (timeline, .failed(fr ? "Je ne trouve pas de moment fort." : "I can't find any highlight.")) }
+                // Each pick becomes a shot taken from its clip, joined by short dissolves.
+                let shots: [VideoClip] = picks.map { pick in
+                    var shot = timeline.clips[pick.clipIndex]
+                    let a = shot.sourceTime(forClipOffset: pick.span.start), b = shot.sourceTime(forClipOffset: pick.span.end)
+                    shot.id = UUID()
+                    shot.sourceRange = TimeSpan(start: min(a, b), end: max(a, b))
+                    shot.transitionOut = Transition(kind: .crossDissolve, duration: 0.3)
+                    shot.motion = nil
+                    return shot
+                }
+                var recap = shots
+                recap[recap.count - 1].transitionOut = nil
+                timeline.clips = recap
+                timeline.captions = nil
+                timeline.touch()
+                let seconds = Int(timeline.duration.rounded())
+                return (timeline, .applied(fr ? "Résumé de \(seconds) s : \(shots.count) moments forts" : "\(seconds) s recap: \(shots.count) highlights"))
+            } catch {
+                return (timeline, .failed(errorMessage(error)))
+            }
+
         case .splitScenes:
             let ids = intent.scope == .all || context.selectedIndex == nil ? timeline.clips.map(\.id) : targetClipIDs()
             guard !ids.isEmpty else { return (timeline, .failed(fr ? "Il n'y a pas de clip." : "There is no clip.")) }

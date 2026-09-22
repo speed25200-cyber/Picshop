@@ -78,6 +78,8 @@ public protocol VideoAIServices: Sendable {
     func isolateVoice(clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> MediaAsset
     /// Colour statistics of a clip, sampled from a few frames.
     func colorStatistics(clip: VideoClip, timeline: VideoTimeline) async throws -> ColorStatistics
+    /// How good each moment of a clip looks and sounds, as offsets along its span.
+    func momentScores(for clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [MomentScore]
     /// Where the shot changes inside a clip, as offsets on the clip's own timeline span.
     func sceneCuts(for clip: VideoClip, timeline: VideoTimeline, sensitivity: Double, progress: @escaping @Sendable (Double) -> Void) async throws -> [Double]
     /// Follows whatever is at `point` (normalised, y down) in the finished picture at `time`,
@@ -103,6 +105,9 @@ public extension VideoAIServices {
     }
     func sceneCuts(for clip: VideoClip, timeline: VideoTimeline, sensitivity: Double, progress: @escaping @Sendable (Double) -> Void) async throws -> [Double] {
         throw PicshopError.unsupportedOperation("Scene detection")
+    }
+    func momentScores(for clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [MomentScore] {
+        throw PicshopError.unsupportedOperation("Highlights")
     }
 }
 

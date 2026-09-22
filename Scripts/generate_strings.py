@@ -99,6 +99,7 @@ FR = {
     "Sunset sky": "Ciel couchant",
     "Upscale": "Agrandir",
     "Expand": "Étendre",
+    "Watching for the best moments…": "Je cherche les meilleurs moments…",
     "No animation": "Sans animation",
     "Title Animation": "Animation du titre",
     "Split at shots": "Couper aux plans",

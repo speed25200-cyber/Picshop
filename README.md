@@ -22,7 +22,7 @@ Tap a Magic tool, type what you want, or just say it — *« efface le chien »*
 | Cut out, replace or blur the background | **Smart reframe** to 9:16 / 1:1 following faces, people or the salient subject |
 | **Match colours** from any reference picture (Lab transfer as a 3D LUT) | **Subject tracking**: titles and stickers stick to a face or a moving object |
 | **Best looks** ranked by Vision's aesthetics model | **Automatic ducking**: the music dips under every sentence |
-| Generative fill (Stable Diffusion), relight, upscale (Real-ESRGAN), denoise | **Scene detection**: long recordings split at every shot change |
+| Generative fill (Stable Diffusion), relight, upscale (Real-ESRGAN), denoise | **Highlights** and **scene detection**: a 30 s recap of the best moments, or a split at every shot |
 | A prompt field and voice for anything else, FR/EN | **Clean voice**, **colour match** across clips, **Magic Movie**, animated titles |
 
 ## Pro

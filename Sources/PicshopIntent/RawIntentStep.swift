@@ -184,6 +184,7 @@ public enum IntentNormalizer {
             "subtitles": .autoCaptions, "subtitle": .autoCaptions, "captions": .autoCaptions, "autocaption": .autoCaptions, "transcribe": .autoCaptions,
             "jumpcut": .removeSilences, "jumpcuts": .removeSilences, "removesilence": .removeSilences, "cutsilences": .removeSilences, "removepauses": .removeSilences,
             "animatetext": .animateText, "animatetitle": .animateText, "textanimation": .animateText, "titleanimation": .animateText,
+            "highlights": .highlights, "highlightreel": .highlights, "recap": .highlights, "bestmoments": .highlights, "summary": .highlights, "summarize": .highlights,
             "splitscenes": .splitScenes, "scenedetect": .splitScenes, "scenedetection": .splitScenes, "detectscenes": .splitScenes, "shotdetection": .splitScenes,
             "track": .trackSubject, "tracksubject": .trackSubject, "follow": .trackSubject, "followsubject": .trackSubject, "motiontrack": .trackSubject, "pin": .trackSubject,
             "autoduck": .autoDuck, "ducking": .autoDuck, "duck": .autoDuck, "duckmusic": .autoDuck, "autoducking": .autoDuck,

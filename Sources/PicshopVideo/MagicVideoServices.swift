@@ -110,6 +110,65 @@ extension AVVideoServices {
         return ColorStatistics.measure(rgba: bytes)
     }
 
+    // MARK: Highlights
+
+    public func momentScores(for clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [MomentScore] {
+        let asset = asset(for: clip)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 360, height: 360)
+        let tolerance = CMTime(value: 1, timescale: 4)
+        generator.requestedTimeToleranceBefore = tolerance
+        generator.requestedTimeToleranceAfter = tolerance
+
+        // One look a second (fewer on very long clips), along the clip's span.
+        let duration = clip.timelineDuration
+        let step = max(1, duration / 300)
+        let offsets = Array(stride(from: min(0.5, duration / 2), to: duration, by: step))
+        guard !offsets.isEmpty else { return [] }
+
+        // The sound: loud moments (laughs, cheers, speech) count.
+        let sound = try? await AudioDecoder.decode(asset: asset, range: clip.sourceRange, sampleRate: 8_000)
+        let envelope = sound.map { LoudnessEnvelope.measure($0, hop: 0.1, window: 0.5) }
+        let quiet = envelope?.percentile(0.1) ?? -60, loud = envelope?.percentile(0.95) ?? -10
+
+        var images: [CGImage] = []
+        var times: [Double] = []
+        var faces: [Double] = []
+        var motion: [Double] = []
+        var previous: FrameSignature?
+        for (index, offset) in offsets.enumerated() {
+            try Task.checkCancellation()
+            guard let image = try? await generator.image(at: VideoTime.cm(clip.sourceTime(forClipOffset: offset))).image else { continue }
+            let signature = FrameSignature.measure(rgba: ImageSupport.rgbaBytes(from: image), width: image.width, height: image.height, time: offset)
+            motion.append(previous.map { min(1, signature.distance(to: $0) * 4) } ?? 0)
+            previous = signature
+            let request = VNDetectFaceRectanglesRequest()
+            try? VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+            faces.append((request.results?.isEmpty == false) ? 1 : 0)
+            images.append(image)
+            times.append(offset)
+            progress(Double(index + 1) / Double(offsets.count) * 0.6)
+        }
+        let aesthetics = await AestheticsRanker.scores(for: images)
+        progress(1)
+
+        return times.indices.map { index in
+            // Vision's aesthetics score runs −1…1.
+            let look = aesthetics[index].map { ($0 + 1) / 2 } ?? 0.5
+            var level = 0.5
+            if let envelope, loud > quiet {
+                let sourceOffset = abs(clip.sourceTime(forClipOffset: times[index]) - clip.sourceRange.start)
+                let frame = min(envelope.decibels.count - 1, max(0, Int(sourceOffset / envelope.hop)))
+                level = envelope.decibels.isEmpty ? 0.5 : Double((envelope.decibels[frame] - quiet) / (loud - quiet)).clamped(to: 0...1)
+            }
+            // Some movement is life; a whip pan is not.
+            let moving = motion[index] < 0.7 ? motion[index] : 1.4 - motion[index]
+            let score = 0.45 * look + 0.25 * level + 0.15 * moving + 0.15 * faces[index]
+            return MomentScore(time: times[index], score: score)
+        }
+    }
+
     // MARK: Scenes
 
     public func sceneCuts(for clip: VideoClip, timeline: VideoTimeline, sensitivity: Double, progress: @escaping @Sendable (Double) -> Void) async throws -> [Double] {

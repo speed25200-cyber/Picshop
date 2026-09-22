@@ -73,6 +73,8 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     case autoDuck
     /// Sets how a title comes on screen (text = animation name, nil = none; target.originalPhrase = overlay id from the panel).
     case animateText
+    /// A recap of the best moments (amount = length in seconds, 30 by default).
+    case highlights
     /// Splits the clips wherever the shot changes (scope .all or the selected clip; amount = sensitivity 0…1).
     case splitScenes
     /// An overlay follows the moving subject under it (`text` = overlay id, `target.label` = text/image/video/shape; amount 0 detaches).
@@ -134,7 +136,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
         switch self {
         case .trim, .split, .deleteClip, .deleteRange, .setSpeed, .reverse, .mute, .unmute, .setVolume,
              .addTransition, .removeTransition, .addMusic, .removeMusic, .moveAudio, .fadeAudio, .extractFrame, .seek, .play, .pause,
-             .duplicateClip, .moveClip, .stabilize, .freezeFrame, .autoCaptions, .removeCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .splitScenes, .animateText, .syncToBeat,
+             .duplicateClip, .moveClip, .stabilize, .freezeFrame, .autoCaptions, .removeCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .splitScenes, .animateText, .highlights, .syncToBeat,
              .smartReframe, .kenBurns, .enhanceVoice, .matchColor:
             return true
         default:
@@ -416,6 +418,7 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .autoDuck: return amount?.value == 0 ? "Ducking off" : "Duck the music under the voice"
         case .trackSubject: return amount?.value == 0 ? "Stop following" : "Follow the subject"
         case .splitScenes: return "Split at every shot"
+        case .highlights: return "Highlights \(Int(amount?.value ?? 30)) s"
         case .animateText: return "Animate title \(text ?? "none")"
         case .cutWords: return "Cut “\(text ?? "")”"
         case .syncToBeat: return "Cut to the beat"

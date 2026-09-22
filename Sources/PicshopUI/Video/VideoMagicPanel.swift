@@ -35,7 +35,7 @@ struct VideoMagicPanel: View {
             Action(id: "match", title: L("Match colour"), symbol: "circle.lefthalf.striped.horizontal", intent: EditIntent(action: .matchColor, scope: .all)),
             Action(id: "stabilize", title: L("Stabilize"), symbol: "camera.metering.center.weighted", intent: EditIntent(action: .stabilize)),
             Action(id: "enhance", title: L("Enhance"), symbol: "wand.and.stars", intent: EditIntent(action: .autoEnhance)),
-            Action(id: "portrait", title: L("Portrait blur"), symbol: "camera.aperture", intent: EditIntent(action: .blurBackground)),
+            Action(id: "highlights", title: L("Highlights"), symbol: "star.square.on.square", intent: EditIntent(action: .highlights)),
             Action(id: "fillers", title: L("Fillers"), symbol: "waveform.badge.minus", intent: EditIntent(action: .removeFillers)),
         ]
     }

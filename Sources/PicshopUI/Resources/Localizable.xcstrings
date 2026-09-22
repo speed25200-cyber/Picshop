@@ -7889,6 +7889,22 @@
         }
       }
     },
+    "Watching for the best moments…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Watching for the best moments…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je cherche les meilleurs moments…"
+          }
+        }
+      }
+    },
     "Wheels": {
       "localizations": {
         "en": {

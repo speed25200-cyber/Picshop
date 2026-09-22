@@ -383,6 +383,20 @@ extension RuleBasedIntentEngine {
         if let words = parseCutWords(u) { return [words] }
         if let duck = parseDucking(u) { return [duck] }
         if let tracking = parseTracking(u) { return [tracking] }
+        if u.contains(["un resume", "le resume", "resume de", "resume la video", "resume cette video", "resumer", "fais un resume", "meilleurs moments", "moments forts", "temps forts", "best moments", "best bits", "highlights", "highlight reel", "recap", "summary",
+                       "summarize", "sum up", "condense", "version courte", "short version", "garde le meilleur", "keep the best", "the best parts", "les meilleurs passages"]),
+           !u.contains(["resume des modifications", "summary of the edits", "what did you do", "qu est ce que tu as fait", "recap of the edits", "resume de mes modifs", "modifications"]) {
+            var intent = EditIntent(action: .highlights)
+            let times = TimeExpressions.allTimes(in: u.tokens, frameRate: 30)
+            if let seconds = times.first, seconds >= 5, seconds <= 600 {
+                intent.amount = .absolute(seconds)
+            } else if let number = NumberWords.firstNumber(in: u.tokens), number.value >= 5, number.value <= 600 {
+                intent.amount = .absolute(u.contains(["minute", "minutes", "min"]) ? number.value * 60 : number.value)
+            } else if u.contains(["court", "courte", "short", "rapide", "quick", "teaser"]) {
+                intent.amount = .absolute(15)
+            }
+            return [intent]
+        }
         let animates = u.contains(["anime", "animer", "animation", "animate", "animated", "entree", "entrance", "apparition"]) && u.contains(["texte", "titre", "title", "text", "le nom", "the name", "animation"])
         let appears = u.contains(["fais apparaitre", "fait apparaitre", "make it appear", "make the title appear", "make the text appear"]) && TextAnimation.matching(u.text) != nil
         if animates || appears {
