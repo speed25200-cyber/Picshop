@@ -12,6 +12,8 @@ struct TranscriptPanel: View {
     @Bindable var session: VideoEditorSession
     @State private var selection: Set<Int> = []
     @State private var activeWord: Int?
+    /// Hesitations found in the words, worked out once per transcript rather than on every redraw.
+    @State private var fillers: Set<Int> = []
 
     var body: some View {
         if let captions = session.timeline.captions, !captions.isEmpty {
@@ -60,7 +62,6 @@ struct TranscriptPanel: View {
             offsets.append(running)
             running += cue.words.count
         }
-        let fillers = TranscriptEditor.fillers(in: words).wordIndices
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 8) {
                 VStack(alignment: .leading, spacing: 1) {
@@ -109,6 +110,7 @@ struct TranscriptPanel: View {
             actionBar(fillers: fillers.count)
         }
         .onChange(of: words.count) { selection = [] }
+        .task(id: "\(words.count)-\(words.last?.end ?? 0)") { fillers = TranscriptEditor.fillers(in: words).wordIndices }
         .animation(PSMotion.quick, value: selection.isEmpty)
     }
 
