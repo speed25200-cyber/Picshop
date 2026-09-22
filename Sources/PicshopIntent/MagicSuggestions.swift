@@ -29,3 +29,24 @@ public enum MagicSuggestions {
         return all.sorted { (score[$0] ?? 0) > (score[$1] ?? 0) }
     }
 }
+
+/// The video Magic grid in the order that suits this timeline.
+public enum VideoMagicSuggestions {
+    public static let all = ["captions", "fillers", "highlights", "silences", "beat", "vertical", "punchins", "voice", "kenburns", "match", "square", "enhance"]
+
+    public static func ranked(duration: Double, clipCount: Int, hasMusic: Bool, hasCaptions: Bool, isVertical: Bool) -> [String] {
+        var score: [String: Double] = [:]
+        for (index, id) in all.enumerated() { score[id] = Double(all.count - index) * 0.1 }
+        func boost(_ id: String, _ amount: Double) { score[id, default: 0] += amount }
+        // Long footage wants a recap first.
+        if duration > 90 { boost("highlights", 3) }
+        // With captions done, the next steps are the jump cuts and the zooms.
+        if hasCaptions { boost("captions", -2); boost("fillers", 1.5); boost("silences", 1.5); boost("punchins", 1.5) }
+        // A song on the timeline: cut on it.
+        if hasMusic { boost("beat", 2.5) }
+        // Several shots: make them one film.
+        if clipCount > 2 { boost("match", 1.6) }
+        if isVertical { boost("vertical", -3); boost("square", -1) }
+        return all.sorted { (score[$0] ?? 0) > (score[$1] ?? 0) }
+    }
+}

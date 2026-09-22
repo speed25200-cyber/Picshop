@@ -184,3 +184,12 @@ final class MagicSuggestionTests: XCTestCase {
         XCTAssertEqual(Set(portrait), Set(MagicSuggestions.all))
     }
 }
+
+final class VideoMagicSuggestionTests: XCTestCase {
+    func testTimelineDecidesWhatComesFirst() {
+        XCTAssertEqual(VideoMagicSuggestions.ranked(duration: 30, clipCount: 1, hasMusic: false, hasCaptions: false, isVertical: false), VideoMagicSuggestions.all)
+        XCTAssertEqual(VideoMagicSuggestions.ranked(duration: 600, clipCount: 1, hasMusic: false, hasCaptions: false, isVertical: false).first, "highlights")
+        XCTAssertEqual(VideoMagicSuggestions.ranked(duration: 30, clipCount: 6, hasMusic: true, hasCaptions: false, isVertical: false).first, "beat")
+        XCTAssertNotEqual(VideoMagicSuggestions.ranked(duration: 30, clipCount: 1, hasMusic: false, hasCaptions: true, isVertical: false).first, "captions")
+    }
+}

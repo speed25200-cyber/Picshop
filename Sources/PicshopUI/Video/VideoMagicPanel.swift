@@ -24,7 +24,7 @@ struct VideoMagicPanel: View {
         reframe.aspect = .ratio9x16
         var square = EditIntent(action: .smartReframe)
         square.aspect = .square
-        return [
+        let tiles: [Action] = [
             Action(id: "captions", title: L("Captions"), symbol: "captions.bubble", intent: EditIntent(action: .autoCaptions)),
             Action(id: "fillers", title: L("Fillers"), symbol: "waveform.badge.minus", intent: EditIntent(action: .removeFillers)),
             Action(id: "highlights", title: L("Highlights"), symbol: "star.square.on.square", intent: EditIntent(action: .highlights)),
@@ -38,6 +38,11 @@ struct VideoMagicPanel: View {
             Action(id: "square", title: L("Square"), symbol: "square", intent: square),
             Action(id: "enhance", title: L("Enhance"), symbol: "wand.and.stars", intent: EditIntent(action: .autoEnhance)),
         ]
+        // The timeline decides the order: long footage leads with a recap, a song with the beat.
+        let timeline = session.timeline
+        let order = VideoMagicSuggestions.ranked(duration: timeline.duration, clipCount: timeline.clips.count, hasMusic: !timeline.audioTracks.isEmpty,
+                                                 hasCaptions: timeline.captions?.isEmpty == false, isVertical: timeline.renderSize.height > timeline.renderSize.width)
+        return tiles.sorted { (order.firstIndex(of: $0.id) ?? 99) < (order.firstIndex(of: $1.id) ?? 99) }
     }
 
     var body: some View {
