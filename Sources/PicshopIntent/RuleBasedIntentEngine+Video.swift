@@ -383,6 +383,14 @@ extension RuleBasedIntentEngine {
         if let words = parseCutWords(u) { return [words] }
         if let duck = parseDucking(u) { return [duck] }
         if let tracking = parseTracking(u) { return [tracking] }
+        if u.contains(["zoom cut", "zoom cuts", "zooms de coupe", "zoom de coupe", "punch in", "punch ins", "punchin", "zoome a chaque coupe", "zoom a chaque coupe", "zoom on every cut",
+                       "zoom at every cut", "zoom in on the cuts", "zooms sur les coupes", "alterne les cadrages", "alternate the framing", "cache les jump cuts", "hide the jump cuts"]) {
+            var intent = EditIntent(action: .punchIns)
+            if u.contains(Self.removeVerbs) || u.contains(["sans", "without", "no more"]) { intent.amount = .absolute(0) }
+            else if u.contains(["leger", "legers", "subtle", "slight", "un peu"]) { intent.amount = .absolute(1.1) }
+            else if u.contains(["fort", "forts", "strong", "big", "gros", "beaucoup"]) { intent.amount = .absolute(1.3) }
+            return [intent]
+        }
         let slow = u.contains(["ralenti", "ralentis", "ralentir", "slow motion", "slow mo", "slowmo", "slow down", "ralentissement"])
         if u.contains(["speed ramp", "rampe de vitesse", "rampe", "ramp", "time ramp"]) ||
             (slow && u.contains(["progressif", "progressive", "gradual", "gradually", "ici", "here", "ce moment", "this moment", "sur ce passage", "at this point", "a cet endroit", "dramatique", "dramatic"])) {

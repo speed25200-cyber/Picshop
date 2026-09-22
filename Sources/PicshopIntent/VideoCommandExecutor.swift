@@ -426,6 +426,36 @@ public struct VideoCommandExecutor: Sendable {
                 return (timeline, .failed(errorMessage(error)))
             }
 
+        case .punchIns:
+            if let amount = intent.amount?.value, amount <= 0.01 {
+                var removed = 0
+                for index in timeline.clips.indices where timeline.clips[index].motion?.kind == .punchIn {
+                    timeline.clips[index].motion = nil
+                    removed += 1
+                }
+                timeline.touch()
+                return removed > 0 ? (timeline, .applied(fr ? "Zooms de coupe retirés" : "Zoom cuts removed")) : (timeline, ExecutionResult(outcome: .info(message: fr ? "Aucun zoom de coupe." : "No zoom cuts.")))
+            }
+            // Earlier punch-ins are redone from scratch.
+            for index in timeline.clips.indices where timeline.clips[index].motion?.kind == .punchIn { timeline.clips[index].motion = nil }
+            let zoom = (intent.amount?.value ?? 1.18).clamped(to: 1.05...1.6)
+            let zooms = PunchIn.plan(clips: timeline.clips, zoom: zoom)
+            let tight = zooms.indices.filter { zooms[$0] > 1 }
+            guard !tight.isEmpty else {
+                return (timeline, ExecutionResult(outcome: .info(message: fr ? "Pas de jump cut ici : enlève d'abord les blancs." : "No jump cuts here: remove the pauses first.")))
+            }
+            for (number, index) in tight.enumerated() {
+                let clip = timeline.clips[index]
+                // Tighter on the speaker's face when there is one, else a little above the centre.
+                let samples = (try? await services.focusSamples(for: clip, timeline: timeline) { fraction in progress((Double(number) + fraction) / Double(tight.count)) }) ?? []
+                let confident = samples.filter { $0.confidence > 0.3 }
+                let focus = confident.isEmpty ? PSPoint(x: 0.5, y: 0.42)
+                    : PSPoint(x: confident.map(\.point.x).sorted()[confident.count / 2], y: confident.map(\.point.y).sorted()[confident.count / 2])
+                timeline.clips[index].motion = PunchIn.motion(zoom: zoom, focus: focus, duration: clip.timelineDuration)
+            }
+            timeline.touch()
+            return (timeline, .applied(fr ? "\(tight.count) zooms de coupe" : "\(tight.count) zoom cuts"))
+
         case .speedRamp:
             let center = (intent.time ?? playhead).clamped(to: 0...max(0, timeline.duration))
             guard let clip = timeline.clip(at: center), let span = timeline.span(of: clip.id) else { return (timeline, .failed(fr ? "Il n'y a pas de clip ici." : "There is no clip here.")) }

@@ -2673,6 +2673,22 @@
         }
       }
     },
+    "Framing the speaker…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Framing the speaker…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je cadre la personne qui parle…"
+          }
+        }
+      }
+    },
     "Freeze frame": {
       "localizations": {
         "en": {
@@ -8125,6 +8141,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zoom"
+          }
+        }
+      }
+    },
+    "Zoom cuts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom cuts"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zooms de coupe"
           }
         }
       }

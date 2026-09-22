@@ -80,3 +80,35 @@ final class RawHighlightsTests: XCTestCase {
         XCTAssertEqual(IntentNormalizer.normalize(RawIntentStep(action: "moveObject", target: "car", amount: 15, degrees: 0), context: .photo)?.amount?.value ?? 0, 0.15, accuracy: 1e-9)
     }
 }
+
+final class PunchInTests: XCTestCase {
+    private func jumpCutTimeline() -> VideoTimeline {
+        let asset = MediaAsset(kind: .video, relativePath: "media/talk.mov", pixelSize: PSSize(width: 1920, height: 1080), duration: 60, frameRate: 30)
+        let other = MediaAsset(kind: .video, relativePath: "media/broll.mov", pixelSize: PSSize(width: 1920, height: 1080), duration: 10, frameRate: 30)
+        let clips = [VideoClip(asset: asset, sourceRange: TimeSpan(start: 0, end: 5)), VideoClip(asset: asset, sourceRange: TimeSpan(start: 5.6, end: 9)),
+                     VideoClip(asset: asset, sourceRange: TimeSpan(start: 9.8, end: 14)), VideoClip(asset: other, sourceRange: TimeSpan(start: 0, end: 3)),
+                     VideoClip(asset: asset, sourceRange: TimeSpan(start: 14.5, end: 18))]
+        return VideoTimeline(title: "t", clips: clips, renderSize: PSSize(width: 1920, height: 1080))
+    }
+
+    func testAlternatesAcrossJumpCutsOnly() {
+        XCTAssertEqual(PunchIn.plan(clips: jumpCutTimeline().clips, zoom: 1.2), [1, 1.2, 1, 1, 1])
+    }
+
+    func testExecutorAndRemoval() async {
+        let engine = RuleBasedIntentEngine()
+        let context = IntentContext(mode: .video, clipCount: 5, playheadSeconds: 0, timelineDuration: 20)
+        XCTAssertEqual(engine.parse("ajoute des zooms de coupe", context: context).intents.first?.action, .punchIns)
+        XCTAssertEqual(engine.parse("enlève les zooms de coupe", context: context).intents.first?.amount?.value, 0)
+        let executor = VideoCommandExecutor(services: FakeMagicVideoServices(focus: [FocusSample(time: 0, point: PSPoint(x: 0.4, y: 0.3), confidence: 0.9)]), language: .english)
+        let (zoomed, result) = await executor.execute(EditIntent(action: .punchIns), on: jumpCutTimeline(), context: context)
+        XCTAssertTrue(result.outcome.isSuccess)
+        XCTAssertEqual(zoomed.clips[1].motion?.kind, .punchIn)
+        XCTAssertEqual(zoomed.clips[1].motion?.sample(at: 1).focus.x ?? 0, 0.4, accuracy: 1e-9)
+        XCTAssertNil(zoomed.clips[0].motion)
+        var off = EditIntent(action: .punchIns)
+        off.amount = .absolute(0)
+        let (plain, _) = await executor.execute(off, on: zoomed, context: context)
+        XCTAssertTrue(plain.clips.allSatisfy { $0.motion == nil })
+    }
+}

@@ -42,6 +42,8 @@ public struct ClipMotion: Hashable, Codable, Sendable {
         case kenBurns
         case smartReframe
         case manual
+        /// A still, tighter frame after a jump cut (zoom cuts).
+        case punchIn
     }
 
     public var kind: Kind

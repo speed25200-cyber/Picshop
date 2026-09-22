@@ -8,6 +8,7 @@
   vertical video, erase people, cut out, enhance, portrait blur) that opens the editor already doing the thing.
 - Magic Movie: clips, photos and a song become an edit cut on the beat.
 - Title animations: pop, rise, wipe, focus and drift, on the GPU; new titles rise in; one tap replays the entrance.
+- Zoom cuts: after jump cuts every other segment is framed tighter on the speaker, so cuts read as a new angle.
 - Speed ramps: ease into slow motion at the playhead and back ("ralenti progressif ici", or Speed › Speed ramp here).
 - Highlights: "fais un résumé de 30 secondes" keeps the best moments of long footage, in order, with dissolves.
 - Scene detection: long recordings split at every shot change, pinned to the exact frame (Split at shots in Cut).
