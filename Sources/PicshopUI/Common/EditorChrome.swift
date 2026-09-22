@@ -693,7 +693,7 @@ struct MicButton: View {
     private var ring: some View {
         let active = voice.isListening || isBusy
         if active && !reducedMotion && effects != .minimal {
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+            SwiftUI.TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
                 let angle = Angle.degrees((context.date.timeIntervalSinceReferenceDate * 120).truncatingRemainder(dividingBy: 360))
                 Circle()
                     .strokeBorder(AngularGradient(colors: PSTheme.intelligence + [PSTheme.intelligence[0]], center: .center, angle: angle), lineWidth: 2.5)

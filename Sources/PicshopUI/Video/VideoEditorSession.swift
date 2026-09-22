@@ -64,6 +64,8 @@ public final class VideoEditorSession {
     public var candidateOverlays: [ObjectCandidate] = []
     public var lastTapPoint: PSPoint?
     public var showsExport = false
+    /// A command to run as soon as the editor is ready (Magic shortcuts on Home).
+    public var pendingCommand: String?
     public var showsHelp = false
     public var showsMusicPicker = false
     /// Where the next imported sound goes: a timeline second (nil = the playhead)
@@ -107,6 +109,10 @@ public final class VideoEditorSession {
             await app.attachEngines(to: pipeline)
         }
         pipeline.setLoading(load)
+        if let command = pendingCommand {
+            pendingCommand = nil
+            Task { [weak self] in await self?.handleTranscript(command) }
+        }
     }
 
     public func teardown() {

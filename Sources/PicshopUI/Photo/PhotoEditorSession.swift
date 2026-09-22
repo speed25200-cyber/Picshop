@@ -136,6 +136,8 @@ public final class PhotoEditorSession {
     public var isFindingObjects = false
     private var sceneObjectsKey: String?
     public var showsExport = false
+    /// A command to run as soon as the editor is ready (Magic shortcuts on Home).
+    public var pendingCommand: String?
     public var exportedURL: URL?
     public var exportProgress: Double?
     public var showsHelp = false
@@ -186,6 +188,10 @@ public final class PhotoEditorSession {
         }
         isVoiceReady = true
         requestPreview()
+        if let command = pendingCommand {
+            pendingCommand = nil
+            Task { [weak self] in await self?.handleTranscript(command) }
+        }
         let load = Task { [weak self] in
             guard let self else { return }
             await app.attachEngines(to: pipeline)

@@ -1,6 +1,22 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%d moments chosen": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d moments chosen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d moments choisis"
+          }
+        }
+      }
+    },
     "%d pages": {
       "localizations": {
         "en": {
@@ -13,6 +29,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "%d pages"
+          }
+        }
+      }
+    },
+    "9:16 that follows the subject": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "9:16 that follows the subject"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du 9:16 qui suit le sujet"
+          }
+        }
+      }
+    },
+    "A soft background, like a big lens": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A soft background, like a big lens"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un fond doux, comme un grand objectif"
           }
         }
       }
@@ -113,6 +161,22 @@
         }
       }
     },
+    "Add a song (optional)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a song (optional)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter une chanson (facultatif)"
+          }
+        }
+      }
+    },
     "Add music, a voice-over or a sound effect: each one gets its own lane. Say “ajoute un son à 10 secondes”.": {
       "localizations": {
         "en": {
@@ -173,6 +237,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tous"
+          }
+        }
+      }
+    },
+    "An edit on the beat, made for you.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An edit on the beat, made for you."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un montage en rythme, fait pour vous."
           }
         }
       }
@@ -317,6 +397,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Auto"
+          }
+        }
+      }
+    },
+    "Auto captions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto captions"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sous-titres auto"
           }
         }
       }
@@ -609,6 +705,38 @@
         }
       }
     },
+    "Choose clips and photos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose clips and photos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisir des clips et des photos"
+          }
+        }
+      }
+    },
+    "Cinematic": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cinematic"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cinéma"
+          }
+        }
+      }
+    },
     "Clear": {
       "localizations": {
         "en": {
@@ -641,6 +769,22 @@
         }
       }
     },
+    "Clear the background of passers-by": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear the background of passers-by"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plus de passants à l'arrière-plan"
+          }
+        }
+      }
+    },
     "Clip volume": {
       "localizations": {
         "en": {
@@ -653,6 +797,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Volume du clip"
+          }
+        }
+      }
+    },
+    "Clips + a song → an edit on the beat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clips + a song → an edit on the beat"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Des clips + une chanson → un montage en rythme"
           }
         }
       }
@@ -817,6 +977,22 @@
         }
       }
     },
+    "Create my movie": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create my movie"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Créer mon film"
+          }
+        }
+      }
+    },
     "Creating freeze frame…": {
       "localizations": {
         "en": {
@@ -865,6 +1041,38 @@
         }
       }
     },
+    "Cut out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cut out"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Détourer"
+          }
+        }
+      }
+    },
+    "Cut, grade, caption": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cut, grade, caption"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couper, étalonner, sous-titrer"
+          }
+        }
+      }
+    },
     "Cutout": {
       "localizations": {
         "en": {
@@ -877,6 +1085,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Détourage"
+          }
+        }
+      }
+    },
+    "Cuts land on its beat.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cuts land on its beat."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les coupes tombent sur le temps."
+          }
+        }
+      }
+    },
+    "Cutting on the beat…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cutting on the beat…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Montage en rythme…"
           }
         }
       }
@@ -1217,6 +1457,22 @@
         }
       }
     },
+    "Edit a PDF": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit a PDF"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier un PDF"
+          }
+        }
+      }
+    },
     "Edit text": {
       "localizations": {
         "en": {
@@ -1261,6 +1517,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ellipse"
+          }
+        }
+      }
+    },
+    "Energetic": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Energetic"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Énergique"
+          }
+        }
+      }
+    },
+    "Enhance": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enhance"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sublimer"
           }
         }
       }
@@ -1325,6 +1613,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Effacer la zone peinte"
+          }
+        }
+      }
+    },
+    "Erase people": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase people"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer des personnes"
           }
         }
       }
@@ -1405,6 +1709,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Suppression…"
+          }
+        }
+      }
+    },
+    "Every pause, gone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every pause, gone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tous les blancs, partis"
           }
         }
       }
@@ -1633,6 +1953,22 @@
         }
       }
     },
+    "Format": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Format"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Format"
+          }
+        }
+      }
+    },
     "Frame": {
       "localizations": {
         "en": {
@@ -1725,6 +2061,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pleine résolution"
+          }
+        }
+      }
+    },
+    "Gathering your moments…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gathering your moments…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je rassemble vos moments…"
           }
         }
       }
@@ -2033,22 +2385,6 @@
         }
       }
     },
-    "Import one from the cards above.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Import one from the cards above."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Importez-en un depuis les cartes ci-dessus."
-          }
-        }
-      }
-    },
     "Importing…": {
       "localizations": {
         "en": {
@@ -2061,6 +2397,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importation…"
+          }
+        }
+      }
+    },
+    "In the order you like. Up to 30.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In the order you like. Up to 30."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dans l'ordre de votre choix. Jusqu'à 30."
           }
         }
       }
@@ -2193,6 +2545,22 @@
         }
       }
     },
+    "Jump cuts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jump cuts"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jump cuts"
+          }
+        }
+      }
+    },
     "Just say it": {
       "localizations": {
         "en": {
@@ -2221,6 +2589,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Réseau LaMa pour une suppression d'objets propre sur les fonds complexes."
+          }
+        }
+      }
+    },
+    "Landscape": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Landscape"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paysage"
           }
         }
       }
@@ -2337,6 +2721,22 @@
         }
       }
     },
+    "Light, colour and detail in one tap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Light, colour and detail in one tap"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lumière, couleur et détail en un geste"
+          }
+        }
+      }
+    },
     "Lighter previews and no glow, to cool down.": {
       "localizations": {
         "en": {
@@ -2381,6 +2781,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "J'écoute et j'écris les sous-titres…"
+          }
+        }
+      }
+    },
+    "Listening to the music…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening to the music…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J'écoute la musique…"
           }
         }
       }
@@ -2497,6 +2913,38 @@
         }
       }
     },
+    "Magic Movie": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Magic Movie"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Film magique"
+          }
+        }
+      }
+    },
+    "Magic Movie · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Magic Movie · %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Film magique · %@"
+          }
+        }
+      }
+    },
     "Magic wand": {
       "localizations": {
         "en": {
@@ -2525,6 +2973,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Annoter"
+          }
+        }
+      }
+    },
+    "Mark up, sign, replace words": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark up, sign, replace words"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annoter, signer, remplacer des mots"
           }
         }
       }
@@ -2625,6 +3089,22 @@
         }
       }
     },
+    "Moments": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moments"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moments"
+          }
+        }
+      }
+    },
     "Move": {
       "localizations": {
         "en": {
@@ -2669,6 +3149,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Placer au curseur"
+          }
+        }
+      }
+    },
+    "Music": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Music"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Musique"
           }
         }
       }
@@ -2749,54 +3245,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gomme neuronale"
-          }
-        }
-      }
-    },
-    "New PDF": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New PDF"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nouveau PDF"
-          }
-        }
-      }
-    },
-    "New Photo": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New Photo"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nouvelle photo"
-          }
-        }
-      }
-    },
-    "New Video": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New Video"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nouvelle vidéo"
           }
         }
       }
@@ -3121,6 +3569,22 @@
         }
       }
     },
+    "Pace": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pace"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rythme"
+          }
+        }
+      }
+    },
     "Page": {
       "localizations": {
         "en": {
@@ -3313,6 +3777,22 @@
         }
       }
     },
+    "Photo and video, magically.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo and video, magically."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La photo et la vidéo, par magie."
+          }
+        }
+      }
+    },
     "Photo canvas": {
       "localizations": {
         "en": {
@@ -3357,22 +3837,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Photos"
-          }
-        }
-      }
-    },
-    "Photos, videos and PDFs. Just say it.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Photos, videos and PDFs. Just say it."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Photos, vidéos et PDF. Dites-le, c'est fait."
           }
         }
       }
@@ -3425,6 +3889,22 @@
         }
       }
     },
+    "PicShop picks the best part of each clip and cuts to the music.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop picks the best part of each clip and cuts to the music."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop choisit le meilleur de chaque clip et coupe en musique."
+          }
+        }
+      }
+    },
     "Pick a look, then tune its intensity.": {
       "localizations": {
         "en": {
@@ -3441,12 +3921,12 @@
         }
       }
     },
-    "Pick a photo or video, then just say what you want.": {
+    "Pick a photo or a video, then just say what you want.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pick a photo or video, then just say what you want."
+            "value": "Pick a photo or a video, then just say what you want."
           }
         },
         "fr": {
@@ -3585,6 +4065,22 @@
         }
       }
     },
+    "Portrait blur": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portrait blur"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flou portrait"
+          }
+        }
+      }
+    },
     "Portrait light": {
       "localizations": {
         "en": {
@@ -3713,6 +4209,22 @@
         }
       }
     },
+    "Projects": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projects"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projets"
+          }
+        }
+      }
+    },
     "Quality": {
       "localizations": {
         "en": {
@@ -3805,22 +4317,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Agrandisseur Real-ESRGAN pour des agrandissements nets."
-          }
-        }
-      }
-    },
-    "Recent": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Recent"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Récents"
           }
         }
       }
@@ -4689,6 +5185,22 @@
         }
       }
     },
+    "Square": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Square"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carré"
+          }
+        }
+      }
+    },
     "Stabilize": {
       "localizations": {
         "en": {
@@ -4749,6 +5261,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Commencer"
+          }
+        }
+      }
+    },
+    "Start one from the tiles above.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start one from the tiles above."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commencez depuis les tuiles ci-dessus."
           }
         }
       }
@@ -4829,6 +5357,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Style « %@ » enregistré"
+          }
+        }
+      }
+    },
+    "Subtitles from the voice, word by word": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subtitles from the voice, word by word"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Des sous-titres tirés de la voix, mot à mot"
           }
         }
       }
@@ -5101,6 +5645,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Le projet et ses retouches sont retirés de cet iPhone. L'original dans Photos est conservé."
+          }
+        }
+      }
+    },
+    "The subject, on a clean background": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The subject, on a clean background"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le sujet, sur un fond net"
           }
         }
       }
@@ -5441,6 +6001,22 @@
         }
       }
     },
+    "Vertical video": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vertical video"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vidéo verticale"
+          }
+        }
+      }
+    },
     "Very hot": {
       "localizations": {
         "en": {
@@ -5649,6 +6225,22 @@
         }
       }
     },
+    "clips": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "clips"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "clips"
+          }
+        }
+      }
+    },
     "from %@ · %@": {
       "localizations": {
         "en": {
@@ -5777,18 +6369,18 @@
         }
       }
     },
-    "“Efface le chien” · “Make it warmer” · “Coupe les 3 premières secondes”": {
+    "“Efface le chien” · “Make it warmer” · “Ajoute des sous-titres”": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "“Efface le chien” · “Make it warmer” · “Coupe les 3 premières secondes”"
+            "value": "“Efface le chien” · “Make it warmer” · “Ajoute des sous-titres”"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "« Efface le chien » · « Plus chaud » · « Coupe les 3 premières secondes »"
+            "value": "« Efface le chien » · « Rends-la plus chaude » · « Ajoute des sous-titres »"
           }
         }
       }

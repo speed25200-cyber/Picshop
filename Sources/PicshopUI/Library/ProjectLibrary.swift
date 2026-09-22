@@ -14,7 +14,7 @@ import PicshopPDF
 public final class ProjectLibrary {
     public let store: ProjectStore
     public private(set) var projects: [Project] = []
-    public private(set) var isImporting = false
+    public internal(set) var isImporting = false
     public var errorMessage: String?
 
     public init(store: ProjectStore) {

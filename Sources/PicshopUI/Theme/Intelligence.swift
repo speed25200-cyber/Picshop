@@ -23,7 +23,7 @@ public struct IntelligenceGlow: View {
     public var body: some View {
         Group {
             if isActive && effects != .minimal {
-                TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reducedMotion)) { context in
+                SwiftUI.TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reducedMotion)) { context in
                     let seconds = context.date.timeIntervalSinceReferenceDate
                     let angle = Angle.degrees(reducedMotion ? 0 : (seconds * 50).truncatingRemainder(dividingBy: 360))
                     let swell = CGFloat(min(1, max(0, level)))
@@ -79,7 +79,7 @@ public struct ShimmerText: View {
             .foregroundStyle(PSTheme.textPrimary.opacity(0.55))
             .overlay {
                 if !reducedMotion {
-                    TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                    SwiftUI.TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
                         let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.2) / 2.2
                         LinearGradient(stops: [
                             .init(color: .clear, location: max(0, phase - 0.35)),
@@ -126,7 +126,7 @@ public struct IntelligenceField: View {
 
     public var body: some View {
         if animated && !reducedMotion {
-            TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { context in
+            SwiftUI.TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { context in
                 mesh(time: context.date.timeIntervalSinceReferenceDate)
             }
         } else {
