@@ -121,12 +121,14 @@ public struct MagicGlyph: View {
 public struct IntelligenceField: View {
     var animated = false
     @Environment(\.psReducedMotion) private var reducedMotion
+    @Environment(\.psEffects) private var effects
 
     public init(animated: Bool = false) { self.animated = animated }
 
     public var body: some View {
-        if animated && !reducedMotion {
-            SwiftUI.TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { context in
+        // The drift is slow, so 15 frames a second is plenty; a warm phone gets a still field.
+        if animated && !reducedMotion && effects == .rich {
+            SwiftUI.TimelineView(.animation(minimumInterval: 1.0 / 15.0)) { context in
                 mesh(time: context.date.timeIntervalSinceReferenceDate)
             }
         } else {
