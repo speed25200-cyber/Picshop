@@ -22,8 +22,6 @@ struct VideoMagicPanel: View {
     private var actions: [Action] {
         var reframe = EditIntent(action: .smartReframe)
         reframe.aspect = .ratio9x16
-        var square = EditIntent(action: .smartReframe)
-        square.aspect = .square
         let tiles: [Action] = [
             Action(id: "captions", title: L("Captions"), symbol: "captions.bubble", intent: EditIntent(action: .autoCaptions)),
             Action(id: "fillers", title: L("Fillers"), symbol: "waveform.badge.minus", intent: EditIntent(action: .removeFillers)),
@@ -35,7 +33,7 @@ struct VideoMagicPanel: View {
             Action(id: "voice", title: L("Clean voice"), symbol: "waveform.badge.mic", intent: EditIntent(action: .enhanceVoice, scope: .all)),
             Action(id: "kenburns", title: L("Camera move"), symbol: "arrow.up.left.and.arrow.down.right", intent: EditIntent(action: .kenBurns, scope: .all)),
             Action(id: "match", title: L("Match colour"), symbol: "circle.lefthalf.striped.horizontal", intent: EditIntent(action: .matchColor, scope: .all)),
-            Action(id: "square", title: L("Square"), symbol: "square", intent: square),
+            Action(id: "faces", title: L("Blur faces"), symbol: "person.crop.circle.badge.xmark", intent: EditIntent(action: .blurFaces, scope: .all)),
             Action(id: "enhance", title: L("Enhance"), symbol: "wand.and.stars", intent: EditIntent(action: .autoEnhance)),
         ]
         // The timeline decides the order: long footage leads with a recap, a song with the beat.

@@ -198,6 +198,7 @@ public enum IntentNormalizer {
             "autoduck": .autoDuck, "ducking": .autoDuck, "duck": .autoDuck, "duckmusic": .autoDuck, "autoducking": .autoDuck,
             "removefillers": .removeFillers, "fillers": .removeFillers, "removefillerwords": .removeFillers, "removeums": .removeFillers, "cutfillers": .removeFillers, "removehesitations": .removeFillers,
             "cutwords": .cutWords, "removewords": .cutWords, "deletewords": .cutWords, "cutphrase": .cutWords, "cuttext": .cutWords, "textcut": .cutWords,
+            "blurfaces": .blurFaces, "anonymize": .blurFaces, "anonymise": .blurFaces, "hidefaces": .blurFaces, "pixelatefaces": .blurFaces,
             "fitmusic": .fitMusic, "fitthemusic": .fitMusic, "musicfit": .fitMusic, "endmusic": .fitMusic,
             "beatsync": .syncToBeat, "cuttobeat": .syncToBeat, "synctomusic": .syncToBeat, "reframe": .smartReframe, "autoreframe": .smartReframe,
             "voiceisolation": .enhanceVoice, "isolatevoice": .enhanceVoice, "cleanaudio": .enhanceVoice, "denoiseaudio": .enhanceVoice,

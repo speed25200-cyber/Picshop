@@ -92,6 +92,8 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     case syncToBeat
     /// The music ends with the video, cut on a bar with a fade.
     case fitMusic
+    /// Faces blurred through the clips (scope; amount 0 shows them again).
+    case blurFaces
     /// Changes the aspect ratio and follows the subject inside the new frame.
     case smartReframe
     /// Slow push-in / drift on the clip(s).
@@ -150,7 +152,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
         switch self {
         case .trim, .split, .deleteClip, .deleteRange, .setSpeed, .reverse, .mute, .unmute, .setVolume,
              .addTransition, .removeTransition, .addMusic, .removeMusic, .moveAudio, .fadeAudio, .extractFrame, .seek, .play, .pause,
-             .duplicateClip, .moveClip, .stabilize, .freezeFrame, .autoCaptions, .removeCaptions, .translateCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .splitScenes, .animateText, .highlights, .speedRamp, .punchIns, .syncToBeat, .fitMusic,
+             .duplicateClip, .moveClip, .stabilize, .freezeFrame, .autoCaptions, .removeCaptions, .translateCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .splitScenes, .animateText, .highlights, .speedRamp, .punchIns, .syncToBeat, .fitMusic, .blurFaces,
              .smartReframe, .kenBurns, .enhanceVoice:
             return true
         default:
@@ -440,6 +442,7 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .cutWords: return "Cut “\(text ?? "")”"
         case .syncToBeat: return "Cut to the beat"
         case .fitMusic: return "Fit the music"
+        case .blurFaces: return amount?.value == 0 ? "Show faces" : "Blur faces"
         case .smartReframe: return "Smart reframe \(aspect?.displayName ?? "")"
         case .kenBurns: return "Ken Burns"
         case .enhanceVoice: return "Enhance voice"

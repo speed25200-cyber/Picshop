@@ -398,6 +398,13 @@ extension RuleBasedIntentEngine {
         if let duck = parseDucking(u) { return [duck] }
         if let tracking = parseTracking(u) { return [tracking] }
         if let textMove = parseTextMove(u) { return [textMove] }
+        if u.contains(["visage", "visages", "face", "faces", "tete", "tetes"]),
+           u.contains(["floute", "flouter", "floutes", "defloute", "deflouter", "blur", "unblur", "anonymise", "anonymiser", "anonymize", "cache", "cacher", "pixelise", "pixeliser", "pixelate", "hide", "masque"]) {
+            var intent = EditIntent(action: .blurFaces, scope: .all)
+            if u.contains(["defloute", "deflouter", "defloutes", "montre", "show", "unblur", "enleve le flou", "retire le flou", "remove the blur", "plus de flou"]) { intent.amount = .absolute(0) }
+            if u.contains(["ce clip", "this clip"]) { intent.scope = .current }
+            return [intent]
+        }
         if u.contains(["adapte la musique", "ajuste la musique", "cale la fin de la musique", "fais finir la musique", "la musique finit avec", "musique a la duree", "fin de la musique en rythme",
                        "fit the music", "fit the song", "make the music end", "end the music with", "music ends with", "trim the music to", "musique a la longueur", "music to the length"]) {
             return [EditIntent(action: .fitMusic)]

@@ -121,6 +121,28 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
         return frame.cropped(to: canvas)
     }
 
+    /// Anonymised faces: a heavy blur inside soft ellipses over each box (upright source frame).
+    static func blurFaces(in image: CIImage, boxes: [PSRect]) -> CIImage {
+        guard !boxes.isEmpty else { return image }
+        let extent = image.extent
+        var mask = CIImage(color: .black).cropped(to: extent)
+        for box in boxes {
+            let rect = box.ciRect(in: extent)
+            let radius = max(rect.width, rect.height) / 2
+            let gradient = CIFilter.radialGradient()
+            gradient.center = CGPoint(x: rect.midX, y: rect.midY)
+            gradient.radius0 = Float(radius * 0.75)
+            gradient.radius1 = Float(radius * 1.05)
+            gradient.color0 = CIColor(red: 1, green: 1, blue: 1, alpha: 1)
+            gradient.color1 = CIColor(red: 0, green: 0, blue: 0, alpha: 1)
+            if let spot = gradient.outputImage?.cropped(to: extent) {
+                mask = spot.applyingFilter("CIMaximumCompositing", parameters: [kCIInputBackgroundImageKey: mask])
+            }
+        }
+        let blurred = image.clampedToExtent().applyingGaussianBlur(sigma: Double(max(extent.width, extent.height)) * 0.018).cropped(to: extent)
+        return blurred.applyingFilter("CIBlendWithMask", parameters: [kCIInputBackgroundImageKey: image, kCIInputMaskImageKey: mask])
+    }
+
     /// One instant of an overlay's entrance: revealed, sharpened, scaled and lifted into place.
     static func animate(_ image: CIImage, state: TextAnimation.State, around center: CGPoint, canvas: CGRect) -> CIImage {
         var result = image
@@ -170,6 +192,9 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
         var image = CIImage(cvPixelBuffer: buffer)
         image = image.transformed(by: clip.preferredTransform)
         image = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
+        if let faces = clip.faces, !faces.isEmpty {
+            image = blurFaces(in: image, boxes: FaceBlur.boxes(in: faces, at: clip.sourceTime(at: time)))
+        }
 
         if let crop = clip.crop {
             let rect = crop.ciRect(in: image.extent).integral.intersection(image.extent)

@@ -113,6 +113,32 @@ extension AVVideoServices {
         return ColorStatistics.measure(rgba: bytes)
     }
 
+    // MARK: Faces
+
+    public func faceSamples(for clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [FaceSample] {
+        let generator = AVAssetImageGenerator(asset: asset(for: clip))
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 640, height: 640)
+        let tolerance = CMTime(value: 1, timescale: 30)
+        generator.requestedTimeToleranceBefore = tolerance
+        generator.requestedTimeToleranceAfter = tolerance
+        // Ten looks a second: a face that turns up is covered within a tenth of a second.
+        let source = clip.sourceRange
+        let step = max(0.1, source.duration / 3000)
+        let times = Array(stride(from: source.start, through: source.end, by: step))
+        var samples: [FaceSample] = []
+        for (index, time) in times.enumerated() {
+            try Task.checkCancellation()
+            guard let image = try? await generator.image(at: VideoTime.cm(time)).image else { continue }
+            let request = VNDetectFaceRectanglesRequest()
+            try? VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+            let boxes = (request.results ?? []).map { PSRect.fromVision($0.boundingBox) }
+            samples.append(FaceSample(time: time, boxes: boxes))
+            progress(Double(index + 1) / Double(times.count))
+        }
+        return samples
+    }
+
     // MARK: Translation
 
     public func translate(_ texts: [String], from source: String?, to target: String) async throws -> [String] {

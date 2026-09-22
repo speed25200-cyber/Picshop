@@ -121,3 +121,29 @@ final class MusicFitTests: XCTestCase {
         XCTAssertEqual(fitted.audioTracks[0].sourceRange.end, 34, accuracy: 1e-9)
     }
 }
+
+final class FaceBlurTests: XCTestCase {
+    func testNearestSamplesAndGrowth() {
+        let face = PSRect(x: 0.4, y: 0.2, width: 0.2, height: 0.2)
+        let samples = [FaceSample(time: 1.0, boxes: [face]), FaceSample(time: 1.1, boxes: []), FaceSample(time: 2.0, boxes: [PSRect(x: 0.1, y: 0.1, width: 0.1, height: 0.1)])]
+        let at = FaceBlur.boxes(in: samples, at: 1.05)
+        XCTAssertEqual(at.count, 1)
+        XCTAssertGreaterThan(at[0].width, face.width)
+        XCTAssertTrue(FaceBlur.boxes(in: samples, at: 1.5).isEmpty)
+        XCTAssertEqual(FaceBlur.boxes(in: samples, at: 1.8).count, 1, "a face about to appear is covered early")
+    }
+
+    func testGrammarAndExecutor() async {
+        let engine = RuleBasedIntentEngine()
+        let context = IntentContext(mode: .video, clipCount: 1, playheadSeconds: 0, timelineDuration: 5)
+        XCTAssertEqual(engine.parse("floute les visages", context: context).intents.first?.action, .blurFaces)
+        XCTAssertEqual(engine.parse("défloute les visages", context: context).intents.first?.amount?.value, 0)
+        XCTAssertEqual(engine.parse("zoom sur le visage", context: context).intents.first?.action, .zoom)
+        let asset = MediaAsset(kind: .video, relativePath: "media/v.mov", pixelSize: PSSize(width: 1920, height: 1080), duration: 5, frameRate: 30)
+        let timeline = VideoTimeline(title: "t", clips: [VideoClip(asset: asset, sourceRange: TimeSpan(start: 0, duration: 5))], renderSize: PSSize(width: 1920, height: 1080))
+        let executor = VideoCommandExecutor(services: FakeMagicVideoServices(faces: [FaceSample(time: 0, boxes: [PSRect(x: 0.4, y: 0.2, width: 0.2, height: 0.2)])]), language: .english)
+        let (blurred, result) = await executor.execute(EditIntent(action: .blurFaces, scope: .all), on: timeline, context: context)
+        XCTAssertTrue(result.outcome.isSuccess)
+        XCTAssertEqual(blurred.clips[0].blurredFaces?.count, 1)
+    }
+}

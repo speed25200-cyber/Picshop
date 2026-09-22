@@ -14,6 +14,7 @@
 - Scene detection: long recordings split at every shot change, pinned to the exact frame (Split at shots in Cut).
 - Keyframes on overlays: place a layer, move the playhead, place it again — it eases between the places; diamonds
   on the timeline.
+- Face blur: every face in the clips found ten times a second and blurred in a soft ellipse ("floute les visages").
 - Subject tracking: a title, sticker, picture or video overlay attaches to a face, a person or any object and moves with
   it (Vision's tracker on the finished picture, smoothed); Follow subject in the Text and Overlay panels, or by voice.
 - Music that ends with the picture: cut on a bar line, faded over it ("adapte la musique à la vidéo").

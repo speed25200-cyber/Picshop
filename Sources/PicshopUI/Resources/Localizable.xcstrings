@@ -913,6 +913,22 @@
         }
       }
     },
+    "Blur faces": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blur faces"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flouter visages"
+          }
+        }
+      }
+    },
     "Blurring the background…": {
       "localizations": {
         "en": {
@@ -2637,6 +2653,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Je cherche les meilleurs moments…"
+          }
+        }
+      }
+    },
+    "Finding the faces…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finding the faces…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je cherche les visages…"
           }
         }
       }

@@ -99,6 +99,8 @@ FR = {
     "Sunset sky": "Ciel couchant",
     "Upscale": "Agrandir",
     "Expand": "Étendre",
+    "Blur faces": "Flouter visages",
+    "Finding the faces…": "Je cherche les visages…",
     "End with the video": "Finir avec la vidéo",
     "Before and after, side by side": "Avant / après côte à côte",
     "Before and after": "Avant / après",

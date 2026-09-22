@@ -645,6 +645,28 @@ public struct VideoCommandExecutor: Sendable {
                 return (timeline, .failed(errorMessage(error)))
             }
 
+        case .blurFaces:
+            let ids = intent.scope == .all ? timeline.clips.map(\.id) : targetClipIDs()
+            guard !ids.isEmpty else { return (timeline, .failed(fr ? "Il n'y a pas de clip." : "There is no clip.")) }
+            if let amount = intent.amount?.value, amount <= 0.01 {
+                for id in ids { timeline.update(clipID: id) { $0.blurredFaces = nil } }
+                return (timeline, .applied(fr ? "Visages visibles" : "Faces shown"))
+            }
+            do {
+                var found = 0
+                let count = Double(ids.count)
+                for (number, id) in ids.enumerated() {
+                    guard let clip = timeline.clip(id: id) else { continue }
+                    let samples = try await services.faceSamples(for: clip, timeline: timeline) { fraction in progress((Double(number) + fraction) / count) }
+                    found = max(found, samples.map(\.boxes.count).max() ?? 0)
+                    timeline.update(clipID: id) { $0.blurredFaces = samples.contains { !$0.boxes.isEmpty } ? samples : nil }
+                }
+                guard found > 0 else { return (timeline, ExecutionResult(outcome: .info(message: fr ? "Je ne vois aucun visage." : "I can't see any face."))) }
+                return (timeline, .applied(fr ? "Visages floutés" : "Faces blurred"))
+            } catch {
+                return (timeline, .failed(errorMessage(error)))
+            }
+
         case .fitMusic:
             guard let index = timeline.audioTracks.firstIndex(where: { !$0.isMuted }) else {
                 return (timeline, .failed(fr ? "Ajoute d'abord une musique." : "Add some music first."))

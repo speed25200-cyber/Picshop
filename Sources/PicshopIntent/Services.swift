@@ -81,6 +81,8 @@ public protocol VideoAIServices: Sendable {
     func isolateVoice(clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> MediaAsset
     /// Colour statistics of a clip, sampled from a few frames.
     func colorStatistics(clip: VideoClip, timeline: VideoTimeline) async throws -> ColorStatistics
+    /// Faces through a clip, sampled several times a second (source seconds).
+    func faceSamples(for clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [FaceSample]
     /// How good each moment of a clip looks and sounds, as offsets along its span.
     func momentScores(for clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [MomentScore]
     /// Texts translated on device, in order (`source` nil = guess from the text).
@@ -116,6 +118,9 @@ public extension VideoAIServices {
     }
     func translate(_ texts: [String], from source: String?, to target: String) async throws -> [String] {
         throw PicshopError.unsupportedOperation("Translation")
+    }
+    func faceSamples(for clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [FaceSample] {
+        throw PicshopError.unsupportedOperation("Face blur")
     }
 }
 

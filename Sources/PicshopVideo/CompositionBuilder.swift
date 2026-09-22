@@ -29,6 +29,17 @@ public struct ClipRenderParameters: @unchecked Sendable {
     /// An imported `.cube` look and its strength.
     public var lutURL: URL? = nil
     public var lutIntensity: Double = 1
+    /// Faces to blur, keyed by source time, and what turns a frame time into one.
+    public var faces: [FaceSample]? = nil
+    public var sourceRange: TimeSpan = TimeSpan(start: 0, duration: 0)
+    public var speed: Double = 1
+    public var isReversed: Bool = false
+
+    /// The source second shown at timeline second `time`.
+    func sourceTime(at time: Double) -> Double {
+        let offset = max(0, time - timelineStart) * speed
+        return isReversed ? sourceRange.end - offset : sourceRange.start + offset
+    }
 }
 
 /// Where a video overlay's frames come from in the composition.
@@ -207,7 +218,8 @@ public struct CompositionBuilder: Sendable {
                                                    rotation: clip.rotation, flipHorizontal: clip.flipHorizontal, fill: timeline.aspect != .original,
                                                    motion: clip.motion, timelineStart: starts[index], colorMatch: clip.colorMatch,
                                                    colorMixer: clip.colorMixer, colorGrade: clip.colorGrade,
-                                                   lutURL: clip.lut.map { store.url(for: $0.relativePath, in: projectID) }, lutIntensity: clip.lut?.intensity ?? 1))
+                                                   lutURL: clip.lut.map { store.url(for: $0.relativePath, in: projectID) }, lutIntensity: clip.lut?.intensity ?? 1,
+                                                   faces: clip.blurredFaces, sourceRange: clip.sourceRange, speed: clip.speed, isReversed: clip.isReversed))
         }
 
         audioParameters.append(contentsOf: clipMixes.compactMap { $0 })
