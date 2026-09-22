@@ -17,8 +17,9 @@ extension VideoEditorSession {
         if let motion = clip.motion, motion.keyframes.count >= 2, motion.kind != .smartReframe {
             return motion
         }
-        let start = clip.motion?.sample(at: 0) ?? (PSPoint(x: 0.5, y: 0.5), 1)
-        let end = clip.motion?.sample(at: clip.timelineDuration) ?? (PSPoint(x: 0.5, y: 0.5), 1)
+        let centred: (focus: PSPoint, zoom: Double) = (PSPoint(x: 0.5, y: 0.5), 1)
+        let start = clip.motion?.sample(at: 0) ?? centred
+        let end = clip.motion?.sample(at: clip.timelineDuration) ?? centred
         return ClipMotion(kind: .manual, keyframes: [
             MotionKeyframe(time: 0, focus: start.focus, zoom: start.zoom),
             MotionKeyframe(time: clip.timelineDuration, focus: end.focus, zoom: end.zoom),
