@@ -70,3 +70,13 @@ final class SpeedRampTests: XCTestCase {
         XCTAssertGreaterThan(ramped.duration, 11)
     }
 }
+
+final class RawHighlightsTests: XCTestCase {
+    func testRecapLengthFromTheModelIsInSeconds() {
+        let context = IntentContext(mode: .video, clipCount: 1, playheadSeconds: 0, timelineDuration: 120)
+        XCTAssertEqual(IntentNormalizer.normalize(RawIntentStep(action: "highlights", seconds: 20), context: context)?.amount?.value, 20)
+        XCTAssertEqual(IntentNormalizer.normalize(RawIntentStep(action: "highlights", amount: 45), context: context)?.amount?.value, 45)
+        XCTAssertNil(IntentNormalizer.normalize(RawIntentStep(action: "highlights"), context: context)?.amount)
+        XCTAssertEqual(IntentNormalizer.normalize(RawIntentStep(action: "moveObject", target: "car", amount: 15, degrees: 0), context: .photo)?.amount?.value ?? 0, 0.15, accuracy: 1e-9)
+    }
+}

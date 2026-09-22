@@ -153,6 +153,11 @@ public enum IntentNormalizer {
             if intent.aspect == nil, intent.target == nil { intent.aspect = .free }
         case .seek where intent.time == nil: return nil
         case .split where intent.time == nil: intent.time = context.playheadSeconds
+        case .highlights:
+            // The recap's length is in seconds, never a percentage.
+            let length = step.seconds ?? step.amount.map { abs($0) }
+            intent.amount = length.flatMap { $0 >= 5 ? .absolute($0) : nil }
+            intent.time = nil
         default: break
         }
         if action.isVideoOnly, context.mode != .video { return nil }
