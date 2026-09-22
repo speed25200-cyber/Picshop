@@ -131,7 +131,8 @@ Paris au centre · Make the text bigger · Change le texte en Hello · Mets le t
 Ajoute un chapeau sur la personne · Génère un dragon (after tapping where) · Change the shirt to red · Rends la voiture bleue ·
 Étends l'image en 16:9 · Agrandis le cadre de 50 % · Uncrop · Invente les bords ·
 Déplace le chien vers la gauche · Bouge la personne un peu plus haut · Move the boat to the centre ·
-Mets-moi sur une plage au coucher du soleil · Put us in Paris.* Generative prompts need the optional Stable Diffusion
+Mets-moi sur une plage au coucher du soleil · Put us in Paris · Enlève les passants · Clean up the photo ·
+Écris « Paris » derrière la personne · Prends les couleurs d'une autre photo.* Generative prompts need the optional Stable Diffusion
 model (Settings › On-device models); recolouring works offline.
 
 ## PDF

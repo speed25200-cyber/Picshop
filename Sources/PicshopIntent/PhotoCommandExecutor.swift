@@ -18,6 +18,15 @@ public struct PhotoCommandExecutor: Sendable {
         let language = self.language
         let fr = language == .french
         switch intent.action {
+        case .cleanUp:
+            let people = (try? await services.candidates(for: ObjectTarget(label: "person"), in: document)) ?? []
+            let distractions = DistractionFinder.distractions(among: people)
+            guard !distractions.isEmpty else {
+                return (document, ExecutionResult(outcome: .info(message: fr ? "Personne ne dérange sur cette photo." : "No one is in the way in this photo.")))
+            }
+            let target = ObjectTarget(label: "person", originalPhrase: fr ? "les passants" : "the passers-by", matchesAll: true)
+            return await apply(pendingIntent: EditIntent(action: .removeObject, target: target, scope: .all), candidates: distractions, document: document)
+
         case .matchColor:
             // The reference is a picture the user chooses.
             return (document, .effect(.pickColorReference, label: ""))

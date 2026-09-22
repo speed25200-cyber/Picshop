@@ -373,7 +373,7 @@ enum MagicShortcut: String, CaseIterable, Identifiable {
         case .highlights: return L("Highlights")
         case .fillers: return L("No more “euh”")
         case .vertical: return L("Vertical video")
-        case .eraseObjects: return L("Erase people")
+        case .eraseObjects: return L("Clean up")
         case .expand: return L("Expand")
         case .cutout: return L("Cut out")
         case .enhance: return L("Enhance")
@@ -420,7 +420,7 @@ enum MagicShortcut: String, CaseIterable, Identifiable {
         case .highlights: return fr ? "fais un résumé de 30 secondes" : "make a 30 second recap"
         case .fillers: return fr ? "enlève les euh" : "remove the ums"
         case .vertical: return fr ? "passe en vertical en suivant le sujet" : "smart reframe to vertical"
-        case .eraseObjects: return fr ? "efface les personnes en arrière-plan" : "remove the people in the background"
+        case .eraseObjects: return fr ? "enlève les passants" : "remove the passers-by"
         case .expand: return fr ? "étends l'image" : "expand the image"
         case .cutout: return fr ? "enlève le fond" : "remove the background"
         case .enhance: return fr ? "améliore la photo" : "auto enhance"

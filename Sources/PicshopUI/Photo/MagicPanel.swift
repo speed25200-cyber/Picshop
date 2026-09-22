@@ -30,7 +30,7 @@ struct MagicPanel: View {
             Suggestion(id: "enhance", title: L("Enhance"), symbol: "wand.and.stars") { $0.perform(EditIntent(action: .autoEnhance)) },
             Suggestion(id: "behind", title: L("Text behind"), symbol: "person.and.background.dotted") { session in Task { await session.textBehindSubject() } },
             Suggestion(id: "match", title: L("Match colours"), symbol: "eyedropper.halffull") { $0.showsColorReferencePicker = true },
-            Suggestion(id: "people", title: L("Erase people"), symbol: "person.2.slash") { $0.eraseAll(label: "person", phrase: L("people")) },
+            Suggestion(id: "cleanup", title: L("Clean up"), symbol: "person.2.slash") { $0.perform(EditIntent(action: .cleanUp)) },
             Suggestion(id: "cutout", title: L("Cut out"), symbol: "person.crop.rectangle") { $0.perform(EditIntent(action: .removeBackground)) },
             Suggestion(id: "portrait", title: L("Portrait blur"), symbol: "camera.aperture", run: say("floute l'arrière-plan", "blur the background")),
             Suggestion(id: "relight", title: L("Relight"), symbol: "lightbulb.max") { $0.perform(EditIntent(action: .relight)) },

@@ -99,6 +99,8 @@ FR = {
     "Sunset sky": "Ciel couchant",
     "Upscale": "Agrandir",
     "Expand": "Étendre",
+    "Clean up": "Nettoyer",
+    "Finding the passers-by…": "Je cherche les passants…",
     "Before “%@”": "Avant « %@ »",
     "History": "Historique",
     "Back to the original": "Revenir à l'original",

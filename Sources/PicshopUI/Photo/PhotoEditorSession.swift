@@ -1115,11 +1115,12 @@ public final class PhotoEditorSession {
             showToast(L("Install Generative Fill in Settings › On-device models to use prompts."), isError: true)
             return .failed(message: "no generative engine")
         }
-        if [.generativeFill, .upscale].contains(intent.action), !app.performance.allowsHeavyWork {
+        if [.generativeFill, .upscale, .expandCanvas].contains(intent.action), !app.performance.allowsHeavyWork {
             showToast(L("The iPhone is too hot for generation right now. Let it cool for a moment."), isError: true)
             return .failed(message: "thermal")
         }
-        if [.removeObject, .removeBackground, .blurBackground, .replaceBackground, .upscale, .selectiveAdjust, .chooseCandidate, .straighten, .generativeFill, .recolor].contains(intent.action) {
+        if [.removeObject, .removeBackground, .blurBackground, .replaceBackground, .upscale, .selectiveAdjust, .chooseCandidate, .straighten, .generativeFill, .recolor,
+            .moveObject, .cleanUp, .expandCanvas, .textBehind].contains(intent.action) {
             isProcessing = true
             processingTitle = intent.action == .chooseCandidate ? L("Erasing…") : processingLabel(for: intent)
         }
@@ -1154,6 +1155,8 @@ public final class PhotoEditorSession {
         case .upscale: return L("Upscaling…")
         case .expandCanvas: return L("Imagining the edges…")
         case .moveObject: return String(format: L("Moving %@…"), intent.target?.originalPhrase ?? L("object"))
+        case .cleanUp: return L("Finding the passers-by…")
+        case .textBehind: return L("Lifting the subject…")
         case .straighten: return L("Levelling…")
         default: return L("Working…")
         }

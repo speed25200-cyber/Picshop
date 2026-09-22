@@ -1025,6 +1025,22 @@
         }
       }
     },
+    "Clean up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clean up"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nettoyer"
+          }
+        }
+      }
+    },
     "Clean voice": {
       "localizations": {
         "en": {
@@ -2113,22 +2129,6 @@
         }
       }
     },
-    "Erase people": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Erase people"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Effacer des personnes"
-          }
-        }
-      }
-    },
     "Erase selection": {
       "localizations": {
         "en": {
@@ -2461,6 +2461,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Je cherche les meilleurs moments…"
+          }
+        }
+      }
+    },
+    "Finding the passers-by…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finding the passers-by…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je cherche les passants…"
           }
         }
       }

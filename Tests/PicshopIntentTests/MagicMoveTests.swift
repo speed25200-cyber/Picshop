@@ -129,3 +129,31 @@ final class PhotoColourMatchTests: XCTestCase {
         XCTAssertEqual(engine.parse("harmonise les couleurs sur le clip 1", context: video).intents.first?.action, .matchColor)
     }
 }
+
+final class CleanUpTests: XCTestCase {
+    let couple = [ObjectCandidate(label: "person", boundingBox: PSRect(x: 0.3, y: 0.2, width: 0.25, height: 0.75), confidence: 0.95),
+                  ObjectCandidate(label: "person", boundingBox: PSRect(x: 0.52, y: 0.25, width: 0.22, height: 0.7), confidence: 0.95)]
+    let passersBy = [ObjectCandidate(label: "person", boundingBox: PSRect(x: 0.85, y: 0.4, width: 0.05, height: 0.15), confidence: 0.8),
+                     ObjectCandidate(label: "person", boundingBox: PSRect(x: 0.05, y: 0.45, width: 0.04, height: 0.12), confidence: 0.8)]
+
+    func testKeepsTheSubjectsAndTakesThePassersBy() {
+        let found = DistractionFinder.distractions(among: couple + passersBy)
+        XCTAssertEqual(Set(found.map(\.id)), Set(passersBy.map(\.id)))
+        XCTAssertTrue(DistractionFinder.distractions(among: couple).isEmpty)
+    }
+
+    func testGrammarAndExecutor() async {
+        let engine = RuleBasedIntentEngine()
+        XCTAssertEqual(engine.parse("enlève les passants", context: .photo).intents.first?.action, .cleanUp)
+        XCTAssertEqual(engine.parse("clean up the photo", context: .photo).intents.first?.action, .cleanUp)
+        XCTAssertNotEqual(engine.parse("enlève le bruit", context: .photo).intents.first?.action, .cleanUp)
+        let executor = PhotoCommandExecutor(services: FakePhotoServices(candidates: couple + passersBy))
+        let document = PhotoDocument(title: "t", baseImage: MediaAsset(kind: .image, relativePath: "media/a.jpg", pixelSize: PSSize(width: 4000, height: 3000)))
+        let (cleaned, result) = await executor.execute(EditIntent(action: .cleanUp), on: document, context: .photo)
+        XCTAssertTrue(result.outcome.isSuccess)
+        guard case .removeObject(let mask)? = cleaned.baseLayer?.edits.operations.last?.kind else { return XCTFail("expected an erase") }
+        // Only the two small figures, not the couple.
+        XCTAssertLessThan(mask.boundingBox.area, 0.5)
+        XCTAssertGreaterThan(mask.boundingBox.width, 0.8)
+    }
+}

@@ -75,6 +75,12 @@ public struct RuleBasedIntentEngine: IntentEngine {
             // "écris « Paris » derrière la personne"; "remove the guy behind me" is something else.
             return [EditIntent(action: .textBehind, text: extractQuoted(from: original), confidence: 0.9)]
         }
+        if context.mode == .photo, u.contains(["nettoie la photo", "nettoie l image", "nettoie le fond", "nettoie l arriere plan", "nettoyage", "clean up", "cleanup", "clean the photo", "clean the background",
+                                               "passants", "les passants", "passers by", "passerby", "touristes", "tourists", "photobomb", "photobomber", "photobombers", "ce qui derange", "distractions", "les gens derriere",
+                                               "people behind", "gens en trop", "les intrus", "intrus"]),
+           !u.contains(["texte", "text", "bruit", "noise", "grain"]), !namesSomethingElse(u, after: ["clean up", "cleanup", "nettoie", "clean"], context: context) {
+            return [EditIntent(action: .cleanUp, confidence: 0.9)]
+        }
         if context.mode == .photo, u.contains(["les couleurs d une autre photo", "couleurs d une autre image", "prends les couleurs", "copie les couleurs", "memes couleurs qu une", "meme ambiance qu une",
                                                "harmonise les couleurs avec", "transfert de couleur", "transfert de couleurs", "match the colours", "match the colors", "colours of another photo",
                                                "colors of another photo", "copy the colours", "copy the colors", "same colours as", "same colors as", "colour transfer", "color transfer", "match colours", "match colors"]) {
@@ -924,6 +930,13 @@ public struct RuleBasedIntentEngine: IntentEngine {
     }
 
     // MARK: - Resolution & detail operations
+
+    /// "clean up the pimple" names a thing to erase; "clean up the photo" does not.
+    func namesSomethingElse(_ u: NormalizedUtterance, after verbs: [String], context: IntentContext) -> Bool {
+        guard let rest = remainder(of: u, after: verbs), let named = makeTarget(from: rest, context: context),
+              let entry = ObjectVocabulary.entry(forLabel: named.label) else { return false }
+        return entry.category != .person && entry.category != .region
+    }
 
     /// "déplace le chien vers la gauche", "bouge la personne un peu plus haut", "move the vase to the right",
     /// "mets le bateau au centre".
