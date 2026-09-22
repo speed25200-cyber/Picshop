@@ -14,7 +14,7 @@ Tap a Magic tool, type what you want, or just say it — *« efface le chien »*
 
 | Photo | Video |
 |---|---|
-| Erase people and objects by tap, brush or voice (LaMa + PatchMatch) | **Auto captions** from the voice, word-timed, five styles (karaoke, reveal…) |
+| **Clean Up**: passers-by erased, the subject kept; erase anything by tap, brush or voice (LaMa + PatchMatch) | **Auto captions** from the voice, word-timed, five styles (karaoke, reveal…) |
 | **Magic move**: tap an object, move it — the hole is filled, it lands where you say | **Edit by text**: strike words in the transcript and they leave the video |
 | **Generative expand** to any shape: the border is invented (Stable Diffusion or LaMa) | **No more "euh"**: hesitations, stutters and unwritten fillers cut |
 | **Focus after the shot**: lens blur from the depth map, or the subject | **Jump cuts**: every pause removed, a breath kept |
@@ -29,9 +29,9 @@ Tap a Magic tool, type what you want, or just say it — *« efface le chien »*
 
 | Photo | Video |
 |---|---|
-| Photos-style adjustment dials (19 parameters), tone curves, 20 looks | Multi-lane timeline: centred playhead, pinch zoom, trim handles, captions lane, beat markers |
+| Photos-style adjustment dials (19 parameters), tone curves, 20 looks, History (hold Undo) | Multi-lane timeline: centred playhead, pinch zoom, trim handles, captions lane, beat markers |
 | **HSL mixer** (8 bands) and **three-way colour wheels**, baked into one GPU LUT | Per-clip adjustments, looks, **HSL mixer and colour wheels** |
-| Layers: text, shapes, blend modes, opacity, masks | Several sound tracks with fades, ducking and a mixer |
+| Layers: text, shapes, blend modes, opacity, masks | Several sound tracks with fades, automatic ducking drawn on the lanes, a mixer |
 | Magic wand, lasso, pixel brush, clone stamp, pixel grid | Split, trim, speed, reverse, freeze frame, transitions, text overlays |
 | Crop with ratio presets, straighten, perspective | HEVC export in 9:16, 1:1, 16:9 … |
 
