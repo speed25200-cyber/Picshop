@@ -766,7 +766,7 @@ struct ClarificationCard: View {
     }
 
     private func numberBadge(_ number: Int, size: CGFloat) -> some View {
-        Text("\(number)").font(PSFont.headline(size * 0.6)).foregroundStyle(.white)
+        Text("\(number)").font(PSFont.headline(size * 0.6)).foregroundStyle(PSTheme.onAccent)
             .frame(width: size, height: size).background(Circle().fill(PSTheme.accentGradient))
             .overlay(Circle().strokeBorder(Color.black.opacity(0.35), lineWidth: 1))
     }

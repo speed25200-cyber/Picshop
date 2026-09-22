@@ -61,14 +61,14 @@ struct PhotoToolPanel: View {
                 Button { session.commitCrop() } label: {
                     Text(L("Done")).font(PSFont.headline(13)).padding(.horizontal, 14).padding(.vertical, 7)
                 }
-                .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Capsule())
+                .buttonStyle(.plain).foregroundStyle(PSTheme.onAccent).psAccentFill(Capsule())
             })
         case .erase:
             return session.brushStrokes.isEmpty ? nil : AnyView(
                 Button { Haptics.confirm(); session.commitBrushErase() } label: {
                     Label(L("Erase painted area"), systemImage: "sparkles").font(PSFont.headline(13)).padding(.horizontal, 12).padding(.vertical, 7)
                 }
-                .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Capsule())
+                .buttonStyle(.plain).foregroundStyle(PSTheme.onAccent).psAccentFill(Capsule())
             )
         default:
             return nil
@@ -155,7 +155,7 @@ struct AdjustPanel: View {
                         .frame(maxWidth: .infinity)
                         .background {
                             if isActive {
-                                Capsule().fill(PSTheme.accentGradient).overlay(Capsule().fill(PSTheme.accentHighlight))
+                                Capsule().fill(PSTheme.selection).overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.75))
                                     .matchedGeometryEffect(id: "group", in: groupIndicator)
                             }
                         }
@@ -489,7 +489,7 @@ struct PrecisePanel: View {
                         .padding(.horizontal, 14).padding(.vertical, 9).psField(Capsule())
                         .submitLabel(.go).onSubmit { session.generateInSelection(session.generativePrompt) }
                     Button { session.generateInSelection(session.generativePrompt) } label: { Image(systemName: "sparkles").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
-                        .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Circle())
+                        .buttonStyle(.plain).foregroundStyle(PSTheme.onAccent).psAccentFill(Circle())
                         .disabled(session.generativePrompt.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 HStack {
@@ -704,7 +704,7 @@ struct TextPanel: View {
                     .submitLabel(.done)
                     .onSubmit(commit)
                 Button(action: commit) { Image(systemName: "plus").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
-                    .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Circle())
+                    .buttonStyle(.plain).foregroundStyle(PSTheme.onAccent).psAccentFill(Circle())
                     .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityLabel(L("Add Text"))
             }
@@ -1115,8 +1115,8 @@ struct ExportSheet: View {
                     .foregroundStyle(isActive ? Color.white : PSTheme.textSecondary)
                     .background {
                         if isActive {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(PSTheme.accentGradient)
-                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(PSTheme.accentHighlight))
+                            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(PSTheme.selection)
+                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 0.75))
                                 .matchedGeometryEffect(id: "format", in: formatIndicator)
                         }
                     }

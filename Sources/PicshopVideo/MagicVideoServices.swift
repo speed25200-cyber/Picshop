@@ -436,7 +436,7 @@ enum VoiceIsolator {
         guard let source = AudioDecoder.buffer(AudioSignal(samples: signal.samples, sampleRate: 48_000), range: 0..<signal.samples.count) else {
             throw PicshopError.renderFailed("voice buffer")
         }
-        player.scheduleBuffer(source, at: nil)
+        player.scheduleBuffer(source, at: nil, options: [], completionHandler: nil)
         player.play()
 
         // 3. Render to a file, frame block by frame block.

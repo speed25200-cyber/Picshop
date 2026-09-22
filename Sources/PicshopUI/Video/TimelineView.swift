@@ -281,7 +281,7 @@ struct ClipView: View {
     private func trimHandle(edge: TimelineView.Edge) -> some View {
         RoundedRectangle(cornerRadius: 6, style: .continuous)
             .fill(PSTheme.accentGradient)
-            .overlay(Image(systemName: edge == .leading ? "chevron.compact.left" : "chevron.compact.right").font(.system(size: 12, weight: .bold)).foregroundStyle(.white))
+            .overlay(Image(systemName: edge == .leading ? "chevron.compact.left" : "chevron.compact.right").font(.system(size: 12, weight: .bold)).foregroundStyle(PSTheme.onAccent))
             .gesture(
                 DragGesture(minimumDistance: 1)
                     .onChanged { value in

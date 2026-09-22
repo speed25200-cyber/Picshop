@@ -412,8 +412,8 @@ struct VideoExportSheet: View {
                     .foregroundStyle(isActive ? Color.white : PSTheme.textSecondary)
                     .background {
                         if isActive {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(PSTheme.accentGradient)
-                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(PSTheme.accentHighlight))
+                            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(PSTheme.selection)
+                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 0.75))
                                 .matchedGeometryEffect(id: "quality", in: qualityIndicator)
                         }
                     }

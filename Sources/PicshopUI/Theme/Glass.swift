@@ -1,10 +1,12 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
 
-/// Liquid Glass helpers. The system glass is used on iOS 26; the material
-/// fallback keeps previews and older simulators rendering. Every surface
-/// reads `psEffects`, so when the phone runs hot the glow and shadows go
-/// first and the layout never changes.
+/// Liquid Glass surfaces and the handful of controls built from them.
+///
+/// Chrome is system glass (iOS 26), grouped in containers so neighbouring
+/// pieces melt into each other and morph when they change. Every surface
+/// reads `psEffects`: when the phone runs hot, shadows go first, then glass
+/// becomes a flat fill — the layout never moves.
 public extension View {
     @ViewBuilder
     func psGlass(tint: Color? = nil, interactive: Bool = false, shape: AnyShape = AnyShape(Capsule())) -> some View {
@@ -16,36 +18,40 @@ public extension View {
         psCard(cornerRadius: cornerRadius)
     }
 
-    /// Layered surface: glass, a top sheen, a lit edge and a soft drop shadow.
-    /// The look of every panel, dock and card in the app.
+    /// A floating panel: glass, a faint lit edge and a soft shadow.
     func psCard(cornerRadius: CGFloat = PSTheme.panelRadius, shadow: Bool = true) -> some View {
         modifier(PSCardModifier(cornerRadius: cornerRadius, shadow: shadow))
     }
 
     /// Inset text-field surface: darker well with a faint edge.
     func psField<S: InsettableShape>(_ shape: S) -> some View {
-        background(shape.fill(Color.black.opacity(0.28)))
-            .overlay(shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
+        background(shape.fill(Color.white.opacity(0.07)))
+            .overlay(shape.strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 
-    /// Solid accent fill for primary actions: gradient, top highlight, glow.
+    /// Edit-accent fill (the yellow "Done"). Content on it should use `PSTheme.onAccent`.
     func psAccentFill<S: Shape>(_ shape: S, glow: Bool = true) -> some View {
         modifier(PSAccentFillModifier(shape: AnyShape(shape), glow: glow))
     }
 
-    /// Gradient pill with a glow, for the selected state of docks and chips.
+    /// The selected state of a neutral control: a lit glass thumb behind the label.
     func psActivePill<S: Shape>(_ shape: S, isActive: Bool, glow: Bool = true) -> some View {
-        modifier(PSActivePillModifier(shape: AnyShape(shape), isActive: isActive, glow: glow))
+        modifier(PSActivePillModifier(shape: AnyShape(shape), isActive: isActive))
     }
 
-    /// Press feedback for any tappable view: a soft scale and dim, spring-driven.
+    /// Press feedback for any tappable view: a soft scale, spring-driven.
     func psPressable(scale: CGFloat = 0.96) -> some View {
         buttonStyle(PSPressStyle(scale: scale))
+    }
+
+    /// Intelligence-spectrum foreground for Magic glyphs and titles.
+    func psIntelligenceForeground() -> some View {
+        foregroundStyle(LinearGradient(colors: PSTheme.intelligence, startPoint: .leading, endPoint: .trailing))
     }
 }
 
 @available(iOS 26.0, *)
-private func makeGlass(tint: Color?, interactive: Bool) -> Glass {
+func psMakeGlass(tint: Color?, interactive: Bool) -> Glass {
     var glass = Glass.regular
     if let tint { glass = glass.tint(tint) }
     if interactive { glass = glass.interactive() }
@@ -63,7 +69,7 @@ struct PSGlassModifier: ViewModifier {
             content.background(shape.fill(PSTheme.surfaceFlat)).overlay(shape.stroke(PSTheme.hairline, lineWidth: 1))
         } else {
             if #available(iOS 26.0, *) {
-                content.glassEffect(makeGlass(tint: tint, interactive: interactive), in: shape)
+                content.glassEffect(psMakeGlass(tint: tint, interactive: interactive), in: shape)
             } else {
                 content.background(.ultraThinMaterial, in: shape)
             }
@@ -78,24 +84,18 @@ struct PSCardModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        content
-            .background {
-                ZStack {
-                    if effects == .minimal {
-                        shape.fill(PSTheme.surfaceFlat)
-                    } else {
-                        if #available(iOS 26.0, *) {
-                            Color.clear.glassEffect(.regular, in: shape)
-                        } else {
-                            shape.fill(.ultraThinMaterial)
-                        }
-                        shape.fill(PSTheme.sheen)
-                    }
-                }
+        Group {
+            if effects == .minimal {
+                content.background(shape.fill(PSTheme.surfaceFlat))
+            } else if #available(iOS 26.0, *) {
+                content.glassEffect(.regular, in: shape)
+            } else {
+                content.background(shape.fill(.ultraThinMaterial))
             }
-            .overlay(shape.strokeBorder(PSTheme.strokeGradient, lineWidth: 1))
-            .clipShape(shape)
-            .shadow(color: .black.opacity(shadow && effects == .rich ? 0.35 : 0), radius: 18, y: 10)
+        }
+        .overlay(shape.strokeBorder(PSTheme.strokeGradient, lineWidth: 0.75))
+        .clipShape(shape)
+        .shadow(color: .black.opacity(shadow && effects == .rich ? 0.32 : 0), radius: 24, y: 12)
     }
 }
 
@@ -107,22 +107,20 @@ struct PSAccentFillModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(shape.fill(PSTheme.accentGradient).overlay(shape.fill(PSTheme.accentHighlight)))
-            .shadow(color: PSTheme.accent.opacity(glow && effects == .rich ? 0.4 : 0), radius: 10, y: 4)
+            .shadow(color: PSTheme.accent.opacity(glow && effects == .rich ? 0.35 : 0), radius: 10, y: 3)
     }
 }
 
 struct PSActivePillModifier: ViewModifier {
     let shape: AnyShape
     let isActive: Bool
-    let glow: Bool
-    @Environment(\.psEffects) private var effects
 
     func body(content: Content) -> some View {
         content.background {
             if isActive {
-                shape.fill(PSTheme.accentGradient)
-                    .overlay(shape.fill(PSTheme.accentHighlight))
-                    .shadow(color: PSTheme.accent.opacity(glow && effects == .rich ? 0.45 : 0), radius: 10, y: 4)
+                shape.fill(PSTheme.selection)
+                    .overlay(shape.fill(LinearGradient(colors: [Color.white.opacity(0.12), .clear], startPoint: .top, endPoint: .bottom)))
+                    .overlay(shape.stroke(Color.white.opacity(0.14), lineWidth: 0.75))
             }
         }
     }
@@ -137,6 +135,7 @@ public struct PSPressStyle: ButtonStyle {
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? scale : 1)
+            .opacity(configuration.isPressed ? 0.88 : 1)
             .animation(PSMotion.quick, value: configuration.isPressed)
     }
 }
@@ -160,7 +159,8 @@ public struct PSGlassContainer<Content: View>: View {
     }
 }
 
-/// Rounded glass button used across toolbars.
+/// Round glass button used across toolbars. `isActive` makes it prominent:
+/// a white disc with a dark glyph (play, the primary action of a bar).
 public struct GlassIconButton: View {
     let systemName: String
     let label: String
@@ -184,15 +184,28 @@ public struct GlassIconButton: View {
             action()
         } label: {
             Image(systemName: systemName)
-                .font(.system(size: size * 0.4, weight: .semibold))
-                .foregroundStyle(isActive ? Color.white : PSTheme.textPrimary)
+                .font(.system(size: size * 0.38, weight: .semibold))
+                .foregroundStyle(isActive ? Color.black : PSTheme.textPrimary)
+                .contentTransition(.symbolEffect(.replace))
                 .frame(width: size, height: size)
+                .background {
+                    if isActive { Circle().fill(Color.white) }
+                }
                 .contentShape(Circle())
-                .psGlass(tint: nil, interactive: true, shape: AnyShape(Circle()))
-                .psActivePill(Circle(), isActive: isActive)
+                .modifier(ConditionalGlass(enabled: !isActive, shape: AnyShape(Circle())))
         }
-        .buttonStyle(PSPressStyle(scale: 0.92))
+        .buttonStyle(PSPressStyle(scale: 0.9))
         .accessibilityLabel(label)
+    }
+}
+
+/// Glass only where it is wanted (a prominent disc is solid).
+struct ConditionalGlass: ViewModifier {
+    let enabled: Bool
+    let shape: AnyShape
+
+    func body(content: Content) -> some View {
+        if enabled { content.psGlass(interactive: true, shape: shape) } else { content }
     }
 }
 
@@ -210,28 +223,29 @@ public struct GlassChip: View {
 
     public var body: some View {
         HStack(spacing: 6) {
-            if let systemImage { Image(systemName: systemImage) }
+            if let systemImage { Image(systemName: systemImage).foregroundStyle(tint ?? PSTheme.textPrimary) }
             Text(text)
         }
         .font(PSFont.caption(13))
-        .foregroundStyle(tint == nil ? PSTheme.textPrimary : Color.white)
+        .foregroundStyle(PSTheme.textPrimary)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .psGlass(tint: nil)
-        .psActivePill(Capsule(), isActive: tint != nil, glow: false)
+        .psGlass()
     }
 }
 
+/// The one prominent action of a screen: a white capsule with dark text.
 public struct PrimaryButtonStyle: ButtonStyle {
     public init() {}
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(PSFont.headline())
-            .foregroundStyle(.white)
+            .foregroundStyle(Color.black)
             .padding(.vertical, 15)
             .frame(maxWidth: .infinity)
-            .psAccentFill(Capsule())
-            .opacity(configuration.isPressed ? 0.85 : 1)
+            .background(Capsule().fill(Color.white))
+            .overlay(Capsule().fill(LinearGradient(colors: [.clear, Color.black.opacity(0.06)], startPoint: .top, endPoint: .bottom)))
+            .opacity(configuration.isPressed ? 0.86 : 1)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(PSMotion.quick, value: configuration.isPressed)
     }
@@ -248,6 +262,28 @@ public struct SecondaryButtonStyle: ButtonStyle {
             .psGlass(interactive: true)
             .opacity(configuration.isPressed ? 0.8 : 1)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(PSMotion.quick, value: configuration.isPressed)
+    }
+}
+
+/// A Magic action: an iridescent capsule for the things the AI does.
+public struct MagicButtonStyle: ButtonStyle {
+    var compact = false
+    public init(compact: Bool = false) { self.compact = compact }
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(compact ? PSFont.headline(13) : PSFont.headline())
+            .foregroundStyle(.white)
+            .padding(.vertical, compact ? 8 : 15)
+            .padding(.horizontal, compact ? 14 : 0)
+            .frame(maxWidth: compact ? nil : .infinity)
+            .background {
+                Capsule().fill(LinearGradient(colors: PSTheme.intelligence, startPoint: .leading, endPoint: .trailing))
+                    .overlay(Capsule().fill(PSTheme.accentHighlight).opacity(0.6))
+            }
+            .shadow(color: PSTheme.voice.opacity(0.35), radius: 12, y: 4)
+            .opacity(configuration.isPressed ? 0.86 : 1)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(PSMotion.quick, value: configuration.isPressed)
     }
 }

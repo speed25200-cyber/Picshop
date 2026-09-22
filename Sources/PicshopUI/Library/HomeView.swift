@@ -189,7 +189,7 @@ public struct HomeView: View {
                             .foregroundStyle(isActive ? Color.white : PSTheme.textSecondary)
                             .background {
                                 if isActive {
-                                    Capsule().fill(PSTheme.accentGradient).overlay(Capsule().fill(PSTheme.accentHighlight))
+                                    Capsule().fill(PSTheme.selection).overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.75))
                                         .matchedGeometryEffect(id: "filter", in: filterIndicator)
                                 } else {
                                     Capsule().fill(Color.white.opacity(0.06))

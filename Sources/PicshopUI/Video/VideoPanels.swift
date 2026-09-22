@@ -144,7 +144,7 @@ struct SoundTrackRow: View {
     var body: some View {
         VStack(spacing: 6) {
             HStack(spacing: 8) {
-                Text("\(index + 1)").font(PSFont.mono(11)).foregroundStyle(.white)
+                Text("\(index + 1)").font(PSFont.mono(11)).foregroundStyle(PSTheme.onAccent)
                     .frame(width: 20, height: 20).background(Circle().fill(PSTheme.accentGradient))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(track.name).font(PSFont.headline(13)).lineLimit(1).foregroundStyle(track.isMuted ? PSTheme.textTertiary : PSTheme.textPrimary)
@@ -311,7 +311,7 @@ struct VideoTextPanel: View {
                     .padding(.horizontal, 14).padding(.vertical, 10).psField(Capsule())
                     .submitLabel(.done).onSubmit(commit)
                 Button(action: commit) { Image(systemName: "plus").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
-                    .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Circle())
+                    .buttonStyle(.plain).foregroundStyle(PSTheme.onAccent).psAccentFill(Circle())
             }
             if let overlay = session.timeline.overlays.last(where: { $0.textElement != nil }), let element = overlay.textElement {
                 HStack(spacing: 8) {

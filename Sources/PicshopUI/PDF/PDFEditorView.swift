@@ -139,7 +139,7 @@ public struct PDFEditorView: View {
                         session.addText(text, at: session.lastTapPoint, pageIndex: session.document.currentPageIndex)
                         session.textDraft = ""
                     } label: { Image(systemName: "plus").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
-                        .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Circle())
+                        .buttonStyle(.plain).foregroundStyle(PSTheme.onAccent).psAccentFill(Circle())
                 }
                 Text(L("Tap any word on the page to change or erase it — scans included."))
                     .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
@@ -286,7 +286,7 @@ struct TextEditSheet: View {
                 Button { onCancel() } label: { Text(L("Cancel")).font(PSFont.caption(13)).padding(.horizontal, 14).padding(.vertical, 9) }
                     .buttonStyle(.plain).foregroundStyle(PSTheme.textPrimary).psGlass(interactive: true)
                 Button { onCommit(draft, fontName) } label: { Text(L("Replace")).font(PSFont.headline(13)).padding(.horizontal, 16).padding(.vertical, 9) }
-                    .buttonStyle(.plain).foregroundStyle(.white).psAccentFill(Capsule())
+                    .buttonStyle(.plain).foregroundStyle(PSTheme.onAccent).psAccentFill(Capsule())
             }
         }
         .padding(20)
