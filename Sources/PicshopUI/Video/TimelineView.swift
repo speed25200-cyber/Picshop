@@ -170,10 +170,14 @@ struct TimelineView: View {
             .offset(x: x, y: laneTop + CGFloat(captionLane) * TimelineView.laneHeight)
         }
         // One lane per sound track, stacked like an NLE: music, voice-over, effects.
+        let speech = session.timeline.speechRanges
         ForEach(Array(session.timeline.audioTracks.enumerated()), id: \.element.id) { index, track in
             let x = width / 2 + CGFloat(track.timelineStart) * pixelsPerSecond
             let visible = max(0, min(track.sourceRange.duration, session.timeline.duration - track.timelineStart))
-            SoundLaneBar(track: track, index: index, thumbnailer: session.thumbnailer, width: max(30, CGFloat(visible) * pixelsPerSecond))
+            // With the voice analysed, the lane shows the music's level: its fades and every dip under a sentence.
+            let envelope = speech.map { Ducking.envelope(span: TimeSpan(start: track.timelineStart, duration: visible), level: 1, amount: track.ducking,
+                                                         speech: $0, fadeIn: track.fadeIn, fadeOut: track.fadeOut) } ?? []
+            SoundLaneBar(track: track, index: index, thumbnailer: session.thumbnailer, width: max(30, CGFloat(visible) * pixelsPerSecond), envelope: envelope)
                 .frame(width: max(30, CGFloat(visible) * pixelsPerSecond), alignment: .leading)
                 .offset(x: x, y: laneTop + CGFloat(textLane + min(index, 3)) * TimelineView.laneHeight)
                 .contextMenu {
@@ -192,6 +196,8 @@ private struct SoundLaneBar: View {
     let index: Int
     var thumbnailer: VideoThumbnailer? = nil
     var width: CGFloat = 100
+    /// The track's level over its span (0…1), drawn as a line when there is one.
+    var envelope: [VolumePoint] = []
     @State private var peaks: [Float] = []
 
     private var tint: Color {
@@ -231,11 +237,34 @@ private struct SoundLaneBar: View {
         .overlay {
             WaveformShape(peaks: peaks).fill(Color.black.opacity(0.28)).padding(.vertical, 2).clipShape(Capsule()).allowsHitTesting(false)
         }
+        .overlay {
+            if envelope.count > 1 {
+                VolumeLineShape(points: envelope).stroke(Color.white.opacity(0.9), style: StrokeStyle(lineWidth: 1.2, lineJoin: .round))
+                    .padding(.vertical, 3).allowsHitTesting(false)
+            }
+        }
         .opacity(track.isMuted ? 0.55 : 1)
         .task(id: "\(track.asset.relativePath)-\(track.sourceRange.start)-\(track.sourceRange.duration)-\(Int(width / 3))") {
             guard let thumbnailer else { return }
             peaks = await thumbnailer.waveform(for: track.asset, range: track.sourceRange, points: max(8, Int(width / 3)))
         }
+    }
+}
+
+/// A level curve across its rect: time left to right, full level at the top.
+struct VolumeLineShape: Shape {
+    var points: [VolumePoint]
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        guard let first = points.first, let last = points.last, last.time > first.time else { return path }
+        let span = last.time - first.time
+        for (index, point) in points.enumerated() {
+            let location = CGPoint(x: rect.minX + CGFloat((point.time - first.time) / span) * rect.width,
+                                   y: rect.maxY - CGFloat(point.level.clamped(to: 0...1)) * rect.height)
+            if index == 0 { path.move(to: location) } else { path.addLine(to: location) }
+        }
+        return path
     }
 }
 
