@@ -93,6 +93,7 @@ public final class VideoEditorSession {
         // Same rule as the photo editor: the first frame never waits for Core ML.
         let pipeline = InpaintingPipeline()
         let services = AVVideoServices(store: app.store, projectID: projectID, inpainting: pipeline)
+        services.captionLocale = Locale(identifier: language == .french ? "fr-FR" : "en-US")
         self.services = services
         executor = VideoCommandExecutor(services: services, language: language) { [weak self] progress in
             Task { @MainActor [weak self] in self?.processingProgress = progress }
@@ -349,6 +350,12 @@ public final class VideoEditorSession {
         case .blurBackground, .removeBackground, .replaceBackground: return L("Rendering portrait effect…")
         case .freezeFrame: return L("Creating freeze frame…")
         case .extractFrame: return L("Saving frame…")
+        case .autoCaptions: return L("Listening and writing captions…")
+        case .removeSilences: return L("Finding the pauses…")
+        case .syncToBeat: return L("Finding the beat…")
+        case .smartReframe: return L("Following the subject…")
+        case .enhanceVoice: return L("Isolating the voice…")
+        case .matchColor: return L("Matching colours…")
         default: return L("Working…")
         }
     }

@@ -11,6 +11,12 @@ UI = ROOT / "Sources/PicshopUI"
 OUT = UI / "Resources/Localizable.xcstrings"
 
 FR = {
+    "Listening and writing captions…": "J'écoute et j'écris les sous-titres…",
+    "Finding the pauses…": "Je cherche les blancs…",
+    "Finding the beat…": "Je cherche le rythme…",
+    "Following the subject…": "Je suis le sujet…",
+    "Isolating the voice…": "J'isole la voix…",
+    "Matching colours…": "J'harmonise les couleurs…",
     "Style %d": "Style %d",
     "Style “%@” saved": "Style « %@ » enregistré",
     "No saved style yet. Say “save this style as …”.": "Aucun style enregistré. Dites « enregistre ce style sous … ».",

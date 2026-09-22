@@ -14,6 +14,7 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
     private let context = RenderContext.shared
     private let queue = DispatchQueue(label: "com.picshop.compositor", qos: .userInteractive)
     private var overlayCache: [String: CIImage] = [:]
+    private var captionCache: [String: CIImage] = [:]
     private var cancelled = false
 
     public var sourcePixelBufferAttributes: [String: any Sendable]? {
@@ -59,10 +60,10 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
         var frame = background
 
         if let buffer = request.sourceFrame(byTrackID: instruction.primary.trackID) {
-            frame = Self.render(clip: instruction.primary, buffer: buffer, canvas: canvas).composited(over: background)
+            frame = Self.render(clip: instruction.primary, buffer: buffer, canvas: canvas, time: time).composited(over: background)
         }
         if let secondary = instruction.secondary, let transition = instruction.transition, let buffer = request.sourceFrame(byTrackID: secondary.trackID) {
-            let incoming = Self.render(clip: secondary, buffer: buffer, canvas: canvas).composited(over: background)
+            let incoming = Self.render(clip: secondary, buffer: buffer, canvas: canvas, time: time).composited(over: background)
             let start = CMTimeGetSeconds(instruction.timeRange.start)
             let duration = max(0.001, CMTimeGetSeconds(instruction.timeRange.duration))
             let progress = ((time - start) / duration).clamped(to: 0...1)
@@ -76,11 +77,29 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
             if overlay.fadeOut > 0 { alpha = min(alpha, (overlay.span.end - time) / overlay.fadeOut) }
             frame = AdjustmentPipeline.blend(image, over: frame, alpha: alpha.clamped(to: 0...1))
         }
+        if let captions = instruction.captions, let cue = captions.cue(at: time), let image = captionImage(cue, track: captions, time: time, renderSize: renderSize) {
+            frame = image.composited(over: frame)
+        }
         return frame.cropped(to: canvas)
     }
 
+    /// The caption for this instant, cached per spoken word.
+    private func captionImage(_ cue: CaptionCue, track: CaptionTrack, time: Double, renderSize: CGSize) -> CIImage? {
+        #if canImport(UIKit)
+        let active = cue.activeWordIndex(at: time)
+        let key = "\(cue.id)-\(active ?? -1)-\(track.style.rawValue)-\(track.verticalPosition)-\(track.scale)-\(track.textColor.hashValue)-\(track.highlightColor.hashValue)-\(Int(renderSize.width))"
+        if let cached = captionCache[key] { return cached }
+        guard let image = CaptionRasterizer.placedImage(for: cue, activeWord: active, track: track, canvasSize: renderSize) else { return nil }
+        if captionCache.count > 48 { captionCache.removeAll() }
+        captionCache[key] = image
+        return image
+        #else
+        return nil
+        #endif
+    }
+
     /// Applies orientation, crop, rotation, flip, framing and colour to one source frame.
-    static func render(clip: ClipRenderParameters, buffer: CVPixelBuffer, canvas: CGRect) -> CIImage {
+    static func render(clip: ClipRenderParameters, buffer: CVPixelBuffer, canvas: CGRect, time: Double = 0) -> CIImage {
         var image = CIImage(cvPixelBuffer: buffer)
         image = image.transformed(by: clip.preferredTransform)
         image = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
@@ -102,15 +121,28 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
             image = image.transformed(by: CGAffineTransform(scaleX: -1, y: 1)).transformed(by: CGAffineTransform(translationX: image.extent.width, y: 0))
         }
 
-        // Fit or fill the canvas.
-        let sx = canvas.width / max(1, image.extent.width)
-        let sy = canvas.height / max(1, image.extent.height)
-        let scale = clip.fill ? max(sx, sy) : min(sx, sy)
-        image = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        let dx = canvas.midX - image.extent.midX
-        let dy = canvas.midY - image.extent.midY
-        image = image.transformed(by: CGAffineTransform(translationX: dx, y: dy))
-        if clip.fill { image = image.cropped(to: canvas) }
+        if let motion = clip.motion, !motion.isEmpty, image.extent.width > 1, image.extent.height > 1 {
+            // Animated framing: the window of the source the virtual camera sees, scaled to fill.
+            let width = image.extent.width, height = image.extent.height
+            let framing = motion.sample(at: time - clip.timelineStart)
+            let window = ClipMotion.window(focus: framing.focus, zoom: framing.zoom, sourceAspect: Double(width / height), outputAspect: Double(canvas.width / max(1, canvas.height)))
+            let rect = CGRect(x: window.minX * width, y: (1 - window.maxY) * height, width: window.width * width, height: window.height * height)
+            let scale = canvas.width / max(1, rect.width)
+            image = image.clampedToExtent()
+                .transformed(by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY).concatenating(CGAffineTransform(scaleX: scale, y: scale)))
+                .transformed(by: CGAffineTransform(translationX: canvas.minX, y: canvas.minY))
+                .cropped(to: canvas)
+        } else {
+            // Fit or fill the canvas.
+            let sx = canvas.width / max(1, image.extent.width)
+            let sy = canvas.height / max(1, image.extent.height)
+            let scale = clip.fill ? max(sx, sy) : min(sx, sy)
+            image = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            let dx = canvas.midX - image.extent.midX
+            let dy = canvas.midY - image.extent.midY
+            image = image.transformed(by: CGAffineTransform(translationX: dx, y: dy))
+            if clip.fill { image = image.cropped(to: canvas) }
+        }
 
         let look: (preset: FilterPreset, intensity: Double)? = clip.look == .original ? nil : (clip.look, clip.lookIntensity)
         let adjustments = AdjustmentPipeline.effectiveAdjustments(manual: clip.adjustments, look: look)
@@ -118,6 +150,9 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
         if !adjustments.isNeutral || !curve.isIdentity {
             let referenceScale = canvas.width / 1920
             image = AdjustmentPipeline.apply(adjustments, toneCurve: curve, to: image, scale: referenceScale)
+        }
+        if let match = clip.colorMatch {
+            image = ColorCube.shared.apply(match, to: image)
         }
         return image
     }

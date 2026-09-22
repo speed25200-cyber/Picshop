@@ -13,9 +13,11 @@ import PicshopImaging
 /// command executor: object removal across a clip, stabilisation, reversal,
 /// portrait effects, freeze frames and frame extraction.
 public final class AVVideoServices: VideoAIServices, @unchecked Sendable {
-    private let store: ProjectStore
-    private let projectID: UUID
+    let store: ProjectStore
+    let projectID: UUID
     private let inpainting: InpaintingPipeline
+    /// Language the captions are transcribed in (the editor's language).
+    public var captionLocale: Locale = .current
 
     public init(store: ProjectStore, projectID: UUID, inpainting: InpaintingPipeline) {
         self.store = store
@@ -25,7 +27,7 @@ public final class AVVideoServices: VideoAIServices, @unchecked Sendable {
 
     private var maskStore: MaskStore { MaskStore(store: store, projectID: projectID) }
 
-    private func asset(for clip: VideoClip) -> AVURLAsset {
+    func asset(for clip: VideoClip) -> AVURLAsset {
         AVURLAsset(url: store.url(for: clip.renderAsset.relativePath, in: projectID), options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
     }
 

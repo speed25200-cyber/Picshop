@@ -18,6 +18,12 @@ public struct ClipRenderParameters: @unchecked Sendable {
     public var rotation: Double
     public var flipHorizontal: Bool
     public var fill: Bool
+    /// Animated framing (Ken Burns, smart reframe), sampled per frame.
+    public var motion: ClipMotion? = nil
+    /// Where the clip starts on the timeline, to turn frame times into clip offsets.
+    public var timelineStart: Double = 0
+    /// Colour matched to a reference shot.
+    public var colorMatch: ColorMatch? = nil
 }
 
 public struct TransitionSegment: Sendable {
@@ -38,15 +44,18 @@ public final class PicshopCompositionInstruction: NSObject, AVVideoCompositionIn
     public let secondary: ClipRenderParameters?
     public let transition: TransitionSegment?
     public let overlays: [TimelineOverlay]
+    public let captions: CaptionTrack?
     public let backgroundColor: PSColor
     public let renderSize: CGSize
 
-    init(timeRange: CMTimeRange, primary: ClipRenderParameters, secondary: ClipRenderParameters?, transition: TransitionSegment?, overlays: [TimelineOverlay], backgroundColor: PSColor, renderSize: CGSize) {
+    init(timeRange: CMTimeRange, primary: ClipRenderParameters, secondary: ClipRenderParameters?, transition: TransitionSegment?, overlays: [TimelineOverlay],
+         captions: CaptionTrack? = nil, backgroundColor: PSColor, renderSize: CGSize) {
         self.timeRange = timeRange
         self.primary = primary
         self.secondary = secondary
         self.transition = transition
         self.overlays = overlays
+        self.captions = captions
         self.backgroundColor = backgroundColor
         self.renderSize = renderSize
         var ids: [NSValue] = [NSNumber(value: primary.trackID)]
@@ -137,11 +146,24 @@ public struct CompositionBuilder: Sendable {
                 track.scaleTimeRange(CMTimeRange(start: start, duration: sourceRange.duration), toDuration: VideoTime.cm(clip.timelineDuration))
             }
 
-            if let sourceAudio = try await asset.loadTracks(withMediaType: .audio).first, !clip.isMuted, clip.volume > 0 {
+            // A voice-isolated copy of the sound plays instead of the original when there is one.
+            var audioSource = try await asset.loadTracks(withMediaType: .audio).first
+            var audioRange = sourceRange
+            if let enhanced = clip.enhancedAudio {
+                let cleaned = AVURLAsset(url: store.url(for: enhanced.relativePath, in: projectID))
+                let cleanedTracks = (try? await cleaned.loadTracks(withMediaType: .audio)) ?? []
+                let cleanedLength = try? await cleaned.load(.duration)
+                if let track = cleanedTracks.first, let length = cleanedLength {
+                    audioSource = track
+                    let end = CMTimeMinimum(CMTimeAdd(sourceRange.start, sourceRange.duration), length)
+                    audioRange = CMTimeRange(start: CMTimeMinimum(sourceRange.start, end), end: end)
+                }
+            }
+            if let sourceAudio = audioSource, !clip.isMuted, clip.volume > 0, audioRange.duration.seconds > 0.01 {
                 let audioTrack = audioTracks[index % 2]
-                try audioTrack.insertTimeRange(sourceRange, of: sourceAudio, at: start)
+                try audioTrack.insertTimeRange(audioRange, of: sourceAudio, at: start)
                 if clip.speed != 1 {
-                    audioTrack.scaleTimeRange(CMTimeRange(start: start, duration: sourceRange.duration), toDuration: VideoTime.cm(clip.timelineDuration))
+                    audioTrack.scaleTimeRange(CMTimeRange(start: start, duration: audioRange.duration), toDuration: VideoTime.cm(clip.timelineDuration))
                 }
                 let mix = clipMixes[index % 2] ?? AVMutableAudioMixInputParameters(track: audioTrack)
                 clipMixes[index % 2] = mix
@@ -159,7 +181,8 @@ public struct CompositionBuilder: Sendable {
 
             parameters.append(ClipRenderParameters(clipID: clip.id, trackID: track.trackID, naturalSize: naturalSize, preferredTransform: preferredTransform,
                                                    adjustments: clip.adjustments, look: clip.look, lookIntensity: clip.lookIntensity, crop: clip.crop,
-                                                   rotation: clip.rotation, flipHorizontal: clip.flipHorizontal, fill: timeline.aspect != .original))
+                                                   rotation: clip.rotation, flipHorizontal: clip.flipHorizontal, fill: timeline.aspect != .original,
+                                                   motion: clip.motion, timelineStart: starts[index], colorMatch: clip.colorMatch))
         }
 
         audioParameters.append(contentsOf: clipMixes.compactMap { $0 })
@@ -205,13 +228,13 @@ public struct CompositionBuilder: Sendable {
             let soloEnd = nextTransition.map { end - $0.1 } ?? end
             if soloEnd > cursor + 0.0001 {
                 instructions.append(PicshopCompositionInstruction(timeRange: VideoTime.range(TimeSpan(start: cursor, end: soloEnd)), primary: parameters[index], secondary: nil,
-                                                                  transition: nil, overlays: timeline.overlays, backgroundColor: timeline.backgroundColor, renderSize: renderSize))
+                                                                  transition: nil, overlays: timeline.overlays, captions: timeline.captions, backgroundColor: timeline.backgroundColor, renderSize: renderSize))
                 cursor = soloEnd
             }
             if let (transition, overlap) = nextTransition {
                 let segment = TransitionSegment(kind: transition.kind, fromTrackID: parameters[index].trackID, toTrackID: parameters[index + 1].trackID)
                 instructions.append(PicshopCompositionInstruction(timeRange: VideoTime.range(TimeSpan(start: cursor, duration: overlap)), primary: parameters[index], secondary: parameters[index + 1],
-                                                                  transition: segment, overlays: timeline.overlays, backgroundColor: timeline.backgroundColor, renderSize: renderSize))
+                                                                  transition: segment, overlays: timeline.overlays, captions: timeline.captions, backgroundColor: timeline.backgroundColor, renderSize: renderSize))
                 cursor += overlap
             }
         }

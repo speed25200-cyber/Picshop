@@ -1553,6 +1553,38 @@
         }
       }
     },
+    "Finding the beat…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finding the beat…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je cherche le rythme…"
+          }
+        }
+      }
+    },
+    "Finding the pauses…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finding the pauses…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je cherche les blancs…"
+          }
+        }
+      }
+    },
     "Flip": {
       "localizations": {
         "en": {
@@ -1581,6 +1613,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Suivis"
+          }
+        }
+      }
+    },
+    "Following the subject…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Following the subject…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je suis le sujet…"
           }
         }
       }
@@ -2129,6 +2177,22 @@
         }
       }
     },
+    "Isolating the voice…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Isolating the voice…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J'isole la voix…"
+          }
+        }
+      }
+    },
     "Just say it": {
       "localizations": {
         "en": {
@@ -2305,6 +2369,22 @@
         }
       }
     },
+    "Listening and writing captions…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening and writing captions…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J'écoute et j'écris les sous-titres…"
+          }
+        }
+      }
+    },
     "Listening…": {
       "localizations": {
         "en": {
@@ -2445,6 +2525,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Annoter"
+          }
+        }
+      }
+    },
+    "Matching colours…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Matching colours…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J'harmonise les couleurs…"
           }
         }
       }
