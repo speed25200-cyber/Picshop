@@ -99,6 +99,8 @@ FR = {
     "Sunset sky": "Ciel couchant",
     "Upscale": "Agrandir",
     "Expand": "Étendre",
+    "Erase or move anything, expand the frame, refocus after the shot, put the title behind a person, grade like a colourist. One tap or one sentence.": "Effacez ou déplacez n'importe quoi, agrandissez le cadre, refaites la mise au point après coup, passez le titre derrière une personne, étalonnez comme un pro. Un geste ou une phrase.",
+    "Edit by the words, captions from the voice, every “euh” cut, cuts on the beat, titles that follow a face, a recap of the best moments.": "Montez par le texte, sous-titres depuis la voix, chaque « euh » coupé, coupes sur le rythme, titres qui suivent un visage, un résumé des meilleurs moments.",
     "Video magic": "Magie vidéo",
     "A 30-second recap of the best moments": "Un résumé de 30 s des meilleurs moments",
     "Finding the best moments…": "Je cherche les meilleurs moments…",

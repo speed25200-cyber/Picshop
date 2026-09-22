@@ -22,9 +22,9 @@ public struct OnboardingView: View {
     private var pages: [Page] {
         [
             Page(symbols: ["wand.and.stars", "person.crop.rectangle", "eraser"], title: L("Photo, magically."),
-                 text: L("Erase anything, cut out the subject, relight, put the title behind a person, grade like a colourist. One tap or one sentence.")),
+                 text: L("Erase or move anything, expand the frame, refocus after the shot, put the title behind a person, grade like a colourist. One tap or one sentence.")),
             Page(symbols: ["captions.bubble", "metronome", "rectangle.portrait"], title: L("Video, like a pro."),
-                 text: L("Captions from the voice, pauses cut out, cuts on the beat, vertical video that follows you, a clean voice, a movie made from your clips.")),
+                 text: L("Edit by the words, captions from the voice, every “euh” cut, cuts on the beat, titles that follow a face, a recap of the best moments.")),
             Page(symbols: ["waveform"], title: L("Just say it."),
                  text: L("“Efface le chien”, “make it warmer”, “ajoute des sous-titres”. PicShop understands French and English and edits instantly.")),
             Page(symbols: ["lock.shield"], title: L("Private by design."),

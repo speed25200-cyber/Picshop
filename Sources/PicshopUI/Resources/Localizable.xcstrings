@@ -929,22 +929,6 @@
         }
       }
     },
-    "Captions from the voice, pauses cut out, cuts on the beat, vertical video that follows you, a clean voice, a movie made from your clips.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Captions from the voice, pauses cut out, cuts on the beat, vertical video that follows you, a clean voice, a movie made from your clips."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Des sous-titres tirés de la voix, les blancs coupés, des coupes en rythme, une vidéo verticale qui vous suit, une voix nette, un film créé à partir de vos clips."
-          }
-        }
-      }
-    },
     "Centre": {
       "localizations": {
         "en": {
@@ -1921,6 +1905,22 @@
         }
       }
     },
+    "Edit by the words, captions from the voice, every “euh” cut, cuts on the beat, titles that follow a face, a recap of the best moments.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit by the words, captions from the voice, every “euh” cut, cuts on the beat, titles that follow a face, a recap of the best moments."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Montez par le texte, sous-titres depuis la voix, chaque « euh » coupé, coupes sur le rythme, titres qui suivent un visage, un résumé des meilleurs moments."
+          }
+        }
+      }
+    },
     "Edit text": {
       "localizations": {
         "en": {
@@ -2049,18 +2049,18 @@
         }
       }
     },
-    "Erase anything, cut out the subject, relight, put the title behind a person, grade like a colourist. One tap or one sentence.": {
+    "Erase or move anything, expand the frame, refocus after the shot, put the title behind a person, grade like a colourist. One tap or one sentence.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Erase anything, cut out the subject, relight, put the title behind a person, grade like a colourist. One tap or one sentence."
+            "value": "Erase or move anything, expand the frame, refocus after the shot, put the title behind a person, grade like a colourist. One tap or one sentence."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Effacez n'importe quoi, détourez le sujet, rééclairez, placez le titre derrière une personne, étalonnez comme un pro. Un geste ou une phrase."
+            "value": "Effacez ou déplacez n'importe quoi, agrandissez le cadre, refaites la mise au point après coup, passez le titre derrière une personne, étalonnez comme un pro. Un geste ou une phrase."
           }
         }
       }
