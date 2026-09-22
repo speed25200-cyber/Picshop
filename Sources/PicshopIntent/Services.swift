@@ -62,6 +62,37 @@ public protocol VideoAIServices: Sendable {
     func freezeFrame(at time: Double, duration: Double, timeline: VideoTimeline) async throws -> MediaAsset
     /// Person/subject matte rendered as an alpha video, for background effects.
     func subjectMatte(for clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> MediaAsset
+
+    // Magic tools. Each has a default that reports the tool as unavailable, so
+    // fakes and older back ends only implement what they support.
+
+    /// Words spoken in the timeline's own sound (clips, not music), with timeline times.
+    func transcribe(timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> (words: [CaptionWord], language: String?)
+    /// The clips' mixed sound as mono PCM on the timeline clock (music excluded), for jump cuts.
+    func dialogueSignal(timeline: VideoTimeline) async throws -> AudioSignal
+    /// A sound track's source as mono PCM, for beat tracking.
+    func musicSignal(track: AudioTrack) async throws -> AudioSignal
+    /// Where the main subject is across a clip (clip-relative seconds, source-normalised points, y down).
+    func focusSamples(for clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [FocusSample]
+    /// A copy of the clip's sound with the voice isolated from background noise.
+    func isolateVoice(clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> MediaAsset
+    /// Colour statistics of a clip, sampled from a few frames.
+    func colorStatistics(clip: VideoClip, timeline: VideoTimeline) async throws -> ColorStatistics
+}
+
+public extension VideoAIServices {
+    func transcribe(timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> (words: [CaptionWord], language: String?) {
+        throw PicshopError.unsupportedOperation("Captions")
+    }
+    func dialogueSignal(timeline: VideoTimeline) async throws -> AudioSignal { throw PicshopError.unsupportedOperation("Remove silences") }
+    func musicSignal(track: AudioTrack) async throws -> AudioSignal { throw PicshopError.unsupportedOperation("Beat detection") }
+    func focusSamples(for clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [FocusSample] {
+        throw PicshopError.unsupportedOperation("Smart reframe")
+    }
+    func isolateVoice(clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> MediaAsset {
+        throw PicshopError.unsupportedOperation("Voice isolation")
+    }
+    func colorStatistics(clip: VideoClip, timeline: VideoTimeline) async throws -> ColorStatistics { throw PicshopError.unsupportedOperation("Colour match") }
 }
 
 /// Things the executor cannot do itself and hands back to the UI/store.

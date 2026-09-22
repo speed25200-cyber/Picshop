@@ -114,11 +114,18 @@ public struct VideoClip: Hashable, Codable, Sendable, Identifiable {
     public var processedAsset: MediaAsset?
     public var processedLabel: String?
     public var name: String
+    /// Animated framing: Ken Burns, smart reframe or hand-set keyframes.
+    public var motion: ClipMotion?
+    /// Colour matched to a reference shot ("make every clip look like this one").
+    public var colorMatch: ColorMatch?
+    /// The clip's sound with the voice isolated (plays instead of the original sound).
+    public var enhancedAudio: MediaAsset?
 
     public init(id: UUID = UUID(), asset: MediaAsset, sourceRange: TimeSpan? = nil, speed: Double = 1, volume: Double = 1,
                 isMuted: Bool = false, isReversed: Bool = false, adjustments: Adjustments = .neutral, look: FilterPreset = .original,
                 lookIntensity: Double = 1, crop: PSRect? = nil, rotation: Double = 0, flipHorizontal: Bool = false,
-                transitionOut: Transition? = nil, processedAsset: MediaAsset? = nil, processedLabel: String? = nil, name: String? = nil) {
+                transitionOut: Transition? = nil, processedAsset: MediaAsset? = nil, processedLabel: String? = nil, name: String? = nil,
+                motion: ClipMotion? = nil, colorMatch: ColorMatch? = nil) {
         self.id = id
         self.asset = asset
         self.sourceRange = sourceRange ?? TimeSpan(start: 0, duration: asset.duration)
@@ -136,6 +143,8 @@ public struct VideoClip: Hashable, Codable, Sendable, Identifiable {
         self.processedAsset = processedAsset
         self.processedLabel = processedLabel
         self.name = name ?? "Clip"
+        self.motion = motion
+        self.colorMatch = colorMatch
     }
 
     /// The media the renderer should read from.
@@ -336,6 +345,10 @@ public struct VideoTimeline: Hashable, Codable, Sendable, Identifiable {
     public var backgroundColor: PSColor
     public var createdAt: Date
     public var modifiedAt: Date
+    /// Spoken words as timed captions (auto-captions).
+    public var captions: CaptionTrack?
+    /// Beats of the first music track, for snapping and beat-synced cuts.
+    public var beatGrid: BeatGrid?
 
     public init(id: UUID = UUID(), title: String, clips: [VideoClip] = [], overlays: [TimelineOverlay] = [],
                 audioTracks: [AudioTrack] = [], renderSize: PSSize = PSSize(width: 1920, height: 1080), frameRate: Double = 30,
@@ -481,7 +494,15 @@ public struct VideoTimeline: Hashable, Codable, Sendable, Identifiable {
             }
         }
         clips = survivors
+        captions = captions?.removing(range)
         touch()
+    }
+
+    /// Removes several timeline ranges at once (latest first, so earlier ranges keep their times).
+    public mutating func removeRanges(_ ranges: [TimeSpan]) {
+        for range in ranges.sorted(by: { $0.start > $1.start }) where !range.isEmpty {
+            removeRange(range)
+        }
     }
 
     @discardableResult

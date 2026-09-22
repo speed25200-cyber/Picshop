@@ -346,6 +346,144 @@ public struct VideoCommandExecutor: Sendable {
                 return (timeline, .failed(errorMessage(error)))
             }
 
+        case .autoCaptions:
+            let style = intent.text.flatMap(CaptionStyle.init(rawValue:)) ?? intent.text.flatMap(CaptionStyle.matching)
+            if var existing = timeline.captions, !existing.isEmpty {
+                // Captions already exist: the request changes their look, or shows them again.
+                existing.isVisible = true
+                if let style { existing.restyle(style) }
+                timeline.captions = existing
+                timeline.touch()
+                return (timeline, .applied(style.map { "Captions: \($0.displayName)" } ?? "Show Captions"))
+            }
+            do {
+                let (words, language) = try await services.transcribe(timeline: timeline, progress: progress)
+                guard !words.isEmpty else { return (timeline, .failed(fr ? "Je n'entends aucune parole dans cette vidéo." : "I can't hear any speech in this video.")) }
+                let chosen = style ?? .karaoke
+                timeline.captions = CaptionTrack(cues: CaptionBuilder.cues(from: words, style: chosen), style: chosen, language: language)
+                timeline.touch()
+                return (timeline, .applied("Captions"))
+            } catch {
+                return (timeline, .failed(errorMessage(error)))
+            }
+
+        case .removeCaptions:
+            guard timeline.captions != nil else { return (timeline, .failed(fr ? "Il n'y a pas de sous-titres." : "There are no captions.")) }
+            timeline.captions = nil
+            timeline.touch()
+            return (timeline, .applied("Remove Captions"))
+
+        case .removeSilences:
+            do {
+                let signal = try await services.dialogueSignal(timeline: timeline)
+                let sensitivity = intent.amount?.value ?? 0.3
+                let ranges = SilenceDetector(minimumSilence: sensitivity > 0.4 ? 0.35 : 0.5, sensitivity: sensitivity).silentRanges(in: signal)
+                    .map { $0.clamped(to: TimeSpan(start: 0, end: timeline.duration)) }
+                    .filter { $0.duration > 0.1 }
+                guard !ranges.isEmpty else { return (timeline, ExecutionResult(outcome: .info(message: fr ? "Aucun blanc à couper." : "No pauses to cut."))) }
+                let removed = ranges.reduce(0) { $0 + $1.duration }
+                guard removed < timeline.duration - 0.5 else { return (timeline, .failed(fr ? "Je n'entends presque pas de voix." : "I can barely hear any voice.")) }
+                timeline.removeRanges(ranges)
+                let seconds = Replies.formatted((removed * 10).rounded() / 10)
+                return (timeline, .applied(fr ? "\(ranges.count) blancs coupés (−\(seconds) s)" : "\(ranges.count) pauses cut (−\(seconds) s)"))
+            } catch {
+                return (timeline, .failed(errorMessage(error)))
+            }
+
+        case .syncToBeat:
+            guard timeline.clips.count > 1 || timeline.audioTracks.isEmpty == false else {
+                return (timeline, .failed(fr ? "Ajoute d'abord une musique." : "Add some music first."))
+            }
+            guard let track = timeline.audioTracks.first(where: { !$0.isMuted }) else {
+                return (timeline, .failed(fr ? "Ajoute d'abord une musique." : "Add some music first."))
+            }
+            do {
+                let grid: BeatGrid
+                if let cached = timeline.beatGrid { grid = cached } else {
+                    let signal = try await services.musicSignal(track: track)
+                    guard let analysed = BeatTracker().analyze(signal) else { return (timeline, .failed(fr ? "Je ne trouve pas le rythme de cette musique." : "I can't find the beat in this music.")) }
+                    grid = analysed
+                }
+                timeline.beatGrid = grid
+                if timeline.clips.count < 2 {
+                    // A single clip: cut it on every bar so the rhythm shows.
+                    let bars = stride(from: grid.downbeatOffset + 4, to: grid.beats.count, by: 4).map { track.timelineStart + grid.beats[$0] - track.sourceRange.start }
+                    for time in bars.reversed() where time > 0.3 && time < timeline.duration - 0.3 { timeline.split(at: time) }
+                }
+                let beats = BeatSync.timelineBeats(grid, track: track)
+                let (snapped, moved) = BeatSync.snap(timeline, to: beats)
+                timeline = snapped
+                return (timeline, .applied(fr ? "Coupes sur le rythme (\(Int(grid.bpm.rounded())) BPM, \(moved))" : "Cuts on the beat (\(Int(grid.bpm.rounded())) BPM, \(moved))"))
+            } catch {
+                return (timeline, .failed(errorMessage(error)))
+            }
+
+        case .smartReframe:
+            let aspect = intent.aspect ?? .ratio9x16
+            guard let outputAspect = aspect.value else { return (timeline, .failed(fr ? "Choisis un format." : "Pick an aspect ratio.")) }
+            let ids = intent.scope == .current && context.hasSelection ? targetClipIDs() : timeline.clips.map(\.id)
+            do {
+                timeline.setAspect(aspect)
+                for id in ids {
+                    guard let clip = timeline.clip(id: id) else { continue }
+                    let size = clip.renderAsset.pixelSize
+                    let rotated = Int(clip.rotation.rounded()) % 180 != 0
+                    let sourceAspect = size.isEmpty ? 16.0 / 9.0 : (rotated ? size.height / size.width : size.aspectRatio)
+                    let samples = try await services.focusSamples(for: clip, timeline: timeline, progress: progress)
+                    let path = SmartReframe().path(samples: samples, duration: clip.timelineDuration, sourceAspect: sourceAspect, outputAspect: outputAspect)
+                    timeline.update(clipID: id) { $0.motion = path }
+                }
+                return (timeline, .applied("Smart Reframe \(aspect.displayName)"))
+            } catch {
+                return (timeline, .failed(errorMessage(error)))
+            }
+
+        case .kenBurns:
+            let ids = intent.scope == .all ? timeline.clips.map(\.id) : targetClipIDs()
+            let off = intent.amount?.value == 0
+            for (offset, id) in ids.enumerated() {
+                let variant = timeline.index(of: id) ?? offset
+                timeline.update(clipID: id) { clip in
+                    clip.motion = off ? nil : ClipMotion.kenBurns(duration: clip.timelineDuration, variant: variant)
+                }
+            }
+            return (timeline, .applied(off ? "Remove Camera Move" : "Ken Burns"))
+
+        case .enhanceVoice:
+            let ids = intent.scope == .all ? timeline.clips.map(\.id) : targetClipIDs()
+            do {
+                var cleaned = 0
+                for id in ids {
+                    guard let clip = timeline.clip(id: id), !clip.isMuted, clip.enhancedAudio == nil else { continue }
+                    let audio = try await services.isolateVoice(clip: clip, timeline: timeline, progress: progress)
+                    timeline.update(clipID: id) { $0.enhancedAudio = audio }
+                    cleaned += 1
+                }
+                guard cleaned > 0 else { return (timeline, ExecutionResult(outcome: .info(message: fr ? "La voix est déjà nettoyée." : "The voice is already clean."))) }
+                return (timeline, .applied("Enhance Voice"))
+            } catch {
+                return (timeline, .failed(errorMessage(error)))
+            }
+
+        case .matchColor:
+            guard timeline.clips.count > 1 else { return (timeline, .failed(fr ? "Il faut au moins deux clips." : "You need at least two clips.")) }
+            let referenceIndex: Int = {
+                if let number = intent.clipIndex { return number == -1 ? timeline.clips.count - 1 : min(max(number - 1, 0), timeline.clips.count - 1) }
+                if let selected = context.selectedIndex, context.hasSelection { return selected }
+                return timeline.clipIndex(at: playhead) ?? 0
+            }()
+            do {
+                let referenceClip = timeline.clips[referenceIndex]
+                let reference = try await services.colorStatistics(clip: referenceClip, timeline: timeline)
+                for (index, clip) in timeline.clips.enumerated() where index != referenceIndex {
+                    let stats = try await services.colorStatistics(clip: clip, timeline: timeline)
+                    timeline.update(clipID: clip.id) { $0.colorMatch = ColorMatch(source: stats, reference: reference, strength: 0.75) }
+                }
+                return (timeline, .applied(fr ? "Couleurs du clip \(referenceIndex + 1)" : "Colours of clip \(referenceIndex + 1)"))
+            } catch {
+                return (timeline, .failed(errorMessage(error)))
+            }
+
         case .undo: return (timeline, .effect(.undo, label: ""))
         case .redo: return (timeline, .effect(.redo, label: ""))
         case .revert: return (timeline, .effect(.revert, label: ""))

@@ -27,6 +27,8 @@ extension RuleBasedIntentEngine {
             return [EditIntent(action: .pause)]
         }
 
+        if let magic = parseMagicVideo(u, context: context) { return magic }
+
         // Seek.
         if u.contains(["go to", "goto", "jump to", "skip to", "va a", "vas a", "aller a", "saute a", "avance a", "place toi a", "positionne toi a", "mets toi a", "seek to", "at the beginning", "at the start", "to the beginning", "to the start", "au debut", "to the end", "at the end", "a la fin", "beginning of the video", "start of the video", "debut de la video", "fin de la video", "rewind to", "reviens au debut", "retourne au debut", "back to the start", "back to the beginning", "avance de", "recule de", "recule", "skip forward", "skip back", "go forward", "go back by", "go back", "forward", "backward", "rewind"]) && !u.contains(["transition", "text", "texte", "musique", "music", "clip", "cut", "coupe", "split", "trim", "delete", "supprime", "efface", "enleve", "remove", "rotate", "tourne", "crop", "recadre"]) {
             if u.contains(["beginning", "start", "debut", "commencement"]) { return [EditIntent(action: .seek, time: 0)] }
@@ -294,5 +296,62 @@ extension RuleBasedIntentEngine {
             return EditIntent(action: .setSpeed, amount: .absolute(factor))
         }
         return EditIntent(action: .setSpeed, amount: .absolute(1), confidence: 0.5)
+    }
+
+    /// The automatic tools: captions, jump cuts, beat sync, reframing, voice, colour.
+    /// Checked before the audio grammar, which would read "enlève les silences" as "mute".
+    func parseMagicVideo(_ u: NormalizedUtterance, context: IntentContext) -> [EditIntent]? {
+        let captionWords = ["sous titre", "sous titres", "sous titrage", "soustitre", "soustitres", "subtitle", "subtitles", "caption", "captions", "closed captions",
+                            "transcris", "transcription", "transcribe", "ecris ce qui est dit", "ecris ce que je dis", "write what i say", "texte de la voix", "paroles a l ecran"]
+        if u.contains(captionWords) {
+            if u.contains(Self.removeVerbs) || u.contains(["cache", "masque", "hide", "turn off", "desactive", "sans sous titres", "no captions", "no subtitles"]) {
+                return [EditIntent(action: .removeCaptions)]
+            }
+            var intent = EditIntent(action: .autoCaptions)
+            if let style = CaptionStyle.matching(u.text) { intent.text = style.rawValue }
+            return [intent]
+        }
+        let pauseWords = ["blancs", "les blancs", "silences", "les silences", "pauses", "les pauses", "temps morts", "moments ou je ne parle pas", "moments sans parole", "euh",
+                          "silence", "silent parts", "the pauses", "dead air", "gaps", "the silences", "where nobody talks", "where i don t talk", "jump cut", "jump cuts", "jumpcut"]
+        if u.contains(pauseWords), u.contains(Self.removeVerbs + ["coupe", "cut", "raccourcis", "tighten", "resserre", "jump cut", "jump cuts", "jumpcut", "vire", "retire"]) || u.contains(["jump cut", "jump cuts", "jumpcut"]) {
+            var intent = EditIntent(action: .removeSilences)
+            if u.contains(["un peu", "a bit", "slightly", "leger", "doucement", "gently", "long", "longs", "longues"]) { intent.amount = .absolute(0.2) }
+            if u.contains(["tous", "all", "every", "chaque", "maximum", "agressif", "aggressive", "tight", "serre"]) { intent.amount = .absolute(0.45) }
+            return [intent]
+        }
+        if u.contains(["rythme", "tempo", "beat", "beats", "the music beat", "sur la musique", "on the music", "en rythme", "on beat", "au rythme", "sur le temps", "sur les temps", "to the music"]),
+           u.contains(["coupe", "cut", "cuts", "coupes", "cale", "sync", "synchronise", "synchronize", "aligne", "align", "snap", "monte", "edit", "montage", "cale les"]) {
+            return [EditIntent(action: .syncToBeat)]
+        }
+        let followWords = ["suis le sujet", "suivre le sujet", "suit le sujet", "en suivant", "follow the subject", "following the subject", "track the subject", "keep the subject", "garde le sujet",
+                           "recadrage intelligent", "recadre intelligemment", "smart reframe", "auto reframe", "autoreframe", "reframe", "recadrage auto", "recadre automatiquement",
+                           "garde la personne", "keep the person", "centre le sujet", "center the subject", "suis la personne", "follow the person"]
+        if u.contains(followWords) {
+            var intent = EditIntent(action: .smartReframe)
+            intent.aspect = AspectPreset.matching(u.text) ?? (context.timelineDuration >= 0 ? .ratio9x16 : nil)
+            return [intent]
+        }
+        if u.contains(["ken burns", "kenburns", "zoom lent", "zoom doux", "slow zoom", "gentle zoom", "effet de zoom", "mouvement de camera", "camera move", "camera movement", "push in", "travelling", "pan and zoom", "panoramique et zoom"]) {
+            if u.contains(Self.removeVerbs) { var intent = EditIntent(action: .kenBurns); intent.amount = .absolute(0); return [intent] }
+            var intent = EditIntent(action: .kenBurns)
+            intent.scope = u.contains(["all", "tous", "toutes", "every", "chaque", "partout", "everywhere"]) ? .all : .current
+            return [intent]
+        }
+        if u.contains(["isole la voix", "isoler la voix", "voix plus claire", "voix claire", "nettoie le son", "nettoie l audio", "nettoie la voix", "enleve le bruit de fond", "supprime le bruit de fond", "retire le bruit de fond",
+                       "reduis le bruit du son", "bruit de fond", "clean up the audio", "clean the audio", "clean up the voice", "clean the voice", "isolate the voice", "voice isolation", "isolate voice",
+                       "remove background noise", "background noise", "enhance the voice", "enhance voice", "enhance speech", "clearer voice", "clearer audio", "denoise the audio", "studio sound", "son studio", "micro studio"]) {
+            var intent = EditIntent(action: .enhanceVoice)
+            intent.scope = u.contains(["all", "tous", "toute", "every", "partout", "whole", "entire"]) ? .all : .current
+            return [intent]
+        }
+        if u.contains(["harmonise les couleurs", "harmoniser les couleurs", "harmonise la colorimetrie", "meme colorimetrie", "memes couleurs", "meme couleur", "match the colors", "match the colours", "match colors", "match colours",
+                       "color match", "colour match", "same colors", "same colours", "same look as", "meme look que", "memes teintes", "uniformise les couleurs", "consistent colors", "consistent colours"]) {
+            var intent = EditIntent(action: .matchColor, scope: .all)
+            if let number = NumberWords.firstNumber(in: u.tokens), number.value >= 1, number.value <= 99 { intent.clipIndex = Int(number.value) }
+            else if u.contains(["premier", "first"]) { intent.clipIndex = 1 }
+            else if u.contains(["dernier", "last"]) { intent.clipIndex = -1 }
+            return [intent]
+        }
+        return nil
     }
 }

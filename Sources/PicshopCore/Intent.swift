@@ -62,6 +62,21 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     case moveClip
     case stabilize
     case freezeFrame
+    /// Transcribes the speech into timed captions (text = style name to use or switch to).
+    case autoCaptions
+    case removeCaptions
+    /// Jump cuts: removes the pauses in speech.
+    case removeSilences
+    /// Moves every cut onto the nearest beat of the music.
+    case syncToBeat
+    /// Changes the aspect ratio and follows the subject inside the new frame.
+    case smartReframe
+    /// Slow push-in / drift on the clip(s).
+    case kenBurns
+    /// Cleans dialogue: background noise and room echo removed.
+    case enhanceVoice
+    /// Gives clips the colour mood of a reference clip (clipNumber).
+    case matchColor
     // PDF only
     case deletePage
     case rotatePage
@@ -101,7 +116,8 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
         switch self {
         case .trim, .split, .deleteClip, .deleteRange, .setSpeed, .reverse, .mute, .unmute, .setVolume,
              .addTransition, .removeTransition, .addMusic, .removeMusic, .moveAudio, .fadeAudio, .extractFrame, .seek, .play, .pause,
-             .duplicateClip, .moveClip, .stabilize, .freezeFrame:
+             .duplicateClip, .moveClip, .stabilize, .freezeFrame, .autoCaptions, .removeCaptions, .removeSilences, .syncToBeat,
+             .smartReframe, .kenBurns, .enhanceVoice, .matchColor:
             return true
         default:
             return false
@@ -375,6 +391,14 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .moveClip: return "Move clip"
         case .stabilize: return "Stabilize"
         case .freezeFrame: return "Freeze frame"
+        case .autoCaptions: return "Captions\(text.map { " (\($0))" } ?? "")"
+        case .removeCaptions: return "Remove captions"
+        case .removeSilences: return "Remove silences"
+        case .syncToBeat: return "Cut to the beat"
+        case .smartReframe: return "Smart reframe \(aspect?.displayName ?? "")"
+        case .kenBurns: return "Ken Burns"
+        case .enhanceVoice: return "Enhance voice"
+        case .matchColor: return "Match colour"
         case .chooseCandidate: return "Choose"
         case .confirm: return "Confirm"
         case .cancel: return "Cancel"
