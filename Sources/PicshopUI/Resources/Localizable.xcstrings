@@ -2497,6 +2497,22 @@
         }
       }
     },
+    "Following": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Following"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suit le sujet"
+          }
+        }
+      }
+    },
     "Following the subject…": {
       "localizations": {
         "en": {
@@ -7021,6 +7037,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "L'iPhone est trop chaud pour générer maintenant. Laissez-le refroidir un instant."
+          }
+        }
+      }
+    },
+    "The layer moves with the subject under it": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The layer moves with the subject under it"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le calque bouge avec le sujet en dessous"
           }
         }
       }

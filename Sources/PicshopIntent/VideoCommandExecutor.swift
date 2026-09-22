@@ -409,6 +409,40 @@ public struct VideoCommandExecutor: Sendable {
                 return (timeline, .failed(errorMessage(error)))
             }
 
+        case .trackSubject:
+            // The overlay: named by id (from the panel), else the kind asked for under the playhead, else the latest.
+            var chosen: TimelineOverlay?
+            if let text = intent.text, let id = UUID(uuidString: text) { chosen = timeline.overlays.first { $0.id == id } }
+            if chosen == nil {
+                let pool = timeline.overlays.filter { overlay in
+                    switch (intent.target?.label, overlay.content) {
+                    case ("text", .text), ("shape", .shape), ("image", .image), ("image", .video), ("video", .video), (nil, _): return true
+                    default: return false
+                    }
+                }
+                chosen = pool.last { $0.span.contains(playhead) } ?? pool.last
+            }
+            guard let overlay = chosen, let index = timeline.overlays.firstIndex(where: { $0.id == overlay.id }) else {
+                return (timeline, .failed(fr ? "Ajoute d'abord un texte ou une image à faire suivre." : "Add a text or a picture to follow first."))
+            }
+            if let amount = intent.amount?.value, amount <= 0.01 {
+                guard overlay.tracking != nil else { return (timeline, ExecutionResult(outcome: .info(message: fr ? "Ce calque ne suit rien." : "That overlay isn't following anything."))) }
+                timeline.overlays[index].tracking = nil
+                return (timeline, .applied(fr ? "Ne suit plus le sujet" : "Stopped following"))
+            }
+            let anchor = overlay.span.contains(playhead) ? playhead : overlay.span.start
+            do {
+                let samples = try await services.track(point: overlay.anchorPoint, at: anchor, within: overlay.span, timeline: timeline, progress: progress)
+                guard samples.count >= 2, let first = samples.first, let last = samples.last else {
+                    return (timeline, .failed(fr ? "Je ne trouve rien à suivre sous ce calque." : "I can't find anything to follow under that overlay."))
+                }
+                timeline.overlays[index].tracking = TrackingPath(samples: TrackingPath.smoothed(samples), anchorTime: anchor)
+                let seconds = Replies.formatted(((last.time - first.time) * 10).rounded() / 10)
+                return (timeline, .applied(fr ? "Le calque suit le sujet (\(seconds) s)" : "The overlay follows the subject (\(seconds) s)"))
+            } catch {
+                return (timeline, .failed(errorMessage(error)))
+            }
+
         case .autoDuck:
             guard !timeline.audioTracks.isEmpty else { return (timeline, .failed(fr ? "Ajoute d'abord une musique." : "Add some music first.")) }
             if let amount = intent.amount?.value, amount <= 0.01 {

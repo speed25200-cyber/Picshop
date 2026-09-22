@@ -116,6 +116,7 @@ Paris au centre · Make the text bigger · Change le texte en Hello · Mets le t
 | Coupe sur le rythme · Cale les coupes sur la musique · Cut to the beat | Finds the music's tempo and moves every cut onto the nearest beat |
 | Passe en vertical en suivant le sujet · Smart reframe to square · Garde la personne au centre | Changes the format and follows faces / people / the salient subject with a calm virtual camera |
 | Isole la voix · Enlève le bruit de fond · Clean up the audio · Studio sound | Voice isolation on the clips' sound |
+| Fais suivre le texte à la personne · Le logo suit la voiture · Make the sticker follow his face · Arrête de suivre | Tracks whatever is under the overlay (face, person, object) from the playhead both ways; the overlay moves with it |
 | Baisse la musique quand je parle · Duck the music under the voice · Désactive le ducking | The music dips under every sentence and comes back between them (from the captions' words, else the voice's energy) |
 | Ajoute un effet Ken Burns partout · Slow zoom · Camera move | Slow push-in and drift on the clips |
 | Harmonise les couleurs sur le clip 1 · Match the colours | Gives every clip the colour mood of a reference clip |

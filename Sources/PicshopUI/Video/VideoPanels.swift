@@ -341,6 +341,10 @@ struct VideoTextPanel: View {
                     Button(role: .destructive) { session.perform(EditIntent(action: .removeText)) } label: { Image(systemName: "trash").frame(width: 38, height: 38) }
                         .buttonStyle(.plain).foregroundStyle(PSTheme.danger).psGlass(interactive: true, shape: AnyShape(Circle()))
                 }
+                HStack(spacing: 8) {
+                    FollowSubjectChip(session: session, overlay: overlay)
+                    Spacer(minLength: 0)
+                }
                 ParameterSlider(title: L("Duration"), value: Binding(get: { overlay.span.duration }, set: { duration in
                     session.update(L("Text Duration")) { timeline in
                         if let index = timeline.overlays.firstIndex(where: { $0.id == overlay.id }) { timeline.overlays[index].span = TimeSpan(start: overlay.span.start, duration: duration) }

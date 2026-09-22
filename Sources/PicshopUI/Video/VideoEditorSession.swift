@@ -347,7 +347,7 @@ public final class VideoEditorSession {
         guard var executor else { return .failed(message: "not ready") }
         executor.language = language
         let heavy: Set<IntentAction> = [.removeObject, .chooseCandidate, .stabilize, .reverse, .blurBackground, .removeBackground, .replaceBackground, .freezeFrame, .extractFrame,
-                                        .autoCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .syncToBeat, .smartReframe, .enhanceVoice, .matchColor, .kenBurns]
+                                        .autoCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .syncToBeat, .smartReframe, .enhanceVoice, .matchColor, .kenBurns]
         // Analyses that finish without reporting a fraction show the pulsing glyph instead of 0 %.
         let indeterminate: Set<IntentAction> = [.removeSilences, .autoDuck, .syncToBeat, .matchColor, .kenBurns]
         if heavy.contains(intent.action) {
@@ -417,6 +417,7 @@ public final class VideoEditorSession {
         case .removeSilences: return L("Finding the pauses…")
         case .removeFillers: return L("Listening for hesitations…")
         case .autoDuck: return L("Listening for the voice…")
+        case .trackSubject: return L("Following the subject…")
         case .cutWords: return L("Finding the words…")
         case .syncToBeat: return L("Finding the beat…")
         case .smartReframe: return L("Following the subject…")

@@ -86,7 +86,12 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
             default:
                 placed = overlayImage(overlay, renderSize: renderSize)
             }
-            guard let image = placed else { continue }
+            guard var image = placed else { continue }
+            if let tracking = overlay.tracking, !tracking.isEmpty {
+                // Attached to a moving subject: shifted by how far it has moved since the overlay was placed.
+                let shift = tracking.offset(at: time)
+                image = image.transformed(by: CGAffineTransform(translationX: shift.x * canvas.width, y: -shift.y * canvas.height))
+            }
             var alpha = overlay.opacity ?? 1.0
             if overlay.fadeIn > 0 { alpha = min(alpha, (time - overlay.span.start) / overlay.fadeIn) }
             if overlay.fadeOut > 0 { alpha = min(alpha, (overlay.span.end - time) / overlay.fadeOut) }

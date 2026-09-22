@@ -157,6 +157,7 @@ struct VideoOverlayPanel: View {
                         session.updateOverlay(overlay.id, "Overlay Sound") { $0.volume = ($0.volume ?? 0) > 0 ? nil : 1 }
                     }
                 }
+                FollowSubjectChip(session: session, overlay: overlay)
                 PanelChip(title: L("Remove"), symbol: "trash") { session.removeOverlay(overlay.id) }
             }
             .padding(.horizontal, 2)
@@ -245,6 +246,23 @@ struct OverlayArrangeLayer: View {
                 )
                 .animation(PSMotion.interactive, value: dragOffset)
         }
+    }
+}
+/// Attaches an overlay to whatever moves under it (a face, a person, a
+/// ball), or lets go of it. Tracking runs from the playhead both ways.
+struct FollowSubjectChip: View {
+    @Bindable var session: VideoEditorSession
+    let overlay: TimelineOverlay
+
+    var body: some View {
+        let isFollowing = overlay.tracking != nil
+        PanelChip(title: isFollowing ? L("Following") : L("Follow subject"), symbol: "scope", tint: PSTheme.voice, isActive: isFollowing, isEnabled: !session.isProcessing) {
+            var intent = EditIntent(action: .trackSubject)
+            intent.text = overlay.id.uuidString
+            if isFollowing { intent.amount = .absolute(0) }
+            Task { await session.run(intent) }
+        }
+        .accessibilityHint(L("The layer moves with the subject under it"))
     }
 }
 #endif

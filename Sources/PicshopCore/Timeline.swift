@@ -239,6 +239,8 @@ public struct TimelineOverlay: Hashable, Codable, Sendable, Identifiable {
     public var opacity: Double?
     /// The overlay's own sound level (video overlays), nil means muted.
     public var volume: Double?
+    /// Follows a moving subject: the overlay moves with it.
+    public var tracking: TrackingPath?
 
     public init(id: UUID = UUID(), content: Content, span: TimeSpan, fadeIn: Double = 0.25, fadeOut: Double = 0.25) {
         self.id = id
@@ -272,6 +274,15 @@ public struct TimelineOverlay: Hashable, Codable, Sendable, Identifiable {
     }
 
     public var isMedia: Bool { transform != nil }
+
+    /// The point the overlay is anchored at: its centre as placed.
+    public var anchorPoint: PSPoint {
+        switch content {
+        case .text(let element): return element.center
+        case .shape(_, let center): return center
+        case .image(_, let transform), .video(_, let transform, _): return transform.center
+        }
+    }
 
     public var mediaAsset: MediaAsset? {
         switch content {

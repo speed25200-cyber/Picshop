@@ -183,6 +183,7 @@ public enum IntentNormalizer {
             "reset": .revert, "revertall": .revert, "save": .export, "download": .export,
             "subtitles": .autoCaptions, "subtitle": .autoCaptions, "captions": .autoCaptions, "autocaption": .autoCaptions, "transcribe": .autoCaptions,
             "jumpcut": .removeSilences, "jumpcuts": .removeSilences, "removesilence": .removeSilences, "cutsilences": .removeSilences, "removepauses": .removeSilences,
+            "track": .trackSubject, "tracksubject": .trackSubject, "follow": .trackSubject, "followsubject": .trackSubject, "motiontrack": .trackSubject, "pin": .trackSubject,
             "autoduck": .autoDuck, "ducking": .autoDuck, "duck": .autoDuck, "duckmusic": .autoDuck, "autoducking": .autoDuck,
             "removefillers": .removeFillers, "fillers": .removeFillers, "removefillerwords": .removeFillers, "removeums": .removeFillers, "cutfillers": .removeFillers, "removehesitations": .removeFillers,
             "cutwords": .cutWords, "removewords": .cutWords, "deletewords": .cutWords, "cutphrase": .cutWords, "cuttext": .cutWords, "textcut": .cutWords,

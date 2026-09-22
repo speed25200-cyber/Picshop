@@ -8,6 +8,7 @@ struct FakeMagicVideoServices: VideoAIServices {
     var dialogue = AudioSignal(samples: [], sampleRate: 16_000)
     var music = AudioSignal(samples: [], sampleRate: 11_025)
     var focus: [FocusSample] = []
+    var trackPath: [TrackSample] = []
 
     func candidates(for target: ObjectTarget, in clip: VideoClip, timeline: VideoTimeline, at time: Double) async throws -> [ObjectCandidate] { [] }
     func removeObject(candidates: [ObjectCandidate], target: ObjectTarget, from clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> MediaAsset { clip.asset }
@@ -24,6 +25,7 @@ struct FakeMagicVideoServices: VideoAIServices {
     func isolateVoice(clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> MediaAsset {
         MediaAsset(kind: .audio, relativePath: "media/voice.m4a", pixelSize: .zero, duration: clip.sourceRange.duration, origin: .generated)
     }
+    func track(point: PSPoint, at time: Double, within span: TimeSpan, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [TrackSample] { trackPath }
     func colorStatistics(clip: VideoClip, timeline: VideoTimeline) async throws -> ColorStatistics {
         clip.name == "warm" ? ColorStatistics(mean: [60, 10, 30], deviation: [20, 8, 12]) : ColorStatistics(mean: [50, -5, -20], deviation: [18, 6, 9])
     }

@@ -78,6 +78,9 @@ public protocol VideoAIServices: Sendable {
     func isolateVoice(clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> MediaAsset
     /// Colour statistics of a clip, sampled from a few frames.
     func colorStatistics(clip: VideoClip, timeline: VideoTimeline) async throws -> ColorStatistics
+    /// Follows whatever is at `point` (normalised, y down) in the finished picture at `time`,
+    /// forwards and backwards within `span`; timeline times, as far as the subject stays visible.
+    func track(point: PSPoint, at time: Double, within span: TimeSpan, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [TrackSample]
 }
 
 public extension VideoAIServices {
@@ -93,6 +96,9 @@ public extension VideoAIServices {
         throw PicshopError.unsupportedOperation("Voice isolation")
     }
     func colorStatistics(clip: VideoClip, timeline: VideoTimeline) async throws -> ColorStatistics { throw PicshopError.unsupportedOperation("Colour match") }
+    func track(point: PSPoint, at time: Double, within span: TimeSpan, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [TrackSample] {
+        throw PicshopError.unsupportedOperation("Tracking")
+    }
 }
 
 /// Things the executor cannot do itself and hands back to the UI/store.

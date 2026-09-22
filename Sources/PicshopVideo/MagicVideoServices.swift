@@ -109,6 +109,107 @@ extension AVVideoServices {
         guard !bytes.isEmpty else { throw PicshopError.mediaUnavailable(clip.name) }
         return ColorStatistics.measure(rgba: bytes)
     }
+
+    // MARK: Tracking
+
+    public func track(point: PSPoint, at time: Double, within span: TimeSpan, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [TrackSample] {
+        // The finished picture without the overlays and captions, which would otherwise be tracked themselves.
+        var bare = timeline
+        bare.overlays = []
+        bare.captions = nil
+        bare.audioTracks = []
+        let built = try await CompositionBuilder(store: store, projectID: projectID).build(bare)
+        let generator = AVAssetImageGenerator(asset: built.composition)
+        generator.videoComposition = built.videoComposition
+        generator.maximumSize = CGSize(width: 720, height: 720)
+        let tolerance = CMTime(value: 1, timescale: 60)
+        generator.requestedTimeToleranceBefore = tolerance
+        generator.requestedTimeToleranceAfter = tolerance
+
+        let limit = TimeSpan(start: max(0, span.start), end: min(span.end, timeline.duration))
+        let anchor = time.clamped(to: limit.start...max(limit.start, limit.end))
+        let step = max(1.0 / 12, limit.duration / 480)
+        let forward = Array(stride(from: anchor, through: limit.end, by: step))
+        let backward = Array(stride(from: anchor, through: limit.start, by: -step))
+        let total = Double(max(1, forward.count + backward.count))
+
+        let first = try await generator.image(at: VideoTime.cm(anchor)).image
+        let start = SubjectTracker.startBox(around: point, in: first)
+        var samples: [TrackSample] = []
+        var done = 0.0
+        for times in [forward, backward] {
+            var tracker = SubjectTracker(box: start)
+            for moment in times {
+                try Task.checkCancellation()
+                let generated = try? await generator.image(at: VideoTime.cm(moment))
+                done += 1
+                progress(done / total)
+                guard let image = generated?.image, let box = tracker.advance(on: image) else { break }
+                // Where the subject is, expressed as the overlay's point moving with it.
+                samples.append(TrackSample(time: moment, point: PSPoint(x: Double(box.midX) + start.pointOffset.x, y: Double(1 - box.midY) + start.pointOffset.y)))
+            }
+        }
+        progress(1)
+        var seen = Set<Double>()
+        return samples.sorted { $0.time < $1.time }.filter { seen.insert(($0.time * 1000).rounded()).inserted }
+    }
+}
+
+/// Vision's object tracker, one frame after the other.
+struct SubjectTracker {
+    struct Start {
+        /// Vision box (normalised, bottom-left origin).
+        var box: CGRect
+        /// From the box centre to the overlay's point, top-left origin.
+        var pointOffset: PSPoint
+    }
+
+    private let handler = VNSequenceRequestHandler()
+    private var observation: VNDetectedObjectObservation
+
+    init(box: Start) {
+        observation = VNDetectedObjectObservation(boundingBox: box.box)
+    }
+
+    /// The box to follow for a point: the face, person or salient object
+    /// nearest to it when there is one — they track far better than an
+    /// arbitrary patch — else a patch of picture around the point.
+    static func startBox(around point: PSPoint, in image: CGImage) -> Start {
+        let request = VNDetectFaceRectanglesRequest()
+        let humans = VNDetectHumanRectanglesRequest()
+        let saliency = VNGenerateObjectnessBasedSaliencyImageRequest()
+        try? VNImageRequestHandler(cgImage: image, options: [:]).perform([request, humans, saliency])
+        var boxes: [CGRect] = (request.results ?? []).map(\.boundingBox)
+        boxes += (humans.results ?? []).map(\.boundingBox)
+        boxes += (saliency.results?.first?.salientObjects ?? []).map(\.boundingBox)
+        let target = CGPoint(x: point.x, y: 1 - point.y)
+        func distance(_ box: CGRect) -> CGFloat {
+            let dx = max(box.minX - target.x, 0, target.x - box.maxX)
+            let dy = max(box.minY - target.y, 0, target.y - box.maxY)
+            return (dx * dx + dy * dy).squareRoot()
+        }
+        // Inside a box beats near one; among those, the smallest is the most specific.
+        let near = boxes.filter { distance($0) < 0.18 && $0.width < 0.9 && $0.height < 0.9 }
+            .min { (distance($0), $0.width * $0.height) < (distance($1), $1.width * $1.height) }
+        let side: CGFloat = 0.14
+        let box = near ?? CGRect(x: target.x - side / 2, y: target.y - side / 2, width: side, height: side)
+            .intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+        return Start(box: box, pointOffset: PSPoint(x: point.x - Double(box.midX), y: point.y - Double(1 - box.midY)))
+    }
+
+    /// The tracked box in the next frame, nil once the subject is lost.
+    mutating func advance(on image: CGImage) -> CGRect? {
+        let request = VNTrackObjectRequest(detectedObjectObservation: observation)
+        request.trackingLevel = .accurate
+        do {
+            try handler.perform([request], on: image)
+        } catch {
+            return nil
+        }
+        guard let result = request.results?.first as? VNDetectedObjectObservation, result.confidence > 0.3 else { return nil }
+        observation = result
+        return result.boundingBox
+    }
 }
 
 // MARK: - Decoding

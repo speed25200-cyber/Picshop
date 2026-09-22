@@ -330,6 +330,26 @@ extension RuleBasedIntentEngine {
         return intent
     }
 
+    /// "fais suivre le texte à la personne", "stick the sticker to his face", "le logo suit la voiture".
+    func parseTracking(_ u: NormalizedUtterance) -> EditIntent? {
+        let textNouns = ["texte", "textes", "titre", "le titre", "text", "title", "label", "legende", "nom", "the name", "emoji"]
+        let imageNouns = ["sticker", "stickers", "autocollant", "image", "photo", "logo", "picture", "incrustation", "overlay", "calque", "layer", "pip"]
+        let shapeNouns = ["forme", "fleche", "cercle", "rectangle", "shape", "arrow", "circle"]
+        let follow = ["suit", "suive", "suivre", "suivent", "follow", "follows", "track", "tracke", "tracker", "attache", "accroche", "stick", "pin", "attach", "glue"]
+        let explicit = ["motion tracking", "suivi de mouvement", "suivi du mouvement", "object tracking", "tracking d objet"]
+        let stop = ["arrete de suivre", "ne suit plus", "ne suive plus", "plus suivre", "stop following", "stop tracking", "detache", "decroche", "detach", "unpin", "unstick", "enleve le suivi", "supprime le suivi", "remove the tracking"]
+        let nouns = textNouns + imageNouns + shapeNouns
+        guard u.contains(explicit) || u.contains(stop) && u.contains(nouns + ["suivi", "tracking"]) || (u.contains(follow) && u.contains(nouns)) else { return nil }
+        // "ajoute le texte qui suit" writes text; it does not track anything.
+        if !u.contains(explicit), u.contains(["ajoute", "add", "ecris", "write", "insere", "insert", "tape", "type"]) { return nil }
+        var intent = EditIntent(action: .trackSubject)
+        if u.contains(stop) { intent.amount = .absolute(0) }
+        if u.contains(textNouns) { intent.target = ObjectTarget(label: "text") }
+        else if u.contains(shapeNouns) { intent.target = ObjectTarget(label: "shape") }
+        else if u.contains(imageNouns) { intent.target = ObjectTarget(label: "image") }
+        return intent
+    }
+
     /// "baisse la musique quand je parle", "duck the music under the voice", "désactive le ducking".
     func parseDucking(_ u: NormalizedUtterance) -> EditIntent? {
         let explicit = ["ducking", "auto duck", "autoduck", "duck the music", "duck music", "ducke la musique"]
@@ -362,6 +382,7 @@ extension RuleBasedIntentEngine {
         }
         if let words = parseCutWords(u) { return [words] }
         if let duck = parseDucking(u) { return [duck] }
+        if let tracking = parseTracking(u) { return [tracking] }
         let fillerWords = ["euh", "les euh", "heu", "hum", "hesitations", "les hesitations", "hesitation", "tics de langage", "tic de langage", "mots parasites", "begaiements", "begaiement", "bafouillages", "bafouille",
                            "um", "ums", "uh", "uhs", "umms", "filler words", "filler word", "fillers", "the fillers", "stutters", "stutter", "stammers", "hesitations"]
         if u.contains(fillerWords), u.contains(Self.removeVerbs + ["coupe", "cut", "vire", "retire", "sans", "without", "clean", "no more"]) {
