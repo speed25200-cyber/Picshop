@@ -363,7 +363,7 @@ struct PrecisePanel: View {
             case .wand:
                 DialSlider(value: $session.wandTolerance, range: 0.02...0.8, neutral: 0.25, label: L("Tolerance"), format: { "\(Int(($0 * 100).rounded()))" })
                 HStack {
-                    Toggle(L("Contiguous"), isOn: $session.wandContiguous).font(PSFont.caption(13)).tint(PSTheme.accent).fixedSize()
+                    Toggle(L("Contiguous"), isOn: $session.wandContiguous).font(PSFont.caption(13)).fixedSize()
                     Spacer()
                     selectionActions
                 }
@@ -923,13 +923,11 @@ struct ExportSheet: View {
                                 Text("\(exportSize.width) × \(exportSize.height) · ~\(String(format: "%.1f", estimatedMegabytes)) MB").font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary).contentTransition(.numericText())
                             }
                         }
-                        .tint(PSTheme.accent)
                         .padding(.horizontal, 16).padding(.vertical, 12)
                         Divider().overlay(PSTheme.hairline).padding(.leading, 16)
                         Toggle(isOn: $saveToPhotos) {
                             Text(L("Save to Photos")).font(PSFont.headline(15))
                         }
-                        .tint(PSTheme.accent)
                         .padding(.horizontal, 16).padding(.vertical, 12)
                     }
                     .psCard(cornerRadius: 18, shadow: false)

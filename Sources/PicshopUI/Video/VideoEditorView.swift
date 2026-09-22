@@ -298,7 +298,6 @@ struct VideoExportSheet: View {
                         Toggle(isOn: $saveToPhotos) {
                             Text(L("Save to Photos")).font(PSFont.headline(15))
                         }
-                        .tint(PSTheme.accent)
                         .padding(.horizontal, 16).padding(.vertical, 12)
                     }
                     .psCard(cornerRadius: 18, shadow: false)

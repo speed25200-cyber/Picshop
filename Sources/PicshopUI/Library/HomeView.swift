@@ -126,7 +126,6 @@ public struct HomeView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .tint(PSTheme.accent)
     }
 
     // MARK: Layout

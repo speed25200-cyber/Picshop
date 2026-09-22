@@ -32,7 +32,6 @@ public struct SettingsView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { dismiss() } } }
         }
         .preferredColorScheme(.dark)
-        .tint(PSTheme.accent)
     }
 
     /// App identity at the top, like the Apple ID card in Settings: the icon
@@ -41,7 +40,7 @@ public struct SettingsView: View {
         Section {
             HStack(spacing: 14) {
                 let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
-                Image(systemName: "waveform.and.mic")
+                Image(systemName: "sparkles")
                     .font(.system(size: 24, weight: .medium))
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(.white)
@@ -127,7 +126,7 @@ public struct SettingsView: View {
                     }
                 }
             }
-            SettingsRow(systemName: "arrow.down.circle.fill", tint: PSTheme.accent) {
+            SettingsRow(systemName: "arrow.down.circle.fill", tint: Color(red: 0.2, green: 0.5, blue: 1.0)) {
                 Toggle(L("Download large models automatically"), isOn: Binding(get: { app.settings.autoInstallsModels }, set: { value in
                     app.settings.autoInstallsModels = value
                     if value { Task { await app.autoInstallModels() } }
@@ -183,7 +182,7 @@ public struct SettingsView: View {
             }
         case .notInstalled:
             Button(L("Get")) { install(model, app: app) }
-                .font(PSFont.caption(13)).buttonStyle(.borderedProminent).tint(PSTheme.accent)
+                .font(PSFont.caption(13)).buttonStyle(.borderedProminent).tint(PSTheme.voice)
         }
     }
 
@@ -275,7 +274,7 @@ public struct SettingsView: View {
     @ViewBuilder
     private func exportSection(_ app: AppEnvironment) -> some View {
         Section(L("Export defaults")) {
-            SettingsRow(systemName: "photo.fill", tint: PSTheme.accent) {
+            SettingsRow(systemName: "photo.fill", tint: Color(red: 1.0, green: 0.62, blue: 0.1)) {
                 Picker(L("Photo format"), selection: Binding(get: { app.settings.photoExportFormat }, set: { app.settings.photoExportFormat = $0 })) {
                     ForEach(ExportOptions.Format.allCases) { Text($0.displayName).tag($0) }
                 }
