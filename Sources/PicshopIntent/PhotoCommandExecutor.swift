@@ -18,7 +18,7 @@ public struct PhotoCommandExecutor: Sendable {
         let language = self.language
         let fr = language == .french
         switch intent.action {
-        case .removeObject:
+        case .removeObject, .moveObject:
             guard let target = intent.target else { return (document, .failed(PicshopError.objectNotFound("object").message)) }
             return await removeObject(target: target, intent: intent, document: document)
 
@@ -371,6 +371,24 @@ public struct PhotoCommandExecutor: Sendable {
                 guard let prompt = intent.text, !prompt.isEmpty else { return (document, .failed("Missing prompt")) }
                 document.apply(.generativeFill(mask, prompt: prompt))
                 return (document, .applied("Generate “\(prompt)”"))
+            case .moveObject:
+                let box = candidates.map(\.boundingBox).reduce(candidates.first?.boundingBox ?? .zero) { $0.union($1) }
+                var offset: PSPoint
+                if intent.placement == .center {
+                    offset = PSPoint(x: 0.5 - box.midX, y: 0.5 - box.midY)
+                } else {
+                    let distance = intent.amount?.value ?? 0.15
+                    let angle = (intent.degrees ?? 0) * .pi / 180
+                    offset = PSPoint(x: cos(angle) * distance, y: -sin(angle) * distance)
+                }
+                // It stays in the picture.
+                offset.x = offset.x.clamped(to: -box.minX...max(-box.minX, 1 - box.maxX))
+                offset.y = offset.y.clamped(to: -box.minY...max(-box.minY, 1 - box.maxY))
+                guard abs(offset.x) + abs(offset.y) > 0.005 else {
+                    return (document, .failed(language == .french ? "Il touche déjà le bord." : "It's already against the edge."))
+                }
+                document.apply(.moveObject(mask, offset: offset))
+                return (document, .applied("Move \(target.originalPhrase)"))
             case .recolor:
                 guard let color = intent.color else { return (document, .failed("Missing colour")) }
                 document.apply(.recolor(mask, color, strength: (intent.amount?.value ?? 0.9).clamped(to: 0...1)))

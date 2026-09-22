@@ -68,12 +68,25 @@ struct MagicPanel: View {
             }
             if !session.sceneObjects.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(L("In this photo")).font(PSFont.label(11)).textCase(.uppercase).tracking(0.6).foregroundStyle(PSTheme.textTertiary)
+                    HStack {
+                        Text(L("In this photo")).font(PSFont.label(11)).textCase(.uppercase).tracking(0.6).foregroundStyle(PSTheme.textTertiary)
+                        Spacer()
+                        Text(L("Tap to erase · hold to move")).font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary)
+                    }
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             ForEach(session.sceneObjects) { candidate in
                                 SceneObjectChip(candidate: candidate, thumbnail: { await session.candidateThumbnail($0) }) {
                                     session.erase(candidate)
+                                }
+                                .contextMenu {
+                                    Button { session.erase(candidate) } label: { Label(L("Erase"), systemImage: "eraser") }
+                                    Divider()
+                                    Button { session.move(candidate, degrees: 180) } label: { Label(L("Move left"), systemImage: "arrow.left") }
+                                    Button { session.move(candidate, degrees: 0) } label: { Label(L("Move right"), systemImage: "arrow.right") }
+                                    Button { session.move(candidate, degrees: 90) } label: { Label(L("Move up"), systemImage: "arrow.up") }
+                                    Button { session.move(candidate, degrees: -90) } label: { Label(L("Move down"), systemImage: "arrow.down") }
+                                    Button { session.move(candidate, degrees: nil) } label: { Label(L("Centre it"), systemImage: "scope") }
                                 }
                             }
                         }

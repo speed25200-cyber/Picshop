@@ -59,6 +59,9 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
         /// Generative expand: the canvas grows and the new border is invented.
         /// `placement` is where the current picture sits in the new canvas (normalised, top-left origin).
         case expand(PSRect)
+        /// Magic move: the object under the mask lifts off, the hole is filled and it lands `offset`
+        /// away (normalised, top-left origin).
+        case moveObject(MaskReference, offset: PSPoint)
         /// Lens blur with the focus on a point: the camera's depth map when the
         /// photo has one, else the subject mask (last one wins).
         case lensBlur(focus: PSPoint, aperture: Double, mask: MaskReference?)
@@ -96,6 +99,7 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
             case .colorMatch: return "Match Colour"
             case .lensBlur: return "Focus"
             case .expand: return "Expand"
+            case .moveObject(let mask, _): return "Move \(mask.displayName)"
             }
         }
 
@@ -110,7 +114,7 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
         /// Operations that need heavy ML/compute and should show progress.
         public var isExpensive: Bool {
             switch self {
-            case .removeObject, .heal, .removeBackground, .replaceBackground, .blurBackground, .upscale, .denoise, .relight, .generativeFill, .expand: return true
+            case .removeObject, .heal, .removeBackground, .replaceBackground, .blurBackground, .upscale, .denoise, .relight, .generativeFill, .expand, .moveObject: return true
             default: return false
             }
         }

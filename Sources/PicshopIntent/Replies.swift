@@ -111,6 +111,7 @@ public enum Replies {
             return fr ? "J'applique le style « \(intent.text ?? "") »." : "Applying the “\(intent.text ?? "")” style."
         case .summarizeEdits: return fr ? "Voici ce que tu as modifié." : "Here is what you changed."
         case .expandCanvas: return fr ? "J'agrandis le cadre et j'invente les bords." : "Expanding the frame and filling in the edges."
+        case .moveObject: return fr ? "Je le déplace." : "Moving it."
         case .unknown: return fr ? "Je n'ai pas compris. Tu peux reformuler ?" : "I didn't catch that. Could you rephrase?"
         }
     }

@@ -122,6 +122,9 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     case summarizeEdits
     /// Generative expand: a bigger frame with the border invented (aspect optional).
     case expandCanvas
+    /// Moves an object across the photo, filling where it was (target; degrees = direction, 0 right / 90 up;
+    /// amount = distance as a fraction of the frame; placement .center = to the middle).
+    case moveObject
 
     public var isVideoOnly: Bool {
         switch self {
@@ -137,7 +140,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
 
     public var isPhotoOnly: Bool {
         switch self {
-        case .selectLayer, .duplicateLayer, .deleteLayer, .upscale, .relight, .generativeFill, .recolor, .describe, .saveStyle, .applyStyle, .expandCanvas: return true
+        case .selectLayer, .duplicateLayer, .deleteLayer, .upscale, .relight, .generativeFill, .recolor, .describe, .saveStyle, .applyStyle, .expandCanvas, .moveObject: return true
         default: return false
         }
     }
@@ -427,6 +430,7 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .applyStyle: return "Apply style “\(text ?? "")”"
         case .summarizeEdits: return "Summarize edits"
         case .expandCanvas: return "Expand \(aspect?.displayName ?? "canvas")"
+        case .moveObject: return "Move \(target?.originalPhrase ?? "object")"
         }
     }
 }

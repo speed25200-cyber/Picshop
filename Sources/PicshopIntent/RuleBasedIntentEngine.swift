@@ -66,6 +66,7 @@ public struct RuleBasedIntentEngine: IntentEngine {
         if context.mode == .photo, let portrait = parsePortrait(u) { return [portrait] }
         if context.mode == .photo, let expand = parseExpand(u) { return [expand] }
         if context.mode == .photo, let generative = parseGenerative(u, original: original, context: context) { return [generative] }
+        if context.mode == .photo, let move = parseMoveObject(u, context: context) { return [move] }
         if let background = parseBackground(u) { return [background] }
         if let removal = parseRemoveObject(u, context: context) { return [removal] }
         if let text = parseText(u, original: original, context: context) { return [text] }
@@ -893,6 +894,48 @@ public struct RuleBasedIntentEngine: IntentEngine {
     }
 
     // MARK: - Resolution & detail operations
+
+    /// "déplace le chien vers la gauche", "bouge la personne un peu plus haut", "move the vase to the right",
+    /// "mets le bateau au centre".
+    func parseMoveObject(_ u: NormalizedUtterance, context: IntentContext) -> EditIntent? {
+        let verbs = ["deplace", "deplacer", "deplaces", "bouge", "bouger", "decale", "decaler", "pousse", "glisse", "move", "shift", "slide", "nudge", "drag", "recentre"]
+        guard let rest = remainder(of: u, after: verbs) else { return nil }
+        // Text and layers move with their own commands.
+        if NormalizedUtterance(rest).contains(["texte", "text", "titre", "title", "calque", "layer", "curseur", "slider", "photo", "image", "picture", "tout", "everything"]) { return nil }
+        let padded = " " + rest + " "
+        let markers = [" vers ", " a gauche", " a droite", " en haut", " en bas", " plus haut", " plus bas", " plus a ", " au centre", " au milieu", " un peu", " legerement", " beaucoup",
+                       " to the ", " towards ", " toward ", " left ", " right ", " up ", " down ", " higher", " lower", " into the ", " a bit", " slightly", " a little", " further", " de ", " by "]
+        guard let cut = markers.compactMap({ padded.range(of: $0)?.lowerBound }).min() else { return nil }
+        var objectPhrase = String(padded[..<cut]).trimmingCharacters(in: .whitespaces)
+        var direction = String(padded[cut...])
+        // "le chien de gauche vers la droite": what comes before "vers" still names the object.
+        for arrow in [" vers ", " to the ", " towards ", " toward "] {
+            if let range = direction.range(of: arrow), direction[..<range.lowerBound].trimmingCharacters(in: .whitespaces).isEmpty == false {
+                objectPhrase += " " + direction[..<range.lowerBound].trimmingCharacters(in: .whitespaces)
+                direction = String(direction[range.lowerBound...])
+            }
+        }
+        guard !objectPhrase.isEmpty, let target = makeTarget(from: objectPhrase, context: context) else { return nil }
+        let d = NormalizedUtterance(direction)
+        var intent = EditIntent(action: .moveObject, target: target)
+        if d.contains(["centre", "center", "milieu", "middle"]) {
+            intent.placement = .center
+            return intent
+        }
+        var dx = 0.0, dy = 0.0
+        if d.contains(["gauche", "left"]) { dx = -1 }
+        if d.contains(["droite", "right"]) { dx = 1 }
+        if d.contains(["haut", "up", "higher", "top", "monte"]) { dy = 1 }
+        if d.contains(["bas", "down", "lower", "bottom", "descend"]) { dy = -1 }
+        guard dx != 0 || dy != 0 else { return nil }
+        var distance = 0.15
+        if d.contains(["un peu", "legerement", "a bit", "slightly", "a little", "un tout petit peu", "tiny"]) { distance = 0.07 }
+        if d.contains(["beaucoup", "loin", "a lot", "far", "much further", "completement", "tout a"]) { distance = 0.3 }
+        if let number = NumberWords.firstNumber(in: d.tokens), number.value > 0, number.value <= 90, d.contains(["pour cent", "pourcent", "percent", "%"]) { distance = number.value / 100 }
+        intent.degrees = atan2(dy, dx) * 180 / .pi
+        intent.amount = .absolute(distance)
+        return intent
+    }
 
     /// "étends l'image en 16:9", "agrandis le cadre", "expand the photo", "dézoome".
     func parseExpand(_ u: NormalizedUtterance) -> EditIntent? {

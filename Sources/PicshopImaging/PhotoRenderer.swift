@@ -266,6 +266,20 @@ public actor PhotoRenderer {
             cacheOperation(result, for: cacheKey)
             return result
 
+        case .moveObject(let mask, let offset):
+            if let cached = operationCache[cacheKey] { return cached }
+            guard let maskImage = maskStore.load(mask, fitting: extent) else { return input }
+            // The object lifted with a soft edge, carried to its new place.
+            let edge = maskImage.clampedToExtent().applyingGaussianBlur(sigma: max(0.8, 1.4 * scale)).cropped(to: extent)
+            let lifted = AdjustmentPipeline.applyingAlpha(mask: edge, to: input)
+            let moved = lifted.transformed(by: CGAffineTransform(translationX: offset.x * extent.width, y: -offset.y * extent.height)).cropped(to: extent)
+            // While a slider moves, the object is shown at its new place over the untouched picture.
+            guard options.allowExpensiveWork else { return moved.composited(over: input) }
+            let filled = try await inpainting.fill(image: input, mask: maskImage, boundingBox: mask.boundingBox, feather: mask.feather)
+            let result = moved.composited(over: filled)
+            cacheOperation(result, for: cacheKey)
+            return result
+
         case .removeObject(let mask):
             if let cached = operationCache[cacheKey] { return cached }
             guard options.allowExpensiveWork, let maskImage = maskStore.load(mask, fitting: extent) else { return input }

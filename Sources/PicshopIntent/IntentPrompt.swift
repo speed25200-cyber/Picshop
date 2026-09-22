@@ -51,6 +51,7 @@ public enum IntentPrompt {
         - crop/setAspect: aspect (\(aspectList)); rotate: degrees (negative = counter-clockwise); straighten: degrees optional; flip: flipAxis (horizontal|vertical)
         - addText: text (verbatim, keep the user's language and casing), placement (\(placementList)), color; editText/removeText
         - upscale (amount 2|3|4), denoise, sharpen, relight
+        - moveObject (PHOTO: target = the object; degrees = direction, 0 right, 90 up, 180 left, 270 down; amount = distance 0.05–0.5 of the frame; placement "center" to centre it): "déplace le chien vers la gauche"
         - generativeFill: target (region to replace, optional) + text (what to generate, in English); recolor: target + color ("make the car red")
         - PDF ONLY: deletePage/rotatePage(degrees)/movePage(choiceIndex = destination)/duplicatePage/insertBlankPage/goToPage (clipNumber = page number, -1 = last), highlightText/underlineText/redactText/findText (text), replaceText (text = words to replace, replacement = new words, or "" to erase the words; "remplace monsieur par madame", "efface le mot brouillon"), addSignature, extractPage, addPageNumbers, mergeDocument
         - undo, redo, revert, compare, zoom, export, share, help, confirm, cancel

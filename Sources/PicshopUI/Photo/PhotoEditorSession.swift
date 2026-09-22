@@ -788,6 +788,19 @@ public final class PhotoEditorSession {
         Task { await run(EditIntent(action: .removeObject, target: target)) }
     }
 
+    /// Magic move for a detected object: it lifts off, where it stood is filled
+    /// in, and it lands a step away in `degrees` (0 right, 90 up) — or in the middle.
+    public func move(_ candidate: ObjectCandidate, degrees: Double?) {
+        var intent = EditIntent(action: .moveObject, target: ObjectTarget(label: candidate.label, originalPhrase: candidate.label, point: candidate.boundingBox.center))
+        if let degrees {
+            intent.degrees = degrees
+            intent.amount = .absolute(0.15)
+        } else {
+            intent.placement = .center
+        }
+        Task { await run(intent) }
+    }
+
     /// Erases every instance of a category (people, text, animals…).
     public func eraseAll(label: String, phrase: String) {
         Task { await run(EditIntent(action: .removeObject, target: ObjectTarget(label: label, originalPhrase: phrase, matchesAll: true), scope: .all)) }
@@ -1128,6 +1141,7 @@ public final class PhotoEditorSession {
         case .replaceBackground: return L("Replacing the background…")
         case .upscale: return L("Upscaling…")
         case .expandCanvas: return L("Imagining the edges…")
+        case .moveObject: return String(format: L("Moving %@…"), intent.target?.originalPhrase ?? L("object"))
         case .straighten: return L("Levelling…")
         default: return L("Working…")
         }

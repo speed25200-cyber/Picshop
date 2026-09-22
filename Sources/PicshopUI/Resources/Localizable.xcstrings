@@ -945,6 +945,22 @@
         }
       }
     },
+    "Centre it": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Centre it"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Au centre"
+          }
+        }
+      }
+    },
     "Choose clips and photos": {
       "localizations": {
         "en": {
@@ -4033,6 +4049,38 @@
         }
       }
     },
+    "Move left": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move left"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vers la gauche"
+          }
+        }
+      }
+    },
+    "Move right": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move right"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vers la droite"
+          }
+        }
+      }
+    },
     "Move to playhead": {
       "localizations": {
         "en": {
@@ -4061,6 +4109,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Monter"
+          }
+        }
+      }
+    },
+    "Moving %@…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moving %@…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je déplace %@…"
           }
         }
       }
@@ -6845,6 +6909,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Touchez la zone source, puis peignez la destination."
+          }
+        }
+      }
+    },
+    "Tap to erase · hold to move": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap to erase · hold to move"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez pour effacer · maintenez pour déplacer"
           }
         }
       }
