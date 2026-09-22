@@ -316,7 +316,10 @@ public struct VideoCommandExecutor: Sendable {
             if let color = intent.color { element.color = color }
             if let amount = intent.amount, amount.mode == .absolute { element.relativeSize = amount.value }
             let span = intent.timeRange ?? TimeSpan(start: playhead, duration: min(3, max(0.5, timeline.duration - playhead)))
-            timeline.addOverlay(TimelineOverlay(content: .text(element), span: span))
+            var title = TimelineOverlay(content: .text(element), span: span)
+            // Titles arrive with a move, as a motion designer would set them.
+            title.animation = .rise
+            timeline.addOverlay(title)
             return (timeline, .applied("Add Text"))
 
         case .editText:
@@ -330,6 +333,20 @@ public struct VideoCommandExecutor: Sendable {
                 timeline.touch()
             }
             return (timeline, .applied("Edit Text"))
+
+        case .animateText:
+            let index: Int?
+            if let id = intent.target.flatMap({ UUID(uuidString: $0.originalPhrase) }) {
+                index = timeline.overlays.firstIndex { $0.id == id }
+            } else {
+                index = timeline.overlays.lastIndex { $0.textElement != nil && $0.span.contains(playhead) } ?? timeline.overlays.lastIndex { $0.textElement != nil }
+            }
+            guard let index else { return (timeline, .failed(fr ? "Ajoute d'abord un texte." : "Add a title first.")) }
+            let animation = intent.text.flatMap(TextAnimation.init(rawValue:))
+            timeline.overlays[index].animation = animation
+            timeline.touch()
+            guard let animation else { return (timeline, .applied(fr ? "Sans animation" : "No animation")) }
+            return (timeline, .applied(fr ? "Animation : \(animation.frenchName)" : "Animation: \(animation.displayName)"))
 
         case .removeText:
             guard let overlay = timeline.overlays.last(where: { $0.textElement != nil }) else { return (timeline, .failed(fr ? "Aucun texte." : "No text to remove.")) }

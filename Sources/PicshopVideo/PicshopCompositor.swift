@@ -87,12 +87,21 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
                 placed = overlayImage(overlay, renderSize: renderSize)
             }
             guard var image = placed else { continue }
+            var entrance = 1.0
+            if let animation = overlay.animation {
+                let state = animation.state(at: time, span: overlay.span)
+                if state != .rest {
+                    let anchor = overlay.anchorPoint
+                    image = Self.animate(image, state: state, around: CGPoint(x: anchor.x * canvas.width, y: (1 - anchor.y) * canvas.height), canvas: canvas)
+                }
+                entrance = state.opacity
+            }
             if let tracking = overlay.tracking, !tracking.isEmpty {
                 // Attached to a moving subject: shifted by how far it has moved since the overlay was placed.
                 let shift = tracking.offset(at: time)
                 image = image.transformed(by: CGAffineTransform(translationX: shift.x * canvas.width, y: -shift.y * canvas.height))
             }
-            var alpha = overlay.opacity ?? 1.0
+            var alpha = (overlay.opacity ?? 1.0) * entrance
             if overlay.fadeIn > 0 { alpha = min(alpha, (time - overlay.span.start) / overlay.fadeIn) }
             if overlay.fadeOut > 0 { alpha = min(alpha, (overlay.span.end - time) / overlay.fadeOut) }
             frame = AdjustmentPipeline.blend(image, over: frame, alpha: alpha.clamped(to: 0...1))
@@ -101,6 +110,35 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
             frame = image.composited(over: frame)
         }
         return frame.cropped(to: canvas)
+    }
+
+    /// One instant of an overlay's entrance: revealed, sharpened, scaled and lifted into place.
+    static func animate(_ image: CIImage, state: TextAnimation.State, around center: CGPoint, canvas: CGRect) -> CIImage {
+        var result = image
+        if state.reveal < 0.999 {
+            let extent = image.extent
+            let edge = max(8, extent.width * 0.1)
+            let front = extent.minX - edge + (extent.width + edge) * CGFloat(state.reveal)
+            let gradient = CIFilter.linearGradient()
+            gradient.point0 = CGPoint(x: front, y: 0)
+            gradient.point1 = CGPoint(x: front + edge, y: 0)
+            gradient.color0 = CIColor(red: 1, green: 1, blue: 1, alpha: 1)
+            gradient.color1 = CIColor(red: 1, green: 1, blue: 1, alpha: 0)
+            if let mask = gradient.outputImage?.cropped(to: extent) {
+                result = result.applyingFilter("CIBlendWithAlphaMask", parameters: [kCIInputBackgroundImageKey: CIImage.empty(), kCIInputMaskImageKey: mask])
+            }
+        }
+        if state.blur > 0.01 {
+            result = result.applyingGaussianBlur(sigma: state.blur * 0.012 * Double(max(canvas.width, canvas.height)))
+        }
+        if abs(state.scale - 1) > 0.0005 || abs(state.offsetY) > 0.0005 {
+            let scale = CGFloat(state.scale)
+            let transform = CGAffineTransform(translationX: center.x, y: center.y - CGFloat(state.offsetY) * canvas.height)
+                .scaledBy(x: scale, y: scale)
+                .translatedBy(x: -center.x, y: -center.y)
+            result = result.transformed(by: transform)
+        }
+        return result.cropped(to: canvas)
     }
 
     /// The caption for this instant, cached per spoken word.

@@ -344,9 +344,17 @@ struct VideoTextPanel: View {
                     Button(role: .destructive) { session.perform(EditIntent(action: .removeText)) } label: { Image(systemName: "trash").frame(width: 38, height: 38) }
                         .buttonStyle(.plain).foregroundStyle(PSTheme.danger).psGlass(interactive: true, shape: AnyShape(Circle()))
                 }
-                HStack(spacing: 8) {
-                    FollowSubjectChip(session: session, overlay: overlay)
-                    Spacer(minLength: 0)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        FollowSubjectChip(session: session, overlay: overlay)
+                        PanelChip(title: L("No animation"), symbol: "circle.slash", isActive: overlay.animation == nil) { setAnimation(nil, of: overlay) }
+                        ForEach(TextAnimation.allCases) { animation in
+                            PanelChip(title: psPrefersFrench ? animation.frenchName : animation.displayName, symbol: animationSymbol(animation), isActive: overlay.animation == animation) {
+                                setAnimation(animation, of: overlay)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 2)
                 }
                 ParameterSlider(title: L("Duration"), value: Binding(get: { overlay.span.duration }, set: { duration in
                     session.update(L("Text Duration")) { timeline in
@@ -362,6 +370,28 @@ struct VideoTextPanel: View {
         guard !text.isEmpty else { return }
         session.perform(EditIntent(action: .addText, text: text, placement: .bottom))
         draft = ""
+    }
+
+    /// Sets the title's entrance and plays it once so it can be judged.
+    private func setAnimation(_ animation: TextAnimation?, of overlay: TimelineOverlay) {
+        session.update(L("Title Animation")) { timeline in
+            if let index = timeline.overlays.firstIndex(where: { $0.id == overlay.id }) { timeline.overlays[index].animation = animation }
+        }
+        guard animation != nil else { return }
+        Task {
+            await session.player.seek(to: max(0, overlay.span.start - 0.1))
+            session.player.play()
+        }
+    }
+
+    private func animationSymbol(_ animation: TextAnimation) -> String {
+        switch animation {
+        case .pop: return "sparkle"
+        case .rise: return "arrow.up.to.line"
+        case .wipe: return "arrow.right.to.line"
+        case .focus: return "camera.aperture"
+        case .drift: return "arrow.up.left.and.arrow.down.right"
+        }
     }
 }
 

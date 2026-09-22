@@ -4337,6 +4337,22 @@
         }
       }
     },
+    "No animation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No animation"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sans animation"
+          }
+        }
+      }
+    },
     "No more “euh”": {
       "localizations": {
         "en": {
@@ -7293,6 +7309,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cette version a été compilée sans le moteur Stable Diffusion."
+          }
+        }
+      }
+    },
+    "Title Animation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Title Animation"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animation du titre"
           }
         }
       }

@@ -241,6 +241,8 @@ public struct TimelineOverlay: Hashable, Codable, Sendable, Identifiable {
     public var volume: Double?
     /// Follows a moving subject: the overlay moves with it.
     public var tracking: TrackingPath?
+    /// How it comes on screen (titles, stickers, pictures).
+    public var animation: TextAnimation?
 
     public init(id: UUID = UUID(), content: Content, span: TimeSpan, fadeIn: Double = 0.25, fadeOut: Double = 0.25) {
         self.id = id

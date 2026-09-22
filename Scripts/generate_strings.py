@@ -99,6 +99,8 @@ FR = {
     "Sunset sky": "Ciel couchant",
     "Upscale": "Agrandir",
     "Expand": "Étendre",
+    "No animation": "Sans animation",
+    "Title Animation": "Animation du titre",
     "Split at shots": "Couper aux plans",
     "Finding the shot changes…": "Je cherche les changements de plan…",
     "No more “euh”": "Fini les « euh »",

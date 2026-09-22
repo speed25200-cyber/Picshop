@@ -92,6 +92,7 @@ public enum Replies {
         case .autoDuck: return fr ? "La musique va s'effacer sous la voix." : "The music will dip under the voice."
         case .trackSubject: return fr ? "Je suis le sujet." : "Following the subject."
         case .splitScenes: return fr ? "Je cherche les changements de plan." : "Finding the shot changes."
+        case .animateText: return fr ? "J'anime le titre." : "Animating the title."
         case .cutWords: return fr ? "Je coupe ce passage." : "Cutting that passage."
         case .syncToBeat: return fr ? "Je cale les coupes sur le rythme." : "Cutting to the beat."
         case .smartReframe: return fr ? "Je recadre en suivant le sujet." : "Reframing around the subject."

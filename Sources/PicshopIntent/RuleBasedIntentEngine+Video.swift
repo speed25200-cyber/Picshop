@@ -383,6 +383,16 @@ extension RuleBasedIntentEngine {
         if let words = parseCutWords(u) { return [words] }
         if let duck = parseDucking(u) { return [duck] }
         if let tracking = parseTracking(u) { return [tracking] }
+        let animates = u.contains(["anime", "animer", "animation", "animate", "animated", "entree", "entrance", "apparition"]) && u.contains(["texte", "titre", "title", "text", "le nom", "the name", "animation"])
+        let appears = u.contains(["fais apparaitre", "fait apparaitre", "make it appear", "make the title appear", "make the text appear"]) && TextAnimation.matching(u.text) != nil
+        if animates || appears {
+            var intent = EditIntent(action: .animateText)
+            if u.contains(["sans animation", "no animation", "enleve l animation", "supprime l animation", "remove the animation", "pas d animation"]) {
+                return [intent]
+            }
+            intent.text = (TextAnimation.matching(u.text) ?? .pop).rawValue
+            return [intent]
+        }
         if u.contains(["changement de plan", "changements de plan", "chaque plan", "les plans", "detecte les plans", "detection de plans", "detection des plans", "decoupe en plans", "separe les plans",
                        "scene detection", "detect scenes", "detect the scenes", "split scenes", "split the scenes", "split into scenes", "shot change", "shot changes", "every shot", "each shot", "scene cuts", "scene changes", "every scene"]),
            !u.contains(["transition", "transitions"]) {
