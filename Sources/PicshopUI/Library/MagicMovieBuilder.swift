@@ -54,7 +54,8 @@ extension ProjectLibrary {
             var sources: [MagicMovie.Source] = []
             for (index, item) in items.enumerated() {
                 progress(Double(index) / Double(max(1, items.count)) * 0.7, L("Gathering your moments…"))
-                if let source = try await importSource(item, index: index, projectID: id) { sources.append(source) }
+                let source = try await importSource(item, index: index, projectID: id)
+                if let source { sources.append(source) }
             }
             guard !sources.isEmpty else { throw PicshopError.mediaUnavailable(L("clips")) }
 
