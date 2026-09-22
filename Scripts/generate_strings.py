@@ -11,6 +11,12 @@ UI = ROOT / "Sources/PicshopUI"
 OUT = UI / "Resources/Localizable.xcstrings"
 
 FR = {
+    "Style %d": "Style %d",
+    "Style “%@” saved": "Style « %@ » enregistré",
+    "No saved style yet. Say “save this style as …”.": "Aucun style enregistré. Dites « enregistre ce style sous … ».",
+    "No style named “%@”": "Aucun style nommé « %@ »",
+    "Last photo's style": "Style de la dernière photo",
+    "Style “%@”": "Style « %@ »",
     "Photos, videos and PDFs. Just say it.": "Photos, vidéos et PDF. Dites-le, c'est fait.",
     "Photos": "Photos",
     "Videos": "Vidéos",

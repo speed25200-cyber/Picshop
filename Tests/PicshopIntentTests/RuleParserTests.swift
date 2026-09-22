@@ -19,6 +19,16 @@ final class RuleParserTests: XCTestCase {
         XCTAssertEqual(first("what do you see").action, .describe)
         XCTAssertEqual(first("save this version as v2", context: .video).action, .saveVersion)
         XCTAssertEqual(first("lis la page", context: .pdf).action, .readPage)
+        let style = first("enregistre ce style sous plage")
+        XCTAssertEqual(style.action, .saveStyle)
+        XCTAssertEqual(style.text, "plage")
+        let apply = first("applique le style plage")
+        XCTAssertEqual(apply.action, .applyStyle)
+        XCTAssertEqual(apply.text, "plage")
+        XCTAssertEqual(first("applique les mêmes réglages que la dernière photo").text, "last")
+        XCTAssertEqual(first("same look as the last photo").action, .applyStyle)
+        XCTAssertEqual(first("qu'est-ce que j'ai modifié ?").action, .summarizeEdits)
+        XCTAssertEqual(first("what did I change", context: .video).action, .summarizeEdits)
         XCTAssertEqual(first("de quoi parle cette page", context: .pdf).action, .readPage)
     }
 

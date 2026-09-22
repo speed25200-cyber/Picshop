@@ -19,6 +19,8 @@ public final class AppEnvironment {
     public let models: ModelManager
     /// Thermal / battery aware render and animation budget.
     public let performance: PerformanceGovernor
+    /// Named styles saved by voice ("enregistre ce style sous plage").
+    public let styles = StyleLibrary()
     /// Engines available on this device (refreshed on launch and after model installs).
     public private(set) var availableEngines: [IntentEngineKind] = [.rules]
     /// The brain currently answering voice commands: the best one available, chosen automatically.
