@@ -167,7 +167,7 @@ struct TimelineView: View {
         ForEach(Array(session.timeline.audioTracks.enumerated()), id: \.element.id) { index, track in
             let x = width / 2 + CGFloat(track.timelineStart) * pixelsPerSecond
             let visible = max(0, min(track.sourceRange.duration, session.timeline.duration - track.timelineStart))
-            SoundLaneBar(track: track, index: index)
+            SoundLaneBar(track: track, index: index, thumbnailer: session.thumbnailer, width: max(30, CGFloat(visible) * pixelsPerSecond))
                 .frame(width: max(30, CGFloat(visible) * pixelsPerSecond), alignment: .leading)
                 .offset(x: x, y: laneTop + CGFloat(textLane + min(index, 3)) * TimelineView.laneHeight)
                 .contextMenu {
@@ -179,10 +179,14 @@ struct TimelineView: View {
     }
 }
 
-/// A sound track on its lane: name, fades drawn as ramps at each end, dimmed when muted.
+/// A sound track on its lane: name, fades drawn as ramps at each end, its
+/// waveform, dimmed when muted.
 private struct SoundLaneBar: View {
     let track: AudioTrack
     let index: Int
+    var thumbnailer: VideoThumbnailer? = nil
+    var width: CGFloat = 100
+    @State private var peaks: [Float] = []
 
     private var tint: Color {
         switch index % 3 {
@@ -218,7 +222,31 @@ private struct SoundLaneBar: View {
             }
             .clipShape(Capsule())
         }
+        .overlay {
+            WaveformShape(peaks: peaks).fill(Color.black.opacity(0.28)).padding(.vertical, 2).clipShape(Capsule()).allowsHitTesting(false)
+        }
         .opacity(track.isMuted ? 0.55 : 1)
+        .task(id: "\(track.asset.relativePath)-\(track.sourceRange.start)-\(track.sourceRange.duration)-\(Int(width / 3))") {
+            guard let thumbnailer else { return }
+            peaks = await thumbnailer.waveform(for: track.asset, range: track.sourceRange, points: max(8, Int(width / 3)))
+        }
+    }
+}
+
+/// A mirrored waveform filling its rect, one bar per peak.
+struct WaveformShape: Shape {
+    var peaks: [Float]
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        guard !peaks.isEmpty else { return path }
+        let step = rect.width / CGFloat(peaks.count)
+        let mid = rect.midY
+        for (index, peak) in peaks.enumerated() {
+            let height = max(1, CGFloat(peak) * rect.height)
+            path.addRect(CGRect(x: rect.minX + CGFloat(index) * step, y: mid - height / 2, width: max(1, step * 0.7), height: height))
+        }
+        return path
     }
 }
 
@@ -252,6 +280,7 @@ struct ClipView: View {
     let pixelsPerSecond: CGFloat
     @Binding var trimDrag: TimelineView.TrimDrag?
     @State private var thumbnails: [UIImage] = []
+    @State private var peaks: [Float] = []
 
     private var isSelected: Bool { session.selectedClip?.id == clip.id }
     private var width: CGFloat { max(24, CGFloat(clip.timelineDuration) * pixelsPerSecond) }
@@ -270,6 +299,16 @@ struct ClipView: View {
             .overlay(alignment: .leading) {
                 if thumbnails.isEmpty {
                     ProgressView().controlSize(.mini).tint(PSTheme.textTertiary).padding(.leading, 12)
+                }
+            }
+            .overlay(alignment: .bottom) {
+                // The clip's own sound, under the pictures, like an NLE's audio lane.
+                if !clip.isMuted, !peaks.isEmpty {
+                    WaveformShape(peaks: peaks)
+                        .fill(LinearGradient(colors: [Color.white.opacity(0.85), Color.white.opacity(0.55)], startPoint: .top, endPoint: .bottom))
+                        .frame(height: 18)
+                        .background(LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .top, endPoint: .bottom))
+                        .allowsHitTesting(false)
                 }
             }
             .overlay(alignment: .bottomLeading) {
@@ -311,6 +350,7 @@ struct ClipView: View {
             let count = ClipView.frameCount(for: width)
             let images = await session.thumbnailer.thumbnails(for: clip, count: count)
             thumbnails = images.map { UIImage(cgImage: $0) }
+            peaks = await session.thumbnailer.waveform(for: clip.enhancedAudio ?? clip.renderAsset, range: clip.sourceRange, points: max(8, Int(width / 3)))
         }
     }
 
