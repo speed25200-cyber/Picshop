@@ -355,13 +355,13 @@ public struct HomeView: View {
 /// One-tap results from Home: pick a photo or a video and the editor opens
 /// already doing the thing, through the same command pipeline as the voice.
 enum MagicShortcut: String, CaseIterable, Identifiable {
-    case captions, jumpCuts, fillers, vertical, eraseObjects, expand, cutout, enhance, portrait
+    case captions, highlights, jumpCuts, fillers, vertical, eraseObjects, expand, cutout, enhance, portrait
 
     var id: String { rawValue }
 
     var isVideo: Bool {
         switch self {
-        case .captions, .jumpCuts, .fillers, .vertical: return true
+        case .captions, .highlights, .jumpCuts, .fillers, .vertical: return true
         default: return false
         }
     }
@@ -370,6 +370,7 @@ enum MagicShortcut: String, CaseIterable, Identifiable {
         switch self {
         case .captions: return L("Auto captions")
         case .jumpCuts: return L("Jump cuts")
+        case .highlights: return L("Highlights")
         case .fillers: return L("No more “euh”")
         case .vertical: return L("Vertical video")
         case .eraseObjects: return L("Erase people")
@@ -384,6 +385,7 @@ enum MagicShortcut: String, CaseIterable, Identifiable {
         switch self {
         case .captions: return L("Subtitles from the voice, word by word")
         case .jumpCuts: return L("Every pause, gone")
+        case .highlights: return L("A 30-second recap of the best moments")
         case .fillers: return L("Hesitations and stutters, cut")
         case .vertical: return L("9:16 that follows the subject")
         case .eraseObjects: return L("Clear the background of passers-by")
@@ -398,6 +400,7 @@ enum MagicShortcut: String, CaseIterable, Identifiable {
         switch self {
         case .captions: return "captions.bubble.fill"
         case .jumpCuts: return "scissors"
+        case .highlights: return "star.square.on.square"
         case .fillers: return "waveform.badge.minus"
         case .vertical: return "rectangle.portrait.and.arrow.forward"
         case .eraseObjects: return "person.2.slash"
@@ -414,6 +417,7 @@ enum MagicShortcut: String, CaseIterable, Identifiable {
         switch self {
         case .captions: return fr ? "ajoute des sous-titres" : "add captions"
         case .jumpCuts: return fr ? "enlève les blancs" : "remove the pauses"
+        case .highlights: return fr ? "fais un résumé de 30 secondes" : "make a 30 second recap"
         case .fillers: return fr ? "enlève les euh" : "remove the ums"
         case .vertical: return fr ? "passe en vertical en suivant le sujet" : "smart reframe to vertical"
         case .eraseObjects: return fr ? "efface les personnes en arrière-plan" : "remove the people in the background"

@@ -99,6 +99,7 @@ FR = {
     "Sunset sky": "Ciel couchant",
     "Upscale": "Agrandir",
     "Expand": "Étendre",
+    "A 30-second recap of the best moments": "Un résumé de 30 s des meilleurs moments",
     "Finding the best moments…": "Je cherche les meilleurs moments…",
     "Speed ramp here": "Ralenti progressif ici",
     "Eases into slow motion at the playhead and back out.": "Glisse vers le ralenti à la tête de lecture, puis revient.",

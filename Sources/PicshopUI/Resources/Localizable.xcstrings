@@ -81,6 +81,22 @@
         }
       }
     },
+    "A 30-second recap of the best moments": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A 30-second recap of the best moments"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un résumé de 30 s des meilleurs moments"
+          }
+        }
+      }
+    },
     "A soft background, like a big lens": {
       "localizations": {
         "en": {

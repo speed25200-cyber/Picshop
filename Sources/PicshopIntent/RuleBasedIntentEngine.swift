@@ -687,6 +687,8 @@ public struct RuleBasedIntentEngine: IntentEngine {
         let phrases = ["qu est ce que j ai modifie", "qu est ce que j ai fait", "qu est ce que j ai change", "qu ai je modifie", "qu ai je fait", "resume mes modifications", "resume les modifications", "liste les modifications", "liste mes modifications", "mes modifications", "historique des modifications", "montre l historique", "recapitule", "recap",
                        "what did i change", "what have i changed", "what did i do", "what have i done", "list my edits", "list the edits", "summarize my edits", "summarise my edits", "show the history", "edit history", "what changed", "recap my edits"]
         guard u.contains(phrases) else { return nil }
+        // "a 30 second recap" of a video is a highlights reel, not a list of edits.
+        if u.contains(["second", "seconds", "seconde", "secondes", "minute", "minutes", "video", "clip", "film", "movie", "reel", "best", "meilleurs"]) { return nil }
         return EditIntent(action: .summarizeEdits)
     }
 
