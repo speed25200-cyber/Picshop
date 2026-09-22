@@ -41,6 +41,9 @@ struct CutPanel: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     PanelChip(title: L("Split here"), symbol: "scissors", tint: PSTheme.accent) { session.splitAtPlayhead() }
+                    PanelChip(title: L("Split at shots"), symbol: "rectangle.split.3x1", tint: PSTheme.voice, isEnabled: !session.isProcessing) {
+                        session.perform(EditIntent(action: .splitScenes, scope: .all))
+                    }
                     PanelChip(title: L("Delete clip"), symbol: "trash") { session.deleteSelectedClip() }
                     PanelChip(title: L("Duplicate"), symbol: "plus.square.on.square") { session.perform(EditIntent(action: .duplicateClip)) }
                     PanelChip(title: L("Freeze frame"), symbol: "pause.rectangle") { session.perform(EditIntent(action: .freezeFrame, amount: .absolute(2), time: session.player.currentTime)) }

@@ -383,6 +383,14 @@ extension RuleBasedIntentEngine {
         if let words = parseCutWords(u) { return [words] }
         if let duck = parseDucking(u) { return [duck] }
         if let tracking = parseTracking(u) { return [tracking] }
+        if u.contains(["changement de plan", "changements de plan", "chaque plan", "les plans", "detecte les plans", "detection de plans", "detection des plans", "decoupe en plans", "separe les plans",
+                       "scene detection", "detect scenes", "detect the scenes", "split scenes", "split the scenes", "split into scenes", "shot change", "shot changes", "every shot", "each shot", "scene cuts", "scene changes", "every scene"]),
+           !u.contains(["transition", "transitions"]) {
+            var intent = EditIntent(action: .splitScenes, scope: .all)
+            if u.contains(["ce clip", "this clip", "le clip selectionne", "the selected clip"]) { intent.scope = .current }
+            if u.contains(["sensible", "sensitive", "plus de plans", "more shots", "tous les", "every little"]) { intent.amount = .absolute(0.8) }
+            return [intent]
+        }
         let fillerWords = ["euh", "les euh", "heu", "hum", "hesitations", "les hesitations", "hesitation", "tics de langage", "tic de langage", "mots parasites", "begaiements", "begaiement", "bafouillages", "bafouille",
                            "um", "ums", "uh", "uhs", "umms", "filler words", "filler word", "fillers", "the fillers", "stutters", "stutter", "stammers", "hesitations"]
         if u.contains(fillerWords), u.contains(Self.removeVerbs + ["coupe", "cut", "vire", "retire", "sans", "without", "clean", "no more"]) {

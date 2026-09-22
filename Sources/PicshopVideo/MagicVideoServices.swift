@@ -110,6 +110,60 @@ extension AVVideoServices {
         return ColorStatistics.measure(rgba: bytes)
     }
 
+    // MARK: Scenes
+
+    public func sceneCuts(for clip: VideoClip, timeline: VideoTimeline, sensitivity: Double, progress: @escaping @Sendable (Double) -> Void) async throws -> [Double] {
+        let asset = asset(for: clip)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 160, height: 160)
+        let tolerance = CMTime(value: 1, timescale: 120)
+        generator.requestedTimeToleranceBefore = tolerance
+        generator.requestedTimeToleranceAfter = tolerance
+
+        func signature(at sourceTime: Double) async -> FrameSignature? {
+            guard let image = try? await generator.image(at: VideoTime.cm(sourceTime)).image else { return nil }
+            return FrameSignature.measure(rgba: ImageSupport.rgbaBytes(from: image), width: image.width, height: image.height, time: sourceTime)
+        }
+
+        // A first pass at eight looks a second (fewer on very long clips), on the source clock.
+        let source = clip.sourceRange
+        let step = max(0.125, source.duration / 2400)
+        var frames: [FrameSignature] = []
+        var time = source.start
+        let count = max(1.0, source.duration / step)
+        while time <= source.end {
+            try Task.checkCancellation()
+            if let frame = await signature(at: time) { frames.append(frame) }
+            progress(min(0.9, Double(frames.count) / count * 0.9))
+            time += step
+        }
+        let rough = SceneDetector.cuts(in: frames, sensitivity: sensitivity)
+
+        // Each cut pinned to the exact frame: the biggest jump between the two looks around it.
+        let rate = clip.asset.frameRate > 0 ? clip.asset.frameRate : timeline.frameRate
+        let frameDuration = 1 / max(12, rate)
+        var exact: [Double] = []
+        for cut in rough {
+            var best = (time: cut, jump: -1.0)
+            var previous = await signature(at: cut - step)
+            var moment = cut - step + frameDuration
+            while moment <= cut + 0.001 {
+                let current = await signature(at: moment)
+                if let a = previous, let b = current {
+                    let jump = b.distance(to: a)
+                    if jump > best.jump { best = (moment, jump) }
+                }
+                previous = current
+                moment += frameDuration
+            }
+            exact.append(best.time)
+        }
+        progress(1)
+        // Source seconds to seconds along the clip's span on the timeline.
+        return exact.map { clip.isReversed ? (source.end - $0) / clip.speed : ($0 - source.start) / clip.speed }.sorted()
+    }
+
     // MARK: Tracking
 
     public func track(point: PSPoint, at time: Double, within span: TimeSpan, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [TrackSample] {

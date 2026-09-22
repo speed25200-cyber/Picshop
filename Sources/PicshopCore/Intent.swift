@@ -71,6 +71,8 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     case removeFillers
     /// Music dips under the voice and comes back between sentences (amount = depth, 0 turns it off).
     case autoDuck
+    /// Splits the clips wherever the shot changes (scope .all or the selected clip; amount = sensitivity 0…1).
+    case splitScenes
     /// An overlay follows the moving subject under it (`text` = overlay id, `target.label` = text/image/video/shape; amount 0 detaches).
     case trackSubject
     /// Text-based editing: cuts where the words in `text` are said (`scope` .all = every time;
@@ -130,7 +132,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
         switch self {
         case .trim, .split, .deleteClip, .deleteRange, .setSpeed, .reverse, .mute, .unmute, .setVolume,
              .addTransition, .removeTransition, .addMusic, .removeMusic, .moveAudio, .fadeAudio, .extractFrame, .seek, .play, .pause,
-             .duplicateClip, .moveClip, .stabilize, .freezeFrame, .autoCaptions, .removeCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .syncToBeat,
+             .duplicateClip, .moveClip, .stabilize, .freezeFrame, .autoCaptions, .removeCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .splitScenes, .syncToBeat,
              .smartReframe, .kenBurns, .enhanceVoice, .matchColor:
             return true
         default:
@@ -411,6 +413,7 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .removeFillers: return "Remove filler words"
         case .autoDuck: return amount?.value == 0 ? "Ducking off" : "Duck the music under the voice"
         case .trackSubject: return amount?.value == 0 ? "Stop following" : "Follow the subject"
+        case .splitScenes: return "Split at every shot"
         case .cutWords: return "Cut “\(text ?? "")”"
         case .syncToBeat: return "Cut to the beat"
         case .smartReframe: return "Smart reframe \(aspect?.displayName ?? "")"

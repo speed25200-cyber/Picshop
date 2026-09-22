@@ -409,6 +409,26 @@ public struct VideoCommandExecutor: Sendable {
                 return (timeline, .failed(errorMessage(error)))
             }
 
+        case .splitScenes:
+            let ids = intent.scope == .all || context.selectedIndex == nil ? timeline.clips.map(\.id) : targetClipIDs()
+            guard !ids.isEmpty else { return (timeline, .failed(fr ? "Il n'y a pas de clip." : "There is no clip.")) }
+            do {
+                var cutTimes: [Double] = []
+                for (number, id) in ids.enumerated() {
+                    guard let clip = timeline.clips.first(where: { $0.id == id }), let span = timeline.span(of: id) else { continue }
+                    let offsets = try await services.sceneCuts(for: clip, timeline: timeline, sensitivity: intent.amount?.value ?? 0.5) { fraction in
+                        progress((Double(number) + fraction) / Double(ids.count))
+                    }
+                    cutTimes += offsets.filter { $0 > 0.2 && $0 < span.duration - 0.2 }.map { span.start + $0 }
+                }
+                guard !cutTimes.isEmpty else { return (timeline, ExecutionResult(outcome: .info(message: fr ? "Un seul plan : rien à découper." : "One continuous shot: nothing to split."))) }
+                var made = 0
+                for time in cutTimes.sorted(by: >) where timeline.split(at: time) != nil { made += 1 }
+                return (timeline, .applied(fr ? "\(made + 1) plans détectés" : "\(made + 1) shots found"))
+            } catch {
+                return (timeline, .failed(errorMessage(error)))
+            }
+
         case .trackSubject:
             // The overlay: named by id (from the panel), else the kind asked for under the playhead, else the latest.
             var chosen: TimelineOverlay?

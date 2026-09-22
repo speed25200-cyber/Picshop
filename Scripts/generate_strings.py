@@ -99,6 +99,8 @@ FR = {
     "Sunset sky": "Ciel couchant",
     "Upscale": "Agrandir",
     "Expand": "Étendre",
+    "Split at shots": "Couper aux plans",
+    "Finding the shot changes…": "Je cherche les changements de plan…",
     "No more “euh”": "Fini les « euh »",
     "Hesitations and stutters, cut": "Hésitations et bégaiements coupés",
     "More picture around it, invented": "Plus d'image autour, inventée",

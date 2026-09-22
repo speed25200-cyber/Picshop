@@ -7,6 +7,7 @@
 - Home: backdrop from your latest work, big Photo and Video tiles, a Magic row (Magic Movie, auto captions, jump cuts,
   vertical video, erase people, cut out, enhance, portrait blur) that opens the editor already doing the thing.
 - Magic Movie: clips, photos and a song become an edit cut on the beat.
+- Scene detection: long recordings split at every shot change, pinned to the exact frame (Split at shots in Cut).
 - Subject tracking: a title, sticker, picture or video overlay attaches to a face, a person or any object and moves with
   it (Vision's tracker on the finished picture, smoothed); Follow subject in the Text and Overlay panels, or by voice.
 - Automatic ducking: the music dips under every sentence and comes back between them; the voice map lives in each

@@ -2417,6 +2417,22 @@
         }
       }
     },
+    "Finding the shot changes…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finding the shot changes…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je cherche les changements de plan…"
+          }
+        }
+      }
+    },
     "Finding the subject…": {
       "localizations": {
         "en": {
@@ -6525,6 +6541,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vitesse"
+          }
+        }
+      }
+    },
+    "Split at shots": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split at shots"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couper aux plans"
           }
         }
       }

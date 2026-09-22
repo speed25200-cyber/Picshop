@@ -9,6 +9,7 @@ struct FakeMagicVideoServices: VideoAIServices {
     var music = AudioSignal(samples: [], sampleRate: 11_025)
     var focus: [FocusSample] = []
     var trackPath: [TrackSample] = []
+    var sceneOffsets: [Double] = []
 
     func candidates(for target: ObjectTarget, in clip: VideoClip, timeline: VideoTimeline, at time: Double) async throws -> [ObjectCandidate] { [] }
     func removeObject(candidates: [ObjectCandidate], target: ObjectTarget, from clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> MediaAsset { clip.asset }
@@ -26,6 +27,7 @@ struct FakeMagicVideoServices: VideoAIServices {
         MediaAsset(kind: .audio, relativePath: "media/voice.m4a", pixelSize: .zero, duration: clip.sourceRange.duration, origin: .generated)
     }
     func track(point: PSPoint, at time: Double, within span: TimeSpan, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> [TrackSample] { trackPath }
+    func sceneCuts(for clip: VideoClip, timeline: VideoTimeline, sensitivity: Double, progress: @escaping @Sendable (Double) -> Void) async throws -> [Double] { sceneOffsets }
     func colorStatistics(clip: VideoClip, timeline: VideoTimeline) async throws -> ColorStatistics {
         clip.name == "warm" ? ColorStatistics(mean: [60, 10, 30], deviation: [20, 8, 12]) : ColorStatistics(mean: [50, -5, -20], deviation: [18, 6, 9])
     }
@@ -174,5 +176,24 @@ final class MagicVideoTests: XCTestCase {
         let video = timeline()
         let (_, result) = await executor.execute(EditIntent(action: .autoCaptions), on: video, context: context(video))
         XCTAssertFalse(result.outcome.isSuccess)
+    }
+}
+
+final class SceneSplitTests: XCTestCase {
+    func testGrammarAndSplit() async {
+        let engine = RuleBasedIntentEngine()
+        let context = IntentContext(mode: .video, clipCount: 1, playheadSeconds: 0, timelineDuration: 12)
+        XCTAssertEqual(engine.parse("coupe à chaque changement de plan", context: context).intents.first?.action, .splitScenes)
+        XCTAssertEqual(engine.parse("detect scenes", context: context).intents.first?.action, .splitScenes)
+        XCTAssertNotEqual(engine.parse("floute l'arrière-plan", context: context).intents.first?.action, .splitScenes)
+
+        let asset = MediaAsset(kind: .video, relativePath: "media/v.mov", pixelSize: PSSize(width: 1920, height: 1080), duration: 12, frameRate: 30)
+        let timeline = VideoTimeline(title: "t", clips: [VideoClip(asset: asset, sourceRange: TimeSpan(start: 0, duration: 12))], renderSize: PSSize(width: 1920, height: 1080))
+        let executor = VideoCommandExecutor(services: FakeMagicVideoServices(sceneOffsets: [3, 7.5]), language: .english)
+        let (split, result) = await executor.execute(EditIntent(action: .splitScenes, scope: .all), on: timeline, context: context)
+        XCTAssertTrue(result.outcome.isSuccess)
+        XCTAssertEqual(split.clips.count, 3)
+        XCTAssertEqual(split.clips[1].sourceRange.start, 3, accuracy: 0.001)
+        XCTAssertEqual(split.duration, 12, accuracy: 0.001)
     }
 }
