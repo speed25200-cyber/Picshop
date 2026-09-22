@@ -18,6 +18,10 @@ public struct PhotoCommandExecutor: Sendable {
         let language = self.language
         let fr = language == .french
         switch intent.action {
+        case .matchColor:
+            // The reference is a picture the user chooses.
+            return (document, .effect(.pickColorReference, label: ""))
+
         case .textBehind:
             do {
                 let mask = try await services.subjectMask(in: document)

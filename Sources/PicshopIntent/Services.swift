@@ -129,6 +129,8 @@ public enum EditorEffect: Equatable, Sendable {
     /// adding another one.
     case pickMusic(query: String?, at: Double?, replace: Bool)
     case pickBackground
+    /// Open the photo picker for a colour reference ("prends les couleurs d'une autre photo").
+    case pickColorReference
     case clarify(ClarificationRequest)
     case selectLayer(UUID)
     case selectClip(UUID)
@@ -167,7 +169,7 @@ public struct ExecutionResult: Sendable, Equatable {
 
     public var changedDocument: Bool { outcome.isSuccess && !label.isEmpty && effects.allSatisfy { effect in
         switch effect {
-        case .undo, .redo, .revert, .compare, .zoom, .export, .share, .play, .pause, .seek, .help, .pickMusic, .pickBackground, .clarify, .message, .confirm, .cancel:
+        case .undo, .redo, .revert, .compare, .zoom, .export, .share, .play, .pause, .seek, .help, .pickMusic, .pickBackground, .pickColorReference, .clarify, .message, .confirm, .cancel:
             return false
         case .selectLayer, .selectClip:
             return true

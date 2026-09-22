@@ -141,6 +141,8 @@ public final class PhotoEditorSession {
     public var sceneObjects: [ObjectCandidate] = []
     /// The object tapped in the Magic tool, with its actions floating beside it.
     public var magicSelection: ObjectCandidate?
+    /// The picker for a picture whose colours this photo should take.
+    public var showsColorReferencePicker = false
     public var isFindingObjects = false
     private var sceneObjectsKey: String?
     public var showsExport = false
@@ -1205,6 +1207,9 @@ public final class PhotoEditorSession {
                 if document != self.document { history.commit(document, label: "Select") }
                 activeTool = .text
             case .pickBackground: activeTool = .cutout
+            case .pickColorReference:
+                activeTool = .magic
+                showsColorReferencePicker = true
             case .cancel:
                 cancelClarification()
                 showToast(L("Cancelled."))

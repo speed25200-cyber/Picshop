@@ -114,3 +114,18 @@ final class TextBehindTests: XCTestCase {
         XCTAssertEqual(result.layers.last?.name, PhotoDocument.subjectLayerName)
     }
 }
+
+final class PhotoColourMatchTests: XCTestCase {
+    func testAsksForAReference() async {
+        let engine = RuleBasedIntentEngine()
+        let intent = engine.parse("prends les couleurs d'une autre photo", context: .photo).intents.first
+        XCTAssertEqual(intent?.action, .matchColor)
+        let executor = PhotoCommandExecutor(services: FakePhotoServices(candidates: []))
+        let document = PhotoDocument(title: "t", baseImage: MediaAsset(kind: .image, relativePath: "media/a.jpg", pixelSize: PSSize(width: 3000, height: 4000)))
+        let (_, result) = await executor.execute(EditIntent(action: .matchColor), on: document, context: .photo)
+        XCTAssertEqual(result.effects, [.pickColorReference])
+        // Video keeps its own meaning: every clip like clip 1.
+        let video = IntentContext(mode: .video, clipCount: 2, playheadSeconds: 0, timelineDuration: 20)
+        XCTAssertEqual(engine.parse("harmonise les couleurs sur le clip 1", context: video).intents.first?.action, .matchColor)
+    }
+}

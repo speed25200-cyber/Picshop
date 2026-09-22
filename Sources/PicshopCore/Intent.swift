@@ -141,7 +141,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
         case .trim, .split, .deleteClip, .deleteRange, .setSpeed, .reverse, .mute, .unmute, .setVolume,
              .addTransition, .removeTransition, .addMusic, .removeMusic, .moveAudio, .fadeAudio, .extractFrame, .seek, .play, .pause,
              .duplicateClip, .moveClip, .stabilize, .freezeFrame, .autoCaptions, .removeCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .splitScenes, .animateText, .highlights, .speedRamp, .syncToBeat,
-             .smartReframe, .kenBurns, .enhanceVoice, .matchColor:
+             .smartReframe, .kenBurns, .enhanceVoice:
             return true
         default:
             return false

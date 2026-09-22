@@ -12,7 +12,6 @@ struct MagicPanel: View {
     @Bindable var session: PhotoEditorSession
     @State private var prompt = ""
     @FocusState private var focused: Bool
-    @State private var showsReferencePicker = false
     @State private var referenceItem: PhotosPickerItem?
 
     struct Suggestion: Identifiable {
@@ -30,7 +29,7 @@ struct MagicPanel: View {
         return [
             Suggestion(id: "enhance", title: L("Enhance"), symbol: "wand.and.stars") { $0.perform(EditIntent(action: .autoEnhance)) },
             Suggestion(id: "behind", title: L("Text behind"), symbol: "person.and.background.dotted") { session in Task { await session.textBehindSubject() } },
-            Suggestion(id: "match", title: L("Match colours"), symbol: "eyedropper.halffull") { _ in showsReferencePicker = true },
+            Suggestion(id: "match", title: L("Match colours"), symbol: "eyedropper.halffull") { $0.showsColorReferencePicker = true },
             Suggestion(id: "people", title: L("Erase people"), symbol: "person.2.slash") { $0.eraseAll(label: "person", phrase: L("people")) },
             Suggestion(id: "cutout", title: L("Cut out"), symbol: "person.crop.rectangle") { $0.perform(EditIntent(action: .removeBackground)) },
             Suggestion(id: "portrait", title: L("Portrait blur"), symbol: "camera.aperture", run: say("floute l'arrière-plan", "blur the background")),
@@ -98,7 +97,7 @@ struct MagicPanel: View {
         }
         .animation(PSMotion.standard, value: session.sceneObjects.map(\.id))
         .task(id: session.lookThumbnailKey) { await session.loadSceneObjects() }
-        .photosPicker(isPresented: $showsReferencePicker, selection: $referenceItem, matching: .images)
+        .photosPicker(isPresented: $session.showsColorReferencePicker, selection: $referenceItem, matching: .images)
         .onChange(of: referenceItem) { _, item in
             guard let item else { return }
             Task {

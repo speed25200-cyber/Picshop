@@ -75,6 +75,11 @@ public struct RuleBasedIntentEngine: IntentEngine {
             // "écris « Paris » derrière la personne"; "remove the guy behind me" is something else.
             return [EditIntent(action: .textBehind, text: extractQuoted(from: original), confidence: 0.9)]
         }
+        if context.mode == .photo, u.contains(["les couleurs d une autre photo", "couleurs d une autre image", "prends les couleurs", "copie les couleurs", "memes couleurs qu une", "meme ambiance qu une",
+                                               "harmonise les couleurs avec", "transfert de couleur", "transfert de couleurs", "match the colours", "match the colors", "colours of another photo",
+                                               "colors of another photo", "copy the colours", "copy the colors", "same colours as", "same colors as", "colour transfer", "color transfer", "match colours", "match colors"]) {
+            return [EditIntent(action: .matchColor, confidence: 0.9)]
+        }
         if context.mode == .photo, let move = parseMoveObject(u, context: context) { return [move] }
         if let background = parseBackground(u) { return [background] }
         if let removal = parseRemoveObject(u, context: context) { return [removal] }
