@@ -51,6 +51,8 @@ public enum TextAnimation: String, Codable, Sendable, CaseIterable, Identifiable
     public struct State: Equatable, Sendable {
         /// Scale around the title's centre.
         public var scale: Double = 1
+        /// Horizontal shift as a fraction of the frame width (positive = right).
+        public var offsetX: Double = 0
         /// Vertical shift as a fraction of the frame height (positive = lower).
         public var offsetY: Double = 0
         /// 0 sharp … 1 fully blurred.

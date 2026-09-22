@@ -96,6 +96,15 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
                 }
                 entrance = state.opacity
             }
+            if let adjustment = overlay.keyframeAdjustment(at: time) {
+                // Hand-set keyframes: the overlay eases between the places it was given.
+                var state = TextAnimation.State()
+                state.scale = adjustment.scale
+                state.offsetX = adjustment.offset.x
+                state.offsetY = adjustment.offset.y
+                let anchor = overlay.anchorPoint
+                image = Self.animate(image, state: state, around: CGPoint(x: anchor.x * canvas.width, y: (1 - anchor.y) * canvas.height), canvas: canvas)
+            }
             if let tracking = overlay.tracking, !tracking.isEmpty {
                 // Attached to a moving subject: shifted by how far it has moved since the overlay was placed.
                 let shift = tracking.offset(at: time)
@@ -131,9 +140,9 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
         if state.blur > 0.01 {
             result = result.applyingGaussianBlur(sigma: state.blur * 0.012 * Double(max(canvas.width, canvas.height)))
         }
-        if abs(state.scale - 1) > 0.0005 || abs(state.offsetY) > 0.0005 {
+        if abs(state.scale - 1) > 0.0005 || abs(state.offsetY) > 0.0005 || abs(state.offsetX) > 0.0005 {
             let scale = CGFloat(state.scale)
-            let transform = CGAffineTransform(translationX: center.x, y: center.y - CGFloat(state.offsetY) * canvas.height)
+            let transform = CGAffineTransform(translationX: center.x + CGFloat(state.offsetX) * canvas.width, y: center.y - CGFloat(state.offsetY) * canvas.height)
                 .scaledBy(x: scale, y: scale)
                 .translatedBy(x: -center.x, y: -center.y)
             result = result.transformed(by: transform)

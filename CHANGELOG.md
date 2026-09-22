@@ -12,6 +12,8 @@
 - Speed ramps: ease into slow motion at the playhead and back ("ralenti progressif ici", or Speed › Speed ramp here).
 - Highlights: "fais un résumé de 30 secondes" keeps the best moments of long footage, in order, with dissolves.
 - Scene detection: long recordings split at every shot change, pinned to the exact frame (Split at shots in Cut).
+- Keyframes on overlays: place a layer, move the playhead, place it again — it eases between the places; diamonds
+  on the timeline.
 - Subject tracking: a title, sticker, picture or video overlay attaches to a face, a person or any object and moves with
   it (Vision's tracker on the finished picture, smoothed); Follow subject in the Text and Overlay panels, or by voice.
 - Automatic ducking: the music dips under every sentence and comes back between them; the voice map lives in each

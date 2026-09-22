@@ -158,6 +158,14 @@ struct TimelineView: View {
             .padding(.horizontal, 6).frame(height: 18)
             .frame(width: max(30, CGFloat(overlay.span.duration) * pixelsPerSecond), alignment: .leading)
             .background(overlay.isMedia ? Color(red: 0.45, green: 0.78, blue: 1.0) : PSTheme.warning, in: Capsule())
+            .overlay(alignment: .leading) {
+                // Keyframes as diamonds, at their times along the layer.
+                ForEach(Array((overlay.keyframes ?? []).enumerated()), id: \.offset) { _, keyframe in
+                    Image(systemName: "diamond.fill").font(.system(size: 7, weight: .bold)).foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.4), radius: 1)
+                        .offset(x: max(0, CGFloat(keyframe.time - overlay.span.start) * pixelsPerSecond - 3.5))
+                }
+            }
             .onTapGesture {
                 Haptics.tick()
                 if overlay.isMedia {

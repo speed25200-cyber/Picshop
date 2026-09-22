@@ -67,3 +67,26 @@ final class TimelineTests: XCTestCase {
         XCTAssertEqual(TransitionKind.matching("un volet"), .wipeLeft)
     }
 }
+
+final class OverlayKeyframeTests: XCTestCase {
+    func testTravelsBetweenTheRecordedPlaces() {
+        let asset = MediaAsset(kind: .image, relativePath: "media/sticker.png", pixelSize: PSSize(width: 100, height: 100))
+        var overlay = TimelineOverlay(content: .image(asset, transform: LayerTransform(center: PSPoint(x: 0.2, y: 0.5), scale: 0.3)), span: TimeSpan(start: 0, end: 10))
+        XCTAssertNil(overlay.keyframeAdjustment(at: 1))
+        overlay.setKeyframe(at: 1)
+        overlay.transform?.center = PSPoint(x: 0.8, y: 0.5)
+        overlay.transform?.scale = 0.6
+        overlay.setKeyframe(at: 3)
+        XCTAssertEqual(overlay.keyframes?.count, 2)
+        // Placed at the second keyframe now: at 1 s it is 0.6 to the left and half the size.
+        let early = overlay.keyframeAdjustment(at: 0.5)
+        XCTAssertEqual(early?.offset.x ?? 0, -0.6, accuracy: 1e-9)
+        XCTAssertEqual(early?.scale ?? 0, 0.5, accuracy: 1e-9)
+        let middle = overlay.keyframeAdjustment(at: 2)
+        XCTAssertEqual(middle?.offset.x ?? 0, -0.3, accuracy: 1e-9)
+        XCTAssertEqual(overlay.keyframeAdjustment(at: 9)?.offset.x ?? 1, 0, accuracy: 1e-9)
+        // Recording again at the same time replaces it.
+        overlay.setKeyframe(at: 3.02)
+        XCTAssertEqual(overlay.keyframes?.count, 2)
+    }
+}

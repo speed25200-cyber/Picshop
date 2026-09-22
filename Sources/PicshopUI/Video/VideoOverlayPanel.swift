@@ -158,6 +158,7 @@ struct VideoOverlayPanel: View {
                     }
                 }
                 FollowSubjectChip(session: session, overlay: overlay)
+                KeyframeChip(session: session, overlay: overlay)
                 PanelChip(title: L("Remove"), symbol: "trash") { session.removeOverlay(overlay.id) }
             }
             .padding(.horizontal, 2)
@@ -263,6 +264,46 @@ struct FollowSubjectChip: View {
             Task { await session.run(intent) }
         }
         .accessibilityHint(L("The layer moves with the subject under it"))
+    }
+}
+/// Records where the overlay is now as a keyframe at the playhead; place it
+/// elsewhere later in time, tap again, and it moves between the two.
+struct KeyframeChip: View {
+    @Bindable var session: VideoEditorSession
+    let overlay: TimelineOverlay
+
+    var body: some View {
+        let count = overlay.keyframes?.count ?? 0
+        Menu {
+            Button { record() } label: { Label(L("Keyframe at the playhead"), systemImage: "diamond") }
+            if count > 0 {
+                Button(role: .destructive) {
+                    session.update(L("Clear Keyframes")) { timeline in
+                        if let index = timeline.overlays.firstIndex(where: { $0.id == overlay.id }) { timeline.overlays[index].keyframes = nil }
+                    }
+                } label: { Label(L("Clear keyframes"), systemImage: "trash") }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: count > 0 ? "diamond.fill" : "diamond").font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(count > 0 ? PSTheme.accent : PSTheme.textPrimary)
+                Text(count > 0 ? String(format: L("%d keyframes"), count) : L("Keyframe")).lineLimit(1)
+            }
+            .font(PSFont.caption(13)).padding(.horizontal, 12).padding(.vertical, 9)
+            .foregroundStyle(PSTheme.textPrimary)
+            .background(Capsule().fill(Color.white.opacity(0.08)))
+        } primaryAction: {
+            record()
+        }
+        .accessibilityHint(L("Place the layer, move the playhead, place it again: it travels between the two."))
+    }
+
+    private func record() {
+        Haptics.tick()
+        let time = session.player.currentTime
+        session.update(L("Keyframe")) { timeline in
+            if let index = timeline.overlays.firstIndex(where: { $0.id == overlay.id }) { timeline.overlays[index].setKeyframe(at: time) }
+        }
     }
 }
 #endif

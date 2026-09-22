@@ -17,6 +17,22 @@
         }
       }
     },
+    "%d keyframes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d keyframes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d images clés"
+          }
+        }
+      }
+    },
     "%d moments chosen": {
       "localizations": {
         "en": {
@@ -1117,6 +1133,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Effacer"
+          }
+        }
+      }
+    },
+    "Clear Keyframes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear Keyframes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer les images clés"
+          }
+        }
+      }
+    },
+    "Clear keyframes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear keyframes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer les images clés"
           }
         }
       }
@@ -3553,6 +3601,38 @@
         }
       }
     },
+    "Keyframe": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyframe"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image clé"
+          }
+        }
+      }
+    },
+    "Keyframe at the playhead": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyframe at the playhead"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image clé à la tête de lecture"
+          }
+        }
+      }
+    },
     "LUT": {
       "localizations": {
         "en": {
@@ -5453,6 +5533,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Placer la signature"
+          }
+        }
+      }
+    },
+    "Place the layer, move the playhead, place it again: it travels between the two.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Place the layer, move the playhead, place it again: it travels between the two."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Placez le calque, avancez la tête de lecture, placez-le encore : il voyage entre les deux."
           }
         }
       }

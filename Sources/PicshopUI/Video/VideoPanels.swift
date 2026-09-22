@@ -356,6 +356,7 @@ struct VideoTextPanel: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         FollowSubjectChip(session: session, overlay: overlay)
+                        KeyframeChip(session: session, overlay: overlay)
                         PanelChip(title: L("No animation"), symbol: "circle.slash", isActive: overlay.animation == nil) { setAnimation(nil, of: overlay) }
                         ForEach(TextAnimation.allCases) { animation in
                             PanelChip(title: psPrefersFrench ? animation.frenchName : animation.displayName, symbol: animationSymbol(animation), isActive: overlay.animation == animation) {

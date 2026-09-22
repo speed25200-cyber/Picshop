@@ -245,6 +245,8 @@ public struct TimelineOverlay: Hashable, Codable, Sendable, Identifiable {
     public var tracking: TrackingPath?
     /// How it comes on screen (titles, stickers, pictures).
     public var animation: TextAnimation?
+    /// Hand-set positions and sizes over time, eased between (timeline seconds).
+    public var keyframes: [OverlayKeyframe]?
 
     public init(id: UUID = UUID(), content: Content, span: TimeSpan, fadeIn: Double = 0.25, fadeOut: Double = 0.25) {
         self.id = id
@@ -278,6 +280,35 @@ public struct TimelineOverlay: Hashable, Codable, Sendable, Identifiable {
     }
 
     public var isMedia: Bool { transform != nil }
+
+    /// Size as placed (pictures and videos), 1 for titles and shapes.
+    public var authoredScale: Double { transform?.scale ?? 1 }
+
+    /// Where the keyframes put the overlay at `time`, as a shift from where it
+    /// is placed and a size factor; nil without keyframes.
+    public func keyframeAdjustment(at time: Double) -> (offset: PSPoint, scale: Double)? {
+        guard let frames = keyframes, let first = frames.first, let last = frames.last else { return nil }
+        let state: (center: PSPoint, scale: Double)
+        if time <= first.time {
+            state = (first.center, first.scale)
+        } else if time >= last.time {
+            state = (last.center, last.scale)
+        } else {
+            let upper = frames.firstIndex { $0.time > time } ?? frames.count - 1
+            let a = frames[upper - 1], b = frames[upper]
+            let t = MotionEasing.easeInOut.apply((time - a.time) / max(0.0001, b.time - a.time))
+            state = (PSPoint(x: a.center.x + (b.center.x - a.center.x) * t, y: a.center.y + (b.center.y - a.center.y) * t), a.scale + (b.scale - a.scale) * t)
+        }
+        let anchor = anchorPoint
+        return (PSPoint(x: state.center.x - anchor.x, y: state.center.y - anchor.y), state.scale / max(0.01, authoredScale))
+    }
+
+    /// Records where the overlay is placed now as a keyframe at `time` (replacing one within a frame or two).
+    public mutating func setKeyframe(at time: Double) {
+        var frames = (keyframes ?? []).filter { abs($0.time - time) > 0.05 }
+        frames.append(OverlayKeyframe(time: time, center: anchorPoint, scale: authoredScale))
+        keyframes = frames.sorted { $0.time < $1.time }
+    }
 
     /// The point the overlay is anchored at: its centre as placed.
     public var anchorPoint: PSPoint {
@@ -655,5 +686,18 @@ public struct VideoTimeline: Hashable, Codable, Sendable, Identifiable {
     /// Overlays visible at a timeline time.
     public func overlays(at time: Double) -> [TimelineOverlay] {
         overlays.filter { $0.span.contains(time) }
+    }
+}
+
+/// One hand-set state of an overlay: where its centre is and how big it is.
+public struct OverlayKeyframe: Hashable, Codable, Sendable {
+    public var time: Double
+    public var center: PSPoint
+    public var scale: Double
+
+    public init(time: Double, center: PSPoint, scale: Double = 1) {
+        self.time = max(0, time)
+        self.center = center
+        self.scale = max(0.01, scale)
     }
 }
