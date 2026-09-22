@@ -366,6 +366,20 @@ public struct RuleBasedIntentEngine: IntentEngine {
     ]
 
     func parseGenerative(_ u: NormalizedUtterance, original: String, context: IntentContext) -> EditIntent? {
+        // "mets-moi sur une plage", "put us in Paris", "emmène-moi à la montagne": a new place behind the people.
+        let teleport = ["mets moi", "mets nous", "met moi", "place moi", "place nous", "emmene moi", "emmene nous", "teleporte moi", "teleporte nous", "envoie moi",
+                        "put me", "put us", "place me", "place us", "take me", "take us", "send me", "teleport me", "teleport us"]
+        if let rest = remainder(of: u, after: teleport) {
+            var place = rest.split(separator: " ").map(String.init)
+            // A place follows "sur / dans / à"; "en noir et blanc" is a look, not a trip.
+            let prepositions: Set<String> = ["sur", "dans", "a", "au", "aux", "on", "in", "at", "to", "into", "onto"]
+            let leadsToPlace = place.first.map { prepositions.contains($0) } ?? false
+            while let first = place.first, prepositions.contains(first) { place.removeFirst() }
+            if leadsToPlace, !place.isEmpty {
+                return EditIntent(action: .generativeFill, target: ObjectTarget(label: "background", originalPhrase: u.language == .french ? "le fond" : "the background"),
+                                  text: place.joined(separator: " "), confidence: 0.85)
+            }
+        }
         // "remplace le ciel par un coucher de soleil" / "replace the sky with a sunset" / "turn the car into a boat"
         let connectors = ["par", "with", "into", "en", "to", "by"]
         if u.contains(Self.replaceVerbs), let rest = remainder(of: u, after: Self.replaceVerbs) {

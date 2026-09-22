@@ -85,3 +85,16 @@ final class ClauseSplittingTests: XCTestCase {
         XCTAssertEqual(plan.intents.map { $0.target?.label }, ["skin", "eyes"])
     }
 }
+
+final class TeleportTests: XCTestCase {
+    func testPutMeSomewhereGeneratesTheBackground() {
+        let engine = RuleBasedIntentEngine()
+        let beach = engine.parse("mets-moi sur une plage au coucher du soleil", context: .photo).intents.first
+        XCTAssertEqual(beach?.action, .generativeFill)
+        XCTAssertEqual(beach?.target?.label, "background")
+        XCTAssertEqual(beach?.text, "une plage au coucher du soleil")
+        XCTAssertEqual(engine.parse("put us in Paris", context: .photo).intents.first?.target?.label, "background")
+        // A look is not a place.
+        XCTAssertNotEqual(engine.parse("mets moi en noir et blanc", context: .photo).intents.first?.target?.label, "background")
+    }
+}
