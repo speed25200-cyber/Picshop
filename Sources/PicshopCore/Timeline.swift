@@ -124,6 +124,10 @@ public struct VideoClip: Hashable, Codable, Sendable, Identifiable {
     public var colorMixer: ColorMixer?
     /// Three-way colour grade.
     public var colorGrade: ColorGrade?
+    /// Where someone speaks, in *source* seconds, so music can dip under the
+    /// voice. Kept in source time so trims, splits, moves and speed changes
+    /// never put it out of step. Nil until analysed.
+    public var speech: [TimeSpan]?
 
     public init(id: UUID = UUID(), asset: MediaAsset, sourceRange: TimeSpan? = nil, speed: Double = 1, volume: Double = 1,
                 isMuted: Bool = false, isReversed: Bool = false, adjustments: Adjustments = .neutral, look: FilterPreset = .original,
@@ -425,6 +429,41 @@ public struct VideoTimeline: Hashable, Codable, Sendable, Identifiable {
             }
         }
         return max(0, total)
+    }
+
+    /// Where someone speaks on the timeline, from the clips' voice analysis;
+    /// nil when no clip was analysed. Muted clips do not speak.
+    public var speechRanges: [TimeSpan]? {
+        guard clips.contains(where: { $0.speech != nil }) else { return nil }
+        let starts = clipStartTimes
+        var ranges: [TimeSpan] = []
+        for (index, clip) in clips.enumerated() where !clip.isMuted && clip.volume > 0.01 {
+            for span in clip.speech ?? [] {
+                let from = max(span.start, clip.sourceRange.start), to = min(span.end, clip.sourceRange.end)
+                guard to > from else { continue }
+                let a = clip.isReversed ? (clip.sourceRange.end - to) / clip.speed : (from - clip.sourceRange.start) / clip.speed
+                let b = clip.isReversed ? (clip.sourceRange.end - from) / clip.speed : (to - clip.sourceRange.start) / clip.speed
+                ranges.append(TimeSpan(start: starts[index] + a, end: starts[index] + b))
+            }
+        }
+        return ranges.sorted { $0.start < $1.start }
+    }
+
+    /// Stores speech found on the timeline into each clip, in its source time.
+    public mutating func setSpeech(_ timelineRanges: [TimeSpan]?) {
+        let starts = clipStartTimes
+        for index in clips.indices {
+            guard let ranges = timelineRanges else { clips[index].speech = nil; continue }
+            let clip = clips[index]
+            let span = TimeSpan(start: starts[index], duration: clip.timelineDuration)
+            clips[index].speech = ranges.compactMap { range -> TimeSpan? in
+                let from = max(range.start, span.start), to = min(range.end, span.end)
+                guard to > from else { return nil }
+                let a = clip.sourceTime(forClipOffset: from - span.start), b = clip.sourceTime(forClipOffset: to - span.start)
+                return TimeSpan(start: min(a, b), end: max(a, b))
+            }
+        }
+        touch()
     }
 
     /// Start time of each clip on the timeline (parallel array to `clips`).

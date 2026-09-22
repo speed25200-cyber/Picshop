@@ -409,6 +409,33 @@ public struct VideoCommandExecutor: Sendable {
                 return (timeline, .failed(errorMessage(error)))
             }
 
+        case .autoDuck:
+            guard !timeline.audioTracks.isEmpty else { return (timeline, .failed(fr ? "Ajoute d'abord une musique." : "Add some music first.")) }
+            if let amount = intent.amount?.value, amount <= 0.01 {
+                timeline.setSpeech(nil)
+                return (timeline, .applied(fr ? "Ducking désactivé" : "Ducking off"))
+            }
+            do {
+                // The words say exactly where someone speaks; without them, the sound does.
+                let speech: [TimeSpan]
+                if let captions = timeline.captions, !captions.isEmpty {
+                    speech = captions.cues.flatMap(\.words).map { TimeSpan(start: $0.start, end: $0.end) }
+                } else {
+                    let signal = try await services.dialogueSignal(timeline: timeline)
+                    guard let found = Ducking.speech(in: LoudnessEnvelope.measure(signal), duration: timeline.duration) else {
+                        return (timeline, .failed(fr ? "Je n'entends pas de voix sous la musique." : "I can't hear any voice to duck under."))
+                    }
+                    speech = found
+                }
+                let depth = (intent.amount?.value ?? 0.7).clamped(to: 0.2...0.95)
+                timeline.setSpeech(speech)
+                for index in timeline.audioTracks.indices { timeline.audioTracks[index].ducking = depth }
+                let passages = Ducking.regions(from: speech).count
+                return (timeline, .applied(fr ? "La musique s'efface sous la voix (\(passages) passages)" : "Music ducks under the voice (\(passages) passages)"))
+            } catch {
+                return (timeline, .failed(errorMessage(error)))
+            }
+
         case .cutWords:
             let phrase = (intent.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
             guard !phrase.isEmpty else { return (timeline, .failed(fr ? "Quels mots dois-je couper ?" : "Which words should I cut?")) }

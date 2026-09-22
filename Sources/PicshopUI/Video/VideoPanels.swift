@@ -129,6 +129,18 @@ struct AudioPanel: View {
                 Text(L("Add music, a voice-over or a sound effect: each one gets its own lane. Say “ajoute un son à 10 secondes”."))
                     .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary).fixedSize(horizontal: false, vertical: true)
             } else {
+                let isDucking = session.timeline.clips.contains { $0.speech != nil }
+                HStack(spacing: 8) {
+                    PanelChip(title: L("Duck under voice"), symbol: "waveform.and.mic", tint: PSTheme.voice, isActive: isDucking, isEnabled: !session.isProcessing) {
+                        var intent = EditIntent(action: .autoDuck)
+                        if isDucking { intent.amount = .absolute(0) }
+                        session.perform(intent)
+                    }
+                    if isDucking {
+                        Text(L("Music dips while someone speaks")).font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary).lineLimit(2)
+                    }
+                    Spacer(minLength: 0)
+                }
                 // The mixer: one strip per track, like the lanes on the timeline.
                 VStack(spacing: 8) {
                     ForEach(Array(session.timeline.audioTracks.enumerated()), id: \.element.id) { index, track in

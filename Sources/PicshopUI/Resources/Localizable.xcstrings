@@ -1793,6 +1793,22 @@
         }
       }
     },
+    "Duck under voice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duck under voice"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "S'effacer sous la voix"
+          }
+        }
+      }
+    },
     "Duplicate": {
       "localizations": {
         "en": {
@@ -3521,6 +3537,22 @@
         }
       }
     },
+    "Listening for the voice…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening for the voice…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J'écoute la voix…"
+          }
+        }
+      }
+    },
     "Listening to the music…": {
       "localizations": {
         "en": {
@@ -4029,6 +4061,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Musique"
+          }
+        }
+      }
+    },
+    "Music dips while someone speaks": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Music dips while someone speaks"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La musique baisse quand quelqu'un parle"
           }
         }
       }

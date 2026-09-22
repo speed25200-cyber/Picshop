@@ -209,6 +209,7 @@ public struct CompositionBuilder: Sendable {
         audioParameters.append(contentsOf: clipMixes.compactMap { $0 })
 
         // Music tracks.
+        let speechRanges = timeline.speechRanges
         for music in timeline.audioTracks where !music.isMuted {
             let asset = AVURLAsset(url: store.url(for: music.asset.relativePath, in: projectID))
             guard let sourceAudio = try await asset.loadTracks(withMediaType: .audio).first,
@@ -220,6 +221,18 @@ public struct CompositionBuilder: Sendable {
             let mix = AVMutableAudioMixInputParameters(track: track)
             let start = VideoTime.cm(music.timelineStart)
             let duration = range.duration
+            if let speech = speechRanges {
+                // Analysed voice: full level in the clear, a dip under every sentence.
+                let points = Ducking.envelope(span: TimeSpan(start: music.timelineStart, duration: duration.seconds), level: music.volume, amount: music.ducking,
+                                              speech: speech, fadeIn: music.fadeIn, fadeOut: music.fadeOut)
+                if let first = points.first { mix.setVolume(Float(first.level), at: VideoTime.cm(first.time)) }
+                for (a, b) in zip(points, points.dropFirst()) where b.time - a.time > 0.001 {
+                    mix.setVolumeRamp(fromStartVolume: Float(a.level), toEndVolume: Float(b.level),
+                                      timeRange: CMTimeRange(start: VideoTime.cm(a.time), end: VideoTime.cm(b.time)))
+                }
+                audioParameters.append(mix)
+                continue
+            }
             let hasClipAudio = timeline.clips.contains { !$0.isMuted && $0.volume > 0 }
             let level = Float(music.volume * (hasClipAudio ? (1 - music.ducking) : 1))
             mix.setVolume(0, at: start)

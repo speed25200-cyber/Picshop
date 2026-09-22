@@ -69,6 +69,8 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     case removeSilences
     /// Removes the "euh"s, "um"s and stutters from the speech.
     case removeFillers
+    /// Music dips under the voice and comes back between sentences (amount = depth, 0 turns it off).
+    case autoDuck
     /// Text-based editing: cuts where the words in `text` are said (`scope` .all = every time;
     /// `target.label` "sentence" = the whole sentence around them).
     case cutWords
@@ -123,7 +125,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
         switch self {
         case .trim, .split, .deleteClip, .deleteRange, .setSpeed, .reverse, .mute, .unmute, .setVolume,
              .addTransition, .removeTransition, .addMusic, .removeMusic, .moveAudio, .fadeAudio, .extractFrame, .seek, .play, .pause,
-             .duplicateClip, .moveClip, .stabilize, .freezeFrame, .autoCaptions, .removeCaptions, .removeSilences, .removeFillers, .cutWords, .syncToBeat,
+             .duplicateClip, .moveClip, .stabilize, .freezeFrame, .autoCaptions, .removeCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .syncToBeat,
              .smartReframe, .kenBurns, .enhanceVoice, .matchColor:
             return true
         default:
@@ -402,6 +404,7 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .removeCaptions: return "Remove captions"
         case .removeSilences: return "Remove silences"
         case .removeFillers: return "Remove filler words"
+        case .autoDuck: return amount?.value == 0 ? "Ducking off" : "Duck the music under the voice"
         case .cutWords: return "Cut “\(text ?? "")”"
         case .syncToBeat: return "Cut to the beat"
         case .smartReframe: return "Smart reframe \(aspect?.displayName ?? "")"

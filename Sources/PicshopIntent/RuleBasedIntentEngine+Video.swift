@@ -330,6 +330,25 @@ extension RuleBasedIntentEngine {
         return intent
     }
 
+    /// "baisse la musique quand je parle", "duck the music under the voice", "désactive le ducking".
+    func parseDucking(_ u: NormalizedUtterance) -> EditIntent? {
+        let explicit = ["ducking", "auto duck", "autoduck", "duck the music", "duck music", "ducke la musique"]
+        let music = ["musique", "music", "son de fond", "background music", "la zik"]
+        let speaking = ["quand je parle", "quand on parle", "quand il parle", "quand elle parle", "pendant que je parle", "pendant qu on parle", "sous la voix", "sous ma voix", "quand ca parle",
+                        "pendant les dialogues", "sous les dialogues", "when i talk", "when i speak", "when someone talks", "when someone speaks", "while i talk", "while i speak", "under the voice",
+                        "under my voice", "under the dialogue", "during dialogue", "during speech", "when people talk", "quand quelqu un parle"]
+        guard u.contains(explicit) || (u.contains(music) && u.contains(speaking)) else { return nil }
+        var intent = EditIntent(action: .autoDuck)
+        if u.contains(["desactive", "enleve le ducking", "supprime le ducking", "sans ducking", "turn off", "disable", "no ducking", "arrete", "stop"]) {
+            intent.amount = .absolute(0)
+        } else if u.contains(["un peu", "a bit", "slightly", "legerement", "doucement", "gently"]) {
+            intent.amount = .absolute(0.45)
+        } else if u.contains(["beaucoup", "a lot", "fort", "fortement", "much", "strongly", "completement", "presque plus"]) {
+            intent.amount = .absolute(0.85)
+        }
+        return intent
+    }
+
     func parseMagicVideo(_ u: NormalizedUtterance, context: IntentContext) -> [EditIntent]? {
         let captionWords = ["sous titre", "sous titres", "sous titrage", "soustitre", "soustitres", "subtitle", "subtitles", "caption", "captions", "closed captions",
                             "transcris", "transcription", "transcribe", "ecris ce qui est dit", "ecris ce que je dis", "write what i say", "texte de la voix", "paroles a l ecran"]
@@ -342,6 +361,7 @@ extension RuleBasedIntentEngine {
             return [intent]
         }
         if let words = parseCutWords(u) { return [words] }
+        if let duck = parseDucking(u) { return [duck] }
         let fillerWords = ["euh", "les euh", "heu", "hum", "hesitations", "les hesitations", "hesitation", "tics de langage", "tic de langage", "mots parasites", "begaiements", "begaiement", "bafouillages", "bafouille",
                            "um", "ums", "uh", "uhs", "umms", "filler words", "filler word", "fillers", "the fillers", "stutters", "stutter", "stammers", "hesitations"]
         if u.contains(fillerWords), u.contains(Self.removeVerbs + ["coupe", "cut", "vire", "retire", "sans", "without", "clean", "no more"]) {
