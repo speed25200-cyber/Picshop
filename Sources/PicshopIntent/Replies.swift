@@ -29,7 +29,9 @@ public enum Replies {
         case .flip:
             if intent.flipAxis == .vertical { return fr ? "Image retournée de haut en bas." : "Flipped upside down." }
             return fr ? "Image retournée en miroir." : "Mirrored left to right."
-        case .resetOrientation: return fr ? "Je remets la photo à l'endroit." : "Putting it the right way up."
+        case .resetOrientation:
+            if intent.flipAxis != nil { return fr ? "J'enlève l'effet miroir." : "Taking the mirror off." }
+            return fr ? "Je remets l'image à l'endroit." : "Putting it the right way up."
         case .addText: return fr ? "Texte ajouté." : "Text added."
         case .editText: return fr ? "Texte modifié." : "Text updated."
         case .removeText: return fr ? "Texte supprimé." : "Text removed."

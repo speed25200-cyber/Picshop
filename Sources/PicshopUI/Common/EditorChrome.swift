@@ -526,6 +526,11 @@ struct VoiceStrip: View {
     var plan: EditPlan?
     /// The reply says the command could not be done as said (nothing found, not possible here).
     var replyIsProblem = false
+    /// The command failed: the reply is an error, not a hand-over to the finger.
+    var replyIsError = false
+    /// Changes with every reply to show: the same words said again, or an outcome that
+    /// arrives after the words, show the reply afresh.
+    var replyID: UUID? = nil
     var clarification: ClarificationRequest?
     /// Shown while nothing else is going on (typically when no tool is open).
     var showsHint: Bool
@@ -593,13 +598,18 @@ struct VoiceStrip: View {
         .animation(PSMotion.standard, value: clarification?.id)
         .animation(PSMotion.standard, value: isBusy)
         .animation(PSMotion.standard, value: replyVisible)
-        .task(id: transcript) {
+        .task(id: ReplyKey(transcript: transcript, replyID: replyID)) {
             guard !transcript.isEmpty else { replyVisible = false; return }
             replyVisible = true
             try? await Task.sleep(for: .seconds(7))
             guard !Task.isCancelled else { return }
             replyVisible = false
         }
+    }
+
+    private struct ReplyKey: Equatable {
+        let transcript: String
+        let replyID: UUID?
     }
 
     /// The rim follows the voice, unless the user asked the system to stop
@@ -614,6 +624,8 @@ struct VoiceStrip: View {
             MagicGlyph(size: 15).symbolEffect(.pulse, isActive: !reducedMotion)
         } else if isUnavailable {
             Image(systemName: "mic.slash").foregroundStyle(PSTheme.danger)
+        } else if replyVisible, plan != nil, replyIsError {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(PSTheme.danger).symbolEffect(.bounce, value: replyVisible)
         } else if replyVisible, plan != nil, replyIsProblem {
             Image(systemName: "hand.point.up.left.fill").foregroundStyle(PSTheme.accent).symbolEffect(.bounce, value: replyVisible)
         } else if replyVisible, plan != nil {

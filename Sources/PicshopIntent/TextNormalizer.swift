@@ -19,7 +19,7 @@ public struct NormalizedUtterance: Sendable {
         let normalized = NormalizedUtterance.normalize(original)
         text = normalized
         tokens = normalized.split(separator: " ").map(String.init)
-        language = NormalizedUtterance.detectLanguage(tokens: tokens)
+        language = NormalizedUtterance.detectLanguage(tokens: tokens, original: original)
     }
 
     /// Lowercases, strips diacritics, expands elisions ("l'arbre" → "l arbre"),
@@ -55,11 +55,15 @@ public struct NormalizedUtterance: Sendable {
         return cleaned.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
     }
 
-    static func detectLanguage(tokens: [String]) -> Language {
+    /// French or English, from the words said. Accented words are French, and so is "à",
+    /// which folds to the English "a". A tie goes to the language the device speaks.
+    static func detectLanguage(tokens: [String], original: String = "") -> Language {
         let frenchMarkers: Set<String> = ["le", "la", "les", "un", "une", "des", "du", "de", "et", "sur", "dans", "efface", "enleve", "supprime",
                                           "retire", "mets", "ajoute", "augmente", "diminue", "baisse", "plus", "moins", "fond", "photo", "video",
                                           "gauche", "droite", "peu", "beaucoup", "tres", "avec", "pour", "au", "aux", "ce", "cette", "ca",
-                                          "coupe", "recadre", "tourne", "annule", "retablis", "reviens", "montre", "applique", "rends", "fais", "remets"]
+                                          "coupe", "recadre", "tourne", "annule", "retablis", "reviens", "montre", "applique", "rends", "fais", "remets",
+                                          "c", "l", "qu", "est", "sont", "je", "tu", "il", "elle", "elles", "moi", "envers", "endroit", "sens", "tete",
+                                          "affiche", "affichee", "retourne", "tout", "tous", "toute", "toutes", "donnees", "tableau", "chiffres"]
         let englishMarkers: Set<String> = ["the", "a", "an", "and", "on", "in", "remove", "erase", "delete", "make", "add", "increase", "decrease",
                                            "more", "less", "background", "photo", "video", "left", "right", "bit", "lot", "very", "with", "for",
                                            "this", "that", "it", "cut", "crop", "rotate", "undo", "redo", "show", "apply", "set", "put", "to", "of"]
@@ -69,10 +73,14 @@ public struct NormalizedUtterance: Sendable {
             if frenchMarkers.contains(token) { fr += 1 }
             if englishMarkers.contains(token) { en += 1 }
         }
+        let written = original.lowercased().split(whereSeparator: { !$0.isLetter })
+        let graveA = written.filter { $0 == "à" }.count
+        en -= min(graveA, tokens.filter { $0 == "a" }.count)
+        fr += written.filter { word in word.contains { "àâäçéèêëîïôöùûüÿœæ".contains($0) } }.count
         if fr == en {
-            // Tie-break on typical French endings.
+            // Tie-break on typical French endings, then on the device's language.
             let frenchEndings = tokens.filter { $0.hasSuffix("ez") || $0.hasSuffix("er") || $0.hasSuffix("tion") }.count
-            return frenchEndings > 0 ? .french : .english
+            return frenchEndings > 0 || PicshopError.devicePrefersFrench ? .french : .english
         }
         return fr > en ? .french : .english
     }

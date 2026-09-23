@@ -44,6 +44,20 @@ public struct VideoCommandExecutor: Sendable {
             return timeline.clips.first.map { [$0.id] } ?? []
         }
 
+        /// Reverses each clip, or plays a reversed one forwards again, from a new render.
+        func toggleReverse(_ ids: [UUID]) async throws {
+            for id in ids {
+                guard let clip = timeline.clip(id: id) else { continue }
+                let rendered = try await services.reverse(clip: clip, timeline: timeline, progress: progress)
+                timeline.update(clipID: id) { clip in
+                    clip.isReversed.toggle()
+                    clip.processedAsset = rendered
+                    clip.processedLabel = clip.isReversed ? "Reversed" : nil
+                    clip.sourceRange = TimeSpan(start: 0, duration: rendered.duration)
+                }
+            }
+        }
+
         switch intent.action {
         case .split:
             let time = intent.time ?? playhead
@@ -82,18 +96,8 @@ public struct VideoCommandExecutor: Sendable {
             return (timeline, .applied("Speed ×\(Replies.formatted(speed))"))
 
         case .reverse:
-            let ids = targetClipIDs()
             do {
-                for id in ids {
-                    guard let clip = timeline.clip(id: id) else { continue }
-                    let rendered = try await services.reverse(clip: clip, timeline: timeline, progress: progress)
-                    timeline.update(clipID: id) { clip in
-                        clip.isReversed.toggle()
-                        clip.processedAsset = rendered
-                        clip.processedLabel = clip.isReversed ? "Reversed" : nil
-                        clip.sourceRange = TimeSpan(start: 0, duration: rendered.duration)
-                    }
-                }
+                try await toggleReverse(targetClipIDs())
                 return (timeline, .applied("Reverse"))
             } catch {
                 return (timeline, .failed(errorMessage(error)))
@@ -310,13 +314,41 @@ public struct VideoCommandExecutor: Sendable {
             return (timeline, .applied("Flip"))
 
         case .resetOrientation:
-            for id in targetClipIDs() {
-                timeline.update(clipID: id) { clip in
-                    clip.rotation = 0
-                    clip.flipHorizontal = false
+            let ids = targetClipIDs()
+            let clips = ids.compactMap { timeline.clip(id: $0) }
+            if intent.flipAxis != nil {
+                // "Annule le miroir": the mirror goes, the rotation stays.
+                let mirrored = clips.filter(\.flipHorizontal).map(\.id)
+                guard !mirrored.isEmpty else { return (timeline, ExecutionResult(outcome: .info(message: fr ? "La vidéo n'est pas en miroir." : "The video isn't mirrored."))) }
+                for id in mirrored { timeline.update(clipID: id) { $0.flipHorizontal = false } }
+                return (timeline, .applied("Remove Mirror"))
+            }
+            let turned = clips.filter { abs($0.rotation.truncatingRemainder(dividingBy: 360)) > 0.5 || $0.flipHorizontal }.map(\.id)
+            if !turned.isEmpty {
+                for id in turned {
+                    timeline.update(clipID: id) { clip in
+                        clip.rotation = 0
+                        clip.flipHorizontal = false
+                    }
+                }
+                return (timeline, .applied("Right Way Up"))
+            }
+            // "Lis la vidéo à l'endroit" after "passe-la à l'envers": forwards again.
+            let reversed = clips.filter(\.isReversed).map(\.id)
+            if !reversed.isEmpty {
+                do {
+                    try await toggleReverse(reversed)
+                    return (timeline, .applied("Play Forwards"))
+                } catch {
+                    return (timeline, .failed(errorMessage(error)))
                 }
             }
-            return (timeline, .applied("Right Way Up"))
+            // Said to be upside down with nothing to undo: it was filmed that way.
+            if intent.degrees == 180, !ids.isEmpty {
+                for id in ids { timeline.update(clipID: id) { $0.rotation = ($0.rotation + 180).truncatingRemainder(dividingBy: 360) } }
+                return (timeline, .applied("Rotate 180°"))
+            }
+            return (timeline, ExecutionResult(outcome: .info(message: fr ? "La vidéo est déjà à l'endroit." : "The video is already the right way up.")))
 
         case .addText:
             guard let text = intent.text, !text.isEmpty else { return (timeline, ExecutionResult(outcome: .info(message: fr ? "Quel texte ?" : "What should it say?"))) }

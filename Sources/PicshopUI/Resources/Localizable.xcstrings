@@ -2801,6 +2801,22 @@
         }
       }
     },
+    "Flip Horizontal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flip Horizontal"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retourner horizontalement"
+          }
+        }
+      }
+    },
     "Flip Vertical": {
       "localizations": {
         "en": {
@@ -5729,6 +5745,22 @@
         }
       }
     },
+    "Play Forwards": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Play Forwards"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lecture à l'endroit"
+          }
+        }
+      }
+    },
     "Playhead": {
       "localizations": {
         "en": {
@@ -6161,6 +6193,22 @@
         }
       }
     },
+    "Remove Background": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Background"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer le fond"
+          }
+        }
+      }
+    },
     "Remove Focus Blur": {
       "localizations": {
         "en": {
@@ -6177,6 +6225,22 @@
         }
       }
     },
+    "Remove Mirror": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Mirror"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer le miroir"
+          }
+        }
+      }
+    },
     "Remove Sound Track": {
       "localizations": {
         "en": {
@@ -6189,6 +6253,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Supprimer la piste son"
+          }
+        }
+      }
+    },
+    "Remove Text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Text"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer le texte"
           }
         }
       }
@@ -6525,6 +6605,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pivoter"
+          }
+        }
+      }
+    },
+    "Rotate 180°": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rotate 180°"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pivoter de 180°"
           }
         }
       }
@@ -7917,6 +8013,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cette version a été compilée sans le moteur Stable Diffusion."
+          }
+        }
+      }
+    },
+    "This is already the original photo.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is already the original photo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "C'est déjà la photo d'origine."
           }
         }
       }

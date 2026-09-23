@@ -55,7 +55,7 @@ public struct PhotoCommandExecutor: Sendable {
 
         case .removeObject, .moveObject, .blurObject:
             guard let target = intent.target else { return (document, .failed(PicshopError.objectNotFound("object").message(french: language == .french))) }
-            return await removeObject(target: target, intent: intent, document: document)
+            return await removeObject(target: target, intent: intent, document: document, selection: context.selectionMask)
 
         case .chooseCandidate:
             guard let pending = context.pendingClarification else { return (document, ExecutionResult(outcome: .ignored)) }
@@ -238,10 +238,19 @@ public struct PhotoCommandExecutor: Sendable {
             return (document, .applied(axis == .horizontal ? "Flip Horizontal" : "Flip Vertical"))
 
         case .resetOrientation:
-            // Flips and quarter turns undone at once; a photo that was shot upside down is turned over.
+            if intent.flipAxis != nil {
+                // "Annule le miroir": the mirror goes, the turns stay.
+                if document.removeMirror(label: "Remove Mirror") { return (document, .applied("Remove Mirror")) }
+                return (document, ExecutionResult(outcome: .info(message: fr ? "La photo n'est pas en miroir." : "The photo isn't mirrored.")))
+            }
+            // Flips and quarter turns undone at once.
             if document.resetOrientation(label: "Right Way Up") { return (document, .applied("Right Way Up")) }
-            document.apply(.rotate(degrees: 180))
-            return (document, .applied("Rotate 180°"))
+            // Said to be upside down with nothing to undo: it was shot that way, so it is turned over.
+            if intent.degrees == 180 {
+                document.apply(.rotate(degrees: 180))
+                return (document, .applied("Rotate 180°"))
+            }
+            return (document, ExecutionResult(outcome: .info(message: fr ? "La photo est déjà à l'endroit." : "The photo is already the right way up.")))
 
         case .addText:
             guard let text = intent.text, !text.isEmpty else {
@@ -369,7 +378,9 @@ public struct PhotoCommandExecutor: Sendable {
 
     // MARK: - Object removal
 
-    func removeObject(target: ObjectTarget, intent: EditIntent, document: PhotoDocument) async -> (PhotoDocument, ExecutionResult) {
+    /// - Parameter selection: the area circled after an earlier "circle it, then say it again";
+    ///   a blur or a move of something not found there acts on it.
+    func removeObject(target: ObjectTarget, intent: EditIntent, document: PhotoDocument, selection: MaskReference? = nil) async -> (PhotoDocument, ExecutionResult) {
         let fr = language == .french
         do {
             let candidates = try await services.candidates(for: target, in: document)
@@ -391,6 +402,9 @@ public struct PhotoCommandExecutor: Sendable {
                 if intent.action == .removeObject {
                     let message = fr ? "Je ne trouve pas « \(phrase) ». Touche ou entoure ce qu'il faut effacer." : "I can't find “\(phrase)”. Tap or circle what to erase."
                     return (document, ExecutionResult(outcome: .info(message: message), effects: [.message("tapToErase")]))
+                }
+                if let selection {
+                    return applyOnSelection(intent, target: target, selection: selection, document: document)
                 }
                 let message = fr ? "Je ne trouve pas « \(phrase) ». Entoure la zone, puis redis la commande." : "I can't find “\(phrase)”. Circle the area, then say it again."
                 return (document, ExecutionResult(outcome: .info(message: message), effects: [.message("selectRegion")]))
@@ -424,22 +438,7 @@ public struct PhotoCommandExecutor: Sendable {
                 return (document, .applied(candidates.count > 1 ? "Blur \(candidates.count) × \(target.label)" : "Blur \(target.originalPhrase)"))
             case .moveObject:
                 let box = candidates.map(\.boundingBox).reduce(candidates.first?.boundingBox ?? .zero) { $0.union($1) }
-                var offset: PSPoint
-                if intent.placement == .center {
-                    offset = PSPoint(x: 0.5 - box.midX, y: 0.5 - box.midY)
-                } else {
-                    let distance = intent.amount?.value ?? 0.15
-                    let angle = (intent.degrees ?? 0) * .pi / 180
-                    offset = PSPoint(x: cos(angle) * distance, y: -sin(angle) * distance)
-                }
-                // It stays in the picture.
-                offset.x = offset.x.clamped(to: -box.minX...max(-box.minX, 1 - box.maxX))
-                offset.y = offset.y.clamped(to: -box.minY...max(-box.minY, 1 - box.maxY))
-                guard abs(offset.x) + abs(offset.y) > 0.005 else {
-                    return (document, .failed(language == .french ? "Il touche déjà le bord." : "It's already against the edge."))
-                }
-                document.apply(.moveObject(mask, offset: offset))
-                return (document, .applied("Move \(target.originalPhrase)"))
+                return move(mask, box: box, intent: intent, target: target, document: document)
             case .recolor:
                 guard let color = intent.color else { return (document, .failed("Missing colour")) }
                 document.apply(.recolor(mask, color, strength: (intent.amount?.value ?? 0.9).clamped(to: 0...1)))
@@ -452,6 +451,39 @@ public struct PhotoCommandExecutor: Sendable {
         } catch {
             return (document, .failed(errorMessage(error)))
         }
+    }
+
+    /// A blur or a move on an area the person circled.
+    func applyOnSelection(_ intent: EditIntent, target: ObjectTarget, selection: MaskReference, document input: PhotoDocument) -> (PhotoDocument, ExecutionResult) {
+        var document = input
+        if intent.action == .moveObject {
+            return move(selection, box: selection.boundingBox, intent: intent, target: target, document: document, circled: true)
+        }
+        document.apply(.blurRegion(selection, amount: (intent.amount?.value ?? 1).clamped(to: 0.2...1)))
+        return (document, ExecutionResult(outcome: .applied(label: "Blur \(target.originalPhrase)"), effects: [.message("selectionUsed")], label: "Blur \(target.originalPhrase)"))
+    }
+
+    /// Moves what `mask` covers (inside `box`) where the intent says, keeping it in the picture.
+    /// `circled`: the mask is the person's selection, which is used up.
+    func move(_ mask: MaskReference, box: PSRect, intent: EditIntent, target: ObjectTarget, document input: PhotoDocument, circled: Bool = false) -> (PhotoDocument, ExecutionResult) {
+        var document = input
+        var offset: PSPoint
+        if intent.placement == .center {
+            offset = PSPoint(x: 0.5 - box.midX, y: 0.5 - box.midY)
+        } else {
+            let distance = intent.amount?.value ?? 0.15
+            let angle = (intent.degrees ?? 0) * .pi / 180
+            offset = PSPoint(x: cos(angle) * distance, y: -sin(angle) * distance)
+        }
+        // It stays in the picture.
+        offset.x = offset.x.clamped(to: -box.minX...max(-box.minX, 1 - box.maxX))
+        offset.y = offset.y.clamped(to: -box.minY...max(-box.minY, 1 - box.maxY))
+        guard abs(offset.x) + abs(offset.y) > 0.005 else {
+            return (document, .failed(language == .french ? "Il touche déjà le bord." : "It's already against the edge."))
+        }
+        document.apply(.moveObject(mask, offset: offset))
+        let label = "Move \(target.originalPhrase)"
+        return (document, ExecutionResult(outcome: .applied(label: label), effects: circled ? [.message("selectionUsed")] : [], label: label))
     }
 
     /// The adjustment for a region, with what a retoucher would add: whiter

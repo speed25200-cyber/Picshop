@@ -45,8 +45,22 @@ public struct RuleBasedIntentEngine: IntentEngine {
             intents.append(contentsOf: parsed)
         }
 
-        // Drop unknowns if at least one segment was understood.
-        let understood = intents.filter { $0.action != .unknown }
+        // Drop unknowns if at least one segment was understood; "parfait, elle est à l'endroit" is one OK.
+        var confirmed = false
+        var understood = intents.filter { intent in
+            guard intent.action == .confirm else { return intent.action != .unknown }
+            defer { confirmed = true }
+            return !confirmed
+        }
+        // "Elle est à l'envers, remets-la à l'endroit" asks once, as the complaint.
+        if let first = understood.firstIndex(where: { $0.action == .resetOrientation }) {
+            let all = understood.filter { $0.action == .resetOrientation }
+            var merged = understood[first]
+            if all.contains(where: { $0.degrees == 180 }) { merged.degrees = 180 }
+            if all.contains(where: { $0.flipAxis == nil }) { merged.flipAxis = nil }
+            understood = understood.enumerated().filter { $0.offset == first || $0.element.action != .resetOrientation }.map(\.element)
+            understood[first] = merged
+        }
         let final = (understood.isEmpty ? intents : understood).map { withOriginalWords($0, from: utterance) }
         let confidence = final.map(\.confidence).min() ?? 0
         return EditPlan(utterance: utterance, intents: final, confidence: confidence, language: language.rawValue,
@@ -57,7 +71,7 @@ public struct RuleBasedIntentEngine: IntentEngine {
 
     func parseSegment(_ u: NormalizedUtterance, original: String, context: IntentContext) -> [EditIntent] {
         // "C'est à l'envers" describes the picture, it does not ask to turn it: put it the right way up.
-        if context.mode != .pdf, u.contains(Self.uprightPhrases) { return [EditIntent(action: .resetOrientation)] }
+        if let orientation = parseOrientation(u, original: original, context: context) { return [orientation] }
         if let summary = parseSummary(u) { return [summary] }
         if context.mode == .photo, let style = parseStyle(u, original: original) { return [style] }
         if let version = parseVersion(u, original: original) { return [version] }
@@ -153,6 +167,16 @@ public struct RuleBasedIntentEngine: IntentEngine {
             }
         }
 
+        // "Un certain nombre de personnes", "a number of people": a quantity of what follows, not digits.
+        for phrase in Self.quantityPhrases {
+            let words = phrase.split(separator: " ").map(String.init)
+            if let index = indexOfSequence(words, in: tokens), index + words.count < tokens.count,
+               let named = ObjectVocabulary.match(tokens[(index + words.count)...].joined(separator: " ")), named.entry.category != .text {
+                tokens.removeSubrange(index..<(index + words.count))
+                break
+            }
+        }
+
         var matchesAll = false
         for phrase in Self.allWords.sorted(by: { $0.count > $1.count }) {
             let words = phrase.split(separator: " ").map(String.init)
@@ -184,7 +208,13 @@ public struct RuleBasedIntentEngine: IntentEngine {
             }
             return nil
         }
-        if let match = ObjectVocabulary.match(cleaned) {
+        if var match = ObjectVocabulary.match(cleaned) {
+            // "The table data", "the table numbers": the data in a table, not the furniture.
+            let rest = remove(phrase: match.matchedForm, from: tokens)
+            if match.entry.label == "table", rest.contains(where: { Self.tableContentNouns.contains($0) }),
+               let data = ObjectVocabulary.match(rest.joined(separator: " ")), data.entry.category == .text {
+                match = data
+            }
             let leftover = remove(phrase: match.matchedForm, from: cleaned.split(separator: " ").map(String.init))
             attributes.append(contentsOf: leftover.filter { $0.count > 2 })
             let point = match.entry.category == .generic ? context.lastTapPoint : nil
@@ -193,6 +223,16 @@ public struct RuleBasedIntentEngine: IntentEngine {
         // Unknown noun — keep the words; the grounding layer can still try embeddings.
         return ObjectTarget(label: cleaned, originalPhrase: displayPhrase, spatialHint: spatial, ordinal: ordinal, matchesAll: matchesAll, attributes: attributes, point: context.lastTapPoint)
     }
+
+    /// "Un certain nombre de", "a number of": how many of the next noun there are.
+    static let quantityPhrases = ["un certain nombre de", "un certain nombre d", "un grand nombre de", "un grand nombre d", "un petit nombre de", "un petit nombre d",
+                                  "bon nombre de", "bon nombre d", "le nombre de", "le nombre d", "nombre de", "nombre d", "a certain number of", "a large number of",
+                                  "a great number of", "a small number of", "a number of", "the number of", "number of"]
+    /// What a table holds, as opposed to the piece of furniture: "the table data".
+    static let tableContentNouns: Set<String> = ["data", "donnee", "donnees", "number", "numbers", "nombre", "nombres", "chiffre", "chiffres", "digit", "digits",
+                                                 "value", "values", "valeur", "valeurs", "score", "scores", "result", "results", "resultat", "resultats", "numero", "numeros",
+                                                 "stats", "statistique", "statistiques", "percentage", "percentages", "pourcentage", "pourcentages", "cell", "cells",
+                                                 "cellule", "cellules", "content", "contenu", "text", "texte", "word", "words", "mot", "mots"]
 
     func indexOfSequence(_ words: [String], in tokens: [String]) -> Int? {
         guard !words.isEmpty, tokens.count >= words.count else { return nil }
@@ -775,13 +815,76 @@ public struct RuleBasedIntentEngine: IntentEngine {
 
     // MARK: - Rotate / straighten / flip
 
-    /// The picture is described as upside down or mirrored, or asked to be the right way up again.
-    static let uprightPhrases = ["est a l envers", "sont a l envers", "est la tete en bas", "est tete en bas", "sont la tete en bas", "affiche a l envers", "affichee a l envers",
-                                 "affichees a l envers", "affiche les images a l envers", "affiche la photo a l envers", "is upside down", "are upside down", "s upside down",
-                                 "shows upside down", "looks upside down", "a l endroit", "dans le bon sens", "sens dessus dessous", "right way up", "right side up",
-                                 "right way round", "fix the orientation", "correct the orientation", "reset the orientation", "corrige l orientation",
-                                 "remets l orientation", "retablis l orientation", "reinitialise l orientation", "orientation d origine", "original orientation",
-                                 "unflip", "annule le retournement", "annule le miroir", "undo the flip", "undo the mirror"]
+    /// Said of the picture as it shows now: "c'est à l'envers". With nothing to undo, it was shot that way.
+    static let upsideDownPhrases = ["est a l envers", "sont a l envers", "est la tete en bas", "est tete en bas", "sont la tete en bas", "sont tete en bas", "affiche a l envers",
+                                    "affichee a l envers", "affichees a l envers", "affiche les images a l envers", "affiche la photo a l envers", "sens dessus dessous",
+                                    "is upside down", "are upside down", "s upside down", "shows upside down", "looks upside down", "wrong way up", "wrong side up", "wrong way round"]
+    /// Asks for the picture the right way up again: "remets-la à l'endroit".
+    static let rightWayUpPhrases = ["a l endroit", "dans le bon sens", "right way up", "right side up", "right way round", "right way around",
+                                    "fix the orientation", "correct the orientation", "reset the orientation", "corrige l orientation", "remets l orientation",
+                                    "retablis l orientation", "reinitialise l orientation", "orientation d origine", "original orientation"]
+    /// Takes the mirror away and nothing else.
+    static let unmirrorPhrases = ["annule le miroir", "annule l effet miroir", "annule le retournement", "undo the flip", "undo the mirror", "unflip", "unmirror"]
+    /// Another command is meant; "à l'endroit" is then a place ("coupe à l'endroit où je dis bonjour") or a manner.
+    static let orientationBlockers: [String] = removeVerbs + ["ajoute", "ajouter", "add", "ecris", "ecrire", "write", "texte", "text", "titre", "title", "legende", "caption", "mot", "word",
+                                                              "coupe", "couper", "cut", "split", "decoupe", "exporte", "exporter", "export", "sauvegarde", "save", "enregistre", "partage",
+                                                              "share", "envoie", "send", "floute", "flouter", "blur", "pixelise", "zoom", "zoome", "deplace", "deplacer", "move", "bouge",
+                                                              "recadre", "crop"]
+    /// What may surround "à l'endroit" in a request about the picture itself: verbs, the picture, politeness.
+    static let rightWayUpWords: Set<String> = ["remets", "remet", "remettre", "remettez", "mets", "met", "mettre", "mettez", "retourne", "retourner", "tourne", "tourner", "repasse",
+                                               "passe", "replace", "put", "turn", "flip", "set", "make", "get", "fix", "correct", "corrige", "corriger", "reset", "restore", "restaure",
+                                               "retablis", "reinitialise", "bring", "back", "it", "la", "le", "l", "les", "photo", "photos", "image", "images", "picture", "pic", "video",
+                                               "clip", "the", "this", "cette", "ce", "cet", "tout", "all", "dans", "son", "sa", "its", "en", "of", "de", "du", "stp", "svp", "please", "s",
+                                               "il", "te", "plait", "maintenant", "now", "moi", "me", "tu", "peux", "pouvez", "vous", "can", "you", "could", "est", "que", "qu", "again",
+                                               "nouveau", "encore", "bien", "merci", "thanks", "oui", "yes", "ok", "okay", "alors", "donc", "juste", "just", "enfin"]
+    /// Video: the playback is what goes the right way again ("lis la vidéo à l'endroit").
+    static let playbackWords: Set<String> = ["lis", "lire", "joue", "jouer", "lecture", "play", "playback", "forwards", "forward"]
+    /// "À l'endroit où / du / indiqué": the place, not the orientation.
+    static let placeFollowers: Set<String> = ["ou", "du", "de", "d", "des", "indique", "indiquee", "precis", "precise", "exact", "exacte", "choisi", "choisie", "marque", "marquee",
+                                              "que", "qui", "touche", "montre"]
+
+    /// "C'est à l'envers" (turn it back, or over when nothing was turned), "remets-la à
+    /// l'endroit" (undo the turns and flips), "annule le miroir" (the mirror only). A
+    /// statement that it is fine now ("c'est à l'endroit maintenant") changes nothing.
+    /// Quoted words, places ("à l'endroit du ciel") and other commands are left to their parsers.
+    func parseOrientation(_ u: NormalizedUtterance, original: String, context: IntentContext) -> EditIntent? {
+        guard context.mode != .pdf else { return nil }
+        let said = unquoted(u, original: original)
+        guard !said.tokens.isEmpty, !said.contains(Self.orientationBlockers) else { return nil }
+        if said.contains(Self.unmirrorPhrases) { return EditIntent(action: .resetOrientation, flipAxis: .horizontal) }
+        // "Flip it so it's upside down": a turn is asked for.
+        let turning = said.contains(["so", "so that"]) && said.contains(["flip", "mirror", "rotate", "turn", "make"])
+        if let phrase = said.firstMatch(Self.upsideDownPhrases), !turning, let index = said.tokenIndex(of: phrase),
+           !(index > 0 && ["qui", "which", "who"].contains(said.tokens[index - 1])) {
+            return EditIntent(action: .resetOrientation, degrees: 180)
+        }
+        guard let phrase = said.firstMatch(Self.rightWayUpPhrases), let index = said.tokenIndex(of: phrase) else { return nil }
+        let before = Array(said.tokens[..<index])
+        let after = Array(said.tokens[(index + phrase.split(separator: " ").count)...])
+        if phrase == "a l endroit", let next = after.first, Self.placeFollowers.contains(next) { return nil }
+        // Back from the phrase past "bien", "the", "now": "n'est pas" complains, "c'est" only says so.
+        for word in before.reversed() where !["bien", "the", "maintenant", "now", "deja", "already", "enfin", "toujours", "still", "encore"].contains(word) {
+            if ["pas", "not", "t", "plus", "jamais", "never"].contains(word) { return EditIntent(action: .resetOrientation, degrees: 180) }
+            if ["est", "sont", "is", "s", "are", "looks", "look", "etait", "was"].contains(word) { return EditIntent(action: .confirm) }
+            break
+        }
+        // Only the picture is put right: "mets le chien dans le bon sens" is about something else.
+        let allowed = context.mode == .video ? Self.rightWayUpWords.union(Self.playbackWords) : Self.rightWayUpWords
+        guard (before + after).allSatisfy({ allowed.contains($0) }) else { return nil }
+        return EditIntent(action: .resetOrientation)
+    }
+
+    /// The segment without what the utterance quotes: « C'est à l'envers » is words to write.
+    func unquoted(_ u: NormalizedUtterance, original: String) -> NormalizedUtterance {
+        guard let regex = try? NSRegularExpression(pattern: "«[^»]*»|“[^”]*”|\"[^\"]*\"") else { return u }
+        var text = " " + u.text + " "
+        for match in regex.matches(in: original, range: NSRange(original.startIndex..., in: original)) {
+            guard let range = Range(match.range, in: original) else { continue }
+            let quoted = NormalizedUtterance.normalize(String(original[range]))
+            if !quoted.isEmpty { text = text.replacingOccurrences(of: " " + quoted + " ", with: " ") }
+        }
+        return NormalizedUtterance(text)
+    }
 
     func parseGeometry(_ u: NormalizedUtterance, context: IntentContext) -> EditIntent? {
         if u.contains(["straighten", "straighten it", "level", "level the horizon", "horizon", "redresse", "redresser", "redresse l horizon", "aligne l horizon", "mets droit", "mets la droite", "de niveau", "c est de travers", "it s crooked", "crooked", "tilted", "penche", "penchee", "de travers"]) {
@@ -940,25 +1043,65 @@ public struct RuleBasedIntentEngine: IntentEngine {
         guard var target = intent.target,
               let said = originalSubstring(matching: NormalizedUtterance.normalize(target.originalPhrase), in: utterance) else { return intent }
         var intent = intent
-        target.originalPhrase = said.trimmingCharacters(in: CharacterSet(charactersIn: "«»“”\"'() "))
+        target.originalPhrase = Self.withQuotes(said, in: utterance)
+        // "Efface « SOLDES »": words in quotes are writing in the picture, found by reading it.
+        if [.removeObject, .blurObject].contains(intent.action), ObjectVocabulary.entry(forLabel: target.label) == nil, Self.isQuoted(target.originalPhrase) {
+            target.attributes.append(target.label)
+            target.label = "text"
+            intent.confidence = max(intent.confidence, 0.9)
+        }
         intent.target = target
         return intent
     }
 
-    /// Finds the span of the original string whose normalised form equals `normalizedPhrase`.
-    func originalSubstring(matching normalizedPhrase: String, in original: String) -> String? {
-        let words = original.split(whereSeparator: { $0.isWhitespace || $0 == "," || $0 == "." || $0 == "!" || $0 == "?" || $0 == ":" }).map(String.init)
-        let targetCount = normalizedPhrase.split(separator: " ").count
-        guard words.count >= targetCount, targetCount > 0 else { return nil }
-        for start in 0...(words.count - targetCount) {
-            let slice = words[start..<(start + targetCount)].joined(separator: " ")
-            if NormalizedUtterance.normalize(slice) == normalizedPhrase { return slice }
+    static let quotePairs: [(Character, Character)] = [("«", "»"), ("“", "”"), ("\"", "\"")]
+
+    /// Whether the phrase holds words between a pair of quotes.
+    static func isQuoted(_ phrase: String) -> Bool {
+        quotePairs.contains { opening, closing in
+            guard let start = phrase.firstIndex(of: opening) else { return false }
+            return phrase[phrase.index(after: start)...].contains(closing)
         }
-        // Handle elisions ("l'été") where token counts differ.
+    }
+
+    /// The span with its quotes as the person typed them: one it opens is closed
+    /// ("le texte « SOLDES »"), and quotes right around it are kept ("« SOLDES »").
+    static func withQuotes(_ span: String, in utterance: String) -> String {
+        guard var range = utterance.range(of: span) else { return span }
+        for (opening, closing) in quotePairs {
+            let said = utterance[range]
+            let opened = said.filter { $0 == opening }.count
+            let unclosed = opening == closing ? opened % 2 == 1 : opened > said.filter { $0 == closing }.count
+            if unclosed, let end = utterance[range.upperBound...].firstIndex(of: closing) {
+                range = range.lowerBound..<utterance.index(after: end)
+            } else if !said.contains(opening),
+                      let before = utterance[..<range.lowerBound].lastIndex(where: { !$0.isWhitespace }), utterance[before] == opening,
+                      let after = utterance[range.upperBound...].firstIndex(where: { !$0.isWhitespace }), utterance[after] == closing {
+                range = before..<utterance.index(after: after)
+            }
+        }
+        return String(utterance[range]).trimmingCharacters(in: CharacterSet(charactersIn: "'()").union(.whitespaces))
+    }
+
+    /// Finds the span of the original string whose normalised form equals `normalizedPhrase`.
+    /// Words are split on spaces only, so "87,3" stays one number; punctuation ending the
+    /// span ("tableau.") is left out.
+    func originalSubstring(matching normalizedPhrase: String, in original: String) -> String? {
+        let words = original.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        let targetCount = normalizedPhrase.split(separator: " ").count
+        guard targetCount > 0 else { return nil }
+        func trimmed(_ slice: String) -> String { slice.trimmingCharacters(in: CharacterSet(charactersIn: ".,!?:;")) }
+        if words.count >= targetCount {
+            for start in 0...(words.count - targetCount) {
+                let slice = words[start..<(start + targetCount)].joined(separator: " ")
+                if NormalizedUtterance.normalize(slice) == normalizedPhrase { return trimmed(slice) }
+            }
+        }
+        // Elisions and hyphens ("l'arrière-plan") make more tokens than words.
         for start in 0..<words.count {
             for end in start..<words.count {
                 let slice = words[start...end].joined(separator: " ")
-                if NormalizedUtterance.normalize(slice) == normalizedPhrase { return slice }
+                if NormalizedUtterance.normalize(slice) == normalizedPhrase { return trimmed(slice) }
             }
         }
         return nil

@@ -93,6 +93,8 @@ public final class PhotoEditorSession {
     public let app: AppEnvironment
     public private(set) var history: EditHistory<PhotoDocument>
     public var document: PhotoDocument { history.present }
+    /// The photo as this session opened it: Revert starts from it, so layers added since go too.
+    private let openedDocument: PhotoDocument
 
     public private(set) var renderer: PhotoRenderer?
     private var services: VisionPhotoServices?
@@ -157,6 +159,11 @@ public final class PhotoEditorSession {
     public var lastPlan: EditPlan?
     /// The voice strip reports what really happened: true when the command could not be done as said.
     public private(set) var lastReplyIsProblem = false
+    /// The command failed (an error, not a hand-over to the finger).
+    public private(set) var lastReplyIsError = false
+    /// Changes with every reply to show, so the strip shows it again for the same words said
+    /// twice, or for an outcome that arrives long after the words.
+    public private(set) var replyID = UUID()
     /// While a spoken command runs, its outcome is told in the voice strip rather than a second banner.
     private var isRunningVoiceCommand = false
     public var pendingClarification: ClarificationRequest?
@@ -201,6 +208,7 @@ public final class PhotoEditorSession {
         self.projectID = projectID
         self.app = app
         history = EditHistory(initial: document)
+        openedDocument = document
         previewAspectRatio = document.aspectRatio
     }
 
@@ -273,7 +281,8 @@ public final class PhotoEditorSession {
         IntentContext(mode: .photo, currentAdjustments: document.activeAdjustments, hasSelection: document.selectedLayer?.isText == true,
                       selectedIndex: document.selectedLayerID.flatMap { document.index(of: $0) }, clipCount: 0, textLayerCount: document.textLayers.count,
                       pendingClarification: pendingClarification, lastTapPoint: lastTapPoint, canUndo: history.canUndo, canRedo: history.canRedo,
-                      preferredLanguage: app.settings.languageHint, lastParameter: lastAdjustment?.parameter, lastAdjustmentDirection: lastAdjustment?.direction ?? 0)
+                      preferredLanguage: app.settings.languageHint, lastParameter: lastAdjustment?.parameter, lastAdjustmentDirection: lastAdjustment?.direction ?? 0,
+                      selectionMask: selectionMask)
     }
 
     // MARK: - Rendering
@@ -391,12 +400,18 @@ public final class PhotoEditorSession {
     }
 
     /// Back to the photo as imported, including edits saved in earlier
-    /// sessions — which Undo cannot reach. Itself undoable.
-    public func revert() {
-        let restored = document.restoredToImport()
-        guard restored.baseLayer?.edits != document.baseLayer?.edits || restored.canvasSize != document.canvasSize else { return }
+    /// sessions — which Undo cannot reach — and without the layers added since
+    /// this session opened. Itself undoable. False when there was nothing to revert.
+    @discardableResult
+    public func revert() -> Bool {
+        let restored = openedDocument.restoredToImport()
+        var compared = restored
+        compared.modifiedAt = document.modifiedAt
+        compared.selectedLayerID = document.selectedLayerID
+        guard compared != document else { return false }
         commit(restored, label: L("Revert to Original"))
         Haptics.confirm()
+        return true
     }
 
     /// Whether earlier flips or quarter turns left the photo upside down, on its side or mirrored.
@@ -1185,6 +1200,8 @@ public final class PhotoEditorSession {
     public func handleTranscript(_ text: String) async {
         transcript = text
         lastReplyIsProblem = false
+        lastReplyIsError = false
+        replyID = UUID()
         let plan = await app.router.plan(text, context: intentContext)
         lastPlan = plan
         if plan.isEmpty {
@@ -1215,6 +1232,7 @@ public final class PhotoEditorSession {
             case .failed(let message):
                 told = message
                 lastReplyIsProblem = true
+                lastReplyIsError = true
                 break steps
             case .needsClarification:
                 return
@@ -1223,8 +1241,9 @@ public final class PhotoEditorSession {
             }
         }
         if let told {
-            // The strip says what really happened, not what was hoped for.
+            // The strip says what really happened, not what was hoped for, and shows it afresh.
             lastPlan?.reply = told
+            replyID = UUID()
             VoiceFeedback.shared.speak(told, language: plan.language)
         } else if mustFindFirst {
             VoiceFeedback.shared.speak(plan.reply ?? "", language: plan.language)
@@ -1233,6 +1252,23 @@ public final class PhotoEditorSession {
 
     /// The last command handed over to the finger (tap or lasso what was not found).
     private var lastOutcomeNeedsHand = false
+
+    /// Says what happened: in the voice strip during a spoken command, in a toast otherwise.
+    private func tell(_ message: String) {
+        if isRunningVoiceCommand {
+            lastPlan?.reply = message
+            replyID = UUID()
+        } else {
+            showToast(message)
+        }
+    }
+
+    /// History labels are English keys (DYNAMIC_KEYS); "Remove …" carries the target as it was said.
+    private func toastText(for label: String) -> String {
+        let localized = LD(label)
+        guard psPrefersFrench, localized == label, label.hasPrefix("Remove ") else { return localized }
+        return String(format: L("Erase %@"), String(label.dropFirst("Remove ".count)))
+    }
 
     private static let findsBeforeActing: Set<IntentAction> = [.removeObject, .moveObject, .blurObject, .recolor, .generativeFill, .selectiveAdjust, .cleanUp, .chooseCandidate]
 
@@ -1304,7 +1340,7 @@ public final class PhotoEditorSession {
             if changed {
                 commit(updatedDocument, label: label)
             }
-            if !label.isEmpty { showToast(label, undoable: changed) }
+            if !label.isEmpty { showToast(toastText(for: label), undoable: changed) }
             // The new title is ready to be rewritten or moved.
             if intent.action == .textBehind, changed { activeTool = .text }
             Haptics.success()
@@ -1338,9 +1374,11 @@ public final class PhotoEditorSession {
                 activeTool = .precise
                 preciseMode = .lasso
                 if let text = intent.text, intent.action == .generativeFill { generativePrompt = text }
+            case .message("selectionUsed"): clearSelection()
             case .undo: undo()
             case .redo: redo()
-            case .revert: revert()
+            case .revert:
+                if !revert() { tell(L("This is already the original photo.")) }
             case .compare:
                 showsOriginal = true
                 Task {

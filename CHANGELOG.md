@@ -6,8 +6,10 @@
   appeared upside down (and taps, rings and erases seemed mirrored). A GPU read-back test now guards it, and pixel
   reads no longer depend on a runtime orientation probe.
 - Right way up: "c'est à l'envers", "remets-la à l'endroit" or the Right way up chip undo every flip and quarter turn at
-  once, even from an earlier session; a photo opened flipped offers it. "Inverse" alone no longer mirrors, and
-  Revert to Original now reaches the photo as imported. Vertical flip in Crop.
+  once, even from an earlier session; a photo opened flipped offers it. Only "c'est à l'envers" turns a photo with
+  nothing to undo over, "c'est à l'endroit maintenant" changes nothing, "annule le miroir" keeps the quarter turns,
+  and in a video "lis-la à l'endroit" plays a reversed clip forwards. "À l'endroit où…" stays a place. "Inverse"
+  alone no longer mirrors, and Revert to Original now reaches the photo as imported. Vertical flip in Crop.
 - Words in pictures: "supprime toutes les données du tableau", "efface les chiffres", "remove the numbers" target the
   text; unknown nouns get the language model's full attention; nothing found hands over to the finger.
 - Replies keep the words as said (accents, apostrophes), errors speak French, and the voice strip reports what

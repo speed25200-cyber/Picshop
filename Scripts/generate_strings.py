@@ -11,6 +11,13 @@ UI = ROOT / "Sources/PicshopUI"
 OUT = UI / "Resources/Localizable.xcstrings"
 
 FR = {
+    "This is already the original photo.": "C'est déjà la photo d'origine.",
+    "Rotate 180°": "Pivoter de 180°",
+    "Remove Mirror": "Retirer le miroir",
+    "Play Forwards": "Lecture à l'endroit",
+    "Flip Horizontal": "Retourner horizontalement",
+    "Remove Background": "Supprimer le fond",
+    "Remove Text": "Supprimer le texte",
     "Right Way Up": "À l'endroit",
     "Right way up": "À l'endroit",
     "Flip Vertical": "Retourner verticalement",
@@ -406,6 +413,8 @@ FR = {
 # Keys passed to L() at runtime rather than as literals (enum display names).
 DYNAMIC_KEYS = {
     "Dissolve", "Fade to Black", "Fade to White", "Slide Left", "Slide Right", "Wipe", "Zoom", "Blur",
+    # Executor labels shown in toasts and the History menu.
+    "Right Way Up", "Rotate 180°", "Remove Mirror", "Play Forwards", "Flip Horizontal", "Flip Vertical", "Remove Background", "Remove Text",
 }
 
 def main():

@@ -988,7 +988,10 @@ public extension VisionTextQuery {
             }
             return lines
         case .numeric:
-            return inside.filter { Self.isNumeric(words[$0].text) }.map { [$0] }
+            // In a table, a number that is part of a name ("Llama 3.1 70B", "Table 2:") is not data.
+            let table = Set(Self.tableWords(in: words) ?? [])
+            let data = Self.dataWords(in: words)
+            return inside.filter { table.contains($0) ? data.contains($0) : Self.isNumeric(words[$0].text) }.map { [$0] }
         case .matching(let phrase):
             let wanted = phrase.split(whereSeparator: { $0.isWhitespace }).map { Self.folded(String($0)) }.filter { !$0.isEmpty }
             guard !wanted.isEmpty else { return [] }
@@ -1026,9 +1029,45 @@ public extension VisionTextQuery {
         return digits > 0 ? digits >= letters : percent && letters == 0
     }
 
+    /// Words split into cells: runs of words on one recognised line with less than 0.6 of a
+    /// word's height between them ("Llama 3.1 70B", "86.1 ± 0.4"). Two words with the same box
+    /// (Vision gave the line's box for both) are kept apart, since where a cell ends is unknown.
+    static func cells(in words: [VisionWord]) -> [[Int]] {
+        let heights = words.map(\.box.height).filter { $0 > 0 }.sorted()
+        guard !heights.isEmpty else { return words.indices.map { [$0] } }
+        let gapLimit = 0.6 * heights[heights.count / 2]
+        var cells: [[Int]] = []
+        for line in Set(words.map(\.line)).sorted() {
+            var cell: [Int] = []
+            for index in words.indices.filter({ words[$0].line == line }).sorted(by: { words[$0].box.minX < words[$1].box.minX }) {
+                if let last = cell.last, words[last].box == words[index].box || words[index].box.minX - words[last].box.maxX > gapLimit {
+                    cells.append(cell)
+                    cell = []
+                }
+                cell.append(index)
+            }
+            if !cell.isEmpty { cells.append(cell) }
+        }
+        return cells
+    }
+
+    /// Words that are data: numbers in a cell holding no word with letters, with the signs
+    /// between them ("86.1 ± 0.4"). Not the version or size in a name ("Llama 3.1 70B"),
+    /// nor a caption's number ("Table 2: Results").
+    static func dataWords(in words: [VisionWord]) -> Set<Int> {
+        var data = Set<Int>()
+        for cell in cells(in: words) {
+            let texts = cell.map { words[$0].text }
+            guard texts.contains(where: isNumeric), texts.allSatisfy({ isNumeric($0) || !$0.contains(where: \.isLetter) }) else { continue }
+            data.formUnion(cell)
+        }
+        return data
+    }
+
     /// Indices (ascending) of the words in the picture's main table: rows are words sharing a
-    /// band half a word high; a table is a run of rows holding numbers, with at most one row
-    /// without any at a time (a header or a section heading) and no gap over 3 word heights.
+    /// band half a word high; a table is a run of rows holding data (see `dataWords(in:)`), with
+    /// at most one row without any at a time (a header or a section heading) and no gap over 3
+    /// word heights, less a caption above it ("Table 2: …").
     /// The run with the most numbers wins. Nil when no two rows with numbers follow each other,
     /// so a status bar ("9:41", "87%") or a page number alone is never a table.
     static func tableWords(in words: [VisionWord]) -> [Int]? {
@@ -1042,10 +1081,11 @@ public extension VisionTextQuery {
         let heights = words.map(\.box.height).filter { $0 > 0 }.sorted()
         guard !heights.isEmpty else { return nil }
         let wordHeight = heights[heights.count / 2]
+        let data = dataWords(in: words)
         var rows: [Row] = []
         for index in words.indices.sorted(by: { words[$0].box.midY < words[$1].box.midY }) {
             let box = words[index].box
-            let number = isNumeric(words[index].text) ? 1 : 0
+            let number = data.contains(index) && isNumeric(words[index].text) ? 1 : 0
             if var row = rows.last, abs(box.midY - row.midY) <= wordHeight / 2 {
                 row.midY = (row.midY * Double(row.indices.count) + box.midY) / Double(row.indices.count + 1)
                 row.indices.append(index)
@@ -1059,8 +1099,14 @@ public extension VisionTextQuery {
         }
         var best: [Int] = [], bestNumbers = 0
         var run: [Int] = []
+        /// "Table 2: Results on…" above the table names it; it is not part of it.
+        func isCaption(_ row: Row) -> Bool {
+            guard let first = row.indices.min(by: { words[$0].box.minX < words[$1].box.minX }) else { return false }
+            return ["table", "tableau", "figure", "fig", "tab"].contains(folded(words[first].text))
+        }
         func finishRun() {
             while let last = run.last, rows[last].numbers == 0 { run.removeLast() }
+            while let first = run.first, rows[first].numbers == 0, isCaption(rows[first]) { run.removeFirst() }
             let numbers = run.reduce(0) { $0 + rows[$1].numbers }
             if run.filter({ rows[$0].numbers > 0 }).count >= 2, numbers > bestNumbers {
                 best = run

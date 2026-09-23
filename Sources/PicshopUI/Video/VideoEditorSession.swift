@@ -469,7 +469,7 @@ public final class VideoEditorSession {
             pendingClarification = nil
             candidateOverlays = []
             if updated != timeline { commit(updated, label: label) }
-            if !label.isEmpty { showToast(label, undoable: history.canUndo) }
+            if !label.isEmpty { showToast(LD(label), undoable: history.canUndo) }
             Haptics.success()
         case .needsClarification(let request):
             pendingClarification = request

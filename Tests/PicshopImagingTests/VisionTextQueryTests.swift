@@ -9,16 +9,24 @@ final class VisionTextQueryTests: XCTestCase {
     }
 
     /// Model | MMLU | GSM8K / GPT-4o | 88.7 | 90,5 / Llama 3.1 70B | 86.0 | 95.1%, one box per word.
-    private let table: [VisionWord] = {
-        let rows: [[String]] = [["Model", "MMLU", "GSM8K"], ["GPT-4o", "88.7", "90,5"], ["Llama", "3.1", "70B", "86.0", "95.1%"]]
+    private let table: [VisionWord] = VisionTextQueryTests.layout([[["Model"], ["MMLU"], ["GSM8K"]], [["GPT-4o"], ["88.7"], ["90,5"]], [["Llama", "3.1", "70B"], ["86.0"], ["95.1%"]]])
+
+    /// Rows of cells of words, one recognised line per row: a word space (a quarter of the
+    /// height) inside a cell, a column gap between cells.
+    private static func layout(_ rows: [[[String]]], top: Double = 0.2) -> [VisionWord] {
         var words: [VisionWord] = []
         for (line, row) in rows.enumerated() {
-            for (index, text) in row.enumerated() {
-                words.append(VisionWord(text: text, box: PSRect(x: 0.1 + Double(index) * 0.15, y: 0.2 + Double(line) * 0.1, width: 0.1, height: 0.04), line: line))
+            var x = 0.05
+            for cell in row {
+                for text in cell {
+                    words.append(VisionWord(text: text, box: PSRect(x: x, y: top + Double(line) * 0.1, width: 0.06, height: 0.04), line: line))
+                    x += 0.07
+                }
+                x += 0.06
             }
         }
         return words
-    }()
+    }
 
     /// A screenshot: status bar, a title, the table above, a page number at the bottom.
     private var screen: [VisionWord] {
@@ -84,8 +92,8 @@ final class VisionTextQueryTests: XCTestCase {
         let words = screen
         XCTAssertEqual(VisionTextQuery.tableWords(in: words), Array(3...13), "not the status bar, the title or the page number")
         let inTable = VisionTextQuery(kind: .numeric, withinTable: true).matches(in: words).map { $0.map { words[$0].text } }
-        XCTAssertEqual(inTable, [["88.7"], ["90,5"], ["3.1"], ["70B"], ["86.0"], ["95.1%"]])
-        XCTAssertEqual(VisionTextQuery(kind: .numeric).matches(in: words).count, 9, "anywhere: the status bar and the page number too")
+        XCTAssertEqual(inTable, [["88.7"], ["90,5"], ["86.0"], ["95.1%"]], "not the version and size in the model's name")
+        XCTAssertEqual(VisionTextQuery(kind: .numeric).matches(in: words).count, 7, "anywhere: the status bar and the page number too")
         XCTAssertEqual(VisionTextQuery(kind: .all, withinTable: true).matches(in: words), [[3, 4, 5], [6, 7, 8], [9, 10, 11, 12, 13]])
         // Without two rows of numbers there is no table, and the query reads the whole picture.
         let lone = [VisionWord(text: "12", box: PSRect(x: 0.48, y: 0.94, width: 0.04, height: 0.04), line: 0)]
@@ -115,7 +123,24 @@ final class VisionTextQueryTests: XCTestCase {
 
     func testNumericSelectionSkipsLabelsAndHeaders() {
         let picked = VisionTextQuery(kind: .numeric).matches(in: table).map { $0.map { table[$0].text } }
-        XCTAssertEqual(picked, [["88.7"], ["90,5"], ["3.1"], ["70B"], ["86.0"], ["95.1%"]])
+        XCTAssertEqual(picked, [["88.7"], ["90,5"], ["86.0"], ["95.1%"]])
+    }
+
+    /// "Supprime toutes les données du tableau" on a benchmark table: every score and its
+    /// uncertainty goes; the caption, the headers and the model names stay whole.
+    func testTableDataSparesNamesAndCaption() {
+        let words = Self.layout([[["Table", "2:", "Results", "on", "standard", "benchmarks."]],
+                                 [["Model"], ["MMLU"], ["GSM8K"]],
+                                 [["Claude", "3.5", "Sonnet"], ["88.7"], ["96.4"]],
+                                 [["Llama", "3.1", "405B"], ["86.1", "±", "0.4"], ["96.8"]],
+                                 [["Gemini", "1.5", "Pro"], ["85.9"], ["90.8"]],
+                                 [["Qwen2.5", "72B"], ["86.1"], ["91.5"]]], top: 0.1)
+        let query = VisionTextQuery(target: ObjectTarget(label: "text", originalPhrase: "toutes les données du tableau", matchesAll: true))
+        let erased = query.matches(in: words).flatMap { $0 }.map { words[$0].text }
+        XCTAssertEqual(erased, ["88.7", "96.4", "86.1", "±", "0.4", "96.8", "85.9", "90.8", "86.1", "91.5"])
+        let tableText = Set(VisionTextQuery(kind: .all, withinTable: true).matches(in: words).flatMap { $0 }.map { words[$0].text })
+        XCTAssertFalse(tableText.contains("benchmarks."), "the caption names the table, it is not in it")
+        XCTAssertTrue(tableText.contains("Model"))
     }
 
     func testMatchingIgnoresCaseAccentsAndDecimalComma() {

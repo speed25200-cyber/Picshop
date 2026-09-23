@@ -36,12 +36,15 @@ public struct IntentContext: Sendable {
     public var lastParameter: AdjustmentParameter?
     /// +1 / -1 direction of that last change, 0 when unknown.
     public var lastAdjustmentDirection: Int
+    /// Photo: the area the person selected (lasso, wand), which a blur or a move of
+    /// something not found falls back to.
+    public var selectionMask: MaskReference?
 
     public init(mode: EditorMode, currentAdjustments: Adjustments = .neutral, hasSelection: Bool = false, selectedIndex: Int? = nil,
                 clipCount: Int = 0, textLayerCount: Int = 0, playheadSeconds: Double = 0, timelineDuration: Double = 0, frameRate: Double = 30,
                 pendingClarification: ClarificationRequest? = nil, lastTapPoint: PSPoint? = nil, canUndo: Bool = false, canRedo: Bool = false,
                 preferredLanguage: String? = nil, pageCount: Int = 0, currentPage: Int = 1, hasSignature: Bool = false,
-                lastParameter: AdjustmentParameter? = nil, lastAdjustmentDirection: Int = 0) {
+                lastParameter: AdjustmentParameter? = nil, lastAdjustmentDirection: Int = 0, selectionMask: MaskReference? = nil) {
         self.mode = mode
         self.currentAdjustments = currentAdjustments
         self.hasSelection = hasSelection
@@ -61,6 +64,7 @@ public struct IntentContext: Sendable {
         self.hasSignature = hasSignature
         self.lastParameter = lastParameter
         self.lastAdjustmentDirection = lastAdjustmentDirection
+        self.selectionMask = selectionMask
     }
 
     public static let photo = IntentContext(mode: .photo)

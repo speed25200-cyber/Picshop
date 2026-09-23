@@ -102,11 +102,36 @@ public struct PhotoDocument: Hashable, Codable, Sendable, Identifiable {
         return true
     }
 
+    /// Takes the last flip away and keeps every turn made around it ("annule le
+    /// miroir" after a quarter turn and a mirror leaves the quarter turn).
+    /// Returns false when the photo is not mirrored.
+    @discardableResult
+    public mutating func removeMirror(label: String? = nil) -> Bool {
+        guard let baseID = baseLayerID, let edits = baseLayer?.edits, edits.netOrientation.mirrored,
+              let flip = edits.operations.lastIndex(where: { if case .flip = $0.kind { return true } else { return false } }) else { return false }
+        var without = edits
+        without.operations.remove(at: flip)
+        let wanted = without.netOrientation
+        let fixes: [[EditOperation.Kind]] = [[.flip(.horizontal)], [.flip(.vertical)], [.flip(.horizontal), .rotate(degrees: 90)], [.flip(.horizontal), .rotate(degrees: -90)]]
+        guard let fix = fixes.first(where: { fix in
+            var trial = edits
+            for kind in fix { trial.append(kind) }
+            return trial.netOrientation == wanted
+        }) else { return false }
+        for kind in fix { apply(kind, label: label, to: baseID) }
+        return true
+    }
+
     /// The photo as it was imported: every edit on it gone, the frame back to
-    /// its own size. Added layers stay.
+    /// its own size. Added layers stay, except the cut-out laid over a title
+    /// behind the subject: it copies the photo's edits and would no longer line up.
     public func restoredToImport() -> PhotoDocument {
         var document = self
-        guard let baseID = baseLayerID, let asset = baseLayer?.imageAsset else { return document }
+        guard let baseID = baseLayerID, let base = baseLayer, let asset = base.imageAsset else { return document }
+        if !base.edits.isEmpty || base.mask != nil {
+            document.layers.removeAll { $0.name == Self.subjectLayerName && $0.id != baseID }
+            if let selected = document.selectedLayerID, document.layer(id: selected) == nil { document.selectedLayerID = baseID }
+        }
         document.update(layerID: baseID) { layer in
             layer.edits = EditStack()
             layer.mask = nil

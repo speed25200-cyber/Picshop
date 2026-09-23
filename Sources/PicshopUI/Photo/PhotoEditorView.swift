@@ -54,7 +54,8 @@ public struct PhotoEditorView: View {
             }
             if let app {
                 VoiceStrip(voice: app.voice, isBusy: session.isProcessing, busyTitle: session.processingTitle,
-                           transcript: session.transcript, plan: session.lastPlan, replyIsProblem: session.lastReplyIsProblem, clarification: session.pendingClarification,
+                           transcript: session.transcript, plan: session.lastPlan, replyIsProblem: session.lastReplyIsProblem, replyIsError: session.lastReplyIsError,
+                           replyID: session.replyID, clarification: session.pendingClarification,
                            showsHint: session.activeTool == nil,
                            candidateThumbnail: { await session.candidateThumbnail($0) },
                            onChoose: { session.choose(candidateIndex: $0) }, onChooseAll: { session.chooseAllCandidates() }, onCancel: { session.cancelClarification() })
