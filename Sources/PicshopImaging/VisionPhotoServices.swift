@@ -974,7 +974,8 @@ public extension VisionTextQuery {
     /// Groups of word indices the query selects, in reading order: one per line for `.all`,
     /// one per word for `.numeric`, one per occurrence for `.matching`.
     func matches(in words: [VisionWord]) -> [[Int]] {
-        let pool = withinTable ? (Self.tableWords(in: words) ?? Array(words.indices)) : Array(words.indices)
+        let table = Self.table(in: words)
+        let pool = withinTable ? (table?.words ?? Array(words.indices)) : Array(words.indices)
         let inside = pool.filter { index in region.map { $0.contains(words[index].box.center) } ?? true }
         switch kind {
         case .all:
@@ -988,10 +989,12 @@ public extension VisionTextQuery {
             }
             return lines
         case .numeric:
-            // In a table, a number that is part of a name ("Llama 3.1 70B", "Table 2:") is not data.
-            let table = Set(Self.tableWords(in: words) ?? [])
-            let data = Self.dataWords(in: words)
-            return inside.filter { table.contains($0) ? data.contains($0) : Self.isNumeric(words[$0].text) }.map { [$0] }
+            // In a table, a number that is part of a name ("Llama 3.1 70B", "Opus 4.5") or of a
+            // column title is not data. Every value means the whole data cells (dashes, notes
+            // under the values, superscripts); one to pick is one of the numbers.
+            let tableWords = Set(table?.words ?? [])
+            let data = selectsAll ? Set(table?.data ?? []) : Self.dataWords(in: words)
+            return inside.filter { tableWords.contains($0) ? data.contains($0) : Self.isNumeric(words[$0].text) }.map { [$0] }
         case .matching(let phrase):
             let wanted = phrase.split(whereSeparator: { $0.isWhitespace }).map { Self.folded(String($0)) }.filter { !$0.isEmpty }
             guard !wanted.isEmpty else { return [] }
@@ -1064,65 +1067,170 @@ public extension VisionTextQuery {
         return data
     }
 
-    /// Indices (ascending) of the words in the picture's main table: rows are words sharing a
-    /// band half a word high; a table is a run of rows holding data (see `dataWords(in:)`), with
-    /// at most one row without any at a time (a header or a section heading) and no gap over 3
-    /// word heights, less a caption above it ("Table 2: …").
-    /// The run with the most numbers wins. Nil when no two rows with numbers follow each other,
-    /// so a status bar ("9:41", "87%") or a page number alone is never a table.
+    /// A cell's words that mark an empty or unavailable value: "—", "–", "-", "n/a".
+    static func isPlaceholder(_ token: String) -> Bool {
+        let letters = folded(token)
+        return letters.isEmpty ? token.contains { "—–-−‒―".contains($0) } : letters == "n/a"
+    }
+
+    /// The picture's main table, as ascending word indices: `words` holds everything from the
+    /// column titles to the last row (titles, row labels, data cells), `data` only the words of
+    /// the data cells: the values with their signs and superscripts, the dashes of empty cells
+    /// and the notes under a value ("with tools", "partial").
+    struct Table: Hashable, Sendable {
+        var words: [Int]
+        var data: [Int]
+    }
+
+    /// Indices (ascending) of every word of the picture's main table (see `table(in:)`).
     static func tableWords(in words: [VisionWord]) -> [Int]? {
-        struct Row {
-            var indices: [Int]
+        table(in: words)?.words
+    }
+
+    /// The picture's main table, found from its values alone so that row labels of any number
+    /// of lines, notes under the values and empty cells never cut it:
+    /// - rows are the values (numbers, dashes) sharing a band half a value high;
+    /// - a table is a run of such rows whose values line up in columns, each row at most 2.5
+    ///   times the usual row spacing below the previous one; the run with the most numbers
+    ///   wins, and needs two rows with numbers, so a status bar ("9:41", "87%") or a page
+    ///   number is never a table;
+    /// - its data columns are the x-clusters of the values, grown to the gutters between them;
+    /// - the column titles are the lines in those columns just above the first row (with the
+    ///   lines stacked on them), and the table ends under the last row and the lines stacked
+    ///   under its values.
+    /// Data cells are the cells lying in one data column between the titles and the end: the
+    /// titles, the row labels (left of the columns), a caption above and the footnotes below
+    /// (they span the columns or are further away) are not.
+    static func table(in words: [VisionWord]) -> Table? {
+        let cellList = cells(in: words)
+        guard !cellList.isEmpty else { return nil }
+        let boxes = cellList.map { cell in cell.dropFirst().reduce(words[cell[0]].box) { $0.union(words[$1].box) } }
+        let data = dataWords(in: words)
+        // Values: numbers in data cells, and the dashes of empty cells (they keep a row of a
+        // model without results in the table, but never make a table on their own).
+        var values: [(index: Int, cell: Int, number: Bool)] = []
+        for (cell, members) in cellList.enumerated() {
+            let placeholder = members.allSatisfy { isPlaceholder(words[$0].text) }
+            for index in members {
+                if data.contains(index), isNumeric(words[index].text) {
+                    values.append((index, cell, true))
+                } else if placeholder {
+                    values.append((index, cell, false))
+                }
+            }
+        }
+        let valueHeights = values.filter(\.number).map { words[$0.index].box.height }.filter { $0 > 0 }.sorted()
+        guard !valueHeights.isEmpty else { return nil }
+        let height = valueHeights[valueHeights.count / 2]
+
+        struct Band {
+            var cells: [Int] = []
+            var numbers = 0
+            var count = 0
             var midY: Double
             var minY: Double
             var maxY: Double
-            var numbers: Int
         }
-        let heights = words.map(\.box.height).filter { $0 > 0 }.sorted()
-        guard !heights.isEmpty else { return nil }
-        let wordHeight = heights[heights.count / 2]
-        let data = dataWords(in: words)
-        var rows: [Row] = []
-        for index in words.indices.sorted(by: { words[$0].box.midY < words[$1].box.midY }) {
-            let box = words[index].box
-            let number = data.contains(index) && isNumeric(words[index].text) ? 1 : 0
-            if var row = rows.last, abs(box.midY - row.midY) <= wordHeight / 2 {
-                row.midY = (row.midY * Double(row.indices.count) + box.midY) / Double(row.indices.count + 1)
-                row.indices.append(index)
-                row.minY = min(row.minY, box.minY)
-                row.maxY = max(row.maxY, box.maxY)
-                row.numbers += number
-                rows[rows.count - 1] = row
+        var bands: [Band] = []
+        for value in values.sorted(by: { words[$0.index].box.midY < words[$1.index].box.midY }) {
+            let box = words[value.index].box
+            if var band = bands.last, abs(box.midY - band.midY) <= height / 2 {
+                band.midY = (band.midY * Double(band.count) + box.midY) / Double(band.count + 1)
+                band.minY = min(band.minY, box.minY)
+                band.maxY = max(band.maxY, box.maxY)
+                band.count += 1
+                band.numbers += value.number ? 1 : 0
+                if !band.cells.contains(value.cell) { band.cells.append(value.cell) }
+                bands[bands.count - 1] = band
             } else {
-                rows.append(Row(indices: [index], midY: box.midY, minY: box.minY, maxY: box.maxY, numbers: number))
+                bands.append(Band(cells: [value.cell], numbers: value.number ? 1 : 0, count: 1, midY: box.midY, minY: box.minY, maxY: box.maxY))
             }
         }
-        var best: [Int] = [], bestNumbers = 0
-        var run: [Int] = []
-        /// "Table 2: Results on…" above the table names it; it is not part of it.
-        func isCaption(_ row: Row) -> Bool {
-            guard let first = row.indices.min(by: { words[$0].box.minX < words[$1].box.minX }) else { return false }
-            return ["table", "tableau", "figure", "fig", "tab"].contains(folded(words[first].text))
+        func aligned(_ cells: [Int], _ others: [Int]) -> Bool {
+            cells.contains { cell in others.contains { boxes[cell].minX < boxes[$0].maxX && boxes[$0].minX < boxes[cell].maxX } }
         }
+        // The usual row spacing: between consecutive rows sharing a column, leaving out lines
+        // stacked in one cell when there are rows further apart. The lower median, so a page
+        // number that happens to line up with a column does not stretch it.
+        let spacings = zip(bands, bands.dropFirst()).filter { aligned($0.cells, $1.cells) }.map { $1.midY - $0.midY }
+        let rowSpacings = spacings.filter { $0 >= 1.5 * height }
+        let usable = (rowSpacings.isEmpty ? spacings : rowSpacings).sorted()
+        guard !usable.isEmpty else { return nil }
+        let pitch = usable[(usable.count - 1) / 2]
+
+        var best: [Int] = [], bestNumbers = 0
+        var run: [Int] = [], runCells: [Int] = []
         func finishRun() {
-            while let last = run.last, rows[last].numbers == 0 { run.removeLast() }
-            while let first = run.first, rows[first].numbers == 0, isCaption(rows[first]) { run.removeFirst() }
-            let numbers = run.reduce(0) { $0 + rows[$1].numbers }
-            if run.filter({ rows[$0].numbers > 0 }).count >= 2, numbers > bestNumbers {
+            let numbers = run.reduce(0) { $0 + bands[$1].numbers }
+            if run.filter({ bands[$0].numbers > 0 }).count >= 2, numbers > bestNumbers {
                 best = run
                 bestNumbers = numbers
             }
             run = []
+            runCells = []
         }
-        for (index, row) in rows.enumerated() {
-            if let last = run.last, row.minY - rows[last].maxY > 3 * wordHeight || (row.numbers == 0 && rows[last].numbers == 0) {
+        for (index, band) in bands.enumerated() {
+            if let last = run.last, band.midY - bands[last].midY > 2.5 * pitch || !aligned(band.cells, runCells) {
                 finishRun()
             }
             run.append(index)
+            runCells += band.cells
         }
         finishRun()
-        guard !best.isEmpty else { return nil }
-        return best.flatMap { rows[$0].indices }.sorted()
+        guard let firstBand = best.first.map({ bands[$0] }), let lastBand = best.last.map({ bands[$0] }) else { return nil }
+
+        // Data columns: the values' x-extents merged where they overlap, grown to the gutters.
+        var columns: [(minX: Double, maxX: Double)] = []
+        for box in Set(best.flatMap { bands[$0].cells }).map({ boxes[$0] }).sorted(by: { $0.minX < $1.minX }) {
+            if let last = columns.last, box.minX < last.maxX {
+                columns[columns.count - 1].maxX = max(last.maxX, box.maxX)
+            } else {
+                columns.append((box.minX, box.maxX))
+            }
+        }
+        let gutters = zip(columns, columns.dropFirst()).map { $1.minX - $0.maxX }.sorted()
+        let gutter = gutters.isEmpty ? 2 * height : gutters[gutters.count / 2]
+        let zones: [(minX: Double, maxX: Double)] = columns.indices.map { index in
+            (index == 0 ? columns[index].minX - gutter / 2 : (columns[index - 1].maxX + columns[index].minX) / 2,
+             index == columns.count - 1 ? columns[index].maxX + gutter / 2 : (columns[index].maxX + columns[index + 1].minX) / 2)
+        }
+        /// A cell centred in a data column and not reaching into the next one: not a row label,
+        /// nor a caption or a footnote running across the columns.
+        func inColumn(_ cell: Int) -> Bool {
+            let box = boxes[cell]
+            return zones.contains { box.midX >= $0.minX && box.midX <= $0.maxX && box.minX >= $0.minX - gutter / 2 && box.maxX <= $0.maxX + gutter / 2 }
+        }
+        let stack = 0.8 * height
+
+        // Column titles: the lines in the columns just above the first row, and those stacked on them.
+        let titles = cellList.indices.filter { inColumn($0) && boxes[$0].midY < firstBand.minY && firstBand.minY - boxes[$0].maxY <= pitch }
+            .sorted { boxes[$0].maxY > boxes[$1].maxY }
+        var titleTop: Double?, titleBottom: Double?
+        if let lowest = titles.first {
+            var top = boxes[lowest].minY
+            for cell in titles where boxes[cell].maxY >= top - stack { top = min(top, boxes[cell].minY) }
+            titleTop = top
+            titleBottom = boxes[lowest].maxY
+        }
+        // The end: under the last row, and the lines stacked under it (the notes under its
+        // values; for the whole table, its label's last lines too).
+        func end(_ include: (Int) -> Bool) -> Double {
+            var bottom = lastBand.maxY
+            for cell in cellList.indices.sorted(by: { boxes[$0].minY < boxes[$1].minY }) where include(cell) {
+                let box = boxes[cell]
+                guard box.midY > lastBand.midY, box.midY <= lastBand.midY + pitch / 2, box.minY <= bottom + stack else { continue }
+                bottom = max(bottom, box.maxY)
+            }
+            return bottom
+        }
+        let dataTop = titleBottom ?? firstBand.minY - height / 2
+        let dataBottom = end(inColumn)
+        let top = titleTop ?? dataTop
+        let bottom = max(dataBottom, end { _ in true })
+
+        let dataCells = cellList.indices.filter { inColumn($0) && boxes[$0].midY > dataTop && boxes[$0].midY <= dataBottom }
+        let tableWords = words.indices.filter { words[$0].box.midY >= top && words[$0].box.midY <= bottom }
+        return Table(words: tableWords, data: dataCells.flatMap { cellList[$0] }.sorted())
     }
 }
 
