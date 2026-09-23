@@ -202,6 +202,7 @@ public enum IntentNormalizer {
             "fitmusic": .fitMusic, "fitthemusic": .fitMusic, "musicfit": .fitMusic, "endmusic": .fitMusic,
             "beatsync": .syncToBeat, "cuttobeat": .syncToBeat, "synctomusic": .syncToBeat, "reframe": .smartReframe, "autoreframe": .smartReframe,
             "voiceisolation": .enhanceVoice, "isolatevoice": .enhanceVoice, "cleanaudio": .enhanceVoice, "denoiseaudio": .enhanceVoice,
+            "blurobject": .blurObject, "blurregion": .blurObject, "pixelate": .blurObject,
             "autocrop": .autoCrop, "bestcrop": .autoCrop, "smartcrop": .autoCrop,
             "cleanup": .cleanUp, "removedistractions": .cleanUp, "removepassersby": .cleanUp, "removetourists": .cleanUp,
             "textbehind": .textBehind, "textbehindsubject": .textBehind, "deptheffect": .textBehind,

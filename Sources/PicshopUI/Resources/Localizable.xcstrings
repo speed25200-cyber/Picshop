@@ -929,6 +929,22 @@
         }
       }
     },
+    "Blur it": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blur it"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le flouter"
+          }
+        }
+      }
+    },
     "Blurring the background…": {
       "localizations": {
         "en": {

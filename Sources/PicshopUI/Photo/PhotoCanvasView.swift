@@ -709,6 +709,8 @@ struct MagicSelectionBar: View {
                 Button { session.move(candidate, degrees: 90) } label: { Label(L("Move up"), systemImage: "arrow.up") }
                 Button { session.move(candidate, degrees: -90) } label: { Label(L("Move down"), systemImage: "arrow.down") }
                 Button { session.move(candidate, degrees: nil) } label: { Label(L("Centre it"), systemImage: "scope") }
+                Divider()
+                Button { session.blur(candidate) } label: { Label(L("Blur it"), systemImage: "drop.halffull") }
             } label: {
                 label(L("Move"), symbol: "arrow.up.and.down.and.arrow.left.and.right")
             }

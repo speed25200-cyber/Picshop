@@ -270,6 +270,13 @@ public actor PhotoRenderer {
             cacheOperation(result, for: cacheKey)
             return result
 
+        case .blurRegion(let mask, let amount):
+            guard let maskImage = maskStore.load(mask, fitting: extent) else { return input }
+            let sigma = max(4, 0.025 * max(extent.width, extent.height) * amount)
+            let blurred = input.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: extent)
+            let soft = maskImage.clampedToExtent().applyingGaussianBlur(sigma: max(1, 2 * scale)).cropped(to: extent)
+            return AdjustmentPipeline.blendWithMask(foreground: blurred, background: input, mask: soft)
+
         case .moveObject(let mask, let offset):
             if let cached = operationCache[cacheKey] { return cached }
             guard let maskImage = maskStore.load(mask, fitting: extent) else { return input }

@@ -144,6 +144,8 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     case cleanUp
     /// The best framing, chosen among photographers' crops by an aesthetics model.
     case autoCrop
+    /// Blurs what the target names (faces by default): privacy on a photo.
+    case blurObject
     /// Moves an object across the photo, filling where it was (target; degrees = direction, 0 right / 90 up;
     /// amount = distance as a fraction of the frame; placement .center = to the middle).
     case moveObject
@@ -162,7 +164,7 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
 
     public var isPhotoOnly: Bool {
         switch self {
-        case .selectLayer, .duplicateLayer, .deleteLayer, .upscale, .relight, .generativeFill, .recolor, .describe, .saveStyle, .applyStyle, .expandCanvas, .moveObject, .textBehind, .cleanUp, .autoCrop: return true
+        case .selectLayer, .duplicateLayer, .deleteLayer, .upscale, .relight, .generativeFill, .recolor, .describe, .saveStyle, .applyStyle, .expandCanvas, .moveObject, .textBehind, .cleanUp, .autoCrop, .blurObject: return true
         default: return false
         }
     }
@@ -464,6 +466,7 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .textBehind: return "Text behind the subject"
         case .cleanUp: return "Clean up"
         case .autoCrop: return "Best crop"
+        case .blurObject: return "Blur \(target?.originalPhrase ?? "faces")"
         }
     }
 }

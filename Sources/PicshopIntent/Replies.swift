@@ -123,6 +123,7 @@ public enum Replies {
         case .textBehind: return fr ? "Le texte passe derrière le sujet." : "The words go behind the subject."
         case .cleanUp: return fr ? "J'enlève les passants." : "Removing the passers-by."
         case .autoCrop: return fr ? "Je cherche le meilleur cadrage." : "Finding the best framing."
+        case .blurObject: return fr ? "Je floute." : "Blurring it."
         case .unknown: return fr ? "Je n'ai pas compris. Tu peux reformuler ?" : "I didn't catch that. Could you rephrase?"
         }
     }

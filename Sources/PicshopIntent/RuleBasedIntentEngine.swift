@@ -91,6 +91,7 @@ public struct RuleBasedIntentEngine: IntentEngine {
                                                "colors of another photo", "copy the colours", "copy the colors", "same colours as", "same colors as", "colour transfer", "color transfer", "match colours", "match colors"]) {
             return [EditIntent(action: .matchColor, confidence: 0.9)]
         }
+        if context.mode == .photo, let blur = parseBlurObject(u, context: context) { return [blur] }
         if context.mode == .photo, let move = parseMoveObject(u, context: context) { return [move] }
         if let background = parseBackground(u) { return [background] }
         if let removal = parseRemoveObject(u, context: context) { return [removal] }
@@ -937,6 +938,21 @@ public struct RuleBasedIntentEngine: IntentEngine {
     }
 
     // MARK: - Resolution & detail operations
+
+    /// "floute les visages", "floute la plaque", "blur the screen": a privacy blur on what is named.
+    /// The background is the portrait blur's, not this.
+    func parseBlurObject(_ u: NormalizedUtterance, context: IntentContext) -> EditIntent? {
+        let verbs = ["floute", "flouter", "floutes", "pixelise", "pixeliser", "anonymise", "anonymiser", "blur", "pixelate", "anonymize", "anonymise"]
+        guard let rest = remainder(of: u, after: verbs), !rest.isEmpty else { return nil }
+        let named = NormalizedUtterance(rest)
+        if named.contains(Self.backgroundWords + ["fond", "arriere plan", "background", "le fond", "decor"]) { return nil }
+        if named.contains(["visage", "visages", "face", "faces", "tete", "tetes", "gens", "people", "personnes", "enfant", "enfants", "kid", "kids", "child"]) {
+            let plural = named.contains(["visages", "faces", "tetes", "gens", "people", "personnes", "enfants", "kids", "tous", "all", "les"])
+            return EditIntent(action: .blurObject, target: ObjectTarget(label: "face", originalPhrase: u.language == .french ? "les visages" : "the faces", matchesAll: plural), confidence: 0.9)
+        }
+        guard let target = makeTarget(from: rest, context: context), target.label != "background" else { return nil }
+        return EditIntent(action: .blurObject, target: target, confidence: 0.85)
+    }
 
     /// "déplace le texte vers le haut", "move the title down": the latest title goes to a place.
     func parseTextMove(_ u: NormalizedUtterance) -> EditIntent? {

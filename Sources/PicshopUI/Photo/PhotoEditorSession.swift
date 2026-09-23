@@ -866,6 +866,12 @@ public final class PhotoEditorSession {
         Task { await run(intent) }
     }
 
+    /// A privacy blur over one of the objects found in the picture.
+    public func blur(_ candidate: ObjectCandidate) {
+        let target = ObjectTarget(label: candidate.label, originalPhrase: candidate.label, point: candidate.boundingBox.center)
+        Task { await run(EditIntent(action: .blurObject, target: target)) }
+    }
+
     /// Erases every instance of a category (people, text, animals…).
     public func eraseAll(label: String, phrase: String) {
         Task { await run(EditIntent(action: .removeObject, target: ObjectTarget(label: label, originalPhrase: phrase, matchesAll: true), scope: .all)) }
@@ -1179,7 +1185,7 @@ public final class PhotoEditorSession {
             return .failed(message: "thermal")
         }
         if [.removeObject, .removeBackground, .blurBackground, .replaceBackground, .upscale, .selectiveAdjust, .chooseCandidate, .straighten, .generativeFill, .recolor,
-            .moveObject, .cleanUp, .expandCanvas, .textBehind, .autoCrop].contains(intent.action) {
+            .moveObject, .cleanUp, .expandCanvas, .textBehind, .autoCrop, .blurObject].contains(intent.action) {
             isProcessing = true
             processingTitle = intent.action == .chooseCandidate ? L("Erasing…") : processingLabel(for: intent)
         }
@@ -1217,6 +1223,7 @@ public final class PhotoEditorSession {
         case .cleanUp: return L("Finding the passers-by…")
         case .textBehind: return L("Lifting the subject…")
         case .autoCrop: return L("Trying framings…")
+        case .blurObject: return String(format: L("Finding %@…"), intent.target?.originalPhrase ?? L("object"))
         case .straighten: return L("Levelling…")
         default: return L("Working…")
         }

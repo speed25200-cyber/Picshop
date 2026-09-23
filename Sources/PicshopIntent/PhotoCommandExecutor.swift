@@ -53,7 +53,7 @@ public struct PhotoCommandExecutor: Sendable {
                 return (document, .failed(errorMessage(error)))
             }
 
-        case .removeObject, .moveObject:
+        case .removeObject, .moveObject, .blurObject:
             guard let target = intent.target else { return (document, .failed(PicshopError.objectNotFound("object").message)) }
             return await removeObject(target: target, intent: intent, document: document)
 
@@ -406,6 +406,9 @@ public struct PhotoCommandExecutor: Sendable {
                 guard let prompt = intent.text, !prompt.isEmpty else { return (document, .failed("Missing prompt")) }
                 document.apply(.generativeFill(mask, prompt: prompt))
                 return (document, .applied("Generate “\(prompt)”"))
+            case .blurObject:
+                document.apply(.blurRegion(mask, amount: (intent.amount?.value ?? 1).clamped(to: 0.2...1)))
+                return (document, .applied(candidates.count > 1 ? "Blur \(candidates.count) × \(target.label)" : "Blur \(target.originalPhrase)"))
             case .moveObject:
                 let box = candidates.map(\.boundingBox).reduce(candidates.first?.boundingBox ?? .zero) { $0.union($1) }
                 var offset: PSPoint

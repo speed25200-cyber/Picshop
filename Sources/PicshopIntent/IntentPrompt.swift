@@ -51,6 +51,7 @@ public enum IntentPrompt {
         - crop/setAspect: aspect (\(aspectList)); rotate: degrees (negative = counter-clockwise); straighten: degrees optional; flip: flipAxis (horizontal|vertical)
         - addText: text (verbatim, keep the user's language and casing), placement (\(placementList)), color; editText/removeText
         - upscale (amount 2|3|4), denoise, sharpen, relight
+        - blurObject (PHOTO: privacy blur on target — face, licence plate, screen; "floute les visages")
         - autoCrop (PHOTO: the best framing, chosen by an aesthetics model: "recadre au mieux", "improve the framing")
         - cleanUp (PHOTO: erase the passers-by and photobombers, keep the people the photo is of)
         - textBehind (PHOTO: a title behind the person, the Lock Screen depth effect; text = the words, verbatim)

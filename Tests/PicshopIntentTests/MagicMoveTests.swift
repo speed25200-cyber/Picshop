@@ -218,3 +218,23 @@ final class AutoCropTests: XCTestCase {
         XCTAssertEqual(same.canvasSize.width, 3000)
     }
 }
+
+final class PhotoBlurTests: XCTestCase {
+    func testBlurFacesAndPlates() async {
+        let engine = RuleBasedIntentEngine()
+        let faces = engine.parse("floute les visages", context: .photo).intents.first
+        XCTAssertEqual(faces?.action, .blurObject)
+        XCTAssertEqual(faces?.target?.label, "face")
+        XCTAssertEqual(faces?.target?.matchesAll, true)
+        XCTAssertEqual(engine.parse("floute la plaque d'immatriculation", context: .photo).intents.first?.action, .blurObject)
+        XCTAssertEqual(engine.parse("floute l'arrière-plan", context: .photo).intents.first?.action, .blurBackground)
+        let people = [ObjectCandidate(label: "face", boundingBox: PSRect(x: 0.2, y: 0.2, width: 0.1, height: 0.1), confidence: 0.9),
+                      ObjectCandidate(label: "face", boundingBox: PSRect(x: 0.6, y: 0.2, width: 0.1, height: 0.1), confidence: 0.9)]
+        let document = PhotoDocument(title: "t", baseImage: MediaAsset(kind: .image, relativePath: "media/a.jpg", pixelSize: PSSize(width: 3000, height: 2000)))
+        guard let faces else { return XCTFail("no intent") }
+        let (blurred, result) = await PhotoCommandExecutor(services: FakePhotoServices(candidates: people)).execute(faces, on: document, context: .photo)
+        XCTAssertTrue(result.outcome.isSuccess)
+        guard case .blurRegion(let mask, _)? = blurred.baseLayer?.edits.operations.last?.kind else { return XCTFail("expected a blur") }
+        XCTAssertGreaterThan(mask.boundingBox.width, 0.45, "both faces")
+    }
+}

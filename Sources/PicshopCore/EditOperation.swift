@@ -61,6 +61,8 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
         /// Generative expand: the canvas grows and the new border is invented.
         /// `placement` is where the current picture sits in the new canvas (normalised, top-left origin).
         case expand(PSRect)
+        /// Privacy blur inside a mask (faces, a number plate, a screen).
+        case blurRegion(MaskReference, amount: Double)
         /// Magic move: the object under the mask lifts off, the hole is filled and it lands `offset`
         /// away (normalised, top-left origin).
         case moveObject(MaskReference, offset: PSPoint)
@@ -103,6 +105,7 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
             case .lensBlur: return "Focus"
             case .expand: return "Expand"
             case .moveObject(let mask, _): return "Move \(mask.displayName)"
+            case .blurRegion(let mask, _): return "Blur \(mask.displayName)"
             }
         }
 
