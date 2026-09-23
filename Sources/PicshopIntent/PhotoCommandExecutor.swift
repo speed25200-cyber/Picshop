@@ -54,7 +54,7 @@ public struct PhotoCommandExecutor: Sendable {
             }
 
         case .removeObject, .moveObject, .blurObject:
-            guard let target = intent.target else { return (document, .failed(PicshopError.objectNotFound("object").message)) }
+            guard let target = intent.target else { return (document, .failed(PicshopError.objectNotFound("object").message(french: language == .french))) }
             return await removeObject(target: target, intent: intent, document: document)
 
         case .chooseCandidate:
@@ -71,7 +71,7 @@ public struct PhotoCommandExecutor: Sendable {
                 case .ambiguous(let candidates):
                     let request = ClarificationRequest(question: CandidateSelector.question(for: target, options: candidates, language: language), candidates: candidates, pendingIntent: pending.pendingIntent)
                     return (document, .clarify(request))
-                case .none: return (document, .failed(PicshopError.objectNotFound(target.originalPhrase).message))
+                case .none: return (document, .failed(PicshopError.objectNotFound(target.originalPhrase).message(french: language == .french)))
                 }
             } else {
                 return (document, ExecutionResult(outcome: .ignored))
@@ -166,7 +166,7 @@ public struct PhotoCommandExecutor: Sendable {
                 case .ambiguous(let options):
                     return (document, .clarify(ClarificationRequest(question: CandidateSelector.question(for: target, options: options, language: language), candidates: options, pendingIntent: intent)))
                 case .none:
-                    return (document, .failed(PicshopError.objectNotFound(target.originalPhrase).message))
+                    return (document, .failed(PicshopError.objectNotFound(target.originalPhrase).message(french: language == .french)))
                 }
             } catch {
                 return (document, .failed(errorMessage(error)))
@@ -188,7 +188,7 @@ public struct PhotoCommandExecutor: Sendable {
                 do {
                     let framing = try await services.framingRect(for: target, in: document)
                     guard let rect = framing else {
-                        return (document, .failed(PicshopError.objectNotFound(target.originalPhrase).message))
+                        return (document, .failed(PicshopError.objectNotFound(target.originalPhrase).message(french: language == .french)))
                     }
                     document.apply(.crop(rect.clampedToUnit()))
                     return (document, .applied("Crop to \(target.originalPhrase)"))
@@ -236,6 +236,12 @@ public struct PhotoCommandExecutor: Sendable {
             let axis = intent.flipAxis ?? .horizontal
             document.apply(.flip(axis))
             return (document, .applied(axis == .horizontal ? "Flip Horizontal" : "Flip Vertical"))
+
+        case .resetOrientation:
+            // Flips and quarter turns undone at once; a photo that was shot upside down is turned over.
+            if document.resetOrientation(label: "Right Way Up") { return (document, .applied("Right Way Up")) }
+            document.apply(.rotate(degrees: 180))
+            return (document, .applied("Rotate 180°"))
 
         case .addText:
             guard let text = intent.text, !text.isEmpty else {
@@ -357,7 +363,7 @@ public struct PhotoCommandExecutor: Sendable {
         case .unknown:
             return (document, ExecutionResult(outcome: .info(message: Replies.reply(for: intent, language: language))))
         default:
-            return (document, .failed(PicshopError.unsupportedOperation(intent.summary).message))
+            return (document, .failed(PicshopError.unsupportedOperation(intent.summary).message(french: language == .french)))
         }
     }
 
@@ -376,11 +382,18 @@ public struct PhotoCommandExecutor: Sendable {
                 let request = ClarificationRequest(question: CandidateSelector.question(for: target, options: options, language: language), candidates: options, pendingIntent: intent)
                 return (document, .clarify(request))
             case .none:
+                // Nothing named that was seen: hand over to the finger instead of stopping at an error.
                 if target.label == "object" || target.label == "blemish" {
                     let message = fr ? "Touche l'élément à effacer, ou décris-le (« le poteau à droite »)." : "Tap the thing to erase, or describe it (“the pole on the right”)."
                     return (document, ExecutionResult(outcome: .info(message: message), effects: [.message("tapToErase")]))
                 }
-                return (document, .failed(PicshopError.objectNotFound(target.originalPhrase).message))
+                let phrase = target.originalPhrase
+                if intent.action == .removeObject {
+                    let message = fr ? "Je ne trouve pas « \(phrase) ». Touche ou entoure ce qu'il faut effacer." : "I can't find “\(phrase)”. Tap or circle what to erase."
+                    return (document, ExecutionResult(outcome: .info(message: message), effects: [.message("tapToErase")]))
+                }
+                let message = fr ? "Je ne trouve pas « \(phrase) ». Entoure la zone, puis redis la commande." : "I can't find “\(phrase)”. Circle the area, then say it again."
+                return (document, ExecutionResult(outcome: .info(message: message), effects: [.message("selectRegion")]))
             }
         } catch {
             return (document, .failed(errorMessage(error)))
@@ -461,7 +474,7 @@ public struct PhotoCommandExecutor: Sendable {
     }
 
     func errorMessage(_ error: Error) -> String {
-        if let known = error as? PicshopError { return known.message }
+        if let known = error as? PicshopError { return known.message(french: language == .french) }
         return error.localizedDescription
     }
 }

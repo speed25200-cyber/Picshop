@@ -13,6 +13,11 @@ protocol EditorStatus: AnyObject, Observable {
     var exportProgress: Double? { get }
     var toast: PhotoEditorSession.Toast? { get }
     func undo()
+    func performToastAction(_ action: PhotoEditorSession.Toast.Action)
+}
+
+extension EditorStatus {
+    func performToastAction(_ action: PhotoEditorSession.Toast.Action) {}
 }
 
 /// Processing HUD, export HUD and toast for an editor.
@@ -29,25 +34,38 @@ struct EditorStatusOverlay<Session: EditorStatus>: View {
 
     var body: some View {
         ZStack {
-            if session.isProcessing {
-                ProgressHUD(title: session.processingTitle, progress: session.processingProgress)
+            ZStack {
+                if session.isProcessing {
+                    ProgressHUD(title: session.processingTitle, progress: session.processingProgress)
+                }
+                if let progress = session.exportProgress {
+                    ProgressHUD(title: L("Exporting…"), progress: progress)
+                }
             }
-            if let progress = session.exportProgress {
-                ProgressHUD(title: L("Exporting…"), progress: progress)
-            }
+            .allowsHitTesting(blocksTouches)
+            // The toast's button must stay tappable while the editor below keeps its touches.
             if let toast = session.toast {
                 ToastView(text: toast.text,
-                          systemImage: toast.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill",
-                          tint: toast.isError ? PSTheme.danger : PSTheme.success,
-                          onUndo: toast.undoable ? { session.undo() } : nil)
+                          systemImage: toast.isError ? "exclamationmark.triangle.fill" : toast.action != nil ? "arrow.uturn.up.circle.fill" : "checkmark.circle.fill",
+                          tint: toast.isError ? PSTheme.danger : toast.action != nil ? PSTheme.accent : PSTheme.success,
+                          action: button(for: toast))
                     .padding(.top, toastTopInset)
                     .padding(.horizontal, toastHorizontalInset)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .id(toast.id)
             }
         }
-        .allowsHitTesting(blocksTouches)
         .animation(PSMotion.standard, value: session.isProcessing)
+    }
+
+    private func button(for toast: PhotoEditorSession.Toast) -> ToastView.Action? {
+        if let action = toast.action {
+            switch action {
+            case .rightWayUp:
+                return ToastView.Action(title: L("Right way up"), symbol: "arrow.uturn.up") { session.performToastAction(action) }
+            }
+        }
+        return toast.undoable ? ToastView.Action(title: L("Undo"), symbol: "arrow.uturn.backward") { session.undo() } : nil
     }
 }
 #endif

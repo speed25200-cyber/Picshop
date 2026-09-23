@@ -524,6 +524,8 @@ struct VoiceStrip: View {
     var busyTitle: String = ""
     var transcript: String
     var plan: EditPlan?
+    /// The reply says the command could not be done as said (nothing found, not possible here).
+    var replyIsProblem = false
     var clarification: ClarificationRequest?
     /// Shown while nothing else is going on (typically when no tool is open).
     var showsHint: Bool
@@ -612,6 +614,8 @@ struct VoiceStrip: View {
             MagicGlyph(size: 15).symbolEffect(.pulse, isActive: !reducedMotion)
         } else if isUnavailable {
             Image(systemName: "mic.slash").foregroundStyle(PSTheme.danger)
+        } else if replyVisible, plan != nil, replyIsProblem {
+            Image(systemName: "hand.point.up.left.fill").foregroundStyle(PSTheme.accent).symbolEffect(.bounce, value: replyVisible)
         } else if replyVisible, plan != nil {
             Image(systemName: "checkmark.circle.fill").foregroundStyle(PSTheme.success).symbolEffect(.bounce, value: replyVisible)
         } else {

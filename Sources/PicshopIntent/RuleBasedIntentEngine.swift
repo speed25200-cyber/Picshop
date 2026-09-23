@@ -47,7 +47,7 @@ public struct RuleBasedIntentEngine: IntentEngine {
 
         // Drop unknowns if at least one segment was understood.
         let understood = intents.filter { $0.action != .unknown }
-        let final = understood.isEmpty ? intents : understood
+        let final = (understood.isEmpty ? intents : understood).map { withOriginalWords($0, from: utterance) }
         let confidence = final.map(\.confidence).min() ?? 0
         return EditPlan(utterance: utterance, intents: final, confidence: confidence, language: language.rawValue,
                         reply: Replies.combined(for: final, language: language), engine: .rules)
@@ -56,6 +56,8 @@ public struct RuleBasedIntentEngine: IntentEngine {
     // MARK: - Segment dispatch
 
     func parseSegment(_ u: NormalizedUtterance, original: String, context: IntentContext) -> [EditIntent] {
+        // "C'est à l'envers" describes the picture, it does not ask to turn it: put it the right way up.
+        if context.mode != .pdf, u.contains(Self.uprightPhrases) { return [EditIntent(action: .resetOrientation)] }
         if let summary = parseSummary(u) { return [summary] }
         if context.mode == .photo, let style = parseStyle(u, original: original) { return [style] }
         if let version = parseVersion(u, original: original) { return [version] }
@@ -605,6 +607,10 @@ public struct RuleBasedIntentEngine: IntentEngine {
             return nil
         }
         let restUtterance = NormalizedUtterance(rest)
+        // "Supprime les données GPS" is about the file, not about writing in the picture.
+        if restUtterance.contains(["gps", "exif", "metadonnees", "metadata", "localisation", "location", "geolocalisation", "position", "coordonnees"]) {
+            return nil
+        }
         if restUtterance.contains(["filter", "filtre", "look", "effect", "effet", "vignette", "vignettage", "grain", "flou", "blur", "noise", "bruit", "modification", "modifications", "edits", "edit", "reglages", "adjustments", "crop", "recadrage", "layer", "calque", "zoom"]) {
             return nil
         }
@@ -769,6 +775,14 @@ public struct RuleBasedIntentEngine: IntentEngine {
 
     // MARK: - Rotate / straighten / flip
 
+    /// The picture is described as upside down or mirrored, or asked to be the right way up again.
+    static let uprightPhrases = ["est a l envers", "sont a l envers", "est la tete en bas", "est tete en bas", "sont la tete en bas", "affiche a l envers", "affichee a l envers",
+                                 "affichees a l envers", "affiche les images a l envers", "affiche la photo a l envers", "is upside down", "are upside down", "s upside down",
+                                 "shows upside down", "looks upside down", "a l endroit", "dans le bon sens", "sens dessus dessous", "right way up", "right side up",
+                                 "right way round", "fix the orientation", "correct the orientation", "reset the orientation", "corrige l orientation",
+                                 "remets l orientation", "retablis l orientation", "reinitialise l orientation", "orientation d origine", "original orientation",
+                                 "unflip", "annule le retournement", "annule le miroir", "undo the flip", "undo the mirror"]
+
     func parseGeometry(_ u: NormalizedUtterance, context: IntentContext) -> EditIntent? {
         if u.contains(["straighten", "straighten it", "level", "level the horizon", "horizon", "redresse", "redresser", "redresse l horizon", "aligne l horizon", "mets droit", "mets la droite", "de niveau", "c est de travers", "it s crooked", "crooked", "tilted", "penche", "penchee", "de travers"]) {
             var intent = EditIntent(action: .straighten)
@@ -782,8 +796,11 @@ public struct RuleBasedIntentEngine: IntentEngine {
         if context.mode == .video, u.contains(["reverse", "inverse", "backwards", "a l envers", "rewind", "marche arriere"]), !u.contains(["flip", "mirror", "miroir", "retourne"]) {
             return nil
         }
-        if u.contains(["flip", "mirror", "miroir", "retourne", "retourner", "inverse", "inverser", "flip it", "mirror it", "en miroir", "symetrie", "symmetry"]) && !u.contains(["upside down", "a l envers", "tete en bas"]) {
-            let axis: FlipAxis = u.contains(["vertical", "verticalement", "vertically", "upside", "haut en bas", "top to bottom"]) ? .vertical : .horizontal
+        // "Inverse" alone is not a mirror ("inverse les couleurs"); it needs a direction.
+        let mirrorWords = ["flip", "mirror", "miroir", "retourne", "retourner", "flip it", "mirror it", "en miroir", "symetrie", "symmetry"]
+        let inverseWithAxis = u.contains(["inverse", "inverser", "inverse la", "inverse le"]) && u.contains(["gauche et droite", "droite et gauche", "haut et bas", "bas et haut", "la gauche et la droite", "la droite et la gauche", "le haut et le bas", "le bas et le haut", "horizontalement", "verticalement", "left and right", "left to right", "top and bottom"])
+        if (u.contains(mirrorWords) || inverseWithAxis) && !u.contains(["upside down", "a l envers", "tete en bas"]) {
+            let axis: FlipAxis = u.contains(["vertical", "verticalement", "vertically", "upside", "haut en bas", "bas en haut", "haut et bas", "bas et haut", "le haut et le bas", "le bas et le haut", "top to bottom", "top and bottom"]) ? .vertical : .horizontal
             return EditIntent(action: .flip, flipAxis: axis)
         }
         if u.contains(["rotate", "turn", "tourne", "tourner", "pivote", "pivoter", "fais pivoter", "fais tourner", "rotation", "upside down", "a l envers", "tete en bas", "en paysage", "en portrait", "to landscape", "to portrait"]) {
@@ -916,6 +933,16 @@ public struct RuleBasedIntentEngine: IntentEngine {
             }
         }
         return nil
+    }
+
+    /// The target as the person said it, accents and apostrophes included ("les données", "l'arbre").
+    func withOriginalWords(_ intent: EditIntent, from utterance: String) -> EditIntent {
+        guard var target = intent.target,
+              let said = originalSubstring(matching: NormalizedUtterance.normalize(target.originalPhrase), in: utterance) else { return intent }
+        var intent = intent
+        target.originalPhrase = said.trimmingCharacters(in: CharacterSet(charactersIn: "«»“”\"'() "))
+        intent.target = target
+        return intent
     }
 
     /// Finds the span of the original string whose normalised form equals `normalizedPhrase`.

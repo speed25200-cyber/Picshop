@@ -17,6 +17,8 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     case rotate
     case straighten
     case flip
+    /// Puts the photo back the right way up, undoing every flip and quarter turn at once.
+    case resetOrientation
     case addText
     case editText
     case removeText
@@ -372,6 +374,7 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .rotate: return "Rotate \(Int(degrees ?? 90))°"
         case .straighten: return "Straighten"
         case .flip: return flipAxis == .vertical ? "Flip vertical" : "Flip horizontal"
+        case .resetOrientation: return "Right way up"
         case .addText: return "Add text “\(text ?? "")”"
         case .editText: return "Edit text"
         case .removeText: return "Remove text"

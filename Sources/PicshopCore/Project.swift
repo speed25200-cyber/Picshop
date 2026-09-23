@@ -84,22 +84,34 @@ public enum PicshopError: Error, Sendable, Equatable {
     case speechUnavailable(String)
     case cancelled
 
-    public var message: String {
+    /// In the language the device speaks.
+    public var message: String { message(french: Self.devicePrefersFrench) }
+
+    public func message(french: Bool) -> String {
         switch self {
-        case .projectNotFound: return "This project could not be found."
-        case .corruptProject(let detail): return "The project file is damaged (\(detail))."
-        case .mediaUnavailable(let name): return "The media “\(name)” is missing."
-        case .objectNotFound(let target): return "I couldn't find “\(target)” in the picture."
-        case .ambiguousTarget(let count): return "I found \(count) matches — which one?"
-        case .unsupportedOperation(let name): return "“\(name)” isn't available here."
-        case .modelUnavailable(let name): return "The \(name) model isn't installed yet."
-        case .renderFailed(let detail): return "Rendering failed: \(detail)"
-        case .exportFailed(let detail): return "Export failed: \(detail)"
-        case .permissionDenied(let what): return "Permission for \(what) was denied. You can enable it in Settings."
-        case .speechUnavailable(let detail): return "Voice control is unavailable: \(detail)"
-        case .cancelled: return "Cancelled."
+        case .projectNotFound: return french ? "Ce projet est introuvable." : "This project could not be found."
+        case .corruptProject(let detail): return french ? "Le fichier du projet est abîmé (\(detail))." : "The project file is damaged (\(detail))."
+        case .mediaUnavailable(let name): return french ? "Le média « \(name) » est introuvable." : "The media “\(name)” is missing."
+        case .objectNotFound(let target): return french ? "Je ne trouve pas « \(target) » sur la photo." : "I couldn't find “\(target)” in the picture."
+        case .ambiguousTarget(let count): return french ? "J'en vois \(count) — lequel ?" : "I found \(count) matches — which one?"
+        case .unsupportedOperation(let name): return french ? "« \(name) » n'est pas possible ici." : "“\(name)” isn't available here."
+        case .modelUnavailable(let name): return french ? "Le modèle \(name) n'est pas encore installé." : "The \(name) model isn't installed yet."
+        case .renderFailed(let detail): return french ? "Le rendu a échoué : \(detail)" : "Rendering failed: \(detail)"
+        case .exportFailed(let detail): return french ? "L'export a échoué : \(detail)" : "Export failed: \(detail)"
+        case .permissionDenied(let what): return french ? "L'accès à \(what) est refusé. Vous pouvez l'autoriser dans Réglages." : "Permission for \(what) was denied. You can enable it in Settings."
+        case .speechUnavailable(let detail): return french ? "La commande vocale est indisponible : \(detail)" : "Voice control is unavailable: \(detail)"
+        case .cancelled: return french ? "Annulé." : "Cancelled."
         }
     }
+
+    /// Whether the person reads French first, as the interface does.
+    public static var devicePrefersFrench: Bool {
+        (Locale.preferredLanguages.first ?? "").lowercased().hasPrefix("fr")
+    }
+}
+
+extension PicshopError: LocalizedError {
+    public var errorDescription: String? { message }
 }
 
 /// File-based persistence for projects. Pure Foundation so it is testable on Linux.

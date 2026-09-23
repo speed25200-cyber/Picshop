@@ -48,7 +48,7 @@ public enum IntentPrompt {
         - selectiveAdjust: same as adjust plus target (the region: sky, face, background, eyes, teeth, grass…) when the change applies to one thing only ("make the sky bluer", "éclaircis le visage", "lisse la peau" → face + noiseReduction +50)
         - applyLook: look (\(lookList)), amount (0–100 intensity). "noir et blanc"/"black and white" → mono.
         - autoEnhance, removeBackground, blurBackground (amount 0–100), replaceBackground (background: colour name or "transparent")
-        - crop/setAspect: aspect (\(aspectList)); rotate: degrees (negative = counter-clockwise); straighten: degrees optional; flip: flipAxis (horizontal|vertical)
+        - crop/setAspect: aspect (\(aspectList)); rotate: degrees (negative = counter-clockwise); straighten: degrees optional; flip: flipAxis (horizontal|vertical); resetOrientation (the photo shows upside down or mirrored: "c'est à l'envers", "remets-la à l'endroit", "it's upside down")
         - addText: text (verbatim, keep the user's language and casing), placement (\(placementList)), color; editText/removeText
         - upscale (amount 2|3|4), denoise, sharpen, relight
         - blurObject (PHOTO: privacy blur on target — face, licence plate, screen; "floute les visages")

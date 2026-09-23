@@ -26,7 +26,10 @@ public enum Replies {
         case .crop, .setAspect: return fr ? "Recadrage \(intent.aspect?.displayName ?? "")." : "Cropping \(intent.aspect?.displayName ?? "")."
         case .rotate: return fr ? "Rotation de \(Int(intent.degrees ?? 90))°." : "Rotating \(Int(intent.degrees ?? 90))°."
         case .straighten: return fr ? "Je redresse l'horizon." : "Straightening."
-        case .flip: return fr ? "Image retournée." : "Flipped."
+        case .flip:
+            if intent.flipAxis == .vertical { return fr ? "Image retournée de haut en bas." : "Flipped upside down." }
+            return fr ? "Image retournée en miroir." : "Mirrored left to right."
+        case .resetOrientation: return fr ? "Je remets la photo à l'endroit." : "Putting it the right way up."
         case .addText: return fr ? "Texte ajouté." : "Text added."
         case .editText: return fr ? "Texte modifié." : "Text updated."
         case .removeText: return fr ? "Texte supprimé." : "Text removed."

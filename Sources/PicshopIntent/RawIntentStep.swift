@@ -180,7 +180,7 @@ public enum IntentNormalizer {
             "changebackground": .replaceBackground, "setbackground": .replaceBackground, "portrait": .blurBackground, "bokeh": .blurBackground,
             "adjustment": .adjust, "set": .adjust, "increase": .adjust, "decrease": .adjust, "filter": .applyLook, "look": .applyLook, "preset": .applyLook,
             "enhance": .autoEnhance, "auto": .autoEnhance, "autoenhance": .autoEnhance, "improve": .autoEnhance, "aspect": .setAspect, "aspectratio": .setAspect,
-            "rotation": .rotate, "turn": .rotate, "mirror": .flip, "text": .addText, "caption": .addText, "title": .addText, "superresolution": .upscale,
+            "rotation": .rotate, "turn": .rotate, "mirror": .flip, "upright": .resetOrientation, "rightwayup": .resetOrientation, "resetorientation": .resetOrientation, "unflip": .resetOrientation, "text": .addText, "caption": .addText, "title": .addText, "superresolution": .upscale,
             "resolution": .upscale, "noise": .denoise, "noisereduction": .denoise, "cut": .split, "splitclip": .split, "trimclip": .trim, "cutrange": .deleteRange,
             "removerange": .deleteRange, "removeclip": .deleteClip, "speed": .setSpeed, "slowmotion": .setSpeed, "volume": .setVolume, "transition": .addTransition,
             "music": .addMusic, "soundtrack": .addMusic, "screenshot": .extractFrame, "frame": .extractFrame, "goto": .seek, "jump": .seek, "choose": .chooseCandidate,

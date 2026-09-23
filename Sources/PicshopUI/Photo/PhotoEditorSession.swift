@@ -80,7 +80,13 @@ public final class PhotoEditorSession {
         var isError: Bool
         /// Offers an Undo button in the toast (applied edits).
         var undoable = false
+        /// A one-tap fix offered in the toast instead of Undo.
+        var action: Action?
         var id = UUID()
+
+        enum Action: Equatable {
+            case rightWayUp
+        }
     }
 
     public let projectID: UUID
@@ -149,6 +155,10 @@ public final class PhotoEditorSession {
     public var toast: Toast?
     public var transcript = ""
     public var lastPlan: EditPlan?
+    /// The voice strip reports what really happened: true when the command could not be done as said.
+    public private(set) var lastReplyIsProblem = false
+    /// While a spoken command runs, its outcome is told in the voice strip rather than a second banner.
+    private var isRunningVoiceCommand = false
     public var pendingClarification: ClarificationRequest?
     public var candidateOverlays: [ObjectCandidate] = []
     /// Main objects found in the picture, offered as one-tap erase targets.
@@ -214,6 +224,10 @@ public final class PhotoEditorSession {
         }
         isVoiceReady = true
         requestPreview()
+        // A flip made in an earlier session is out of Undo's reach: offer the way back.
+        if isTurnedOrMirrored, pendingCommand == nil {
+            showToast(L("This photo is flipped or turned."), action: .rightWayUp)
+        }
         if let command = pendingCommand {
             pendingCommand = nil
             Task { [weak self] in await self?.handleTranscript(command) }
@@ -375,10 +389,25 @@ public final class PhotoEditorSession {
         requestPreview()
     }
 
+    /// Back to the photo as imported, including edits saved in earlier
+    /// sessions — which Undo cannot reach. Itself undoable.
     public func revert() {
-        history.revertToOriginal()
+        let restored = document.restoredToImport()
+        guard restored != document else { return }
+        commit(restored, label: L("Revert to Original"))
         Haptics.confirm()
-        requestPreview()
+    }
+
+    /// Whether earlier flips or quarter turns left the photo upside down, on its side or mirrored.
+    public var isTurnedOrMirrored: Bool { !document.baseOrientation.isUpright }
+
+    /// Undoes every flip and quarter turn in one step, whenever they were made.
+    public func putRightWayUp() {
+        var document = self.document
+        guard document.resetOrientation(label: L("Right Way Up")) else { return }
+        commit(document, label: L("Right Way Up"))
+        Haptics.confirm()
+        showToast(L("Back the right way up."), undoable: true)
     }
 
     // MARK: - Direct (touch) edits
@@ -725,6 +754,10 @@ public final class PhotoEditorSession {
 
     public func flipHorizontally() {
         apply(.flip(.horizontal), label: L("Flip"))
+    }
+
+    public func flipVertically() {
+        apply(.flip(.vertical), label: L("Flip Vertical"))
     }
 
     public func autoLevel() {
@@ -1150,6 +1183,7 @@ public final class PhotoEditorSession {
 
     public func handleTranscript(_ text: String) async {
         transcript = text
+        lastReplyIsProblem = false
         let plan = await app.router.plan(text, context: intentContext)
         lastPlan = plan
         if plan.isEmpty {
@@ -1164,25 +1198,43 @@ public final class PhotoEditorSession {
             VoiceFeedback.shared.speak(clarification, language: plan.language)
             return
         }
-        VoiceFeedback.shared.speak(plan.reply ?? "", language: plan.language)
+        // What has to be found in the picture is confirmed once it is found, never before.
+        let mustFindFirst = plan.intents.contains { Self.findsBeforeActing.contains($0.action) }
+        if !mustFindFirst { VoiceFeedback.shared.speak(plan.reply ?? "", language: plan.language) }
+        isRunningVoiceCommand = true
+        defer { isRunningVoiceCommand = false }
         for intent in plan.intents where intent.action != .unknown {
             let outcome = await run(intent)
-            if case .needsClarification = outcome { break }
-            if case .failed = outcome { break }
+            switch outcome {
+            case .info(let message), .failed(let message):
+                lastPlan?.reply = message
+                lastReplyIsProblem = true
+                VoiceFeedback.shared.speak(message, language: plan.language)
+                return
+            case .needsClarification:
+                return
+            case .applied, .ignored:
+                continue
+            }
         }
+        if mustFindFirst { VoiceFeedback.shared.speak(plan.reply ?? "", language: plan.language) }
     }
+
+    private static let findsBeforeActing: Set<IntentAction> = [.removeObject, .moveObject, .blurObject, .recolor, .generativeFill, .selectiveAdjust, .cleanUp, .chooseCandidate]
 
     @discardableResult
     public func run(_ intent: EditIntent) async -> CommandOutcome {
-        guard var executor else { return .failed(message: "not ready") }
+        guard var executor else { return .failed(message: L("Still getting ready — try again in a moment.")) }
         executor.language = language
+        func refuse(_ message: String) -> CommandOutcome {
+            if !isRunningVoiceCommand { showToast(message, isError: true) }
+            return .failed(message: message)
+        }
         if intent.action == .generativeFill, !hasGenerativeEngine {
-            showToast(L("Install Generative Fill in Settings › On-device models to use prompts."), isError: true)
-            return .failed(message: "no generative engine")
+            return refuse(L("Install Generative Fill in Settings › On-device models to use prompts."))
         }
         if [.generativeFill, .upscale, .expandCanvas].contains(intent.action), !app.performance.allowsHeavyWork {
-            showToast(L("The iPhone is too hot for generation right now. Let it cool for a moment."), isError: true)
-            return .failed(message: "thermal")
+            return refuse(L("The iPhone is too hot for generation right now. Let it cool for a moment."))
         }
         if [.removeObject, .removeBackground, .blurBackground, .replaceBackground, .upscale, .selectiveAdjust, .chooseCandidate, .straighten, .generativeFill, .recolor,
             .moveObject, .cleanUp, .expandCanvas, .textBehind, .autoCrop, .blurObject].contains(intent.action) {
@@ -1256,11 +1308,11 @@ public final class PhotoEditorSession {
                 }
             }
         case .info(let message):
-            showToast(message)
+            if !isRunningVoiceCommand { showToast(message) }
             if result.effects.contains(.message("tapToErase")) { activeTool = .erase }
             if result.effects.contains(.message("crop")) { activeTool = .crop }
         case .failed(let message):
-            showToast(message, isError: true)
+            if !isRunningVoiceCommand { showToast(message, isError: true) }
             Haptics.error()
         case .ignored:
             break
@@ -1433,11 +1485,11 @@ public final class PhotoEditorSession {
 
     // MARK: - Toast
 
-    public func showToast(_ text: String, isError: Bool = false, undoable: Bool = false) {
+    public func showToast(_ text: String, isError: Bool = false, undoable: Bool = false, action: Toast.Action? = nil) {
         toastTask?.cancel()
-        withAnimation(.spring(duration: 0.35)) { toast = Toast(text: text, isError: isError, undoable: undoable) }
+        withAnimation(.spring(duration: 0.35)) { toast = Toast(text: text, isError: isError, undoable: undoable, action: action) }
         toastTask = Task {
-            try? await Task.sleep(for: .seconds(isError ? 3.5 : (undoable ? 4 : 2.2)))
+            try? await Task.sleep(for: .seconds(action != nil ? 6 : isError ? 3.5 : (undoable ? 4 : 2.2)))
             guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.25)) { toast = nil }
         }
@@ -1446,5 +1498,11 @@ public final class PhotoEditorSession {
 extension PhotoEditorSession: EditorStatus {
     /// The photo tasks report completion rather than a fraction.
     var processingProgress: Double? { nil }
+
+    func performToastAction(_ action: Toast.Action) {
+        switch action {
+        case .rightWayUp: putRightWayUp()
+        }
+    }
 }
 #endif

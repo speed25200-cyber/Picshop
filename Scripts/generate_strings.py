@@ -11,6 +11,14 @@ UI = ROOT / "Sources/PicshopUI"
 OUT = UI / "Resources/Localizable.xcstrings"
 
 FR = {
+    "Right Way Up": "À l'endroit",
+    "Right way up": "À l'endroit",
+    "Flip Vertical": "Retourner verticalement",
+    "Flip vertical": "Retourner à la verticale",
+    "Back the right way up.": "Remise à l'endroit.",
+    "This photo is flipped or turned.": "Cette photo est retournée ou pivotée.",
+    "Still getting ready — try again in a moment.": "Encore un instant — réessayez dans un moment.",
+    "Revert to Original": "Revenir à l'original",
     "Drag on the picture to frame, pinch to zoom. The camera moves from the start framing to the end one.": "Faites glisser sur l'image pour cadrer, pincez pour zoomer. La caméra va du cadrage de début à celui de fin.",
     "End": "Fin",
     "Follow subject": "Suivre le sujet",

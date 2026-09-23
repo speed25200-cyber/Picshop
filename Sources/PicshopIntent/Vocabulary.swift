@@ -56,7 +56,7 @@ public enum ObjectVocabulary {
         Entry(label: "bottle", spoken: ["bottle", "bottles", "bouteille", "bouteilles", "can", "canette", "canettes", "gourde", "flask"], classifierTerms: ["bottle", "can", "flask", "water bottle", "beverage"], category: .object),
         Entry(label: "cup", spoken: ["cup", "cups", "tasse", "tasses", "mug", "glass", "verre", "verres", "gobelet", "coffee", "cafe"], classifierTerms: ["cup", "mug", "glass", "coffee cup", "wine glass", "beverage", "drink"], category: .object),
         Entry(label: "plate", spoken: ["plate", "plates", "assiette", "assiettes", "bowl", "bol", "dish", "plat", "food", "nourriture", "fork", "fourchette", "knife", "couteau", "spoon", "cuillere"], classifierTerms: ["plate", "bowl", "dish", "food", "fork", "knife", "spoon", "tableware", "cutlery"], category: .object),
-        Entry(label: "phone", spoken: ["phone", "phones", "telephone", "portable", "smartphone", "iphone", "cellphone", "mobile"], classifierTerms: ["phone", "cellphone", "smartphone", "telephone", "mobile phone", "electronic device"], category: .object),
+        Entry(label: "phone", spoken: ["phone", "phones", "telephone", "portable", "smartphone", "iphone", "cellphone", "cell phone", "mobile phone", "mobile"], classifierTerms: ["phone", "cellphone", "smartphone", "telephone", "mobile phone", "electronic device"], category: .object),
         Entry(label: "laptop", spoken: ["laptop", "computer", "ordinateur", "ordi", "pc", "mac", "macbook", "screen", "ecran", "monitor", "tv", "tele", "television"], classifierTerms: ["laptop", "computer", "monitor", "screen", "television", "keyboard", "display"], category: .object),
         Entry(label: "bag", spoken: ["bag", "bags", "sac", "sacs", "backpack", "sac a dos", "handbag", "purse", "suitcase", "valise", "valises", "luggage", "bagage", "bagages", "cabas"], classifierTerms: ["bag", "backpack", "handbag", "purse", "suitcase", "luggage", "tote"], category: .object),
         Entry(label: "chair", spoken: ["chair", "chairs", "chaise", "chaises", "fauteuil", "armchair", "bench", "banc", "bancs", "stool", "tabouret", "sofa", "canape", "couch", "seat", "siege"], classifierTerms: ["chair", "armchair", "bench", "stool", "sofa", "couch", "seat", "furniture"], category: .furniture),
@@ -73,7 +73,7 @@ public enum ObjectVocabulary {
         Entry(label: "building", spoken: ["building", "buildings", "batiment", "batiments", "immeuble", "immeubles", "house", "maison", "maisons", "tower", "tour", "crane", "grue", "grues", "scaffolding", "echafaudage", "wall", "mur", "fence", "cloture", "barriere", "gate", "portail", "bridge", "pont"], classifierTerms: ["building", "house", "tower", "crane", "scaffolding", "wall", "fence", "gate", "bridge", "skyscraper", "structure"], category: .object),
         Entry(label: "window", spoken: ["window", "windows", "fenetre", "fenetres", "door", "porte", "portes", "mirror", "miroir"], classifierTerms: ["window", "door", "mirror"], category: .object),
         Entry(label: "vehicle", spoken: ["traffic", "circulation", "trafic"], classifierTerms: ["vehicle", "car", "truck", "bus"], category: .vehicle),
-        Entry(label: "text", spoken: ["text", "texte", "writing", "ecriture", "words", "mots", "letters", "lettres", "caption", "legende", "subtitle", "sous titre", "sous titres", "watermark", "filigrane", "logo", "logos", "date", "timestamp", "sticker", "stickers", "emoji", "label", "etiquette", "price", "prix", "tag"], classifierTerms: ["text", "sign", "logo", "label", "sticker", "document", "handwriting"], category: .text),
+        Entry(label: "text", spoken: ["text", "texte", "writing", "ecriture", "words", "mots", "letters", "lettres", "caption", "legende", "subtitle", "sous titre", "sous titres", "watermark", "filigrane", "logo", "logos", "date", "timestamp", "sticker", "stickers", "emoji", "label", "etiquette", "price", "prix", "tag", "word", "mot", "inscription", "inscriptions", "titre", "title", "heading", "contenu", "content", "donnee", "donnees", "data", "chiffre", "chiffres", "nombre", "nombres", "number", "numbers", "digit", "digits", "valeur", "valeurs", "value", "values", "numero", "numeros", "score", "scores", "pourcentage", "pourcentages", "percentage", "percentages", "resultat", "resultats", "result", "results", "statistique", "statistiques", "stats", "cellule", "cellules", "cell", "cells"], classifierTerms: ["text", "sign", "logo", "label", "sticker", "document", "handwriting"], category: .text),
         Entry(label: "blemish", spoken: ["blemish", "blemishes", "imperfection", "imperfections", "defaut", "defauts", "flaw", "flaws", "spot", "spots", "tache", "taches", "pimple", "pimples", "bouton", "boutons", "acne", "scar", "cicatrice", "wrinkle", "wrinkles", "ride", "rides", "mole", "grain de beaute", "stain", "stains", "dust", "poussiere", "poussieres", "scratch", "rayure", "rayures", "crack", "fissure", "smudge", "trace", "traces", "reflection", "reflet", "reflets", "glare", "flare", "lens flare", "highlight", "hot spot", "shadow", "ombre", "ombres", "shine", "brillance", "red eye", "yeux rouges", "hair", "cheveu", "cheveux", "poil", "poils", "crumb", "miette", "miettes"], classifierTerms: [], category: .blemish),
         Entry(label: "object", spoken: ["object", "objet", "thing", "things", "truc", "trucs", "machin", "chose", "stuff", "that", "this", "ca", "cela", "it", "element", "distraction", "distractions", "clutter", "bazar", "mess", "desordre", "item"], classifierTerms: [], category: .generic),
         Entry(label: "shadow", spoken: ["shadow", "shadows", "ombre portee"], classifierTerms: ["shadow"], category: .blemish),
@@ -104,19 +104,21 @@ public enum ObjectVocabulary {
             for start in 0...(tokens.count - length) {
                 let candidate = tokens[start..<(start + length)].joined(separator: " ")
                 if let entry = lookup[candidate] { return (entry, candidate) }
-                if length == 1, let singular = singularize(candidate), let entry = lookup[singular] { return (entry, candidate) }
+                if length == 1, let entry = singulars(of: candidate).lazy.compactMap({ lookup[$0] }).first { return (entry, candidate) }
             }
         }
         return nil
     }
 
-    static func singularize(_ word: String) -> String? {
-        if word.hasSuffix("ies") { return String(word.dropLast(3)) + "y" }
-        if word.hasSuffix("aux") { return String(word.dropLast(3)) + "al" }
-        if word.hasSuffix("es"), word.count > 4 { return String(word.dropLast(2)) }
-        if word.hasSuffix("s"), word.count > 3 { return String(word.dropLast()) }
-        if word.hasSuffix("x"), word.count > 3 { return String(word.dropLast()) }
-        return nil
+    /// Possible singulars, most likely first: "dates" is "date", "boxes" is "box".
+    static func singulars(of word: String) -> [String] {
+        var forms: [String] = []
+        if word.hasSuffix("ies"), word.count > 4 { forms.append(String(word.dropLast(3)) + "y") }
+        if word.hasSuffix("aux"), word.count > 4 { forms.append(String(word.dropLast(3)) + "al") }
+        if word.hasSuffix("s"), word.count > 3 { forms.append(String(word.dropLast())) }
+        if word.hasSuffix("es"), word.count > 4 { forms.append(String(word.dropLast(2))) }
+        if word.hasSuffix("x"), word.count > 3 { forms.append(String(word.dropLast())) }
+        return forms
     }
 
     /// Words that can be dropped from a target phrase without changing meaning.

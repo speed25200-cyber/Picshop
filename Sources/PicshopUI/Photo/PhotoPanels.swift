@@ -522,7 +522,11 @@ struct CropPanel: View {
                     IconChip(title: L("Best crop"), symbol: "crop", isEnabled: !session.isProcessing, tint: PSTheme.voice) { session.autoCrop() }
                     IconChip(title: L("Expand"), symbol: "arrow.up.left.and.arrow.down.right", isEnabled: !session.isProcessing, tint: PSTheme.voice) { session.expandCanvas() }
                     IconChip(title: L("Rotate"), symbol: "rotate.right") { session.rotateQuarterTurn() }
+                    if session.isTurnedOrMirrored {
+                        IconChip(title: L("Right way up"), symbol: "arrow.uturn.up", tint: PSTheme.accent) { session.putRightWayUp() }
+                    }
                     IconChip(title: L("Flip"), symbol: "arrow.left.and.right.righttriangle.left.righttriangle.right") { session.flipHorizontally() }
+                    IconChip(title: L("Flip vertical"), symbol: "arrow.up.and.down.righttriangle.up.righttriangle.down") { session.flipVertically() }
                     IconChip(title: L("Auto level"), symbol: "level") { session.autoLevel() }
                     IconChip(title: L("Reset"), symbol: "arrow.counterclockwise", isEnabled: session.hasPendingGeometry) { session.beginCrop(); geometry = .straighten }
                 }

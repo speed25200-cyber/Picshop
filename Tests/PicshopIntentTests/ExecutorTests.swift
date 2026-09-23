@@ -130,8 +130,21 @@ final class PhotoExecutorTests: XCTestCase {
         let executor = PhotoCommandExecutor(services: FakePhotoServices(candidates: []))
         let intent = engine.parse("remove the giraffe", context: .photo).intents[0]
         let (_, result) = await executor.execute(intent, on: makeDocument(), context: .photo)
-        guard case .failed(let message) = result.outcome else { return XCTFail("expected failure") }
+        // Not found hands over to the finger rather than failing.
+        guard case .info(let message) = result.outcome else { return XCTFail("expected a hand-off") }
         XCTAssertTrue(message.contains("giraffe"))
+        XCTAssertTrue(result.effects.contains(.message("tapToErase")))
+    }
+
+    func testObjectNotFoundSpeaksFrench() async {
+        let executor = PhotoCommandExecutor(services: FakePhotoServices(candidates: []), language: .french)
+        let intent = engine.parse("efface la girafe", context: .photo).intents[0]
+        let (_, result) = await executor.execute(intent, on: makeDocument(), context: .photo)
+        guard case .info(let message) = result.outcome else { return XCTFail("expected a hand-off") }
+        XCTAssertTrue(message.hasPrefix("Je ne trouve pas « la girafe »"), message)
+        XCTAssertFalse(message.contains("couldn"))
+        XCTAssertNotEqual(PicshopError.objectNotFound("x").message(french: true), PicshopError.objectNotFound("x").message(french: false))
+        XCTAssertEqual(PicshopError.cancelled.localizedDescription, PicshopError.cancelled.message)
     }
 
     func testAdjustRelativeToCurrentValue() async {

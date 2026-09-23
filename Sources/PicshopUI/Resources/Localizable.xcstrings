@@ -609,6 +609,22 @@
         }
       }
     },
+    "Back the right way up.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back the right way up."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remise à l'endroit."
+          }
+        }
+      }
+    },
     "Back to the original": {
       "localizations": {
         "en": {
@@ -2781,6 +2797,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Retourner"
+          }
+        }
+      }
+    },
+    "Flip Vertical": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flip Vertical"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retourner verticalement"
+          }
+        }
+      }
+    },
+    "Flip vertical": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flip vertical"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retourner à la verticale"
           }
         }
       }
@@ -6417,6 +6465,54 @@
         }
       }
     },
+    "Revert to Original": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revert to Original"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revenir à l'original"
+          }
+        }
+      }
+    },
+    "Right Way Up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right Way Up"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À l'endroit"
+          }
+        }
+      }
+    },
+    "Right way up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right way up"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À l'endroit"
+          }
+        }
+      }
+    },
     "Rotate": {
       "localizations": {
         "en": {
@@ -7201,6 +7297,22 @@
         }
       }
     },
+    "Still getting ready — try again in a moment.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Still getting ready — try again in a moment."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Encore un instant — réessayez dans un moment."
+          }
+        }
+      }
+    },
     "Stop listening": {
       "localizations": {
         "en": {
@@ -7805,6 +7917,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cette version a été compilée sans le moteur Stable Diffusion."
+          }
+        }
+      }
+    },
+    "This photo is flipped or turned.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This photo is flipped or turned."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette photo est retournée ou pivotée."
           }
         }
       }

@@ -309,6 +309,15 @@ public struct VideoCommandExecutor: Sendable {
             for id in targetClipIDs() { timeline.update(clipID: id) { $0.flipHorizontal.toggle() } }
             return (timeline, .applied("Flip"))
 
+        case .resetOrientation:
+            for id in targetClipIDs() {
+                timeline.update(clipID: id) { clip in
+                    clip.rotation = 0
+                    clip.flipHorizontal = false
+                }
+            }
+            return (timeline, .applied("Right Way Up"))
+
         case .addText:
             guard let text = intent.text, !text.isEmpty else { return (timeline, ExecutionResult(outcome: .info(message: fr ? "Quel texte ?" : "What should it say?"))) }
             var element = TextElement(text: text)
@@ -802,7 +811,7 @@ public struct VideoCommandExecutor: Sendable {
         case .summarizeEdits: return (timeline, .effect(.message("summary"), label: ""))
         case .restoreVersion: return (timeline, .effect(.message("version:restore:" + (intent.text ?? "")), label: ""))
         case .unknown: return (timeline, ExecutionResult(outcome: .info(message: Replies.reply(for: intent, language: language))))
-        default: return (timeline, .failed(PicshopError.unsupportedOperation(intent.summary).message))
+        default: return (timeline, .failed(PicshopError.unsupportedOperation(intent.summary).message(french: language == .french)))
         }
     }
 
@@ -817,7 +826,7 @@ public struct VideoCommandExecutor: Sendable {
             case .ambiguous(let options):
                 return (timeline, .clarify(ClarificationRequest(question: CandidateSelector.question(for: target, options: options, language: language), candidates: options, pendingIntent: intent)))
             case .none:
-                return (timeline, .failed(PicshopError.objectNotFound(target.originalPhrase).message))
+                return (timeline, .failed(PicshopError.objectNotFound(target.originalPhrase).message(french: language == .french)))
             }
         } catch {
             return (timeline, .failed(errorMessage(error)))
@@ -850,7 +859,7 @@ public struct VideoCommandExecutor: Sendable {
     }
 
     func errorMessage(_ error: Error) -> String {
-        if let known = error as? PicshopError { return known.message }
+        if let known = error as? PicshopError { return known.message(french: language == .french) }
         return error.localizedDescription
     }
 }

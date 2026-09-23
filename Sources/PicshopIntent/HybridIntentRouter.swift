@@ -119,7 +119,12 @@ public actor HybridIntentRouter {
         // With a usable grammar plan in hand the model is only being asked to do
         // better, so it gets a short slot; when the grammar came up empty it gets
         // the full budget because it is the only thing that can answer.
-        let hasUsableFast = !fast.isEmpty && fast.confidence >= 0.5
+        // A grammar plan about a thing it has no word for ("efface le bidule") is a guess, not a plan.
+        let namesUnknownThing = fast.intents.contains { intent in
+            guard let label = intent.target?.label else { return false }
+            return ObjectVocabulary.entry(forLabel: label) == nil
+        }
+        let hasUsableFast = !fast.isEmpty && fast.confidence >= 0.5 && !namesUnknownThing
         let timeout = hasUsableFast ? configuration.improveTimeout : configuration.llmTimeout
         let llmPlan: EditPlan? = await withTaskGroup(of: EditPlan?.self) { group in
             group.addTask {
@@ -137,6 +142,9 @@ public actor HybridIntentRouter {
             let first = await group.next() ?? nil
             group.cancelAll()
             return first
+        }
+        if llmPlan == nil {
+            PSLog.info("\(preferredEngine.rawValue) gave no plan within \(timeout); keeping the grammar's", category: .intent)
         }
 
         if let llmPlan {

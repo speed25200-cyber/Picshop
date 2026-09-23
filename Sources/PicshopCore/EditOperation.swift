@@ -266,6 +266,52 @@ public struct EditStack: Hashable, Codable, Sendable {
         return (h, v)
     }
 
+    /// Which way up the picture ends after every flip and quarter turn, in order:
+    /// mirrored left-to-right first (when `mirrored`), then turned clockwise.
+    /// Tilts that are not quarter turns are left out; they are deliberate.
+    public var netOrientation: Orientation {
+        var orientation = Orientation.upright
+        for operation in operations {
+            switch operation.kind {
+            case .rotate(let degrees):
+                let quarters = degrees / 90
+                guard abs(quarters - quarters.rounded()) < 0.01 else { continue }
+                orientation.quarterTurns = Orientation.wrapped(orientation.quarterTurns + Int(quarters.rounded()))
+            case .flip(let axis):
+                // A mirror reverses the turns before it; a vertical flip is a mirror plus a half turn.
+                orientation.mirrored.toggle()
+                orientation.quarterTurns = Orientation.wrapped((axis == .vertical ? 2 : 0) - orientation.quarterTurns)
+            default:
+                continue
+            }
+        }
+        return orientation
+    }
+
+    public struct Orientation: Hashable, Sendable {
+        public var mirrored: Bool
+        /// Clockwise quarter turns, 0…3.
+        public var quarterTurns: Int
+
+        public static let upright = Orientation(mirrored: false, quarterTurns: 0)
+        public var isUpright: Bool { self == .upright }
+        /// Upside down with the reading order kept: what a vertical flip looks like.
+        public var isVerticallyFlipped: Bool { mirrored && quarterTurns == 2 }
+
+        /// The operations that bring the picture back upright, fewest first.
+        public var correction: [EditOperation.Kind] {
+            switch (mirrored, quarterTurns) {
+            case (false, 0): return []
+            case (false, let turns): return [.rotate(degrees: turns == 3 ? 90 : turns == 1 ? -90 : 180)]
+            case (true, 0): return [.flip(.horizontal)]
+            case (true, 2): return [.flip(.vertical)]
+            case (true, let turns): return [.flip(.horizontal), .rotate(degrees: turns == 1 ? 90 : -90)]
+            }
+        }
+
+        static func wrapped(_ turns: Int) -> Int { ((turns % 4) + 4) % 4 }
+    }
+
     /// Operations that require pixel synthesis, in order.
     public var pixelOperations: [EditOperation] {
         operations.filter { $0.kind.isExpensive }

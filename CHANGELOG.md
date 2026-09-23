@@ -2,6 +2,13 @@
 
 ## 2.0.0 — PicShop, reimagined
 
+- Right way up: "c'est à l'envers", "remets-la à l'endroit" or the Right way up chip undo every flip and quarter turn at
+  once, even from an earlier session; a photo opened flipped offers it. "Inverse" alone no longer mirrors, and
+  Revert to Original now reaches the photo as imported. Vertical flip in Crop.
+- Words in pictures: "supprime toutes les données du tableau", "efface les chiffres", "remove the numbers" target the
+  text; unknown nouns get the language model's full attention; nothing found hands over to the finger.
+- Replies keep the words as said (accents, apostrophes), errors speak French, and the voice strip reports what
+  really happened instead of a success made up in advance. Toast buttons are tappable again.
 - New visual language: system Liquid Glass, Photos' edit yellow for values, an intelligence spectrum reserved for the AI,
   and a glow around the screen while PicShop listens or works.
 - Home: backdrop from your latest work, big Photo and Video tiles, a Magic row (Magic Movie, auto captions, jump cuts,

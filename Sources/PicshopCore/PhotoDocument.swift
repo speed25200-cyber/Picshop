@@ -85,6 +85,36 @@ public struct PhotoDocument: Hashable, Codable, Sendable, Identifiable {
         }
     }
 
+    /// Which way up the photo shows after its flips and quarter turns.
+    public var baseOrientation: EditStack.Orientation {
+        baseLayer?.edits.netOrientation ?? .upright
+    }
+
+    /// Puts the photo back the right way up. The correction is added after the
+    /// other edits, so crops and selections made on the turned picture stay put.
+    /// Returns false when it already was.
+    @discardableResult
+    public mutating func resetOrientation(label: String? = nil) -> Bool {
+        guard let baseID = baseLayerID else { return false }
+        let correction = baseOrientation.correction
+        guard !correction.isEmpty else { return false }
+        for kind in correction { apply(kind, label: label, to: baseID) }
+        return true
+    }
+
+    /// The photo as it was imported: every edit on it gone, the frame back to
+    /// its own size. Added layers stay.
+    public func restoredToImport() -> PhotoDocument {
+        var document = self
+        guard let baseID = baseLayerID, let asset = baseLayer?.imageAsset else { return document }
+        document.update(layerID: baseID) { layer in
+            layer.edits = EditStack()
+            layer.mask = nil
+        }
+        document.canvasSize = asset.pixelSize
+        return document
+    }
+
     public mutating func addLayer(_ layer: Layer, select: Bool = true) {
         layers.append(layer)
         if select { selectedLayerID = layer.id }
