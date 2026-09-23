@@ -189,6 +189,17 @@ The automatic tools are split the same way as the rest of the app: the algorithm
   between the wide frame and a still, tighter one centred on the median face position of the segment.
 - **Clean Up** (`Distractions.swift`): the largest person and anyone as prominent standing with them are the subject;
   much smaller figures, those apart from them and those cut by the frame edge are erased together in one fill.
+- **Face blur** (`FaceBlur.swift`): faces sampled ten times a second per clip and stored by source time; the compositor
+  blurs soft ellipses on the upright frame before any crop or move. Photos blur named regions (`.blurRegion`).
+- **Music fit** (`MusicFit` in `AudioAnalysis.swift`): the song is cut on the last bar line that leaves at most two bars of
+  picture, with a fade over that bar.
+- **Best crop** (`CropCandidates.swift`): shapes × sizes × thirds around the subject, never cutting it, each scored by
+  Vision's aesthetics model; kept only when clearly better than the original.
+- **Keyframes** (`OverlayKeyframe`): recorded centre and size per time, eased between; applied by the compositor between
+  an overlay's entrance animation and its tracking.
+- **Translation**: caption lines through `TranslationSession` on device; each line keeps its time and its words share it.
+- **Colour LUTs** (`LUTReference`): `.cube` files copied into the project, parsed once into the shared cube cache, applied
+  as the last grading node with an intensity (photo edit step, per-clip field).
 - **Titles** (`TextAnimation.swift`): pop, rise, wipe, focus and drift are states (scale, lift, blur, reveal, opacity)
   computed from time; the compositor applies them to any overlay.
 - **Photo geometry magic**: generative expand places the picture in a larger canvas and fills the border (Stable
