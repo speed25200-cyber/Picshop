@@ -72,14 +72,22 @@ public final class CoreMLImageModel: @unchecked Sendable {
         let output = try model.prediction(from: provider)
         guard let value = output.featureValue(for: outputName) else { throw PicshopError.renderFailed("model output") }
         if let buffer = value.imageBufferValue {
-            let image = CIImage(cvPixelBuffer: buffer)
-            guard let cg = ImageSupport.cgImage(from: image) else { throw PicshopError.renderFailed("model output image") }
-            return (ImageSupport.rgbaBytes(from: cg), cg.width, cg.height)
+            guard let bytes = Self.rgbaBytes(fromImageBuffer: buffer) else { throw PicshopError.renderFailed("model output image") }
+            return bytes
         }
         if let array = value.multiArrayValue {
             return try rgbaBytes(from: array)
         }
         throw PicshopError.renderFailed("unsupported model output")
+    }
+
+    /// Top-down RGBA8 bytes of an image-typed model output, values as the model wrote them:
+    /// tagged sRGB on the way in and read back in sRGB, so no colour conversion touches them.
+    public static func rgbaBytes(fromImageBuffer buffer: CVPixelBuffer) -> (rgba: [UInt8], width: Int, height: Int)? {
+        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        let image = CIImage(cvPixelBuffer: buffer, options: [.colorSpace: space])
+        guard let bytes = ImageSupport.rgbaBytes(of: image, colorSpace: space) else { return nil }
+        return (bytes, CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer))
     }
 
     private func featureValue(for image: CGImage, input: ImageInput, isMask: Bool) throws -> MLFeatureValue {
@@ -229,8 +237,9 @@ public struct Upscaler: Sendable {
 
     /// Tiles the image through a fixed-size super-resolution network.
     private func neuralUpscale(_ image: CIImage, model: CoreMLImageModel, tile: Int, factor: Double) async throws -> CIImage {
-        guard let source = ImageSupport.cgImage(from: image) else { return image }
-        let width = source.width, height = source.height
+        // Top-down bytes in the display space; the result is tagged with the same space.
+        guard let bytes = ImageSupport.rgbaBytes(of: image) else { return image }
+        let width = Int(image.extent.integral.width), height = Int(image.extent.integral.height)
         let overlap = 16
         let modelScale: Int = {
             // Probe the model's native scale from the output description when available.
@@ -241,7 +250,6 @@ public struct Upscaler: Sendable {
         }()
         let outWidth = width * modelScale, outHeight = height * modelScale
         var output = [UInt8](repeating: 255, count: outWidth * outHeight * 4)
-        let bytes = ImageSupport.rgbaBytes(from: source)
         let step = tile - overlap * 2
         var y = 0
         while y < height {
@@ -260,6 +268,7 @@ public struct Upscaler: Sendable {
                 }
                 let result = try model.predict(rgba: patch, mask: nil, width: tile, height: tile)
                 let scaleX = Double(result.width) / Double(tile)
+                let scaleY = Double(result.height) / Double(tile)
                 for py in 0..<(th * modelScale) {
                     let oy = y0 * modelScale + py
                     guard oy < outHeight else { continue }
@@ -267,7 +276,7 @@ public struct Upscaler: Sendable {
                         let ox = x0 * modelScale + px
                         guard ox < outWidth else { continue }
                         let sx = min(result.width - 1, Int(Double(px) * scaleX / Double(modelScale)))
-                        let sy = min(result.height - 1, Int(Double(py) * scaleX / Double(modelScale)))
+                        let sy = min(result.height - 1, Int(Double(py) * scaleY / Double(modelScale)))
                         let si = (sy * result.width + sx) * 4
                         let di = (oy * outWidth + ox) * 4
                         output[di] = result.rgba[si]; output[di + 1] = result.rgba[si + 1]; output[di + 2] = result.rgba[si + 2]; output[di + 3] = 255
@@ -278,8 +287,7 @@ public struct Upscaler: Sendable {
             y += step
             try Task.checkCancellation()
         }
-        guard let cg = ImageSupport.rgbaImage(width: outWidth, height: outHeight, bytes: output) else { return image }
-        var result = CIImage(cgImage: cg)
+        guard var result = ImageSupport.ciImage(rgba: output, width: outWidth, height: outHeight) else { return image }
         let target = factor / Double(modelScale)
         if abs(target - 1) > 0.01 {
             result = result.transformed(by: CGAffineTransform(scaleX: target, y: target))

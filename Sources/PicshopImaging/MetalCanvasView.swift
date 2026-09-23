@@ -1,3 +1,35 @@
+#if canImport(Metal) && canImport(CoreImage)
+import Foundation
+import Metal
+import CoreImage
+import CoreGraphics
+
+/// Where and how the canvas draws: placement math and render target setup, shared
+/// by `MetalCanvasView` and the tests that check the on-screen orientation.
+public enum CanvasPlacement {
+    /// Maps `imageExtent` (Core Image space) onto `frame` (points, top-left origin) inside a
+    /// drawable of `drawableSize` pixels, whose Core Image origin is bottom-left.
+    public static func transform(imageExtent: CGRect, frame: CGRect, drawableSize: CGSize, scale: CGFloat) -> CGAffineTransform {
+        let sx = frame.width * scale / imageExtent.width
+        let sy = frame.height * scale / imageExtent.height
+        let originX = frame.minX * scale
+        let originY = drawableSize.height - (frame.maxY * scale)
+        return CGAffineTransform(translationX: -imageExtent.minX, y: -imageExtent.minY)
+            .concatenating(CGAffineTransform(scaleX: sx, y: sy))
+            .concatenating(CGAffineTransform(translationX: originX, y: originY))
+    }
+
+    /// A render destination configured exactly like the canvas's drawable.
+    public static func destination(width: Int, height: Int, pixelFormat: MTLPixelFormat = .bgra8Unorm, commandBuffer: MTLCommandBuffer?,
+                                   texture: @escaping () -> MTLTexture) -> CIRenderDestination {
+        let destination = CIRenderDestination(width: width, height: height, pixelFormat: pixelFormat, commandBuffer: commandBuffer, mtlTextureProvider: texture)
+        destination.colorSpace = RenderContext.colorSpace
+        destination.isFlipped = false
+        return destination
+    }
+}
+#endif
+
 #if canImport(UIKit) && canImport(MetalKit)
 import Foundation
 import UIKit
@@ -70,29 +102,18 @@ public final class MetalCanvasView: MTKView {
         guard let drawable = currentDrawable, let commandQueue, let commandBuffer = commandQueue.makeCommandBuffer() else { return }
         let scale = contentScaleFactor
         let drawableSize = CGSize(width: CGFloat(drawable.texture.width), height: CGFloat(drawable.texture.height))
-        let destination = CIRenderDestination(width: Int(drawableSize.width), height: Int(drawableSize.height), pixelFormat: colorPixelFormat, commandBuffer: commandBuffer) { [drawable] in
+        let destination = CanvasPlacement.destination(width: Int(drawableSize.width), height: Int(drawableSize.height), pixelFormat: colorPixelFormat, commandBuffer: commandBuffer) { [drawable] in
             drawable.texture
         }
-        destination.colorSpace = RenderContext.colorSpace
-        destination.isFlipped = false
 
         // Clear.
         let background = CIImage(color: CIColor(red: backgroundClearColor.red, green: backgroundClearColor.green, blue: backgroundClearColor.blue)).cropped(to: CGRect(origin: .zero, size: drawableSize))
         var composed = background
         if let image, imageFrame.width > 0, imageFrame.height > 0 {
             // Map the image extent into the drawable (points → pixels, flip y for Metal/CI origin).
-            let sx = imageFrame.width * scale / image.extent.width
-            let sy = imageFrame.height * scale / image.extent.height
-            let originX = imageFrame.minX * scale
-            let originY = drawableSize.height - (imageFrame.maxY * scale)
-            var transform = CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY)
-            transform = transform.concatenating(CGAffineTransform(scaleX: sx, y: sy))
-            transform = transform.concatenating(CGAffineTransform(translationX: originX, y: originY))
-            var placed = image.transformed(by: transform)
+            var placed = image.transformed(by: CanvasPlacement.transform(imageExtent: image.extent, frame: imageFrame, drawableSize: drawableSize, scale: scale))
             if let overlay {
-                let placedOverlay = overlay.transformed(by: CGAffineTransform(translationX: -overlay.extent.minX, y: -overlay.extent.minY)
-                    .concatenating(CGAffineTransform(scaleX: imageFrame.width * scale / overlay.extent.width, y: imageFrame.height * scale / overlay.extent.height))
-                    .concatenating(CGAffineTransform(translationX: originX, y: originY)))
+                let placedOverlay = overlay.transformed(by: CanvasPlacement.transform(imageExtent: overlay.extent, frame: imageFrame, drawableSize: drawableSize, scale: scale))
                 placed = placedOverlay.composited(over: placed)
             }
             composed = placed.composited(over: background)

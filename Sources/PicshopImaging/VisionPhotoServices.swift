@@ -1,11 +1,11 @@
-#if canImport(Vision) && canImport(CoreImage)
 import Foundation
+import PicshopCore
+import PicshopIntent
+#if canImport(Vision) && canImport(CoreImage)
 import Vision
 import CoreImage
 import CoreGraphics
 import NaturalLanguage
-import PicshopCore
-import PicshopIntent
 
 /// Grounds natural-language targets ("the dog on the left", "the power lines",
 /// "that guy") in pixels using Apple's on-device Vision models, and produces
@@ -15,18 +15,22 @@ import PicshopIntent
 /// - people → `VNDetectHumanRectanglesRequest` + person segmentation, split per instance
 /// - faces → `VNDetectFaceRectanglesRequest`
 /// - animals → `VNRecognizeAnimalsRequest`
-/// - text / logos / watermarks → `VNRecognizeTextRequest`
+/// - text / logos / watermarks / table data → accurate `VNRecognizeTextRequest`, one box per
+///   word, filtered by a `VisionTextQuery` (all text, numbers only, or a literal match); tight
+///   masks for data and table text, padded ones for the rest
 /// - everything else → foreground instance masks + per-instance `VNClassifyImageRequest`,
 ///   matched against the vocabulary and, for unknown nouns, word embeddings.
 /// - "that" / tap → the instance under the tap point, or salient objects.
 public final class VisionPhotoServices: PhotoAIServices, @unchecked Sendable {
     public static let analysisLongestSide = 1536
+    /// Text is read at a higher resolution so small table figures are found.
+    public static let textAnalysisLongestSide = MaskStore.maximumSide
 
     private let renderer: PhotoRenderer
     private let store: ProjectStore
     private let projectID: UUID
     private let embedding = NLEmbedding.wordEmbedding(for: .english)
-    private var analysisCache: (documentHash: Int, image: CGImage)?
+    private var analysisCache: [Int: (documentHash: Int, image: CGImage)] = [:]
     private let cacheLock = NSLock()
 
     public init(renderer: PhotoRenderer, store: ProjectStore, projectID: UUID) {
@@ -40,7 +44,7 @@ public final class VisionPhotoServices: PhotoAIServices, @unchecked Sendable {
     // MARK: - Analysis image
 
     /// The current edited base image (so removals after a crop line up) at analysis resolution.
-    func analysisImage(for document: PhotoDocument) async throws -> CGImage {
+    func analysisImage(for document: PhotoDocument, longestSide: Int = VisionPhotoServices.analysisLongestSide) async throws -> CGImage {
         let key = document.baseLayer.map { layer in
             var hasher = Hasher()
             hasher.combine(layer.edits.operations.map(\.id))
@@ -48,21 +52,32 @@ public final class VisionPhotoServices: PhotoAIServices, @unchecked Sendable {
             return hasher.finalize()
         } ?? 0
         let cachedImage: CGImage? = cacheLock.withLock {
-            if let cached = analysisCache, cached.documentHash == key { return cached.image }
+            if let cached = analysisCache[longestSide], cached.documentHash == key { return cached.image }
             return nil
         }
         if let cachedImage { return cachedImage }
-        let image = try await renderer.renderBase(document, options: PhotoRenderer.Options(targetLongestSide: Double(Self.analysisLongestSide), allowExpensiveWork: true))
+        let image = try await renderer.renderBase(document, options: PhotoRenderer.Options(targetLongestSide: Double(longestSide), allowExpensiveWork: true))
         guard let cg = ImageSupport.cgImage(from: image) else { throw PicshopError.renderFailed("analysis image") }
-        cacheLock.withLock { analysisCache = (key, cg) }
+        cacheLock.withLock { analysisCache[longestSide] = (key, cg) }
         return cg
+    }
+
+    static func analysisSide(for target: ObjectTarget) -> Int {
+        VisionTextQuery.isTextTarget(target) ? textAnalysisLongestSide : analysisLongestSide
     }
 
     // MARK: - PhotoAIServices
 
     public func candidates(for target: ObjectTarget, in document: PhotoDocument) async throws -> [ObjectCandidate] {
-        let image = try await analysisImage(for: document)
-        return try VisionGrounding.candidates(in: image, for: target, maskStore: maskStore, embedding: embedding)
+        let image = try await analysisImage(for: document, longestSide: Self.analysisSide(for: target))
+        return try VisionGrounding.candidates(in: image, for: target, maskStore: maskStore, embedding: embedding, mergingText: true)
+    }
+
+    /// Text candidates for an explicit query, read at the text resolution. Pass them to
+    /// `mask(for:query:in:)` with the same query.
+    public func textCandidates(_ query: VisionTextQuery, in document: PhotoDocument) async throws -> [ObjectCandidate] {
+        let image = try await analysisImage(for: document, longestSide: Self.textAnalysisLongestSide)
+        return try VisionGrounding.textCandidates(in: image, query: query, maskStore: maskStore, merging: true)
     }
 
     /// The main things in the picture, largest first, each named by the
@@ -83,24 +98,40 @@ public final class VisionPhotoServices: PhotoAIServices, @unchecked Sendable {
     }
 
     public func mask(for candidates: [ObjectCandidate], target: ObjectTarget, in document: PhotoDocument) async throws -> MaskReference {
-        let image = try await analysisImage(for: document)
+        let query = VisionTextQuery.isTextTarget(target) ? VisionTextQuery(target: target) : nil
+        return try await mask(for: candidates, label: target.label, text: query, in: document)
+    }
+
+    /// The mask for candidates from `textCandidates(_:in:)`: tight when the query is.
+    public func mask(for candidates: [ObjectCandidate], query: VisionTextQuery, in document: PhotoDocument) async throws -> MaskReference {
+        try await mask(for: candidates, label: "text", text: query, in: document)
+    }
+
+    private func mask(for candidates: [ObjectCandidate], label: String, text: VisionTextQuery?, in document: PhotoDocument) async throws -> MaskReference {
+        // Data and table text is already a tight word mask: no growth, a hairline feather, so table rules survive the fill.
+        let tight = text?.tight == true
+        let image = try await analysisImage(for: document, longestSide: text == nil ? Self.analysisLongestSide : Self.textAnalysisLongestSide)
         let width = image.width, height = image.height
         var masks: [[UInt8]] = []
         for candidate in candidates {
             if let path = candidate.maskPath, let cg = try? ImageSupport.loadCGImage(at: store.url(for: path, in: projectID)) {
                 let resized = ImageSupport.resized(cg, to: CGSize(width: width, height: height)) ?? cg
                 masks.append(ImageSupport.grayBytes(from: resized))
+            } else if tight {
+                masks.append(MaskStore.rectanglesMask([candidate.boundingBox], width: width, height: height))
             } else {
                 masks.append(MaskStore.rectangleMask(candidate.boundingBox.insetBy(dx: -0.01, dy: -0.01).clampedToUnit(), width: width, height: height))
             }
         }
         var union = MaskStore.union(masks)
-        // Grow slightly so shadows/halos around the object are covered by the fill.
-        let growth = max(2, Int(Double(max(width, height)) * 0.008))
-        union = MaskStore.dilated(union, width: width, height: height, radius: growth)
+        if !tight {
+            // Grow slightly so shadows/halos around the object are covered by the fill.
+            let growth = max(2, Int(Double(max(width, height)) * 0.008))
+            union = MaskStore.dilated(union, width: width, height: height, radius: growth)
+        }
         let box = candidates.map(\.boundingBox).reduce(PSRect.zero) { $0.union($1) }
-        let source: MaskSource = .object(label: target.label, boundingBox: box)
-        return try maskStore.save(bytes: union, width: width, height: height, source: source, feather: 0.015)
+        let source: MaskSource = .object(label: label, boundingBox: box)
+        return try maskStore.save(bytes: union, width: width, height: height, source: source, feather: tight ? 0.002 : 0.015)
     }
 
     public func subjectMask(in document: PhotoDocument) async throws -> MaskReference {
@@ -131,7 +162,7 @@ public final class VisionPhotoServices: PhotoAIServices, @unchecked Sendable {
             .sorted { $0.confidence > $1.confidence }
             .prefix(4)
             .map { $0.identifier.lowercased() }
-        scene.hasText = ((try? detector.text()) ?? []).contains { $0.boundingBox.width * $0.boundingBox.height > 0.004 }
+        scene.hasText = detector.containsText()
         // Exposure and colourfulness from a coarse sample.
         let small = ImageSupport.resized(image, to: CGSize(width: 64, height: 64)) ?? image
         let bytes = ImageSupport.rgbaBytes(from: small)
@@ -222,7 +253,10 @@ public final class VisionPhotoServices: PhotoAIServices, @unchecked Sendable {
 
 /// Stateless entry point shared by the photo services and the video pipeline.
 public enum VisionGrounding {
-    public static func candidates(in image: CGImage, for target: ObjectTarget, maskStore: MaskStore, embedding: NLEmbedding? = NLEmbedding.wordEmbedding(for: .english)) throws -> [ObjectCandidate] {
+    /// With `mergingText` (photos), a text query that selects all comes back as one candidate
+    /// carrying the union mask. Video tracks each box, so it keeps one candidate per line or word.
+    public static func candidates(in image: CGImage, for target: ObjectTarget, maskStore: MaskStore, embedding: NLEmbedding? = NLEmbedding.wordEmbedding(for: .english),
+                                  mergingText: Bool = false) throws -> [ObjectCandidate] {
         let timer = PSTimer("ground \(target.label)")
         defer { timer.log(category: .imaging) }
         let detector = Detector(image: image, maskStore: maskStore, embedding: embedding)
@@ -232,6 +266,8 @@ public enum VisionGrounding {
         switch entry?.category {
         case _ where Detector.faceParts.contains(target.label):
             candidates = try detector.faceParts(target.label)
+        case _ where VisionTextQuery.isTextTarget(target):
+            candidates = try detector.textCandidates(for: VisionTextQuery(target: target), merging: mergingText)
         case .person:
             if target.label == "face" {
                 candidates = try detector.faces()
@@ -243,8 +279,6 @@ public enum VisionGrounding {
         case .animal:
             candidates = try detector.animals(label: target.label)
             if candidates.isEmpty { candidates = try detector.instances(matching: entry, freeText: target.label) }
-        case .text:
-            candidates = try detector.text()
         case .blemish:
             if let point = target.point {
                 candidates = [detector.spot(at: point, label: target.label)]
@@ -266,6 +300,13 @@ public enum VisionGrounding {
             candidates = detector.boostByAttributes(candidates, attributes: target.attributes)
         }
         return candidates.sorted { $0.confidence > $1.confidence }
+    }
+
+    /// Text candidates for an explicit query (the target's own words are not read): one per
+    /// line, word or occurrence, or, with `merging` and a query that selects all, one with
+    /// every selected word.
+    public static func textCandidates(in image: CGImage, query: VisionTextQuery, maskStore: MaskStore, merging: Bool = false) throws -> [ObjectCandidate] {
+        try Detector(image: image, maskStore: maskStore, embedding: nil).textCandidates(for: query, merging: merging)
     }
 
     /// Magic-wand selection saved as a mask reference.
@@ -311,6 +352,7 @@ final class Detector {
     let height: Int
     private var instanceObservation: VNInstanceMaskObservation??
     private var personSegmentation: [UInt8]??
+    private var recognizedWords: [VisionWord]?
 
     init(image: CGImage, maskStore: MaskStore, embedding: NLEmbedding?) {
         self.image = image
@@ -606,15 +648,74 @@ final class Detector {
         return candidates
     }
 
-    func text() throws -> [ObjectCandidate] {
+    /// Recognised words, one box per word: accurate mode, French and English, no language
+    /// correction (so "87,3" or "GPT-4o" stay literal) and small text included. Cached.
+    func words() throws -> [VisionWord] {
+        if let recognizedWords { return recognizedWords }
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["fr-FR", "en-US"]
+        request.usesLanguageCorrection = false
+        request.minimumTextHeight = 0.006
+        try handler.perform([request])
+        var words: [VisionWord] = []
+        // Top line first, so lines come in reading order.
+        let observations = (request.results ?? []).sorted { $0.boundingBox.maxY > $1.boundingBox.maxY }
+        for (line, observation) in observations.enumerated() {
+            guard let candidate = observation.topCandidates(1).first else { continue }
+            let string = candidate.string
+            let lineBox = PSRect.fromVision(observation.boundingBox)
+            for token in string.split(whereSeparator: { $0.isWhitespace }) {
+                // Accurate mode boxes each word; fall back to the line when Vision has no box for it.
+                let wordBox = (try? candidate.boundingBox(for: token.startIndex..<token.endIndex)).map { PSRect.fromVision($0.boundingBox) }
+                let box = wordBox.flatMap { $0.width > 0 && $0.height > 0 ? $0 : nil } ?? lineBox
+                words.append(VisionWord(text: String(token), box: box, line: line, confidence: Double(candidate.confidence)))
+            }
+        }
+        recognizedWords = words
+        return words
+    }
+
+    /// Candidates for a text query. A tight query (data, literal words, table text) boxes each
+    /// word grown by 15 % of its height, so the rules of a table between cells survive the fill;
+    /// other text (watermarks, dates, captions) keeps the padded line box, so its shadow or
+    /// outline goes too. With `merging`, a query that selects all gives one candidate carrying
+    /// the union mask (nothing to ask); otherwise one per line, word or occurrence.
+    func textCandidates(for query: VisionTextQuery, merging: Bool) throws -> [ObjectCandidate] {
+        let words = try self.words()
+        let groups = query.matches(in: words)
+        guard !groups.isEmpty else { return [] }
+        func union(_ rects: [PSRect]) -> PSRect { rects.reduce(PSRect.zero) { $0.union($1) } }
+        func text(_ group: [Int]) -> String { group.map { words[$0].text }.joined(separator: " ") }
+        func holes(_ group: [Int]) -> [PSRect] {
+            guard query.tight else { return [union(group.map { words[$0].box }).insetBy(dx: -0.008, dy: -0.012).clampedToUnit()] }
+            return group.map { words[$0].maskBox(imageWidth: width, imageHeight: height) }
+        }
+        if merging, query.selectsAll {
+            let selected = groups.flatMap { $0 }
+            // Loose holes get the 1 % margin `mask(for:)` gives a candidate without a mask file.
+            let rects = groups.flatMap(holes).map { query.tight ? $0 : $0.insetBy(dx: -0.01, dy: -0.01).clampedToUnit() }
+            let box = union(rects)
+            let bytes = MaskStore.rectanglesMask(rects, width: width, height: height)
+            let reference = try maskStore.save(bytes: bytes, width: width, height: height, source: .object(label: "text", boundingBox: box), feather: query.tight ? 0.002 : 0.015)
+            return [ObjectCandidate(label: groups.count == 1 ? text(selected) : "text", boundingBox: box, confidence: 0.95, maskPath: reference.relativePath)]
+        }
+        // No mask files: `mask(for:)` fills each box as is when tight, padded and grown otherwise.
+        return groups.map { group in
+            let confidence = group.map { words[$0].confidence }.min() ?? 0.5
+            return ObjectCandidate(label: text(group), boundingBox: union(holes(group)), confidence: max(0.5, confidence))
+        }
+    }
+
+    /// Whether the picture holds sizeable text (fast pass, for scene descriptions).
+    func containsText() -> Bool {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .fast
         request.usesLanguageCorrection = false
-        try handler.perform([request])
-        return (request.results ?? []).map { observation in
+        try? handler.perform([request])
+        return (request.results ?? []).contains { observation in
             let box = PSRect.fromVision(observation.boundingBox).insetBy(dx: -0.008, dy: -0.012).clampedToUnit()
-            let string = observation.topCandidates(1).first?.string ?? "text"
-            return ObjectCandidate(label: string, boundingBox: box, confidence: max(0.5, Double(observation.confidence)))
+            return box.width * box.height > 0.004
         }
     }
 
@@ -759,3 +860,286 @@ final class Detector {
     }
 }
 #endif
+
+// MARK: - Text queries (pure Swift, tested on every platform)
+
+/// A word found by text recognition; `box` is normalised with a top-left origin.
+public struct VisionWord: Hashable, Sendable {
+    public var text: String
+    public var box: PSRect
+    /// Index of the recognised line the word belongs to, top line first.
+    public var line: Int
+    public var confidence: Double
+
+    public init(text: String, box: PSRect, line: Int, confidence: Double = 1) {
+        self.text = text
+        self.box = box
+        self.line = line
+        self.confidence = confidence
+    }
+
+    /// The box grown by `padding` × its height on every side (at least 1.5 px) in an
+    /// `imageWidth` × `imageHeight` picture: a hole tight enough to spare nearby table rules.
+    public func maskBox(imageWidth: Int, imageHeight: Int, padding: Double = 0.15) -> PSRect {
+        let width = Double(max(1, imageWidth)), height = Double(max(1, imageHeight))
+        let pixels = max(1.5, padding * box.height * height)
+        return box.insetBy(dx: -pixels / width, dy: -pixels / height).clampedToUnit()
+    }
+}
+
+/// Which recognised words a text target means: all of them, the numbers and data values
+/// only, or the words matching a phrase; optionally only those in the picture's main table
+/// or inside a region.
+public struct VisionTextQuery: Hashable, Sendable {
+    public enum Kind: Hashable, Sendable {
+        /// Every word.
+        case all
+        /// Numbers and data values ("12.3", "1,234", "45%", "70B"), not labels such as "GPT-4o".
+        case numeric
+        /// Words equal to the phrase, ignoring case, accents and surrounding punctuation.
+        case matching(String)
+    }
+
+    public var kind: Kind
+    /// Normalised, top-left-origin region the words' centres must lie in; nil = anywhere.
+    public var region: PSRect?
+    /// Every selected word is meant: photos get them as one candidate, so nothing is asked.
+    public var selectsAll: Bool
+    /// Only the words of the picture's main table (see `tableWords(in:)`), or every word when none is found.
+    public var withinTable: Bool
+
+    public init(kind: Kind = .all, region: PSRect? = nil, selectsAll: Bool = false, withinTable: Bool = false) {
+        self.kind = kind
+        self.region = region
+        self.selectsAll = selectsAll
+        self.withinTable = withinTable
+    }
+
+    /// Holes hug the glyphs (data, literal words, table text) so the rules between cells survive
+    /// the fill. Other text (watermarks, dates, captions) is padded and grown like an object, so
+    /// its shadow, glow or outline goes too.
+    public var tight: Bool { kind != .all || withinTable }
+}
+
+public extension VisionTextQuery {
+    /// Nouns that ask for the values: "les données", "chiffres", "the numbers".
+    static let numericNouns: Set<String> = [
+        "donnee", "donnees", "chiffre", "chiffres", "nombre", "nombres", "valeur", "valeurs", "score", "scores", "pourcentage", "pourcentages",
+        "numero", "numeros", "resultat", "resultats", "statistique", "statistiques", "stats", "data", "number", "numbers", "digit", "digits",
+        "figure", "figures", "value", "values", "percentage", "percentages", "result", "results",
+    ]
+
+    /// The plural or collective ones, which mean every value rather than one to pick.
+    static let collectiveNumericNouns: Set<String> = [
+        "donnees", "chiffres", "nombres", "valeurs", "scores", "pourcentages", "numeros", "resultats", "statistiques", "stats",
+        "data", "numbers", "digits", "figures", "values", "percentages", "results",
+    ]
+
+    /// Nouns that put the words in a table: "les données du tableau", "the numbers in the grid".
+    static let tableNouns: Set<String> = [
+        "tableau", "tableaux", "tableur", "grille", "colonne", "colonnes", "cellule", "cellules",
+        "table", "tables", "spreadsheet", "grid", "column", "columns", "cell", "cells",
+    ]
+
+    /// Whether the target means writing in the picture: the vocabulary's text label, or an
+    /// unknown label naming data or a word ("donnees tableau", "mot total").
+    static func isTextTarget(_ target: ObjectTarget) -> Bool {
+        if let entry = ObjectVocabulary.entry(forLabel: target.label) { return entry.category == .text }
+        // "figure" also names a face or a silhouette; only an explicit text target reads it as a number.
+        return tokens(of: target.label).contains { (numericNouns.contains($0) && !$0.hasPrefix("figure")) || wordMarkers.contains($0) }
+    }
+
+    /// The query a text target's own words ask for: a literal match for quoted text,
+    /// "le mot X" / "the word X" or "la valeur 87,3"; the numbers when they name data
+    /// ("toutes les données du tableau", "the numbers"); otherwise every word. Plural data
+    /// nouns take every number unless a position, an ordinal or a tap narrows them; a
+    /// singular one ("le numéro", "the score") and everything else only when the target
+    /// says "all". A table noun keeps the words to the table.
+    init(target: ObjectTarget) {
+        let phrase = Self.tokens(of: target.originalPhrase)
+        let words = phrase + Self.tokens(of: target.label)
+        let saysAll = target.matchesAll || words.contains { Self.allWords.contains($0) }
+        let withinTable = words.contains { Self.tableNouns.contains($0) }
+        if let literal = Self.quotedText(in: target.originalPhrase) ?? Self.literal(in: phrase) {
+            self.init(kind: .matching(literal), selectsAll: saysAll, withinTable: withinTable)
+        } else if words.contains(where: { Self.numericNouns.contains($0) }) {
+            let narrowed = target.spatialHint != nil || target.ordinal != nil || target.point != nil
+            let collective = words.contains { Self.collectiveNumericNouns.contains($0) }
+            self.init(kind: .numeric, selectsAll: saysAll || (collective && !narrowed), withinTable: withinTable)
+        } else {
+            self.init(kind: .all, selectsAll: saysAll, withinTable: withinTable)
+        }
+    }
+
+    /// Groups of word indices the query selects, in reading order: one per line for `.all`,
+    /// one per word for `.numeric`, one per occurrence for `.matching`.
+    func matches(in words: [VisionWord]) -> [[Int]] {
+        let pool = withinTable ? (Self.tableWords(in: words) ?? Array(words.indices)) : Array(words.indices)
+        let inside = pool.filter { index in region.map { $0.contains(words[index].box.center) } ?? true }
+        switch kind {
+        case .all:
+            var lines: [[Int]] = []
+            for index in inside {
+                if let last = lines.last?.last, words[last].line == words[index].line {
+                    lines[lines.count - 1].append(index)
+                } else {
+                    lines.append([index])
+                }
+            }
+            return lines
+        case .numeric:
+            return inside.filter { Self.isNumeric(words[$0].text) }.map { [$0] }
+        case .matching(let phrase):
+            let wanted = phrase.split(whereSeparator: { $0.isWhitespace }).map { Self.folded(String($0)) }.filter { !$0.isEmpty }
+            guard !wanted.isEmpty else { return [] }
+            let allowed = Set(inside)
+            let folded = words.map { Self.folded($0.text) }
+            var groups: [[Int]] = []
+            var start = 0
+            while start + wanted.count <= words.count {
+                let span = Array(start..<(start + wanted.count))
+                let sameLine = span.allSatisfy { allowed.contains($0) && words[$0].line == words[start].line }
+                if sameLine, zip(span, wanted).allSatisfy({ folded[$0.0] == $0.1 }) {
+                    groups.append(span)
+                    start += wanted.count
+                } else {
+                    start += 1
+                }
+            }
+            return groups
+        }
+    }
+
+    /// Numbers and data values: at least as many digits as letters, or a lone percent sign
+    /// ("12.3", "1,234", "45%", "−3", "(±0.4)", "70B", "%"); not "GPT-4o", "GSM8K" or "N/A".
+    static func isNumeric(_ token: String) -> Bool {
+        var digits = 0, letters = 0, percent = false
+        for character in token {
+            if character.isNumber {
+                digits += 1
+            } else if character.isLetter {
+                letters += 1
+            } else if character == "%" || character == "‰" {
+                percent = true
+            }
+        }
+        return digits > 0 ? digits >= letters : percent && letters == 0
+    }
+
+    /// Indices (ascending) of the words in the picture's main table: rows are words sharing a
+    /// band half a word high; a table is a run of rows holding numbers, with at most one row
+    /// without any at a time (a header or a section heading) and no gap over 3 word heights.
+    /// The run with the most numbers wins. Nil when no two rows with numbers follow each other,
+    /// so a status bar ("9:41", "87%") or a page number alone is never a table.
+    static func tableWords(in words: [VisionWord]) -> [Int]? {
+        struct Row {
+            var indices: [Int]
+            var midY: Double
+            var minY: Double
+            var maxY: Double
+            var numbers: Int
+        }
+        let heights = words.map(\.box.height).filter { $0 > 0 }.sorted()
+        guard !heights.isEmpty else { return nil }
+        let wordHeight = heights[heights.count / 2]
+        var rows: [Row] = []
+        for index in words.indices.sorted(by: { words[$0].box.midY < words[$1].box.midY }) {
+            let box = words[index].box
+            let number = isNumeric(words[index].text) ? 1 : 0
+            if var row = rows.last, abs(box.midY - row.midY) <= wordHeight / 2 {
+                row.midY = (row.midY * Double(row.indices.count) + box.midY) / Double(row.indices.count + 1)
+                row.indices.append(index)
+                row.minY = min(row.minY, box.minY)
+                row.maxY = max(row.maxY, box.maxY)
+                row.numbers += number
+                rows[rows.count - 1] = row
+            } else {
+                rows.append(Row(indices: [index], midY: box.midY, minY: box.minY, maxY: box.maxY, numbers: number))
+            }
+        }
+        var best: [Int] = [], bestNumbers = 0
+        var run: [Int] = []
+        func finishRun() {
+            while let last = run.last, rows[last].numbers == 0 { run.removeLast() }
+            let numbers = run.reduce(0) { $0 + rows[$1].numbers }
+            if run.filter({ rows[$0].numbers > 0 }).count >= 2, numbers > bestNumbers {
+                best = run
+                bestNumbers = numbers
+            }
+            run = []
+        }
+        for (index, row) in rows.enumerated() {
+            if let last = run.last, row.minY - rows[last].maxY > 3 * wordHeight || (row.numbers == 0 && rows[last].numbers == 0) {
+                finishRun()
+            }
+            run.append(index)
+        }
+        finishRun()
+        guard !best.isEmpty else { return nil }
+        return best.flatMap { rows[$0].indices }.sorted()
+    }
+}
+
+extension VisionTextQuery {
+    /// Words that introduce the literal text to erase: "le mot Total", "the word Total".
+    static let wordMarkers: Set<String> = ["mot", "mots", "word", "words", "terme", "termes", "term", "terms"]
+    static let allWords: Set<String> = ["tout", "tous", "toute", "toutes", "all", "every", "everything", "each", "chaque"]
+    /// Words around a literal that are not part of it: articles, places, containers, "all".
+    static let stopWords: Set<String> = {
+        var words = ObjectVocabulary.fillerWords.union(VisionTextQuery.allWords).union(VisionTextQuery.numericNouns).union(VisionTextQuery.wordMarkers)
+        words.formUnion(["tableau", "tableaux", "table", "tables", "grille", "grid", "colonne", "colonnes", "column", "columns", "ligne", "lignes",
+                         "row", "rows", "cellule", "cellules", "cell", "cells", "case", "cases", "texte", "text", "page", "document", "ecran", "screen",
+                         "capture", "screenshot", "et", "ou", "and", "or", "avec", "with", "en", "au", "aux", "a"])
+        for hint in SpatialHint.allCases {
+            for alias in hint.aliases { words.formUnion(alias.split(separator: " ").map(String.init)) }
+        }
+        return words
+    }()
+
+    /// Lower-cased, accent-free and without surrounding punctuation; a comma between digits
+    /// reads as a point ("Été:" → "ete", "87,3" → "87.3", "l’été" → "l'ete").
+    static func folded(_ token: String) -> String {
+        let characters = Array(token.normalizedForMatching)
+        guard let first = characters.firstIndex(where: { $0.isLetter || $0.isNumber }),
+              let last = characters.lastIndex(where: { $0.isLetter || $0.isNumber }) else { return "" }
+        var out = ""
+        for index in first...last {
+            let character = characters[index]
+            let decimalComma = character == "," && characters[index - 1].isNumber && characters[index + 1].isNumber
+            out.append(decimalComma ? "." : character)
+        }
+        return out
+    }
+
+    /// Folded words of a phrase, split on spaces and apostrophes ("l'image" → "l", "image").
+    static func tokens(of phrase: String) -> [String] {
+        phrase.split(whereSeparator: { $0.isWhitespace || $0 == "'" || $0 == "’" }).map { Self.folded(String($0)) }.filter { !$0.isEmpty }
+    }
+
+    /// Text between quotes: « Total », "Total", “Total” or ‘Total’.
+    static func quotedText(in phrase: String) -> String? {
+        let pairs: [(Character, Character)] = [("«", "»"), ("“", "”"), ("\"", "\""), ("‘", "’")]
+        for (opening, closing) in pairs {
+            guard let start = phrase.firstIndex(of: opening) else { continue }
+            let rest = phrase[phrase.index(after: start)...]
+            guard let end = rest.firstIndex(of: closing) else { continue }
+            let inner = rest[..<end].trimmingCharacters(in: .whitespaces)
+            if !inner.isEmpty { return inner }
+        }
+        return nil
+    }
+
+    /// The literal after "mot" / "word" ("le mot total du tableau" → "total"), or the number
+    /// right after a data noun ("la valeur 87,3" → "87.3"). `words` are folded.
+    static func literal(in words: [String]) -> String? {
+        if let index = words.firstIndex(where: { wordMarkers.contains($0) }) {
+            let rest = words[(index + 1)...].filter { !stopWords.contains($0) }
+            if !rest.isEmpty { return rest.joined(separator: " ") }
+        }
+        if let index = words.firstIndex(where: { numericNouns.contains($0) }), index + 1 < words.count,
+           words[index + 1].contains(where: { $0.isNumber }), isNumeric(words[index + 1]) {
+            return words[index + 1]
+        }
+        return nil
+    }
+}

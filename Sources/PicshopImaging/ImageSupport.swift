@@ -33,24 +33,9 @@ public enum RenderContext {
         return CIContext(options: options)
     }()
 
-    /// Whether `CIContext.render(_:toBitmap:…)` writes the top image row first.
-    /// Probed once at runtime so mask/bitmap code never relies on an assumption.
-    public static let bitmapIsTopDown: Bool = {
-        // 1×2 image: top pixel white, bottom pixel black.
-        var pixels: [UInt8] = [255, 255, 255, 255, 0, 0, 0, 255]
-        let data = Data(pixels)
-        guard let provider = CGDataProvider(data: data as CFData),
-              let cg = CGImage(width: 1, height: 2, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
-                               bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue), provider: provider, decode: nil,
-                               shouldInterpolate: false, intent: .defaultIntent) else { return true }
-        let image = CIImage(cgImage: cg)
-        var out = [UInt8](repeating: 0, count: 8)
-        out.withUnsafeMutableBytes { buffer in
-            shared.render(image, toBitmap: buffer.baseAddress!, rowBytes: 4, bounds: CGRect(x: 0, y: 0, width: 1, height: 2), format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB())
-        }
-        pixels = out
-        return pixels[0] > 127
-    }()
+    /// Gray space masks are read in: linear like the working space, so a soft edge
+    /// reads the value Core Image blends with.
+    public static let maskColorSpace = CGColorSpace(name: CGColorSpace.linearGray) ?? CGColorSpaceCreateDeviceGray()
 
     /// A context tuned for offline exports (no intermediate caching).
     public static let export: CIContext = {
@@ -115,27 +100,43 @@ public enum ImageSupport {
         }
     }
 
-    /// Rasterises a `CIImage` into a `CGImage`.
+    /// Rasterises `rect` of a `CIImage` (default: its extent) into a `CGImage`.
     ///
-    /// Goes through `render(toBitmap:)` plus the `bitmapIsTopDown` probe — the one
-    /// path whose orientation is verified on device by the inpainting composite —
-    /// so thumbnails, exports, the Vision analysis image and model outputs all share
-    /// the canvas's orientation. Very large images fall back to `createCGImage`
-    /// to avoid a second full-size copy in memory.
-    public static func cgImage(from image: CIImage, context: CIContext = RenderContext.shared) -> CGImage? {
-        let extent = image.extent.integral
-        guard !extent.isEmpty, extent.width.isFinite, extent.height.isFinite else { return nil }
-        let width = Int(extent.width), height = Int(extent.height)
-        guard width > 0, height > 0 else { return nil }
-        if width * height <= 24_000_000 {
-            var bytes = [UInt8](repeating: 0, count: width * height * 4)
-            bytes.withUnsafeMutableBytes { buffer in
-                context.render(image, toBitmap: buffer.baseAddress!, rowBytes: width * 4, bounds: extent, format: .RGBA8, colorSpace: RenderContext.colorSpace)
-            }
-            if !RenderContext.bitmapIsTopDown { bytes = MaskStore.flippedVertically(bytes, width: width * 4, height: height) }
-            return rgbaImage(width: width, height: height, bytes: bytes, colorSpace: RenderContext.colorSpace)
-        }
-        return context.createCGImage(image, from: extent, format: .RGBA8, colorSpace: RenderContext.colorSpace)
+    /// Always `createCGImage`, rendered eagerly: upright by contract (the first row
+    /// is the rect's top edge, maxY) at every size, with no runtime probe.
+    public static func cgImage(from image: CIImage, rect: CGRect? = nil, colorSpace: CGColorSpace = RenderContext.colorSpace, context: CIContext = RenderContext.shared) -> CGImage? {
+        guard let bounds = pixelBounds(rect ?? image.extent) else { return nil }
+        return context.createCGImage(image, from: bounds, format: .RGBA8, colorSpace: colorSpace, deferred: false)
+    }
+
+    /// Top-down RGBA8 bytes (premultiplied) of `rect` (default: the extent): row 0 is the
+    /// top edge. Read in `colorSpace`; `ciImage(rgba:…)` in the same space gives the image back.
+    public static func rgbaBytes(of image: CIImage, rect: CGRect? = nil, colorSpace: CGColorSpace = RenderContext.colorSpace, context: CIContext = RenderContext.shared) -> [UInt8]? {
+        cgImage(from: image, rect: rect, colorSpace: colorSpace, context: context).map { rgbaBytes(from: $0, colorSpace: colorSpace) }
+    }
+
+    /// Top-down 8-bit gray bytes of `rect` (default: the extent): row 0 is the top edge.
+    /// Read in `colorSpace`; `ciImage(gray:…)` in the same space gives the image back.
+    public static func grayBytes(of image: CIImage, rect: CGRect? = nil, colorSpace: CGColorSpace = CGColorSpaceCreateDeviceGray(), context: CIContext = RenderContext.shared) -> [UInt8]? {
+        guard let bounds = pixelBounds(rect ?? image.extent),
+              let cg = context.createCGImage(image, from: bounds, format: .L8, colorSpace: colorSpace, deferred: false) else { return nil }
+        return grayBytes(from: cg, colorSpace: colorSpace)
+    }
+
+    /// Top-down RGBA8 bytes as a `CIImage` at the origin, in `colorSpace`.
+    public static func ciImage(rgba bytes: [UInt8], width: Int, height: Int, colorSpace: CGColorSpace = RenderContext.colorSpace) -> CIImage? {
+        rgbaImage(width: width, height: height, bytes: bytes, colorSpace: colorSpace).map { CIImage(cgImage: $0) }
+    }
+
+    /// Top-down 8-bit gray bytes as a `CIImage` at the origin, in `colorSpace`.
+    public static func ciImage(gray bytes: [UInt8], width: Int, height: Int, colorSpace: CGColorSpace = CGColorSpaceCreateDeviceGray()) -> CIImage? {
+        grayImage(width: width, height: height, bytes: bytes, colorSpace: colorSpace).map { CIImage(cgImage: $0) }
+    }
+
+    private static func pixelBounds(_ rect: CGRect) -> CGRect? {
+        let bounds = rect.integral
+        guard !bounds.isEmpty, !bounds.isInfinite, bounds.width.isFinite, bounds.height.isFinite else { return nil }
+        return bounds
     }
 
     /// Writes a CGImage as JPEG/PNG/HEIC.
@@ -150,9 +151,7 @@ public enum ImageSupport {
         }
     }
 
-    /// Writes a CIImage. The image is rasterised through `createCGImage` — the same
-    /// path the canvas uses — so files and previews are guaranteed to match
-    /// (orientation, colour space, alpha).
+    /// Writes a CIImage, rasterised upright through `cgImage(from:)` in the display colour space.
     public static func write(_ image: CIImage, to url: URL, type: UTType = .jpeg, quality: Double = 0.92, context: CIContext = RenderContext.export) throws {
         guard let cg = cgImage(from: image, context: context) else {
             throw PicshopError.exportFailed("cannot rasterise \(url.lastPathComponent)")
@@ -160,43 +159,43 @@ public enum ImageSupport {
         try write(cg, to: url, type: type, quality: quality)
     }
 
-    /// Creates a single-channel 8-bit grayscale CGImage from raw bytes.
-    public static func grayImage(width: Int, height: Int, bytes: [UInt8]) -> CGImage? {
+    /// Creates a single-channel 8-bit grayscale CGImage from top-down bytes.
+    public static func grayImage(width: Int, height: Int, bytes: [UInt8], colorSpace: CGColorSpace = CGColorSpaceCreateDeviceGray()) -> CGImage? {
         guard bytes.count >= width * height else { return nil }
         let data = Data(bytes)
         guard let provider = CGDataProvider(data: data as CFData) else { return nil }
         return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: width,
-                       space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+                       space: colorSpace, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
                        provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
     }
 
-    /// Extracts 8-bit gray bytes from any CGImage (converted to gray if needed).
-    public static func grayBytes(from image: CGImage) -> [UInt8] {
+    /// Top-down 8-bit gray bytes of any CGImage, converted to `colorSpace` if it differs.
+    public static func grayBytes(from image: CGImage, colorSpace: CGColorSpace = CGColorSpaceCreateDeviceGray()) -> [UInt8] {
         let width = image.width
         let height = image.height
         var bytes = [UInt8](repeating: 0, count: width * height)
         bytes.withUnsafeMutableBytes { buffer in
             guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width,
-                                          space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return }
+                                          space: colorSpace, bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return }
             context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         }
         return bytes
     }
 
-    /// Extracts interleaved RGBA8 bytes (premultiplied) from a CGImage.
-    public static func rgbaBytes(from image: CGImage) -> [UInt8] {
+    /// Top-down interleaved RGBA8 bytes (premultiplied) of a CGImage, converted to `colorSpace` if it differs.
+    public static func rgbaBytes(from image: CGImage, colorSpace: CGColorSpace = CGColorSpaceCreateDeviceRGB()) -> [UInt8] {
         let width = image.width
         let height = image.height
         var bytes = [UInt8](repeating: 0, count: width * height * 4)
         bytes.withUnsafeMutableBytes { buffer in
             guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
-                                          space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+                                          space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
             context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         }
         return bytes
     }
 
-    /// Builds an RGBA8 CGImage from interleaved bytes.
+    /// Builds an RGBA8 CGImage from top-down interleaved bytes (premultiplied).
     public static func rgbaImage(width: Int, height: Int, bytes: [UInt8], colorSpace: CGColorSpace = CGColorSpaceCreateDeviceRGB()) -> CGImage? {
         guard bytes.count >= width * height * 4 else { return nil }
         let data = Data(bytes)

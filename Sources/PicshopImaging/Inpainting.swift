@@ -10,7 +10,7 @@ public protocol Inpainter: Sendable {
     var name: String { get }
     /// Preferred working resolution (longest side). The pipeline resamples crops to this.
     var preferredLongestSide: Int { get }
-    /// `mask` is 8-bit (255 = fill). Returns RGBA8 of the same size.
+    /// Bitmaps are top-down (row 0 = top). `mask` is 8-bit (255 = fill). Returns RGBA8 of the same size.
     func inpaint(rgba: [UInt8], mask: [UInt8], width: Int, height: Int) async throws -> [UInt8]
 }
 
@@ -119,17 +119,10 @@ public final class InpaintingPipeline: @unchecked Sendable {
         let croppedImage = image.cropped(to: crop).transformed(by: CGAffineTransform(translationX: -crop.minX, y: -crop.minY)).transformed(by: CGAffineTransform(scaleX: workScale, y: workScale))
         let croppedMask = mask.cropped(to: crop).transformed(by: CGAffineTransform(translationX: -crop.minX, y: -crop.minY)).transformed(by: CGAffineTransform(scaleX: workScale, y: workScale))
 
-        var rgba = [UInt8](repeating: 0, count: workWidth * workHeight * 4)
-        rgba.withUnsafeMutableBytes { buffer in
-            context.render(croppedImage, toBitmap: buffer.baseAddress!, rowBytes: workWidth * 4, bounds: workRect, format: .RGBA8, colorSpace: RenderContext.colorSpace)
-        }
-        var maskBytes = [UInt8](repeating: 0, count: workWidth * workHeight)
-        maskBytes.withUnsafeMutableBytes { buffer in
-            context.render(croppedMask, toBitmap: buffer.baseAddress!, rowBytes: workWidth, bounds: workRect, format: .R8, colorSpace: nil)
-        }
-        if !RenderContext.bitmapIsTopDown {
-            rgba = MaskStore.flippedVertically(rgba, width: workWidth * 4, height: workHeight)
-            maskBytes = MaskStore.flippedVertically(maskBytes, width: workWidth, height: workHeight)
+        // Top-down bytes by contract (row 0 = the crop's top edge); the mask in linear gray, the values it blends with.
+        guard let rgba = ImageSupport.rgbaBytes(of: croppedImage, rect: workRect, context: context),
+              var maskBytes = ImageSupport.grayBytes(of: croppedMask, rect: workRect, colorSpace: RenderContext.maskColorSpace, context: context) else {
+            throw PicshopError.renderFailed("inpaint crop")
         }
         // Harden and slightly grow the hole so anti-aliased edges are fully replaced.
         for index in maskBytes.indices { maskBytes[index] = maskBytes[index] > 100 ? 255 : 0 }
@@ -137,12 +130,9 @@ public final class InpaintingPipeline: @unchecked Sendable {
         guard maskBytes.contains(where: { $0 > 0 }) else { return image }
 
         let filledBytes = try await worker(rgba, maskBytes, workWidth, workHeight)
-        guard let filledCG = ImageSupport.rgbaImage(width: workWidth, height: workHeight, bytes: filledBytes) else {
+        // Same colour space as the read, so the fill keeps the surroundings' colours.
+        guard var filled = ImageSupport.ciImage(rgba: filledBytes, width: workWidth, height: workHeight) else {
             throw PicshopError.renderFailed("inpaint output")
-        }
-        var filled = CIImage(cgImage: filledCG)
-        if !RenderContext.bitmapIsTopDown {
-            filled = filled.transformed(by: CGAffineTransform(scaleX: 1, y: -1)).transformed(by: CGAffineTransform(translationX: 0, y: filled.extent.height))
         }
         // Back to crop resolution and position.
         let upscale = 1 / workScale

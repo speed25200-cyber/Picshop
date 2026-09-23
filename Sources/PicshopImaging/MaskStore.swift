@@ -91,26 +91,19 @@ public struct MaskStore: Sendable {
 
     // MARK: - Rasterisation helpers
 
-    /// Reads a one-component pixel buffer (Vision masks) into bytes at the given size.
+    /// Reads a one-component pixel buffer (Vision masks) into top-down bytes at the given size,
+    /// in linear gray like the values Core Image blends with.
     public static func bytes(from pixelBuffer: CVPixelBuffer, width: Int, height: Int) -> [UInt8] {
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let scaled = ciImage.transformed(by: CGAffineTransform(scaleX: CGFloat(width) / ciImage.extent.width, y: CGFloat(height) / ciImage.extent.height))
-        var bytes = [UInt8](repeating: 0, count: width * height)
-        bytes.withUnsafeMutableBytes { buffer in
-            RenderContext.shared.render(scaled, toBitmap: buffer.baseAddress!, rowBytes: width, bounds: CGRect(x: 0, y: 0, width: width, height: height),
-                                        format: .R8, colorSpace: nil)
-        }
-        return RenderContext.bitmapIsTopDown ? bytes : flippedVertically(bytes, width: width, height: height)
-    }
-
-    static func flippedVertically(_ bytes: [UInt8], width: Int, height: Int) -> [UInt8] {
-        var out = [UInt8](repeating: 0, count: bytes.count)
-        for y in 0..<height {
-            let src = y * width
-            let dst = (height - 1 - y) * width
-            out.replaceSubrange(dst..<(dst + width), with: bytes[src..<(src + width)])
-        }
-        return out
+        // Clamped so resampling does not blend the border rows with the clear outside the extent.
+        let scaled = ciImage.clampedToExtent().transformed(by: CGAffineTransform(scaleX: CGFloat(width) / ciImage.extent.width, y: CGFloat(height) / ciImage.extent.height))
+        // The value is in red whether Core Image maps the buffer to gray or to red only; spread it before the gray read.
+        let spread = CIFilter.colorMatrix()
+        spread.inputImage = scaled
+        spread.gVector = CIVector(x: 1, y: 0, z: 0, w: 0)
+        spread.bVector = CIVector(x: 1, y: 0, z: 0, w: 0)
+        return ImageSupport.grayBytes(of: spread.outputImage ?? scaled, rect: CGRect(x: 0, y: 0, width: width, height: height), colorSpace: RenderContext.maskColorSpace)
+            ?? [UInt8](repeating: 0, count: width * height)
     }
 
     /// Draws brush strokes into a mask.
@@ -196,6 +189,23 @@ public struct MaskStore: Sendable {
         guard x1 > x0, y1 > y0 else { return bytes }
         for y in y0..<y1 {
             for x in x0..<x1 { bytes[y * width + x] = 255 }
+        }
+        return bytes
+    }
+
+    /// Bytes for a mask covering the union of normalised rectangles (every pixel they touch).
+    public static func rectanglesMask(_ rects: [PSRect], width: Int, height: Int) -> [UInt8] {
+        var bytes = [UInt8](repeating: 0, count: width * height)
+        for rect in rects {
+            let x0 = max(0, Int((rect.minX * Double(width)).rounded(.down)))
+            let x1 = min(width, Int((rect.maxX * Double(width)).rounded(.up)))
+            let y0 = max(0, Int((rect.minY * Double(height)).rounded(.down)))
+            let y1 = min(height, Int((rect.maxY * Double(height)).rounded(.up)))
+            guard x1 > x0, y1 > y0 else { continue }
+            for y in y0..<y1 {
+                let row = y * width
+                for x in x0..<x1 { bytes[row + x] = 255 }
+            }
         }
         return bytes
     }
