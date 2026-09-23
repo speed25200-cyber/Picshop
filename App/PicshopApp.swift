@@ -8,6 +8,8 @@ struct PicshopApp: App {
     @State private var environment: AppEnvironment
 
     init() {
+        // First, so a crash or memory kill in this session leaves a report for the next one.
+        Diagnostics.shared.start()
         var engines: [any IntentEngine] = []
         #if canImport(MLXLLM)
         engines.append(MLXIntentEngine.shared)

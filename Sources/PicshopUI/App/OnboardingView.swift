@@ -3,8 +3,9 @@ import SwiftUI
 import PicshopSpeech
 import PicshopImaging
 
-/// First launch: a living spectrum behind the name, four short pages —
-/// photo, video, voice, privacy — then the two permissions and one button.
+/// First launch: a slow spectrum behind the name (the one AI moment of the
+/// screen), four short pages — photo, video, voice, privacy — then the two
+/// permissions and one button.
 public struct OnboardingView: View {
     @Environment(\.picshop) private var app
     @State private var page = 0
@@ -37,39 +38,40 @@ public struct OnboardingView: View {
             PSTheme.ink.ignoresSafeArea()
             IntelligenceField(animated: true)
                 .frame(height: 520)
-                .blur(radius: 50)
-                .opacity(0.65)
+                .blur(radius: 60)
+                .opacity(0.5)
                 .frame(maxHeight: .infinity, alignment: .top)
                 .ignoresSafeArea()
             LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: PSTheme.ink.opacity(0.4), location: 0.35), .init(color: PSTheme.ink, location: 0.62)],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
-            VStack(spacing: 22) {
-                VStack(spacing: 4) {
-                    Text("PicShop").font(PSFont.display(44)).foregroundStyle(.white).tracking(-1.8)
-                    Text(L("Photo and video, magically.")).font(PSFont.body(16)).foregroundStyle(.white.opacity(0.75))
+            VStack(spacing: PSSpacing.xLarge) {
+                VStack(spacing: PSSpacing.xSmall) {
+                    Text("PicShop").font(PSFont.largeTitle()).foregroundStyle(PSTheme.textPrimary)
+                    Text(L("Photo and video, magically.")).font(PSFont.callout()).foregroundStyle(PSTheme.textSecondary)
                 }
-                .padding(.top, 24)
+                .padding(.top, PSSpacing.xLarge)
                 TabView(selection: $page) {
                     ForEach(Array(pages.enumerated()), id: \.offset) { index, item in
-                        VStack(spacing: 18) {
-                            HStack(spacing: -10) {
-                                ForEach(Array(item.symbols.enumerated()), id: \.offset) { position, symbol in
-                                    Image(systemName: symbol)
-                                        .font(.system(size: item.symbols.count == 1 ? 40 : 26, weight: .semibold))
-                                        .symbolRenderingMode(.hierarchical)
-                                        .foregroundStyle(.white)
-                                        .frame(width: item.symbols.count == 1 ? 104 : 72, height: item.symbols.count == 1 ? 104 : 72)
-                                        .psGlass(shape: AnyShape(Circle()))
-                                        .overlay(Circle().strokeBorder(PSTheme.intelligenceAngular, lineWidth: 1).opacity(0.6))
-                                        .offset(y: position == 1 ? -10 : 0)
-                                        .zIndex(position == 1 ? 1 : 0)
+                        VStack(spacing: PSSpacing.large) {
+                            PSGlassContainer(spacing: PSSpacing.medium) {
+                                HStack(spacing: -10) {
+                                    ForEach(Array(item.symbols.enumerated()), id: \.offset) { position, symbol in
+                                        Image(systemName: symbol)
+                                            .font(.system(size: item.symbols.count == 1 ? 40 : 26, weight: .regular))
+                                            .symbolRenderingMode(.hierarchical)
+                                            .foregroundStyle(PSTheme.textPrimary)
+                                            .frame(width: item.symbols.count == 1 ? 104 : 72, height: item.symbols.count == 1 ? 104 : 72)
+                                            .psGlass(shape: AnyShape(Circle()))
+                                            .offset(y: position == 1 ? -10 : 0)
+                                            .zIndex(position == 1 ? 1 : 0)
+                                    }
                                 }
                             }
                             .symbolEffect(.bounce, value: page == index)
-                            .padding(.bottom, 8)
-                            Text(item.title).font(PSFont.display(30)).foregroundStyle(PSTheme.textPrimary).multilineTextAlignment(.center).tracking(-0.8)
-                            Text(item.text).font(PSFont.body(16)).foregroundStyle(PSTheme.textSecondary).multilineTextAlignment(.center).padding(.horizontal, 30)
+                            .padding(.bottom, PSSpacing.small)
+                            Text(item.title).font(.title.weight(.bold)).foregroundStyle(PSTheme.textPrimary).multilineTextAlignment(.center)
+                            Text(item.text).font(PSFont.callout()).foregroundStyle(PSTheme.textSecondary).multilineTextAlignment(.center).padding(.horizontal, PSSpacing.xxLarge)
                         }
                         .tag(index)
                     }
@@ -77,7 +79,7 @@ public struct OnboardingView: View {
                 .tabViewStyle(.page)
                 .indexViewStyle(.page(backgroundDisplayMode: .always))
 
-                VStack(spacing: 10) {
+                VStack(spacing: PSSpacing.small) {
                     permissionRow(title: L("Microphone & speech"), granted: micGranted, symbol: "mic.fill") {
                         micGranted = await VoiceController.requestPermissions()
                     }
@@ -89,10 +91,10 @@ public struct OnboardingView: View {
                         app?.settings.hasCompletedOnboarding = true
                     } label: { Text(L("Start editing")) }
                         .buttonStyle(PrimaryButtonStyle())
-                        .padding(.top, 6)
+                        .padding(.top, PSSpacing.small)
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 20)
+                .padding(.horizontal, PSSpacing.xLarge)
+                .padding(.bottom, PSSpacing.mediumLarge)
             }
         }
         .preferredColorScheme(.dark)
@@ -105,21 +107,21 @@ public struct OnboardingView: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: symbol)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(granted ? PSTheme.success : PSTheme.textPrimary)
                     .frame(width: 32, height: 32)
-                    .background(Color.white.opacity(0.08), in: Circle())
-                Text(title).font(PSFont.headline(15))
+                    .background(PSTheme.fill, in: Circle())
+                Text(title).font(PSFont.control(selected: true))
                 Spacer()
                 Image(systemName: granted ? "checkmark.circle.fill" : "chevron.right")
-                    .font(.system(size: granted ? 20 : 13, weight: .semibold))
+                    .font(.system(size: granted ? 20 : 13, weight: .medium))
                     .foregroundStyle(granted ? PSTheme.success : PSTheme.textTertiary)
                     .contentTransition(.symbolEffect(.replace))
                     .symbolEffect(.bounce, value: granted)
             }
             .foregroundStyle(PSTheme.textPrimary)
-            .padding(.horizontal, 14).padding(.vertical, 10)
-            .psCard(cornerRadius: 22, shadow: false)
+            .padding(.horizontal, PSSpacing.medium).padding(.vertical, 10)
+            .psGlass(interactive: true)
         }
         .buttonStyle(PSPressStyle(scale: 0.98))
         .animation(PSMotion.quick, value: granted)

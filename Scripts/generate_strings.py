@@ -408,6 +408,15 @@ FR = {
     "%d pages": "%d pages", "French or English, several requests in one breath.": "Français ou anglais, plusieurs demandes d'un trait.", "French or English. Tap an example to run it.": "Français ou anglais. Touchez un exemple pour le lancer.", "Small, Apple": "Léger, Apple", "Universal": "Universel", "Lossless": "Sans perte", "Goals": "Objectifs", "Follow-ups": "Suivis", "Portrait": "Portrait",
 
     "The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large and download from Hugging Face on demand; everything runs on your iPhone.": "La gomme et l'agrandisseur sont livrés avec l'app. Le remplissage génératif et le Pro Brain sont volumineux et se téléchargent depuis Hugging Face à la demande ; tout fonctionne sur votre iPhone.",
+
+    # Home, settings and editor polish.
+    "New": "Nouveau", "Resume": "Reprendre", "Filter": "Filtrer", "Say what you want to do": "Dites ce que vous voulez faire",
+    "The large models download over Wi‑Fi. Everything else already works.": "Les grands modèles se téléchargent en Wi‑Fi. Tout le reste fonctionne déjà.",
+    "A diagnostics report is waiting": "Un rapport de diagnostic est en attente",
+    "Diagnostics": "Diagnostic", "Dismiss": "Ignorer", "Share diagnostics": "Partager le diagnostic", "Share the report": "Partager le rapport",
+    "PicShop quit unexpectedly": "PicShop s'est arrêté de façon inattendue", "PicShop was closed unexpectedly": "PicShop a été fermé de façon inattendue",
+    "The report says what PicShop was doing, including your last commands, with the device model and free memory. No photos, videos or recordings. It leaves your iPhone only if you share it.": "Le rapport indique ce que faisait PicShop, y compris vos dernières commandes, avec le modèle de l'appareil et la mémoire libre. Aucune photo, vidéo ni enregistrement. Il ne quitte votre iPhone que si vous le partagez.",
+    "Edited": "Modifié", "More": "Plus", "One moment…": "Un instant…", "The photo changed in the meantime. Try again.": "La photo a changé entre-temps. Réessayez.",
 }
 
 # Keys passed to L() at runtime rather than as literals (enum display names).

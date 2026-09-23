@@ -4,7 +4,8 @@ import PicshopCore
 import PicshopIntent
 import PicshopSpeech
 
-/// Voice command cheat-sheet.
+/// Voice command cheat-sheet: examples as plain chips, grouped by what they
+/// do; the spectrum marks only the voice glyph at the top.
 struct HelpSheet: View {
     let mode: EditorMode
     /// Runs an example as if it had been spoken; the sheet closes first.
@@ -57,23 +58,21 @@ struct HelpSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: PSSpacing.xLarge) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "waveform.and.mic")
-                            .font(.system(size: 22, weight: .semibold))
-                            .foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: PSSpacing.section) {
+                    HStack(spacing: PSSpacing.medium) {
+                        MagicGlyph(size: 20, symbol: "waveform")
                             .frame(width: 48, height: 48)
-                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(PSTheme.voiceGradient))
+                            .background(PSTheme.fill, in: Circle())
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(L("Say it")).font(PSFont.title(22)).foregroundStyle(PSTheme.textPrimary).tracking(-0.4)
+                            Text(L("Say it")).font(.title2.weight(.bold)).foregroundStyle(PSTheme.textPrimary)
                             Text(onSay == nil ? L("French or English, several requests in one breath.") : L("French or English. Tap an example to run it."))
-                                .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                                .font(PSFont.footnote()).foregroundStyle(PSTheme.textSecondary)
                         }
                     }
                     ForEach(sections, id: \.0) { section in
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: PSSpacing.medium) {
                             Label(section.0, systemImage: symbol(for: section.0))
-                                .font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
+                                .font(PSFont.headline()).foregroundStyle(PSTheme.textPrimary)
                                 .symbolRenderingMode(.hierarchical)
                             FlowLayout(spacing: 8) {
                                 ForEach(section.1, id: \.self) { example in
@@ -83,14 +82,13 @@ struct HelpSheet: View {
                                         dismiss()
                                         onSay(example)
                                     } label: {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: "quote.opening").font(.system(size: 9, weight: .bold)).foregroundStyle(PSTheme.voice)
-                                            Text(example).font(PSFont.body(14)).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
-                                        }
-                                        .padding(.horizontal, 12).padding(.vertical, 8)
-                                        .psGlass(interactive: onSay != nil)
+                                        Text(example).font(PSFont.control()).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
+                                            .padding(.horizontal, PSMetrics.chipPadding)
+                                            .frame(minHeight: PSMetrics.chip)
+                                            .psChipFill(Capsule())
+                                            .contentShape(Capsule())
                                     }
-                                    .buttonStyle(PSPressStyle())
+                                    .buttonStyle(PSPressStyle(scale: 0.97))
                                     .disabled(onSay == nil)
                                 }
                             }
@@ -98,7 +96,7 @@ struct HelpSheet: View {
                     }
                 }
                 .padding(.horizontal, PSSpacing.page)
-                .padding(.vertical, 12)
+                .padding(.vertical, PSSpacing.medium)
             }
             .scrollIndicators(.hidden)
             .background(AmbientBackground().ignoresSafeArea())

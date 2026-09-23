@@ -20,13 +20,13 @@ struct FocusPanel: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Image(systemName: session.hasDepthMap ? "cube.transparent" : "person.crop.rectangle")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 17, weight: .medium))
                     .psIntelligenceForeground()
                 VStack(alignment: .leading, spacing: 1) {
                     Text(session.focusPoint == nil ? L("Tap where the picture should be sharp.") : L("Tap again to move the focus."))
-                        .font(PSFont.headline(13)).foregroundStyle(PSTheme.textPrimary)
+                        .font(.subheadline.weight(.medium)).foregroundStyle(PSTheme.textPrimary)
                     Text(session.hasDepthMap ? L("Using the depth captured by the camera.") : L("Estimated from the subject."))
-                        .font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary)
+                        .font(.footnote).foregroundStyle(PSTheme.textTertiary)
                 }
                 Spacer()
                 if session.focusPoint != nil {

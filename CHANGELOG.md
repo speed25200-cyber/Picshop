@@ -2,6 +2,13 @@
 
 ## 2.0.0 — PicShop, reimagined
 
+- High-end pass: native Liquid Glass without hand-made strokes and shadows, text styles with Dynamic Type, concentric
+  radii, a calmer palette; the photo runs edge to edge, the tool panel is half as tall with a native segmented
+  control and calm chips, one glass top bar (Export is the single yellow action), a mic that becomes a listening
+  capsule; Home opens on your latest work, with calm Photo/Video/PDF buttons and a quiet AI status ring.
+- Reliability: voice sessions survive route and format changes, commands run one at a time, erases are computed
+  once and can be cancelled, memory pressure trims caches, every edit is autosaved, and a crash or unclean exit is
+  captured (MetricKit + breadcrumbs) and can be shared from Settings.
 - Photos show the right way up: the canvas wrote Core Image's bottom row at the top of the screen, so every photo
   appeared upside down (and taps, rings and erases seemed mirrored). A GPU read-back test now guards it, and pixel
   reads no longer depend on a runtime orientation probe.

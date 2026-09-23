@@ -12,12 +12,17 @@ protocol EditorStatus: AnyObject, Observable {
     /// Fraction of a running export, when one is running.
     var exportProgress: Double? { get }
     var toast: PhotoEditorSession.Toast? { get }
+    /// Whether the running work shows the blocking HUD. An editor that draws
+    /// its progress on the picture itself (an erase shimmering over its mask)
+    /// returns false.
+    var showsProcessingHUD: Bool { get }
     func undo()
     func performToastAction(_ action: PhotoEditorSession.Toast.Action)
 }
 
 extension EditorStatus {
     func performToastAction(_ action: PhotoEditorSession.Toast.Action) {}
+    var showsProcessingHUD: Bool { true }
 }
 
 /// Processing HUD, export HUD and toast for an editor.
@@ -27,19 +32,21 @@ extension EditorStatus {
 /// canvas, the timeline and the dock on every tick.
 struct EditorStatusOverlay<Session: EditorStatus>: View {
     var session: Session
-    var toastTopInset: CGFloat = 60
+    /// Below the top bar (44 points plus its 4-point top padding).
+    var toastTopInset: CGFloat = 56
     var toastHorizontalInset: CGFloat = 20
 
-    private var blocksTouches: Bool { session.isProcessing || session.exportProgress != nil }
+    private var showsProcessing: Bool { session.isProcessing && session.showsProcessingHUD }
+    private var blocksTouches: Bool { showsProcessing || session.exportProgress != nil }
 
     var body: some View {
         ZStack {
             ZStack {
-                if session.isProcessing {
+                if showsProcessing {
                     ProgressHUD(title: session.processingTitle, progress: session.processingProgress)
                 }
                 if let progress = session.exportProgress {
-                    ProgressHUD(title: L("Exporting…"), progress: progress)
+                    ProgressHUD(title: L("Exporting…"), progress: progress, tone: .neutral)
                 }
             }
             .allowsHitTesting(blocksTouches)
@@ -55,7 +62,9 @@ struct EditorStatusOverlay<Session: EditorStatus>: View {
                     .id(toast.id)
             }
         }
-        .animation(PSMotion.standard, value: session.isProcessing)
+        .animation(PSMotion.standard, value: showsProcessing)
+        .animation(PSMotion.standard, value: session.exportProgress == nil)
+        .animation(PSMotion.standard, value: session.toast?.id)
     }
 
     private func button(for toast: PhotoEditorSession.Toast) -> ToastView.Action? {

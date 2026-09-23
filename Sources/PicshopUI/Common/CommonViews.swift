@@ -1,48 +1,73 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
 
-/// Blocking progress overlay for long operations: a glass tile in the centre
-/// with a spectrum ring and a shimmering title, the picture still visible
-/// behind a light veil. The screen-edge glow says the rest.
+/// Blocking progress overlay for long, non-cancellable work (export,
+/// import): a glass tile in the centre and nothing else, so the picture stays
+/// fully visible. Touches are still held off the screen below.
+///
+/// `.intelligence` (AI work) draws a spectrum ring and a shimmering title;
+/// `.neutral` (export, import) stays white.
 struct ProgressHUD: View {
+    enum Tone { case intelligence, neutral }
+
     var title: String
     var progress: Double? = nil
     var onCancel: (() -> Void)? = nil
+    var tone: Tone = .intelligence
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.22).ignoresSafeArea()
-            VStack(spacing: 14) {
-                ZStack {
-                    Circle().stroke(Color.white.opacity(0.1), lineWidth: 4).frame(width: 48, height: 48)
-                    if let progress {
-                        Circle()
-                            .trim(from: 0, to: CGFloat(max(0.02, min(1, progress))))
-                            .stroke(AngularGradient(colors: PSTheme.intelligence + [PSTheme.intelligence[0]], center: .center), style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                            .rotationEffect(.degrees(-90))
-                            .frame(width: 48, height: 48)
-                            .animation(PSMotion.numeric, value: progress)
-                        Text("\(Int(progress * 100))").font(PSFont.mono(13)).foregroundStyle(PSTheme.textPrimary).contentTransition(.numericText())
-                    } else {
-                        MagicGlyph(size: 20).symbolEffect(.pulse)
-                    }
+            // Invisible, but it catches touches while the work runs.
+            Color.clear.contentShape(Rectangle()).ignoresSafeArea()
+            VStack(spacing: PSSpacing.medium) {
+                ring
+                if tone == .intelligence {
+                    ShimmerText(title, font: PSFont.control(selected: true))
+                        .multilineTextAlignment(.center)
+                } else {
+                    Text(title).font(PSFont.control(selected: true)).foregroundStyle(PSTheme.textPrimary)
+                        .multilineTextAlignment(.center).lineLimit(2)
                 }
-                ShimmerText(title, font: PSFont.headline(15))
-                    .multilineTextAlignment(.center)
                 if let onCancel {
-                    Button(L("Cancel"), action: onCancel).font(PSFont.caption(13)).foregroundStyle(PSTheme.textSecondary)
+                    Button(L("Cancel"), action: onCancel).font(PSFont.footnote()).foregroundStyle(PSTheme.textSecondary)
                 }
             }
-            .padding(.horizontal, 26)
-            .padding(.vertical, 22)
-            .frame(minWidth: 180, maxWidth: 300)
-            .psCard(cornerRadius: PSRadius.panel)
+            .padding(.horizontal, PSSpacing.xLarge)
+            .padding(.vertical, PSSpacing.mediumLarge)
+            .frame(minWidth: 168, maxWidth: 280)
+            .psCard(cornerRadius: PSRadius.hud)
         }
         .transition(.opacity.combined(with: .scale(scale: 0.98)))
     }
+
+    private var ring: some View {
+        ZStack {
+            Circle().stroke(Color.white.opacity(0.12), lineWidth: 3.5)
+            if let progress {
+                Circle()
+                    .trim(from: 0, to: CGFloat(max(0.02, min(1, progress))))
+                    .stroke(ringStyle, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .animation(PSMotion.numeric, value: progress)
+                Text("\(Int(progress * 100))").font(PSFont.rounded(13)).foregroundStyle(PSTheme.textPrimary).contentTransition(.numericText())
+            } else if tone == .intelligence {
+                MagicGlyph(size: 18).symbolEffect(.pulse)
+            } else {
+                ProgressView().tint(PSTheme.textPrimary)
+            }
+        }
+        .frame(width: 44, height: 44)
+    }
+
+    private var ringStyle: AnyShapeStyle {
+        tone == .intelligence
+            ? AnyShapeStyle(AngularGradient(colors: PSTheme.intelligence + [PSTheme.intelligence[0]], center: .center))
+            : AnyShapeStyle(PSTheme.textPrimary)
+    }
 }
 
-/// Transient message at the top of the editor, shaped like a Dynamic Island pill.
+/// Transient message under the top bar: a 44-point glass capsule, like a
+/// Dynamic Island notice.
 struct ToastView: View {
     let text: String
     var systemImage: String = "checkmark.circle.fill"
@@ -59,30 +84,33 @@ struct ToastView: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: systemImage)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(tint)
                 .symbolRenderingMode(.hierarchical)
-            Text(text).font(PSFont.body(14)).foregroundStyle(PSTheme.textPrimary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            Text(text).font(PSFont.control()).foregroundStyle(PSTheme.textPrimary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
             if let action {
                 Button {
                     Haptics.tap()
                     action.run()
                 } label: {
+                    // Concentric with the toast: 44 − 2 × 6.
                     Label(action.title, systemImage: action.symbol)
-                        .font(PSFont.headline(12))
+                        .font(PSFont.control(selected: true))
                         .foregroundStyle(PSTheme.textPrimary)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(Capsule().fill(Color.white.opacity(0.12)))
-                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
+                        .padding(.horizontal, 12)
+                        .frame(height: 32)
+                        .psChipFill(Capsule())
+                        .contentShape(Capsule())
                 }
                 .buttonStyle(PSPressStyle(scale: 0.94))
             }
         }
-        .padding(.leading, 16)
-        .padding(.trailing, action == nil ? 16 : 8)
-        .padding(.vertical, action == nil ? 11 : 8)
-        .psCard(cornerRadius: 24, shadow: true)
-        .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92, anchor: .top)))
+        .padding(.leading, 14)
+        .padding(.trailing, action == nil ? 18 : 6)
+        .padding(.vertical, 6)
+        .frame(minHeight: PSMetrics.control)
+        .psGlass()
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 }
 
@@ -97,7 +125,7 @@ struct ParameterSlider: View {
     var body: some View {
         VStack(spacing: 6) {
             HStack {
-                Text(title).font(PSFont.caption(13)).foregroundStyle(PSTheme.textSecondary)
+                Text(title).font(PSFont.footnote()).foregroundStyle(PSTheme.textSecondary)
                 Spacer()
                 Text(value >= 0 && bipolar ? "+\(Int((value * 100).rounded()))" : "\(Int((value * 100).rounded()))")
                     .font(PSFont.mono(12)).foregroundStyle(PSTheme.textPrimary)
@@ -119,9 +147,9 @@ struct SectionTitle: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(title).font(PSFont.title(22)).foregroundStyle(PSTheme.textPrimary).tracking(-0.4)
+            Text(title).font(PSFont.section()).foregroundStyle(PSTheme.textPrimary)
             if let count {
-                Text("\(count)").font(PSFont.mono(12)).foregroundStyle(PSTheme.textTertiary).contentTransition(.numericText())
+                Text("\(count)").font(.subheadline.monospacedDigit()).foregroundStyle(PSTheme.textTertiary).contentTransition(.numericText())
             }
             Spacer()
         }

@@ -1,5 +1,6 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
+import UIKit
 import Observation
 import PicshopCore
 import PicshopIntent
@@ -30,6 +31,10 @@ public final class AppEnvironment {
     public private(set) var modelStates: [String: ModelManager.State] = [:]
     /// Provided by the app target when the Stable Diffusion runtime is linked.
     public var generativeEngineProvider: (@Sendable (URL) -> any GenerativeFillEngine)?
+    /// How the previous session ended, when it ended badly (crash, memory kill), until
+    /// dismissed. Offer to share it with `writeCrashReport()`.
+    public private(set) var pendingCrashReport: Diagnostics.Report?
+    @ObservationIgnored private var memoryObserver: NSObjectProtocol?
 
     public init(extraEngines: [any IntentEngine] = []) {
         let settings = AppSettings()
@@ -46,6 +51,11 @@ public final class AppEnvironment {
         router = HybridIntentRouter(preferredEngine: .appleIntelligence)
         voice = VoiceController(locale: settings.voiceLocale)
         voice.mode = settings.voiceMode
+        pendingCrashReport = Diagnostics.shared.pendingReport
+        Diagnostics.shared.setReportHandler { [weak self] report in self?.pendingCrashReport = report }
+        memoryObserver = NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { _ in
+            Task { @MainActor in AppEnvironment.relieveMemoryPressure() }
+        }
 
         Task {
             #if canImport(FoundationModels)
@@ -145,6 +155,31 @@ public final class AppEnvironment {
         }
         guard !active.isEmpty else { return nil }
         return active.reduce(0, +) / Double(active.count)
+    }
+
+    // MARK: Diagnostics
+
+    /// Writes the pending report (or, with none, the current breadcrumbs) to a text file to share.
+    public func writeCrashReport() -> URL? {
+        do {
+            return try Diagnostics.shared.writeShareableReport(pendingCrashReport)
+        } catch {
+            PSLog.error("could not write the diagnostics report: \(error)", category: .ui)
+            return nil
+        }
+    }
+
+    /// The report was shared or waved away: it is not offered again.
+    public func dismissCrashReport() {
+        Diagnostics.shared.dismissPendingReport()
+        pendingCrashReport = nil
+    }
+
+    /// App-wide part of a memory warning: the shared Core Image caches. Editors drop
+    /// their own renders and thumbnails on the same notification.
+    static func relieveMemoryPressure() {
+        RenderContext.shared.clearCaches()
+        RenderContext.export.clearCaches()
     }
 
     public func applyPerformanceSettings() {

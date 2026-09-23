@@ -5,13 +5,27 @@ import PicshopCore
 import PicshopIntent
 import PicshopSpeech
 
-/// Shared editor shell. The canvas fills the screen; the top bar and the
-/// bottom controls are safe-area insets, so the canvas always knows exactly
-/// how much room is visible and frames the picture inside it.
+/// Shared editor shell. By default the top bar and the bottom controls are
+/// safe-area insets, so the canvas gets exactly the room between them.
+///
+/// `edgeToEdge` runs the canvas under the bars, full screen, the way Photos
+/// does: the black ground and anything behind the picture reach the display
+/// edges, and the glass has something to refract. The canvas then reads
+/// `editorChromeEdges` and fits its picture between the bars itself.
 struct EditorChrome<Canvas: View, Top: View, Bottom: View>: View {
-    @ViewBuilder var canvas: () -> Canvas
-    @ViewBuilder var top: () -> Top
-    @ViewBuilder var bottom: () -> Bottom
+    var edgeToEdge: Bool
+    let canvas: () -> Canvas
+    let top: () -> Top
+    let bottom: () -> Bottom
+
+    @State private var edges = EditorChromeEdges()
+
+    init(edgeToEdge: Bool = false, @ViewBuilder canvas: @escaping () -> Canvas, @ViewBuilder top: @escaping () -> Top, @ViewBuilder bottom: @escaping () -> Bottom) {
+        self.edgeToEdge = edgeToEdge
+        self.canvas = canvas
+        self.top = top
+        self.bottom = bottom
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -20,12 +34,58 @@ struct EditorChrome<Canvas: View, Top: View, Bottom: View>: View {
             let window = WindowInsets.current
             let extraTop = max(0, window.top - proxy.safeAreaInsets.top)
             let extraBottom = max(0, window.bottom - proxy.safeAreaInsets.bottom)
-            canvas()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .safeAreaInset(edge: .top, spacing: 0) { top().padding(.top, extraTop) }
-                .safeAreaInset(edge: .bottom, spacing: 0) { bottom().padding(.bottom, extraBottom) }
+            if edgeToEdge {
+                ZStack {
+                    canvas()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .environment(\.editorChromeEdges, edges)
+                        .ignoresSafeArea()
+                    // Empty space in the stack is not hit-testable: the canvas
+                    // keeps every touch between the bars.
+                    VStack(spacing: 0) {
+                        top()
+                            .padding(.top, extraTop)
+                            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { edges.top = $0 }
+                        Spacer(minLength: 0)
+                        bottom()
+                            .padding(.bottom, extraBottom)
+                            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { edges.bottom = $0 }
+                    }
+                }
+            } else {
+                canvas()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .safeAreaInset(edge: .top, spacing: 0) { top().padding(.top, extraTop) }
+                    .safeAreaInset(edge: .bottom, spacing: 0) { bottom().padding(.bottom, extraBottom) }
+            }
         }
         .background(PSTheme.canvas.ignoresSafeArea())
+    }
+}
+
+/// Where an edge-to-edge editor's bars sit, in global coordinates.
+struct EditorChromeEdges: Equatable {
+    /// Bottom of the top bar.
+    var top: CGFloat = 0
+    /// Top of the bottom controls.
+    var bottom: CGFloat = .greatestFiniteMagnitude
+
+    /// How far the bars reach into a view occupying `frame` (global coordinates).
+    func insets(over frame: CGRect) -> EdgeInsets {
+        EdgeInsets(top: max(0, min(frame.height / 2, top - frame.minY)), leading: 0,
+                   bottom: max(0, min(frame.height / 2, frame.maxY - bottom)), trailing: 0)
+    }
+}
+
+private struct EditorChromeEdgesKey: EnvironmentKey {
+    static let defaultValue: EditorChromeEdges? = nil
+}
+
+extension EnvironmentValues {
+    /// Set by an edge-to-edge `EditorChrome` for its canvas; nil otherwise.
+    var editorChromeEdges: EditorChromeEdges? {
+        get { self[EditorChromeEdgesKey.self] }
+        set { self[EditorChromeEdgesKey.self] = newValue }
     }
 }
 
@@ -38,19 +98,21 @@ enum WindowInsets {
     }
 }
 
-/// A soft fall-off behind the bottom controls so they read on any picture,
-/// without a visible band.
+/// A soft fall-off behind the dock so it reads on any picture. Only the
+/// dock's height: an open panel is glass and needs none, and a taller band
+/// would paint a dark slab over the photo.
 struct DockBackground: ViewModifier {
     func body(content: Content) -> some View {
-        content.background(
+        content.background(alignment: .bottom) {
             LinearGradient(stops: [
                 .init(color: PSTheme.canvas.opacity(0), location: 0),
-                .init(color: PSTheme.canvas.opacity(0.55), location: 0.35),
-                .init(color: PSTheme.canvas.opacity(0.92), location: 1),
+                .init(color: PSTheme.canvas.opacity(0.4), location: 0.5),
+                .init(color: PSTheme.canvas.opacity(0.7), location: 1),
             ], startPoint: .top, endPoint: .bottom)
+            .frame(height: 112)
             .ignoresSafeArea(edges: .bottom)
             .allowsHitTesting(false)
-        )
+        }
     }
 }
 
@@ -60,8 +122,9 @@ extension View {
 
 // MARK: - Top bar
 
-/// Floating glass controls: close on the left, the document's name in the
-/// middle, history and export on the right — nothing else on top of the picture.
+/// One row of glass over the picture: close on the left, the document's
+/// name in the middle, then undo and redo joined in one capsule, a menu for
+/// help, history and revert, and Export — the single yellow action.
 struct EditorTopBar: View {
     var title: String
     var subtitle: String? = nil
@@ -77,85 +140,152 @@ struct EditorTopBar: View {
     var history: [String] = []
     /// Undoes this many steps at once.
     var onUndoSteps: ((Int) -> Void)? = nil
+    /// Back to the document as imported. Without it, "Back to the original"
+    /// undoes every step of this session.
+    var onRevert: (() -> Void)? = nil
+
+    @Environment(\.psEffects) private var effects
 
     var body: some View {
-        PSGlassContainer(spacing: 10) {
-            HStack(spacing: 10) {
-                GlassIconButton("xmark", label: L("Close"), size: 42, action: onClose)
+        // Container spacing under the gaps: the pieces share one glass
+        // sampling but never bridge into each other.
+        PSGlassContainer(spacing: 4) {
+            HStack(spacing: 8) {
+                GlassIconButton("xmark", label: L("Close"), size: 44, action: onClose)
                 Spacer(minLength: 4)
                 VStack(spacing: 1) {
-                    Text(title).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
+                    Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
                     if let subtitle {
-                        Text(subtitle).font(PSFont.mono(11)).foregroundStyle(PSTheme.textTertiary).lineLimit(1)
+                        Text(subtitle).font(.caption.monospacedDigit()).foregroundStyle(PSTheme.textSecondary).lineLimit(1)
                             .contentTransition(.numericText())
+                            .transition(.opacity)
                     }
                 }
                 .allowsHitTesting(false)
+                .animation(PSMotion.standard, value: subtitle == nil)
                 Spacer(minLength: 4)
-                HStack(spacing: 0) {
-                    if let onUndoSteps, history.count > 1 {
-                        Menu {
-                            Section(L("History")) {
-                                ForEach(Array(history.enumerated().reversed()), id: \.offset) { index, label in
-                                    // Going back to before this step undoes it and everything after it.
-                                    Button(String(format: L("Before “%@”"), LD(label))) { Haptics.tick(); onUndoSteps(history.count - index) }
-                                }
-                            }
-                            Button(role: .destructive) { onUndoSteps(history.count) } label: { Label(L("Back to the original"), systemImage: "arrow.counterclockwise") }
-                        } label: {
-                            Image(systemName: "arrow.uturn.backward").font(.system(size: 15, weight: .semibold)).frame(width: 38, height: 42).contentShape(Rectangle())
-                        } primaryAction: {
-                            Haptics.tap()
-                            onUndo()
-                        }
-                        .foregroundStyle(PSTheme.textPrimary)
-                        .accessibilityLabel(L("Undo"))
-                        .accessibilityHint(L("Hold for the history"))
-                    } else {
-                        barButton("arrow.uturn.backward", label: L("Undo"), enabled: canUndo, action: onUndo)
-                    }
-                    barButton("arrow.uturn.forward", label: L("Redo"), enabled: canRedo, action: onRedo)
-                    barButton("questionmark", label: L("Help"), enabled: true, action: onHelp)
-                }
-                .padding(.horizontal, 2)
-                .psGlass(interactive: true)
-                .animation(PSMotion.quick, value: canUndo)
-                .animation(PSMotion.quick, value: canRedo)
-                Button { Haptics.confirm(); onExport() } label: {
-                    Image(systemName: "square.and.arrow.up").font(.system(size: 15, weight: .bold)).foregroundStyle(Color.black)
-                        .frame(width: 42, height: 42)
-                        .background(Circle().fill(Color.white))
-                }
-                .buttonStyle(PSPressStyle(scale: 0.9))
-                .accessibilityLabel(L("Export"))
+                historyCapsule
+                moreMenu
+                exportButton
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 12)
         .padding(.top, 4)
         .padding(.bottom, 8)
-        .background(
-            LinearGradient(colors: [PSTheme.canvas.opacity(0.75), PSTheme.canvas.opacity(0)], startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea(edges: .top)
-                .allowsHitTesting(false)
-        )
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+    }
+
+    /// Undo and redo read as one control.
+    private var historyCapsule: some View {
+        HStack(spacing: 0) {
+            if let onUndoSteps, history.count > 1 {
+                Menu {
+                    historySection(onUndoSteps)
+                } label: {
+                    barGlyph("arrow.uturn.backward")
+                } primaryAction: {
+                    Haptics.tap()
+                    onUndo()
+                }
+                .opacity(canUndo ? 1 : 0.3)
+                .accessibilityLabel(L("Undo"))
+                .accessibilityHint(L("Hold for the history"))
+            } else {
+                barButton("arrow.uturn.backward", label: L("Undo"), enabled: canUndo, action: onUndo)
+            }
+            barButton("arrow.uturn.forward", label: L("Redo"), enabled: canRedo, action: onRedo)
+        }
+        .foregroundStyle(PSTheme.textPrimary)
+        .psGlass(interactive: true)
+        .animation(PSMotion.quick, value: canUndo)
+        .animation(PSMotion.quick, value: canRedo)
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            Button { onHelp() } label: { Label(L("Help"), systemImage: "questionmark.circle") }
+            if let onUndoSteps, !history.isEmpty {
+                Menu {
+                    historySection(onUndoSteps)
+                } label: {
+                    Label(L("History"), systemImage: "clock.arrow.circlepath")
+                }
+            }
+            if onRevert != nil || (onUndoSteps != nil && !history.isEmpty) {
+                Divider()
+                Button(role: .destructive) {
+                    if let onRevert { onRevert() } else { onUndoSteps?(history.count) }
+                } label: {
+                    Label(L("Back to the original"), systemImage: "arrow.counterclockwise")
+                }
+            }
+        } label: {
+            barGlyph("ellipsis")
+                .foregroundStyle(PSTheme.textPrimary)
+                .psGlass(interactive: true, shape: AnyShape(Circle()))
+        }
+        .accessibilityLabel(L("More"))
+    }
+
+    @ViewBuilder
+    private func historySection(_ undoSteps: @escaping (Int) -> Void) -> some View {
+        Section(L("History")) {
+            ForEach(Array(history.enumerated().reversed()), id: \.offset) { index, label in
+                // Going back to before this step undoes it and everything after it.
+                Button(String(format: L("Before “%@”"), LD(label))) { Haptics.tick(); undoSteps(history.count - index) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var exportButton: some View {
+        let glyph = Image(systemName: "square.and.arrow.up")
+            .font(.system(size: 17, weight: .medium))
+            .foregroundStyle(PSTheme.onAccent)
+        Group {
+            if effects == .minimal {
+                Button(action: export) {
+                    glyph.frame(width: 44, height: 44).background(Circle().fill(PSTheme.accent))
+                }
+                .buttonStyle(PSPressStyle(scale: 0.9))
+            } else {
+                Button(action: export) {
+                    glyph.frame(maxWidth: .infinity, maxHeight: .infinity).contentShape(Circle())
+                }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle)
+                .tint(PSTheme.accent)
+                .frame(width: 44, height: 44)
+            }
+        }
+        .accessibilityLabel(L("Export"))
+    }
+
+    private func export() {
+        Haptics.confirm()
+        onExport()
+    }
+
+    private func barGlyph(_ symbol: String) -> some View {
+        Image(systemName: symbol).font(.system(size: 17, weight: .medium)).frame(width: 44, height: 44).contentShape(Rectangle())
     }
 
     private func barButton(_ symbol: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button { Haptics.tap(); action() } label: {
-            Image(systemName: symbol).font(.system(size: 15, weight: .semibold)).frame(width: 38, height: 42).contentShape(Rectangle())
+            barGlyph(symbol)
         }
         .buttonStyle(PSPressStyle(scale: 0.88))
         .disabled(!enabled)
-        .foregroundStyle(enabled ? PSTheme.textPrimary : PSTheme.textQuaternary)
+        .opacity(enabled ? 1 : 0.3)
         .accessibilityLabel(label)
     }
 }
 
 // MARK: - Tool dock
 
-/// The tool bar at the bottom: one glass capsule of tools. The chosen tool's
-/// glyph turns edit-yellow and a lit thumb slides behind it; the row scrolls
-/// only when it has to.
+/// The tool bar at the bottom: one glass capsule of tools. The chosen tool
+/// turns white over a lit thumb; a small yellow dot marks the tools whose
+/// edits are in the picture, as in Photos. The row scrolls only when it has to.
 struct ToolDock<Tool: Identifiable & Hashable>: View {
     let tools: [Tool]
     @Binding var selection: Tool?
@@ -164,11 +294,13 @@ struct ToolDock<Tool: Identifiable & Hashable>: View {
     /// Tools drawn with the intelligence spectrum (the Magic entry).
     var isMagic: (Tool) -> Bool = { _ in false }
     var onSelect: ((Tool?) -> Void)? = nil
+    /// Tools whose edits differ from the defaults.
+    var isModified: (Tool) -> Bool = { _ in false }
 
     @Namespace private var indicator
 
-    private let preferredItemWidth: CGFloat = 62
-    private let minimumItemWidth: CGFloat = 52
+    private let preferredItemWidth: CGFloat = 64
+    private let minimumItemWidth: CGFloat = 46
 
     private func itemWidth(in available: CGFloat) -> CGFloat {
         let fitting = (available - 12) / CGFloat(max(1, tools.count))
@@ -197,8 +329,9 @@ struct ToolDock<Tool: Identifiable & Hashable>: View {
                 }
             }
         }
-        .frame(height: 60)
+        .frame(height: 64)
         .psGlass(shape: AnyShape(Capsule()))
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
     }
 
     private func item(_ tool: Tool, width: CGFloat) -> some View {
@@ -210,35 +343,35 @@ struct ToolDock<Tool: Identifiable & Hashable>: View {
             withAnimation(PSMotion.standard) { selection = next }
             onSelect?(next)
         } label: {
-            VStack(spacing: 3) {
+            VStack(spacing: 2) {
                 Group {
                     if magic {
                         Image(systemName: symbol(tool)).psIntelligenceForeground()
                     } else {
-                        Image(systemName: symbol(tool)).foregroundStyle(isActive ? PSTheme.accent : PSTheme.textPrimary)
+                        Image(systemName: symbol(tool)).foregroundStyle(isActive ? Color.white : PSTheme.textPrimary)
                     }
                 }
-                .font(.system(size: 18, weight: .semibold))
-                .symbolVariant(isActive ? .fill : .none)
-                .symbolEffect(.bounce.down.byLayer, value: isActive)
-                .frame(height: 22)
-                Text(title(tool)).font(PSFont.label(10))
+                .font(.system(size: 20, weight: isActive ? .medium : .regular))
+                .frame(height: 24)
+                Text(title(tool)).font(.caption2.weight(.medium))
                     .foregroundStyle(isActive ? PSTheme.textPrimary : PSTheme.textSecondary)
                     .lineLimit(1).minimumScaleFactor(0.75)
+                Circle().fill(PSTheme.accent).frame(width: 4, height: 4)
+                    .opacity(isModified(tool) ? 1 : 0)
             }
-            .frame(width: width - 4, height: 52)
+            .frame(width: width - 4, height: 56)
             .background {
                 if isActive {
-                    Capsule().fill(PSTheme.selection)
-                        .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 0.75))
+                    Capsule().fill(Color.white.opacity(0.14))
                         .matchedGeometryEffect(id: "active", in: indicator)
                 }
             }
             .contentShape(Capsule())
             .padding(.horizontal, 2)
         }
-        .buttonStyle(PSPressStyle(scale: 0.92))
+        .buttonStyle(PSPressStyle(scale: 0.94))
         .accessibilityLabel(title(tool))
+        .accessibilityValue(isModified(tool) ? L("Edited") : "")
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 }
@@ -263,10 +396,12 @@ struct ToolGroup<Tool: Hashable & Identifiable>: Identifiable, Hashable {
 struct GroupedToolDock<Tool: Hashable & Identifiable>: View {
     let groups: [ToolGroup<Tool>]
     @Binding var selection: Tool?
+    /// Groups whose edits differ from the defaults (a yellow dot).
+    var isModified: (ToolGroup<Tool>) -> Bool = { _ in false }
     @State private var lastTool: [String: Tool] = [:]
 
     var body: some View {
-        ToolDock(tools: groups, selection: groupSelection, title: { $0.title }, symbol: { $0.symbol }, isMagic: { $0.isMagic })
+        ToolDock(tools: groups, selection: groupSelection, title: { $0.title }, symbol: { $0.symbol }, isMagic: { $0.isMagic }, isModified: isModified)
             .onChange(of: selection) { _, tool in
                 if let tool, let group = groups.first(where: { $0.contains(tool) }) { lastTool[group.id] = tool }
             }
@@ -283,58 +418,40 @@ struct GroupedToolDock<Tool: Hashable & Identifiable>: View {
     }
 }
 
-/// Segmented sub-mode picker shown in a panel header: a lit thumb sliding
-/// behind the chosen one — the iOS segmented control, in glass.
+/// Sub-mode picker: the system segmented control, whose thumb is Liquid
+/// Glass on iOS 26. Text only; `symbol` is kept for existing call sites.
 struct ModeSegments<Mode: Hashable & Identifiable>: View {
     let modes: [Mode]
     @Binding var selection: Mode?
     var title: (Mode) -> String
     var symbol: (Mode) -> String
 
-    @Namespace private var indicator
-
     var body: some View {
-        HStack(spacing: 0) {
+        Picker(selection: $selection) {
             ForEach(modes) { mode in
-                let isActive = selection == mode
-                Button {
-                    Haptics.tick()
-                    withAnimation(PSMotion.standard) { selection = mode }
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: symbol(mode)).font(.system(size: 11, weight: .semibold))
-                        Text(title(mode)).font(PSFont.label(12)).lineLimit(1).minimumScaleFactor(0.8)
-                    }
-                    .padding(.horizontal, 8).padding(.vertical, 7)
-                    .frame(maxWidth: .infinity)
-                    .background {
-                        if isActive {
-                            Capsule().fill(PSTheme.selection)
-                                .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 0.75))
-                                .matchedGeometryEffect(id: "segment", in: indicator)
-                        }
-                    }
-                    .foregroundStyle(isActive ? PSTheme.textPrimary : PSTheme.textSecondary)
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(PSPressStyle(scale: 0.97))
-                .accessibilityAddTraits(isActive ? [.isSelected] : [])
+                Text(title(mode)).tag(Optional(mode))
             }
+        } label: {
+            EmptyView()
         }
-        .padding(3)
-        .background(Color.white.opacity(0.06), in: Capsule())
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.regular)
+        .sensoryFeedback(.selection, trigger: selection)
     }
 }
 
-/// Glass panel that hosts the active tool's controls, with a small header.
-/// A drag on the header (or a swipe down anywhere on the header row) closes it,
-/// the way system sheets do.
+/// Glass panel that hosts the active tool's controls. No title: the dock
+/// already says which tool is open, and tapping it again closes the panel.
+/// The sub-mode segments and the tool's own action (Done, Erase…) share the
+/// first row; a swipe down on that row closes the panel, as on a sheet.
 struct ToolPanelContainer<Content: View>: View {
+    /// Kept for existing call sites and accessibility; not drawn.
     var title: String
     var symbol: String
     var onClose: () -> Void
     var trailing: AnyView? = nil
-    /// Sub-mode segments (see `ModeSegments`) rendered under the title.
+    /// Sub-mode segments (see `ModeSegments`) in the first row.
     var modes: AnyView? = nil
     @ViewBuilder var content: () -> Content
 
@@ -342,48 +459,45 @@ struct ToolPanelContainer<Content: View>: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Text(title).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
-                    .contentTransition(.interpolate)
-                Spacer()
-                if let trailing { trailing }
-                Button {
-                    Haptics.tap()
-                    onClose()
-                } label: {
-                    Image(systemName: "chevron.down").font(.system(size: 12, weight: .bold)).foregroundStyle(PSTheme.textSecondary).frame(width: 30, height: 30)
-                        .background(Color.white.opacity(0.08), in: Circle())
+            if modes != nil || trailing != nil {
+                HStack(spacing: 8) {
+                    if let modes {
+                        modes.frame(maxWidth: .infinity)
+                    } else {
+                        Spacer(minLength: 0)
+                    }
+                    if let trailing { trailing }
                 }
-                .buttonStyle(PSPressStyle(scale: 0.9))
-                .accessibilityLabel(L("Close"))
-            }
-            .overlay(alignment: .top) {
-                Capsule().fill(Color.white.opacity(0.18)).frame(width: 34, height: 4).offset(y: -9)
-            }
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 8)
-                    .onChanged { value in
-                        dragOffset = max(0, value.translation.height)
-                    }
-                    .onEnded { value in
-                        let shouldClose = value.translation.height > 48 || value.predictedEndTranslation.height > 140
-                        withAnimation(PSMotion.standard) { dragOffset = 0 }
-                        if shouldClose {
-                            Haptics.tap()
-                            onClose()
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 12)
+                        .onChanged { value in
+                            guard abs(value.translation.height) > abs(value.translation.width) else { return }
+                            dragOffset = max(0, value.translation.height)
                         }
-                    }
-            )
-            if let modes { modes }
+                        .onEnded { value in
+                            let vertical = abs(value.translation.height) > abs(value.translation.width)
+                            let shouldClose = vertical && (value.translation.height > 48 || value.predictedEndTranslation.height > 140)
+                            withAnimation(PSMotion.standard) { dragOffset = 0 }
+                            if shouldClose {
+                                Haptics.tap()
+                                onClose()
+                            }
+                        }
+                )
+            }
             content()
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 14)
-        .padding(.bottom, 14)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
         .psCard(cornerRadius: PSRadius.panel)
         .offset(y: dragOffset * 0.5)
         .opacity(1 - Double(min(dragOffset, 120)) / 300)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(title)
+        .accessibilityAction(.escape) { onClose() }
     }
 }
 
@@ -414,18 +528,25 @@ struct DialSlider: View {
     private var isNeutralValue: Bool { abs(value - neutral) < 0.0001 }
 
     var body: some View {
-        VStack(spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                if let label { Text(label.uppercased()).font(PSFont.label(11)).tracking(0.6).foregroundStyle(PSTheme.textSecondary) }
-                Spacer()
+        VStack(spacing: 4) {
+            // The value sits centred over the marker, the name small on the left, as in Photos.
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(label ?? "")
+                    .font(.caption2.weight(.medium)).textCase(.uppercase).tracking(0.4)
+                    .foregroundStyle(PSTheme.textSecondary)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 Text(format(value))
-                    .font(PSFont.mono(14).weight(.semibold))
-                    .foregroundStyle(isNeutralValue ? PSTheme.textSecondary : PSTheme.accent)
+                    .font(.subheadline.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(isNeutralValue ? PSTheme.textPrimary : PSTheme.accent)
                     .contentTransition(.numericText())
                     .animation(PSMotion.numeric, value: value)
-                    .scaleEffect(isDragging ? 1.12 : 1, anchor: .trailing)
+                    .scaleEffect(isDragging ? 1.08 : 1)
                     .animation(PSMotion.quick, value: isDragging)
+                    .fixedSize()
+                Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
             }
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
             GeometryReader { proxy in
                 let width = proxy.size.width
                 let centerX = width / 2
@@ -497,7 +618,7 @@ struct DialSlider: View {
                     onEditingChanged?(false)
                 }
             }
-            .frame(height: 34)
+            .frame(height: 32)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label ?? "")
@@ -517,7 +638,8 @@ struct DialSlider: View {
 
 /// Slim status line above the dock. It only appears when there is something to
 /// say — listening, working, a reply, a question — so an open tool panel sits
-/// directly on the dock the rest of the time.
+/// directly on the dock the rest of the time. A reply stays four seconds, a
+/// problem seven.
 struct VoiceStrip: View {
     @Bindable var voice: VoiceController
     var isBusy: Bool
@@ -532,7 +654,8 @@ struct VoiceStrip: View {
     /// arrives after the words, show the reply afresh.
     var replyID: UUID? = nil
     var clarification: ClarificationRequest?
-    /// Shown while nothing else is going on (typically when no tool is open).
+    /// The "tap the mic" hint may show (typically when no tool is open). It
+    /// shows only in the first few editor sessions, and fades after a moment.
     var showsHint: Bool
     /// Optional picture of each candidate for the clarification chips.
     var candidateThumbnail: ((ObjectCandidate) async -> UIImage?)? = nil
@@ -541,7 +664,9 @@ struct VoiceStrip: View {
     var onCancel: () -> Void
 
     @State private var replyVisible = false
-    @Environment(\.psEffects) private var effects
+    @State private var idleHintVisible = false
+    /// Editor sessions that have shown the mic hint.
+    @AppStorage("hint.mic.count") private var micHintCount = 0
     @Environment(\.psReducedMotion) private var reducedMotion
 
     var body: some View {
@@ -551,59 +676,74 @@ struct VoiceStrip: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             if isIdleHint, let text = statusText {
-                HStack(spacing: 7) {
-                    MagicGlyph(size: 11, symbol: "waveform")
-                    Text(text).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary).lineLimit(1)
+                HStack(spacing: 8) {
+                    MagicGlyph(size: 13, symbol: "waveform")
+                    Text(text).font(.footnote).foregroundStyle(PSTheme.textSecondary).lineLimit(1)
                 }
-                .padding(.horizontal, 12).padding(.vertical, 7)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 36)
                 .psGlass()
-                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .transition(.opacity)
             } else if let text = statusText {
-                HStack(spacing: 10) {
+                HStack(spacing: 12) {
                     statusIcon
-                        .frame(width: 20)
-                    VStack(alignment: .leading, spacing: 1) {
+                        .font(.system(size: 17, weight: .medium))
+                        .frame(width: 22)
+                    VStack(alignment: .leading, spacing: 2) {
                         if voice.isListening || isBusy {
-                            ShimmerText(text, font: PSFont.body(14))
+                            ShimmerText(text, font: .subheadline)
                         } else {
                             Text(text)
-                                .font(PSFont.body(14))
+                                .font(.subheadline)
                                 .foregroundStyle(PSTheme.textPrimary)
                                 .lineLimit(2)
                                 .contentTransition(.interpolate)
                         }
                         if replyVisible, !voice.isListening, !isBusy, !transcript.isEmpty {
-                            Text("“\(transcript)”").font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary).lineLimit(1)
+                            Text("“\(transcript)”").font(.footnote).foregroundStyle(PSTheme.textTertiary).lineLimit(1)
                         }
                     }
                     Spacer(minLength: 0)
+                    #if DEBUG
                     if replyVisible, !voice.isListening, !isBusy, let plan, !transcript.isEmpty {
                         Text(plan.engine.displayName)
-                            .font(PSFont.label(10)).foregroundStyle(PSTheme.textSecondary)
-                            .padding(.horizontal, 7).padding(.vertical, 3).background(Color.white.opacity(0.08), in: Capsule())
+                            .font(.caption2.weight(.medium)).foregroundStyle(PSTheme.textTertiary)
                     }
+                    #endif
                 }
-                .padding(.horizontal, 14).padding(.vertical, 11)
+                .padding(.horizontal, 16).padding(.vertical, 10)
+                .frame(minHeight: 44)
                 .psCard(cornerRadius: 22, shadow: false)
                 .overlay(
+                    // The spectrum rim is the voice's, and only while it listens.
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .strokeBorder(PSTheme.intelligenceAngular, lineWidth: 1.2)
-                        .opacity(voice.isListening || isBusy ? 0.5 + rimLevel * 0.5 : 0)
+                        .strokeBorder(PSTheme.intelligenceAngular, lineWidth: 1)
+                        .opacity(voice.isListening ? 0.4 + rimLevel * 0.6 : 0)
                         .animation(PSMotion.interactive, value: rimLevel)
+                        .allowsHitTesting(false)
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .animation(PSMotion.standard, value: voice.isListening)
         .animation(PSMotion.standard, value: clarification?.id)
         .animation(PSMotion.standard, value: isBusy)
         .animation(PSMotion.standard, value: replyVisible)
+        .animation(PSMotion.standard, value: idleHintVisible)
         .task(id: ReplyKey(transcript: transcript, replyID: replyID)) {
             guard !transcript.isEmpty else { replyVisible = false; return }
             replyVisible = true
-            try? await Task.sleep(for: .seconds(7))
+            try? await Task.sleep(for: .seconds(replyIsProblem || replyIsError ? 7 : 4))
             guard !Task.isCancelled else { return }
             replyVisible = false
+        }
+        .task {
+            guard micHintCount < 3 else { return }
+            micHintCount += 1
+            idleHintVisible = true
+            try? await Task.sleep(for: .seconds(4))
+            idleHintVisible = false
         }
     }
 
@@ -619,19 +759,20 @@ struct VoiceStrip: View {
     @ViewBuilder
     private var statusIcon: some View {
         if voice.isListening {
-            LevelBars(level: effects == .minimal || reducedMotion ? 0.5 : voice.level)
+            // The mic itself shows the level; here the voice's glyph is enough.
+            MagicGlyph(size: 17, symbol: "waveform")
         } else if isBusy {
-            MagicGlyph(size: 15).symbolEffect(.pulse, isActive: !reducedMotion)
+            MagicGlyph(size: 17).symbolEffect(.pulse, isActive: !reducedMotion)
         } else if isUnavailable {
             Image(systemName: "mic.slash").foregroundStyle(PSTheme.danger)
         } else if replyVisible, plan != nil, replyIsError {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(PSTheme.danger).symbolEffect(.bounce, value: replyVisible)
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(PSTheme.danger)
         } else if replyVisible, plan != nil, replyIsProblem {
-            Image(systemName: "hand.point.up.left.fill").foregroundStyle(PSTheme.accent).symbolEffect(.bounce, value: replyVisible)
+            Image(systemName: "hand.point.up.left").foregroundStyle(PSTheme.textSecondary)
         } else if replyVisible, plan != nil {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(PSTheme.success).symbolEffect(.bounce, value: replyVisible)
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(PSTheme.success)
         } else {
-            MagicGlyph(size: 15, symbol: "waveform")
+            MagicGlyph(size: 17, symbol: "waveform")
         }
     }
 
@@ -642,7 +783,7 @@ struct VoiceStrip: View {
 
     /// True when the strip only shows the "tap the mic" hint.
     private var isIdleHint: Bool {
-        showsHint && !voice.isListening && !isBusy && !isUnavailable && !(replyVisible && !transcript.isEmpty)
+        showsHint && idleHintVisible && !voice.isListening && !isBusy && !isUnavailable && !(replyVisible && !transcript.isEmpty)
     }
 
     private var statusText: String? {
@@ -650,22 +791,22 @@ struct VoiceStrip: View {
         if isBusy { return busyTitle.isEmpty ? L("Working…") : busyTitle }
         if isUnavailable { return L("Voice unavailable — check microphone access in Settings.") }
         if replyVisible, !transcript.isEmpty { return plan?.reply?.isEmpty == false ? plan?.reply : L("Done.") }
-        if showsHint { return voice.mode == .pushToTalk ? L("Hold the mic and say what to change") : L("Tap the mic and say what to change") }
+        if showsHint, idleHintVisible { return voice.mode == .pushToTalk ? L("Hold the mic and say what to change") : L("Tap the mic and say what to change") }
         return nil
     }
 }
 
-/// Five bars that follow the microphone level, each with its own weight so
-/// the meter reads as a voice rather than a single gauge.
+/// Five white bars that follow the microphone level, each with its own
+/// weight so the meter reads as a voice rather than a single gauge.
 struct LevelBars: View {
     let level: Double
     private let weights: [Double] = [0.55, 0.85, 1, 0.75, 0.5]
 
     var body: some View {
-        HStack(alignment: .center, spacing: 2) {
+        HStack(alignment: .center, spacing: 3) {
             ForEach(weights.indices, id: \.self) { index in
                 Capsule()
-                    .fill(PSTheme.intelligence[index % PSTheme.intelligence.count])
+                    .fill(Color.white.opacity(0.9))
                     .frame(width: 3, height: 4 + CGFloat(min(1, max(0, level)) * weights[index]) * 14)
             }
         }
@@ -675,9 +816,10 @@ struct LevelBars: View {
     }
 }
 
-/// The voice button at the end of the dock: a glass disc with a spectrum
-/// ring. While listening the ring turns and breathes with the voice; idle,
-/// nothing moves.
+/// The voice button at the end of the dock: a glass disc with the mic. When
+/// it listens it widens into a violet-tinted capsule with the voice's level
+/// and a stop glyph; the glass morphs rather than cross-fades. The screen's
+/// edge glow is the only spectrum.
 struct MicButton: View {
     @Bindable var voice: VoiceController
     var isBusy: Bool
@@ -686,25 +828,34 @@ struct MicButton: View {
     @Environment(\.psEffects) private var effects
     @Environment(\.psReducedMotion) private var reducedMotion
 
+    private var isListening: Bool { voice.isListening }
+
     var body: some View {
-        ZStack {
-            ring
-            Image(systemName: micSymbol)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(voice.isListening ? Color.white : PSTheme.textPrimary)
-                .contentTransition(.symbolEffect(.replace))
-                .frame(width: 56, height: 56)
-                .background {
-                    if voice.isListening {
-                        Circle().fill(LinearGradient(colors: PSTheme.intelligence, startPoint: .topLeading, endPoint: .bottomTrailing))
-                    }
-                }
-                .psGlass(interactive: true, shape: AnyShape(Circle()))
-                .scaleEffect(pressing ? 0.9 : 1)
-                .animation(PSMotion.quick, value: pressing)
+        HStack(spacing: 10) {
+            if isListening {
+                LevelBars(level: effects == .minimal || reducedMotion ? 0.5 : voice.level)
+                    .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 15, weight: .medium))
+                    .transition(.opacity)
+            } else if isBusy {
+                MagicGlyph(size: 20)
+                    .symbolEffect(.pulse, isActive: !reducedMotion)
+                    .transition(.opacity)
+            } else {
+                Image(systemName: micSymbol)
+                    .font(.system(size: 20, weight: .medium))
+                    .contentTransition(.symbolEffect(.replace))
+                    .transition(.opacity)
+            }
         }
-        .frame(width: 62, height: 62)
-        .contentShape(Circle())
+        .foregroundStyle(Color.white)
+        .frame(width: isListening ? 116 : 56, height: 56)
+        .contentShape(Capsule())
+        .psGlass(tint: isListening ? PSTheme.voice.opacity(0.35) : nil, interactive: true, shape: AnyShape(Capsule()))
+        .scaleEffect(pressing ? 0.94 : 1)
+        .animation(PSMotion.quick, value: pressing)
+        .animation(PSMotion.emphasized, value: isListening)
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
@@ -730,28 +881,7 @@ struct MicButton: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    @ViewBuilder
-    private var ring: some View {
-        let active = voice.isListening || isBusy
-        if active && !reducedMotion && effects != .minimal {
-            SwiftUI.TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-                let angle = Angle.degrees((context.date.timeIntervalSinceReferenceDate * 120).truncatingRemainder(dividingBy: 360))
-                Circle()
-                    .strokeBorder(AngularGradient(colors: PSTheme.intelligence + [PSTheme.intelligence[0]], center: .center, angle: angle), lineWidth: 2.5)
-                    .frame(width: 62, height: 62)
-                    .scaleEffect(1 + CGFloat(voice.isListening ? voice.level : 0.1) * 0.12)
-                    .shadow(color: PSTheme.voice.opacity(0.6), radius: 8)
-            }
-        } else {
-            Circle()
-                .strokeBorder(PSTheme.intelligenceAngular, lineWidth: active ? 2.5 : 1.5)
-                .opacity(active ? 1 : 0.55)
-                .frame(width: 62, height: 62)
-        }
-    }
-
     private var micSymbol: String {
-        if isBusy { return "sparkles" }
         switch voice.state {
         case .listening: return "waveform"
         case .preparing, .finishing: return "ellipsis"
@@ -845,8 +975,17 @@ struct ClarificationCard: View {
 
 // MARK: - Chips
 
-/// Small chip button used inside panels. `tint` marks a recommended action:
-/// its glyph takes the colour (the intelligence spectrum for `PSTheme.voice`).
+/// The fill of a control inside a panel: never glass on glass.
+enum PanelChipStyle {
+    static let fill = Color.white.opacity(0.10)
+    static let height: CGFloat = 34
+}
+
+/// Small chip button used inside panels: 34 points, a quiet white capsule,
+/// a monochrome glyph; white with black text when selected (the Photos
+/// filter-chip idiom). `tint` marks the glyph of a special action: the
+/// spectrum for `PSTheme.voice` (the AI does it), yellow for
+/// `PSTheme.accent` (it finishes something), red text for `PSTheme.danger`.
 struct PanelChip: View {
     let title: String
     var symbol: String? = nil
@@ -859,27 +998,42 @@ struct PanelChip: View {
         Button { Haptics.tap(); action() } label: {
             HStack(spacing: 6) {
                 if let symbol {
-                    if tint == PSTheme.voice {
-                        MagicGlyph(size: 12, symbol: symbol)
+                    if tint == PSTheme.voice, !isActive {
+                        MagicGlyph(size: 15, symbol: symbol)
                     } else {
-                        Image(systemName: symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(tint ?? (isActive ? PSTheme.accent : PSTheme.textPrimary))
+                        Image(systemName: symbol).font(.system(size: 15, weight: .medium)).foregroundStyle(glyphColor)
                     }
                 }
                 Text(title).lineLimit(1)
             }
-            .font(PSFont.caption(13)).padding(.horizontal, 12).padding(.vertical, 9)
-            .foregroundStyle(PSTheme.textPrimary)
-            .background(Capsule().fill(Color.white.opacity(isActive ? 0 : 0.08)))
-            .psActivePill(Capsule(), isActive: isActive)
+            .font(.subheadline.weight(isActive ? .medium : .regular))
+            .foregroundStyle(textColor)
+            .padding(.leading, symbol == nil ? 14 : 12).padding(.trailing, 14)
+            .frame(minHeight: PanelChipStyle.height)
+            .background(Capsule().fill(isActive ? Color.white : PanelChipStyle.fill))
+            .contentShape(Capsule())
         }
-        .buttonStyle(PSPressStyle())
+        .buttonStyle(PSPressStyle(scale: 0.97))
         .disabled(!isEnabled)
         .opacity(isEnabled ? 1 : 0.4)
         .animation(PSMotion.quick, value: isActive)
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
+    }
+
+    private var textColor: Color {
+        if isActive { return .black }
+        return tint == PSTheme.danger ? PSTheme.danger : PSTheme.textPrimary
+    }
+
+    private var glyphColor: Color {
+        if isActive { return .black }
+        if tint == PSTheme.accent || tint == PSTheme.danger { return tint ?? PSTheme.textSecondary }
+        return PSTheme.textSecondary
     }
 }
 
-/// Icon-only chip with a caption underneath, for action rows.
+/// Icon-only chip with a caption underneath, for action rows: the same
+/// quiet fill as `PanelChip`, white with black content when selected.
 struct IconChip: View {
     let title: String
     let symbol: String
@@ -889,26 +1043,32 @@ struct IconChip: View {
     let action: () -> Void
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
         Button { Haptics.tap(); action() } label: {
             VStack(spacing: 4) {
                 Group {
-                    if tint == PSTheme.voice {
+                    if tint == PSTheme.voice, !isActive {
                         MagicGlyph(size: 17, symbol: symbol)
                     } else {
-                        Image(systemName: symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(isActive ? PSTheme.accent : (tint ?? PSTheme.textPrimary))
+                        Image(systemName: symbol).font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(isActive ? Color.black : (tint == PSTheme.accent ? PSTheme.accent : PSTheme.textPrimary))
                     }
                 }
                 .frame(height: 21)
-                Text(title).font(PSFont.label(10)).lineLimit(1).minimumScaleFactor(0.75).foregroundStyle(isActive ? PSTheme.textPrimary : PSTheme.textSecondary)
+                Text(title).font(.caption2.weight(.medium)).lineLimit(1).minimumScaleFactor(0.75)
+                    .foregroundStyle(isActive ? Color.black : PSTheme.textSecondary)
             }
             .frame(width: 68, height: 52)
-            .background(Color.white.opacity(isActive ? 0 : 0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .psActivePill(RoundedRectangle(cornerRadius: 16, style: .continuous), isActive: isActive)
+            .background(shape.fill(isActive ? Color.white : PanelChipStyle.fill))
+            .contentShape(shape)
         }
-        .buttonStyle(PSPressStyle())
+        .buttonStyle(PSPressStyle(scale: 0.97))
         .disabled(!isEnabled)
         .opacity(isEnabled ? 1 : 0.4)
+        .animation(PSMotion.quick, value: isActive)
+        .dynamicTypeSize(...DynamicTypeSize.xLarge)
         .accessibilityLabel(title)
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 }
 

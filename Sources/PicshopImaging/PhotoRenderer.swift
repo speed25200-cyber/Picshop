@@ -4,6 +4,56 @@ import CoreImage
 import CoreImage.CIFilterBuiltins
 import CoreGraphics
 import PicshopCore
+#if os(iOS)
+import os
+#endif
+
+/// How much memory the process may still use before the system reclaims it.
+public enum MemoryBudget {
+    /// Below this, heavy jobs purge caches first and work a step smaller.
+    public static let lowThreshold = 700 * 1_048_576
+
+    /// Bytes still available to the app; nil where the system does not say (macOS).
+    public static var availableBytes: Int? {
+        #if os(iOS)
+        let available = os_proc_available_memory()
+        return available > 0 ? Int(available) : nil
+        #else
+        return nil
+        #endif
+    }
+
+    public static var isLow: Bool { availableBytes.map { $0 < lowThreshold } ?? false }
+
+    /// "812 MB", or "?" where unknown.
+    public static var availableDescription: String {
+        availableBytes.map { "\($0 / 1_048_576) MB" } ?? "?"
+    }
+}
+
+/// Where the imaging layer reports its heavy steps (erase, upscale…) for the
+/// crash breadcrumbs kept by the app. Thread-safe.
+public enum ImagingBreadcrumbs {
+    private final class Box: @unchecked Sendable {
+        let lock = NSLock()
+        var handler: (@Sendable (String) -> Void)?
+    }
+
+    private static let box = Box()
+
+    public static func setHandler(_ handler: (@Sendable (String) -> Void)?) {
+        box.lock.lock()
+        box.handler = handler
+        box.lock.unlock()
+    }
+
+    public static func note(_ message: String) {
+        box.lock.lock()
+        let handler = box.handler
+        box.lock.unlock()
+        handler?(message)
+    }
+}
 
 /// Turns a `PhotoDocument` into a `CIImage` by replaying every layer's edit
 /// stack. Expensive operations (inpainting, upscaling) are cached by operation
@@ -18,15 +68,18 @@ public actor PhotoRenderer {
         public var includeOverlays: Bool
         /// Skip expensive operations that are not cached yet (fast interactive preview).
         public var allowExpensiveWork: Bool
+        /// The picture on screen: the expensive results it uses survive memory trimming.
+        public var isDisplayed: Bool
 
-        public init(targetLongestSide: Double? = nil, showOriginal: Bool = false, includeOverlays: Bool = true, allowExpensiveWork: Bool = true) {
+        public init(targetLongestSide: Double? = nil, showOriginal: Bool = false, includeOverlays: Bool = true, allowExpensiveWork: Bool = true, isDisplayed: Bool = false) {
             self.targetLongestSide = targetLongestSide
             self.showOriginal = showOriginal
             self.includeOverlays = includeOverlays
             self.allowExpensiveWork = allowExpensiveWork
+            self.isDisplayed = isDisplayed
         }
 
-        public static let preview = Options(targetLongestSide: 2048)
+        public static let preview = Options(targetLongestSide: 2048, isDisplayed: true)
         public static let thumbnail = Options(targetLongestSide: 512, includeOverlays: true, allowExpensiveWork: false)
         public static let full = Options()
     }
@@ -37,13 +90,24 @@ public actor PhotoRenderer {
     private let upscaler: Upscaler
     private var sourceCache: [String: CIImage] = [:]
     private var operationCache: [String: CIImage] = [:]
+    /// Least recently used first: a hit moves its key to the end.
     private var operationOrder: [String] = []
+    /// Keys the last settled on-screen render used: never trimmed, so a memory
+    /// warning does not make the open photo redo its erases.
+    private var displayedKeys: Set<String> = []
+    private var displayGeneration = 0
     private var overlayCache: [String: CIImage] = [:]
     /// Results of the expensive operations (erase, generate, upscale, denoise)
     /// are worth keeping so undo and a panel change do not re-run a neural
     /// model, but not forever: unbounded, a long session grew until the system
-    /// started reclaiming memory, and everything stuttered. Oldest out first.
+    /// started reclaiming memory, and everything stuttered. Least recently used out first.
     private static let operationCacheLimit = 24
+    /// Expensive results being computed, keyed like `operationCache`: a second render of
+    /// the same step (compare, a panel, the analysis image) awaits the running job instead
+    /// of starting another PatchMatch or neural pass.
+    private var inFlight: [String: Task<CIImage, Error>] = [:]
+    /// Renders currently awaiting each job; the job is cancelled when the last one leaves.
+    private var inFlightWaiters: [String: Set<UUID>] = [:]
 
     public init(store: ProjectStore, projectID: UUID, inpainting: InpaintingPipeline, upscaler: Upscaler = Upscaler()) {
         self.store = store
@@ -54,28 +118,71 @@ public actor PhotoRenderer {
 
     public var maskStore: MaskStore { MaskStore(store: store, projectID: projectID) }
 
+    /// Cache keys one render read or produced.
+    private final class KeyLog {
+        var keys: Set<String> = []
+    }
+
     private func cacheOperation(_ image: CIImage, for key: String) {
-        if operationCache[key] == nil {
-            operationOrder.append(key)
-            while operationOrder.count > Self.operationCacheLimit, let oldest = operationOrder.first {
-                operationOrder.removeFirst()
-                operationCache[oldest] = nil
-            }
-        }
         operationCache[key] = image
+        touch(key)
+        evict(downTo: Self.operationCacheLimit) { _ in false }
+    }
+
+    /// Marks a cached result as just used.
+    private func touch(_ key: String) {
+        if let index = operationOrder.lastIndex(of: key) { operationOrder.remove(at: index) }
+        operationOrder.append(key)
+    }
+
+    /// Drops least recently used results until `limit` remain, those matching
+    /// `preferring` first; what is on screen stays.
+    private func evict(downTo limit: Int, preferring first: (String) -> Bool) {
+        let candidates = operationOrder.filter { !displayedKeys.contains($0) }
+        let ranked = candidates.filter(first) + candidates.filter { !first($0) }
+        var excess = operationOrder.count - limit
+        for key in ranked where excess > 0 {
+            operationCache[key] = nil
+            excess -= 1
+        }
+        operationOrder.removeAll { operationCache[$0] == nil }
     }
 
     /// Drops all cached intermediates (call when memory is tight or media changed).
+    /// Jobs still running finish for the renders awaiting them.
     public func purgeCaches() {
         sourceCache.removeAll()
         operationCache.removeAll()
         operationOrder.removeAll()
+        displayedKeys.removeAll()
         overlayCache.removeAll()
+        disparityCache.removeAll()
     }
+
+    /// Memory warning: drops what is cheap to rebuild and the least recently used
+    /// expensive results, other sizes (export, analysis) first. The results the
+    /// picture on screen uses always stay, so its erases are not redone.
+    public func trimForMemoryPressure(keepingRecent keep: Int = 4) {
+        sourceCache.removeAll()
+        overlayCache.removeAll()
+        disparityCache.removeAll()
+        let displayedSizes = Set(displayedKeys.compactMap(Self.sizeSuffix(ofKey:)))
+        evict(downTo: keep) { key in Self.sizeSuffix(ofKey: key).map { !displayedSizes.contains($0) } ?? true }
+        RenderContext.shared.clearCaches()
+    }
+
+    /// "WxH" of a cache key ("<uuid>@WxH").
+    private static func sizeSuffix(ofKey key: String) -> Substring? {
+        key.lastIndex(of: "@").map { key[key.index(after: $0)...] }
+    }
+
+    /// Whether an expensive step is being computed right now.
+    public var hasHeavyWorkInFlight: Bool { !inFlight.isEmpty }
 
     public func purgeOperationCache(for operationIDs: Set<UUID>) {
         operationCache = operationCache.filter { key, _ in !operationIDs.contains { key.hasPrefix($0.uuidString) } }
         operationOrder = operationOrder.filter { operationCache[$0] != nil }
+        displayedKeys = displayedKeys.filter { operationCache[$0] != nil }
     }
 
     // MARK: - Rendering
@@ -83,6 +190,10 @@ public actor PhotoRenderer {
     public func render(_ document: PhotoDocument, options: Options = .preview) async throws -> CIImage {
         let timer = PSTimer("render")
         defer { timer.log(category: .imaging) }
+        // A settled on-screen render records the results it uses; the newest one to finish wins.
+        let log = options.isDisplayed && options.allowExpensiveWork && !options.showOriginal ? KeyLog() : nil
+        if log != nil { displayGeneration += 1 }
+        let generation = displayGeneration
 
         guard let base = document.baseLayer, let baseAsset = base.imageAsset else {
             throw PicshopError.renderFailed("document has no photo")
@@ -91,7 +202,7 @@ public actor PhotoRenderer {
         let fullLongest = max(baseAsset.pixelSize.width, baseAsset.pixelSize.height)
         let scale = options.targetLongestSide.map { min(1, $0 / max(1, fullLongest)) } ?? 1
 
-        let baseImage = try await renderImageLayer(base, asset: baseAsset, scale: scale, options: options)
+        let baseImage = try await renderImageLayer(base, asset: baseAsset, scale: scale, options: options, log: log)
         let canvasRect = CGRect(origin: .zero, size: baseImage.extent.size)
         var canvas = CIImage(color: document.backgroundColor.ciColor).cropped(to: canvasRect)
         canvas = composite(baseImage.transformed(by: CGAffineTransform(translationX: -baseImage.extent.minX, y: -baseImage.extent.minY)), over: canvas, layer: base, canvasRect: canvasRect, isBase: true)
@@ -103,7 +214,7 @@ public actor PhotoRenderer {
             let rendered: CIImage?
             switch layer.content {
             case .image(let asset):
-                rendered = try await renderImageLayer(layer, asset: asset, scale: scale, options: options)
+                rendered = try await renderImageLayer(layer, asset: asset, scale: scale, options: options, log: log)
             case .text(let element):
                 rendered = overlayImage(key: "text-\(layer.id)-\(element.hashValue)-\(Int(canvasRect.width))") {
                     #if canImport(UIKit)
@@ -130,6 +241,7 @@ public actor PhotoRenderer {
                 canvas = composite(rendered, over: canvas, layer: layer, canvasRect: canvasRect, isBase: false)
             }
         }
+        if let log, generation == displayGeneration { displayedKeys = log.keys }
         return canvas.cropped(to: canvasRect)
     }
 
@@ -179,7 +291,7 @@ public actor PhotoRenderer {
         return image
     }
 
-    private func renderImageLayer(_ layer: Layer, asset: MediaAsset, scale: Double, options: Options) async throws -> CIImage {
+    private func renderImageLayer(_ layer: Layer, asset: MediaAsset, scale: Double, options: Options, log: KeyLog? = nil) async throws -> CIImage {
         var image = try source(for: asset, scale: scale)
         // Actual ratio between this render and the original (thumbnail loader rounds).
         let effectiveScale = image.extent.width / max(1, asset.pixelSize.width)
@@ -190,7 +302,7 @@ public actor PhotoRenderer {
             image = LensBlur.apply(to: image, disparity: disparity, focus: lens.focus, aperture: lens.aperture)
         }
         for operation in layer.edits.operations {
-            image = try await apply(operation, to: image, layer: layer, scale: effectiveScale, options: options)
+            image = try await apply(operation, to: image, layer: layer, scale: effectiveScale, options: options, log: log)
         }
         let look = layer.edits.resolvedLook
         let adjustments = AdjustmentPipeline.effectiveAdjustments(manual: layer.edits.resolvedAdjustments, look: look)
@@ -214,8 +326,160 @@ public actor PhotoRenderer {
         return image
     }
 
-    private func apply(_ operation: EditOperation, to input: CIImage, layer: Layer, scale: Double, options: Options) async throws -> CIImage {
+    // MARK: - Expensive work
+
+    /// The result for `key` when it is cached or being computed, else the same
+    /// operation's result at another size, scaled. A larger result stands in for a
+    /// smaller one at no loss; a smaller one only while interacting (no expensive work).
+    private func reusedResult(key: String, operationID: UUID, extent: CGRect, options: Options, log: KeyLog?) async throws -> CIImage? {
+        if let cached = operationCache[key] {
+            touch(key)
+            log?.keys.insert(key)
+            return cached
+        }
+        if options.allowExpensiveWork {
+            // The same step is running, at this size or a larger one: wait for it rather than start another.
+            let running = inFlight[key].map { (key: key, value: $0) }
+                ?? inFlight.first { Self.isResult(of: operationID, key: $0.key, reusableFor: extent, allowUpscale: false) }
+            if let running {
+                do {
+                    let image = try await join(running.value, key: running.key)
+                    if running.key == key {
+                        log?.keys.insert(key)
+                        return image
+                    }
+                } catch let error as CancellationError {
+                    // Abandoned by every other render: this one computes it below.
+                    if Task.isCancelled { throw error }
+                }
+            }
+        }
+        return scaledResult(of: operationID, to: extent, allowUpscale: !options.allowExpensiveWork, log: log)
+    }
+
+    /// Input size encoded in a cache key ("<uuid>@WxH").
+    private static func inputSize(inKey key: String) -> CGSize? {
+        guard let at = key.lastIndex(of: "@") else { return nil }
+        let parts = key[key.index(after: at)...].split(separator: "x")
+        guard parts.count == 2, let width = Double(parts[0]), let height = Double(parts[1]), width > 0, height > 0 else { return nil }
+        return CGSize(width: width, height: height)
+    }
+
+    private static func isResult(of operationID: UUID, key: String, reusableFor extent: CGRect, allowUpscale: Bool) -> Bool {
+        guard key.hasPrefix(operationID.uuidString + "@"), let size = inputSize(inKey: key) else { return false }
+        guard extent.width > 0, extent.height > 0 else { return false }
+        // Same framing only: a result for a different crop is not this one resized.
+        guard abs(size.width / size.height - extent.width / extent.height) < 0.01 else { return false }
+        return allowUpscale || size.width >= extent.width - 0.5
+    }
+
+    private func scaledResult(of operationID: UUID, to extent: CGRect, allowUpscale: Bool, log: KeyLog?) -> CIImage? {
+        var best: (key: String, size: CGSize, image: CIImage)?
+        for key in operationOrder where Self.isResult(of: operationID, key: key, reusableFor: extent, allowUpscale: allowUpscale) {
+            guard let image = operationCache[key], let size = Self.inputSize(inKey: key) else { continue }
+            let resultExtent = image.extent
+            guard !resultExtent.isInfinite, resultExtent.width.isFinite, resultExtent.height.isFinite, resultExtent.width > 0, resultExtent.height > 0 else { continue }
+            if best.map({ size.width > $0.size.width }) ?? true { best = (key, size, image) }
+        }
+        guard let best else { return nil }
+        touch(best.key)
+        log?.keys.insert(best.key)
+        let sx = extent.width / best.size.width, sy = extent.height / best.size.height
+        let source = best.image.extent
+        // Most steps keep their input's frame; an expand grows it by the same ratio.
+        let keepsFrame = abs(source.width - best.size.width) < 0.5 && abs(source.height - best.size.height) < 0.5
+        let target = keepsFrame
+            ? extent
+            : CGRect(x: (source.minX * sx).rounded(), y: (source.minY * sy).rounded(), width: (source.width * sx).rounded(), height: (source.height * sy).rounded())
+        guard target.width >= 1, target.height >= 1 else { return nil }
+        let transform = CGAffineTransform(translationX: target.minX, y: target.minY)
+            .scaledBy(x: target.width / source.width, y: target.height / source.height)
+            .translatedBy(x: -source.minX, y: -source.minY)
+        return best.image.transformed(by: transform).cropped(to: target)
+    }
+
+    /// Computes an expensive result once for every render that asks for it and caches it.
+    /// A job that everyone stopped waiting for is cancelled and never cached.
+    private func runExpensive(key: String, step: String, log: KeyLog?, work: @escaping @Sendable () async throws -> CIImage) async throws -> CIImage {
+        log?.keys.insert(key)
+        var attempts = 0
+        while true {
+            attempts += 1
+            let job: Task<CIImage, Error>
+            if let running = inFlight[key] {
+                job = running
+            } else {
+                relieveMemoryIfNeeded(before: step)
+                ImagingBreadcrumbs.note("\(step) started · \(MemoryBudget.availableDescription) free")
+                job = Task<CIImage, Error> {
+                    let image = try await work()
+                    try Task.checkCancellation()
+                    return image
+                }
+                inFlight[key] = job
+            }
+            do {
+                return try await join(job, key: key)
+            } catch let error as CancellationError {
+                // Abandoned by the renders that were waiting just before this one joined: start again once.
+                guard !Task.isCancelled, attempts < 2 else { throw error }
+            }
+        }
+    }
+
+    private func join(_ job: Task<CIImage, Error>, key: String) async throws -> CIImage {
+        let token = UUID()
+        inFlightWaiters[key, default: []].insert(token)
+        let outcome = await withTaskCancellationHandler {
+            await job.result
+        } onCancel: {
+            Task { await self.leave(key, token: token, cancelling: job) }
+        }
+        leave(key, token: token, cancelling: nil)
+        switch outcome {
+        case .success(let image):
+            if inFlight[key] == job {
+                inFlight[key] = nil
+                cacheOperation(image, for: key)
+                ImagingBreadcrumbs.note("step finished · \(MemoryBudget.availableDescription) free")
+            }
+            return image
+        case .failure(let error):
+            if inFlight[key] == job { inFlight[key] = nil }
+            throw error
+        }
+    }
+
+    private func leave(_ key: String, token: UUID, cancelling job: Task<CIImage, Error>?) {
+        inFlightWaiters[key]?.remove(token)
+        if inFlightWaiters[key]?.isEmpty == true { inFlightWaiters[key] = nil }
+        guard let job, inFlightWaiters[key] == nil, inFlight[key] == job else { return }
+        // The render that replaces a cancelled one usually asks for the same step right
+        // away (a slider settled, a panel opened): give it a moment to join first.
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            self.cancelIfAbandoned(job, key: key)
+        }
+    }
+
+    private func cancelIfAbandoned(_ job: Task<CIImage, Error>, key: String) {
+        guard inFlightWaiters[key] == nil, inFlight[key] == job else { return }
+        job.cancel()
+        inFlight[key] = nil
+        ImagingBreadcrumbs.note("step cancelled")
+    }
+
+    /// Before a heavy job: when the system is short of memory, free what can be rebuilt.
+    private func relieveMemoryIfNeeded(before step: String) {
+        guard MemoryBudget.isLow else { return }
+        PSLog.info("low memory before \(step) (\(MemoryBudget.availableDescription)): trimming caches", category: .imaging)
+        trimForMemoryPressure()
+    }
+
+    private func apply(_ operation: EditOperation, to input: CIImage, layer: Layer, scale: Double, options: Options, log: KeyLog?) async throws -> CIImage {
         let extent = input.extent
+        // An unbounded or non-finite extent would trap in the Int conversions below.
+        guard !extent.isInfinite, extent.width.isFinite, extent.height.isFinite else { return input }
         let cacheKey = "\(operation.id.uuidString)@\(Int(extent.width))x\(Int(extent.height))"
         switch operation.kind {
         case .adjust, .adjustments, .toneCurve, .look, .autoEnhance, .colorMixer, .colorGrade, .colorMatch, .lut:
@@ -248,7 +512,8 @@ public actor PhotoRenderer {
             return perspective(input, horizontal: horizontal, vertical: vertical)
 
         case .expand(let placement):
-            if let cached = operationCache[cacheKey] { return cached }
+            let reused = try await reusedResult(key: cacheKey, operationID: operation.id, extent: extent, options: options, log: log)
+            if let reused { return reused }
             guard placement.width > 0.05, placement.height > 0.05 else { return input }
             let canvas = CGRect(x: 0, y: 0, width: (extent.width / placement.width).rounded(), height: (extent.height / placement.height).rounded())
             let origin = CGPoint(x: (placement.minX * canvas.width).rounded(), y: ((1 - placement.maxY) * canvas.height).rounded())
@@ -261,14 +526,13 @@ public actor PhotoRenderer {
             let hole = CIImage(color: .white).cropped(to: canvas)
             let keep = CIImage(color: .black).cropped(to: placed.extent.insetBy(dx: 2, dy: 2))
             let mask = keep.composited(over: hole)
-            let result: CIImage
-            if inpainting.hasGenerativeEngine {
-                result = try await inpainting.generate(image: seed, mask: mask, boundingBox: .unit, prompt: "seamless continuation of the scene, same light, same style")
-            } else {
-                result = try await inpainting.fill(image: seed, mask: mask, boundingBox: .unit, feather: 0.01)
+            let inpainting = self.inpainting
+            return try await runExpensive(key: cacheKey, step: "expand", log: log) {
+                if inpainting.hasGenerativeEngine {
+                    return try await inpainting.generate(image: seed, mask: mask, boundingBox: .unit, prompt: "seamless continuation of the scene, same light, same style")
+                }
+                return try await inpainting.fill(image: seed, mask: mask, boundingBox: .unit, feather: 0.01)
             }
-            cacheOperation(result, for: cacheKey)
-            return result
 
         case .blurRegion(let mask, let amount):
             guard let maskImage = maskStore.load(mask, fitting: extent) else { return input }
@@ -278,7 +542,8 @@ public actor PhotoRenderer {
             return AdjustmentPipeline.blendWithMask(foreground: blurred, background: input, mask: soft)
 
         case .moveObject(let mask, let offset):
-            if let cached = operationCache[cacheKey] { return cached }
+            let reused = try await reusedResult(key: cacheKey, operationID: operation.id, extent: extent, options: options, log: log)
+            if let reused { return reused }
             guard let maskImage = maskStore.load(mask, fitting: extent) else { return input }
             // The object lifted with a soft edge, carried to its new place.
             let edge = maskImage.clampedToExtent().applyingGaussianBlur(sigma: max(0.8, 1.4 * scale)).cropped(to: extent)
@@ -286,20 +551,24 @@ public actor PhotoRenderer {
             let moved = lifted.transformed(by: CGAffineTransform(translationX: offset.x * extent.width, y: -offset.y * extent.height)).cropped(to: extent)
             // While a slider moves, the object is shown at its new place over the untouched picture.
             guard options.allowExpensiveWork else { return moved.composited(over: input) }
-            let filled = try await inpainting.fill(image: input, mask: maskImage, boundingBox: mask.boundingBox, feather: mask.feather)
-            let result = moved.composited(over: filled)
-            cacheOperation(result, for: cacheKey)
-            return result
+            let inpainting = self.inpainting
+            return try await runExpensive(key: cacheKey, step: "move", log: log) {
+                let filled = try await inpainting.fill(image: input, mask: maskImage, boundingBox: mask.boundingBox, feather: mask.feather)
+                return moved.composited(over: filled)
+            }
 
         case .removeObject(let mask):
-            if let cached = operationCache[cacheKey] { return cached }
+            let reused = try await reusedResult(key: cacheKey, operationID: operation.id, extent: extent, options: options, log: log)
+            if let reused { return reused }
             guard options.allowExpensiveWork, let maskImage = maskStore.load(mask, fitting: extent) else { return input }
-            let result = try await inpainting.fill(image: input, mask: maskImage, boundingBox: mask.boundingBox, feather: mask.feather)
-            cacheOperation(result, for: cacheKey)
-            return result
+            let inpainting = self.inpainting
+            return try await runExpensive(key: cacheKey, step: "erase", log: log) {
+                try await inpainting.fill(image: input, mask: maskImage, boundingBox: mask.boundingBox, feather: mask.feather)
+            }
 
         case .heal(let strokes):
-            if let cached = operationCache[cacheKey] { return cached }
+            let reused = try await reusedResult(key: cacheKey, operationID: operation.id, extent: extent, options: options, log: log)
+            if let reused { return reused }
             guard options.allowExpensiveWork else { return input }
             let width = Int(extent.width), height = Int(extent.height)
             var bytes = [UInt8](repeating: 0, count: width * height)
@@ -307,9 +576,10 @@ public actor PhotoRenderer {
             guard let cg = ImageSupport.grayImage(width: width, height: height, bytes: bytes) else { return input }
             let maskImage = CIImage(cgImage: cg)
             let box = MaskStore.boundingBox(of: bytes, width: width, height: height)
-            let result = try await inpainting.fill(image: input, mask: maskImage, boundingBox: box, feather: 0.01)
-            cacheOperation(result, for: cacheKey)
-            return result
+            let inpainting = self.inpainting
+            return try await runExpensive(key: cacheKey, step: "heal", log: log) {
+                try await inpainting.fill(image: input, mask: maskImage, boundingBox: box, feather: 0.01)
+            }
 
         case .removeBackground(let mask):
             guard let mask, let maskImage = maskStore.load(mask, fitting: extent) else { return input }
@@ -330,11 +600,13 @@ public actor PhotoRenderer {
             return AdjustmentPipeline.blendWithMask(foreground: adjusted, background: input, mask: maskImage)
 
         case .upscale(let factor):
-            if let cached = operationCache[cacheKey] { return cached }
+            let reused = try await reusedResult(key: cacheKey, operationID: operation.id, extent: extent, options: options, log: log)
+            if let reused { return reused }
             guard options.allowExpensiveWork else { return input }
-            let result = try await upscaler.upscale(input, factor: factor)
-            cacheOperation(result, for: cacheKey)
-            return result
+            let upscaler = self.upscaler
+            return try await runExpensive(key: cacheKey, step: "upscale", log: log) {
+                try await upscaler.upscale(input, factor: factor)
+            }
 
         case .denoise(let amount):
             let filter = CIFilter.noiseReduction()
@@ -354,11 +626,13 @@ public actor PhotoRenderer {
             return BackgroundEffects.relight(input, direction: direction, intensity: intensity)
 
         case .generativeFill(let mask, let prompt):
-            if let cached = operationCache[cacheKey] { return cached }
+            let reused = try await reusedResult(key: cacheKey, operationID: operation.id, extent: extent, options: options, log: log)
+            if let reused { return reused }
             guard options.allowExpensiveWork, let maskImage = maskStore.load(mask, fitting: extent) else { return input }
-            let result = try await inpainting.generate(image: input, mask: maskImage, boundingBox: mask.boundingBox, prompt: prompt)
-            cacheOperation(result, for: cacheKey)
-            return result
+            let inpainting = self.inpainting
+            return try await runExpensive(key: cacheKey, step: "generate", log: log) {
+                try await inpainting.generate(image: input, mask: maskImage, boundingBox: mask.boundingBox, prompt: prompt)
+            }
 
         case .recolor(let mask, let color, let strength):
             guard let maskImage = maskStore.load(mask, fitting: extent) else { return input }

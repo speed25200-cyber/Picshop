@@ -46,56 +46,56 @@ struct MagicPanel: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             promptField
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
-                ForEach(suggestions) { suggestion in
-                    Button {
-                        Haptics.magic()
-                        suggestion.run(session)
-                    } label: {
-                        VStack(spacing: 6) {
-                            MagicGlyph(size: 18, symbol: suggestion.symbol)
-                                .frame(height: 22)
-                            Text(suggestion.title).font(PSFont.label(10)).foregroundStyle(PSTheme.textPrimary)
-                                .lineLimit(1).minimumScaleFactor(0.7)
+            // One scrolling row, so the panel stays short and the photo stays big.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(suggestions) { suggestion in
+                        Button {
+                            Haptics.magic()
+                            suggestion.run(session)
+                        } label: {
+                            VStack(spacing: 6) {
+                                MagicGlyph(size: 20, symbol: suggestion.symbol)
+                                    .frame(height: 24)
+                                Text(suggestion.title).font(.caption2.weight(.medium)).foregroundStyle(PSTheme.textPrimary)
+                                    .lineLimit(1).minimumScaleFactor(0.75)
+                            }
+                            .frame(width: 72, height: 64)
+                            .background(PanelChipStyle.fill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         }
-                        .frame(maxWidth: .infinity).frame(height: 62)
-                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .buttonStyle(PSPressStyle(scale: 0.95))
+                        .disabled(session.isProcessing)
+                        .accessibilityLabel(suggestion.title)
                     }
-                    .buttonStyle(PSPressStyle(scale: 0.94))
-                    .disabled(session.isProcessing)
-                    .accessibilityLabel(suggestion.title)
                 }
+                .padding(.horizontal, 2)
             }
+            .dynamicTypeSize(...DynamicTypeSize.xLarge)
             if !session.sceneObjects.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text(L("In this photo")).font(PSFont.label(11)).textCase(.uppercase).tracking(0.6).foregroundStyle(PSTheme.textTertiary)
-                        Spacer()
-                        Text(L("Tap to erase · hold to move")).font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary)
-                    }
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(session.sceneObjects) { candidate in
-                                SceneObjectChip(candidate: candidate, thumbnail: { await session.candidateThumbnail($0) }) {
-                                    session.erase(candidate)
-                                }
-                                .contextMenu {
-                                    Button { session.erase(candidate) } label: { Label(L("Erase"), systemImage: "eraser") }
-                                    Divider()
-                                    Button { session.move(candidate, degrees: 180) } label: { Label(L("Move left"), systemImage: "arrow.left") }
-                                    Button { session.move(candidate, degrees: 0) } label: { Label(L("Move right"), systemImage: "arrow.right") }
-                                    Button { session.move(candidate, degrees: 90) } label: { Label(L("Move up"), systemImage: "arrow.up") }
-                                    Button { session.move(candidate, degrees: -90) } label: { Label(L("Move down"), systemImage: "arrow.down") }
-                                    Button { session.move(candidate, degrees: nil) } label: { Label(L("Centre it"), systemImage: "scope") }
-                                }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(session.sceneObjects) { candidate in
+                            SceneObjectChip(candidate: candidate, thumbnail: { await session.candidateThumbnail($0) }) {
+                                session.erase(candidate)
+                            }
+                            .contextMenu {
+                                Button { session.erase(candidate) } label: { Label(L("Erase"), systemImage: "eraser") }
+                                Divider()
+                                Button { session.move(candidate, degrees: 180) } label: { Label(L("Move left"), systemImage: "arrow.left") }
+                                Button { session.move(candidate, degrees: 0) } label: { Label(L("Move right"), systemImage: "arrow.right") }
+                                Button { session.move(candidate, degrees: 90) } label: { Label(L("Move up"), systemImage: "arrow.up") }
+                                Button { session.move(candidate, degrees: -90) } label: { Label(L("Move down"), systemImage: "arrow.down") }
+                                Button { session.move(candidate, degrees: nil) } label: { Label(L("Centre it"), systemImage: "scope") }
                             }
                         }
-                        .padding(.horizontal, 2)
                     }
+                    .padding(.horizontal, 2)
                 }
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .accessibilityHint(L("Tap to erase · hold to move"))
+                .transition(.opacity)
             }
         }
         .animation(PSMotion.standard, value: session.sceneObjects.map(\.id))
@@ -116,26 +116,27 @@ struct MagicPanel: View {
         HStack(spacing: 10) {
             MagicGlyph(size: 15)
             TextField(L("Describe an edit…"), text: $prompt)
-                .font(PSFont.body(15))
+                .font(.body)
                 .foregroundStyle(PSTheme.textPrimary)
                 .submitLabel(.go)
                 .focused($focused)
                 .onSubmit(run)
             if !prompt.trimmingCharacters(in: .whitespaces).isEmpty {
                 Button(action: run) {
-                    Image(systemName: "arrow.up").font(.system(size: 14, weight: .bold)).foregroundStyle(.black)
-                        .frame(width: 30, height: 30)
+                    Image(systemName: "arrow.up").font(.system(size: 15, weight: .semibold)).foregroundStyle(.black)
+                        .frame(width: 32, height: 32)
                         .background(Circle().fill(Color.white))
                 }
                 .buttonStyle(PSPressStyle(scale: 0.9))
-                .transition(.scale.combined(with: .opacity))
+                .transition(.opacity)
                 .accessibilityLabel(L("Apply"))
             }
         }
-        .padding(.leading, 14).padding(.trailing, 7)
-        .frame(height: 46)
-        .background(Capsule().fill(Color.white.opacity(0.07)))
-        .overlay(Capsule().strokeBorder(PSTheme.intelligenceAngular, lineWidth: focused ? 1.5 : 0.8).opacity(focused ? 1 : 0.55))
+        .padding(.leading, 14).padding(.trailing, 6)
+        .frame(height: 44)
+        .background(Capsule().fill(PanelChipStyle.fill))
+        // The spectrum rim only while the AI is being spoken to.
+        .overlay(Capsule().strokeBorder(PSTheme.intelligenceAngular, lineWidth: 1).opacity(focused ? 0.9 : 0))
         .animation(PSMotion.quick, value: prompt.isEmpty)
         .animation(PSMotion.quick, value: focused)
     }

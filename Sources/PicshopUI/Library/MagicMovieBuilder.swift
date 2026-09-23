@@ -160,35 +160,35 @@ struct MagicMovieSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: PSSpacing.xLarge) {
+                VStack(alignment: .leading, spacing: PSSpacing.section) {
                     hero
                     step(number: 1, title: L("Moments")) {
                         PhotosPicker(selection: $items, maxSelectionCount: 30, selectionBehavior: .ordered, matching: .any(of: [.videos, .images])) {
                             HStack(spacing: 12) {
                                 Image(systemName: items.isEmpty ? "plus.viewfinder" : "checkmark.circle.fill")
-                                    .font(.system(size: 20, weight: .semibold))
+                                    .font(.system(size: 20, weight: .medium))
                                     .foregroundStyle(items.isEmpty ? PSTheme.textPrimary : PSTheme.success)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(items.isEmpty ? L("Choose clips and photos") : String(format: L("%d moments chosen"), items.count))
                                         .font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
-                                    Text(L("In the order you like. Up to 30.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                                    Text(L("In the order you like. Up to 30.")).font(PSFont.footnote()).foregroundStyle(PSTheme.textSecondary)
                                 }
                                 Spacer()
-                                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(PSTheme.textTertiary)
+                                Image(systemName: "chevron.right").font(.system(size: 13, weight: .medium)).foregroundStyle(PSTheme.textTertiary)
                             }
-                            .padding(16)
-                            .psCard(cornerRadius: 22, shadow: false)
+                            .padding(PSSpacing.large)
+                            .psCard(cornerRadius: PSRadius.card, shadow: false)
                         }
                     }
                     step(number: 2, title: L("Music")) {
                         Button { showsMusicPicker = true } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: music == nil ? "music.note" : "music.note.list")
-                                    .font(.system(size: 20, weight: .semibold)).foregroundStyle(PSTheme.textPrimary)
+                                    .font(.system(size: 20, weight: .medium)).foregroundStyle(PSTheme.textPrimary)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(music?.deletingPathExtension().lastPathComponent ?? L("Add a song (optional)"))
                                         .font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
-                                    Text(L("Cuts land on its beat.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                                    Text(L("Cuts land on its beat.")).font(PSFont.footnote()).foregroundStyle(PSTheme.textSecondary)
                                 }
                                 Spacer()
                                 if music != nil {
@@ -196,8 +196,8 @@ struct MagicMovieSheet: View {
                                         .buttonStyle(.plain)
                                 }
                             }
-                            .padding(16)
-                            .psCard(cornerRadius: 22, shadow: false)
+                            .padding(PSSpacing.large)
+                            .psCard(cornerRadius: PSRadius.card, shadow: false)
                         }
                         .buttonStyle(PSPressStyle(scale: 0.98))
                     }
@@ -226,26 +226,33 @@ struct MagicMovieSheet: View {
         .preferredColorScheme(.dark)
     }
 
+    /// The same still spectrum as the Magic Movie card on Home, so the sheet
+    /// reads as that card opened.
     private var hero: some View {
         ZStack(alignment: .bottomLeading) {
-            IntelligenceField(animated: true)
-                .frame(height: 150)
-                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-            VStack(alignment: .leading, spacing: 4) {
-                Image(systemName: "film.stack.fill").font(.system(size: 26, weight: .semibold)).foregroundStyle(.white)
-                Text(L("An edit on the beat, made for you.")).font(PSFont.title(22)).foregroundStyle(.white).tracking(-0.4)
-                Text(L("PicShop picks the best part of each clip and cuts to the music.")).font(PSFont.caption(13)).foregroundStyle(.white.opacity(0.85))
+            IntelligenceField(animated: false)
+            Color.black.opacity(0.25)
+            VStack(alignment: .leading, spacing: PSSpacing.xSmall) {
+                Image(systemName: "film.stack").font(.system(size: 22, weight: .medium)).foregroundStyle(.white)
+                    .padding(.bottom, PSSpacing.xSmall)
+                Text(L("An edit on the beat, made for you.")).font(.title2.weight(.bold)).foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(L("PicShop picks the best part of each clip and cuts to the music.")).font(PSFont.footnote()).foregroundStyle(.white.opacity(0.85))
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(18)
+            .padding(PSSpacing.mediumLarge)
         }
-        .padding(.top, 8)
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 168)
+        .clipShape(RoundedRectangle(cornerRadius: PSRadius.hero, style: .continuous))
+        .padding(.top, PSSpacing.small)
     }
 
     private func step<Content: View>(number: Int, title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Text("\(number)").font(PSFont.label(11)).foregroundStyle(.black).frame(width: 18, height: 18).background(Circle().fill(Color.white))
-                Text(title.uppercased()).font(PSFont.label(12)).tracking(0.8).foregroundStyle(PSTheme.textSecondary)
+        VStack(alignment: .leading, spacing: PSSpacing.medium) {
+            HStack(spacing: PSSpacing.small) {
+                Text("\(number)").font(PSFont.rounded(12)).foregroundStyle(.black).frame(width: 20, height: 20).background(Circle().fill(Color.white))
+                Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(PSTheme.textSecondary)
             }
             content()
         }
@@ -259,13 +266,15 @@ struct MagicMovieSheet: View {
                     Haptics.tick()
                     withAnimation(PSMotion.quick) { selection.wrappedValue = item }
                 } label: {
+                    // Selected is white with black content, as Photos' filter chips.
                     VStack(spacing: 6) {
-                        Image(systemName: symbol(item)).font(.system(size: 18, weight: .semibold)).foregroundStyle(active ? PSTheme.accent : PSTheme.textPrimary)
-                        Text(title(item)).font(PSFont.caption(12)).foregroundStyle(active ? PSTheme.textPrimary : PSTheme.textSecondary)
+                        Image(systemName: symbol(item)).font(.system(size: 18, weight: active ? .medium : .regular))
+                        Text(title(item)).font(PSFont.control(selected: active))
                     }
-                    .frame(maxWidth: .infinity).padding(.vertical, 14)
-                    .background(Color.white.opacity(active ? 0 : 0.06), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .psActivePill(RoundedRectangle(cornerRadius: 18, style: .continuous), isActive: active)
+                    .foregroundStyle(active ? Color.black : PSTheme.textPrimary)
+                    .frame(maxWidth: .infinity).padding(.vertical, PSSpacing.medium)
+                    .psChipFill(RoundedRectangle(cornerRadius: PSRadius.tile, style: .continuous), isSelected: active)
+                    .contentShape(RoundedRectangle(cornerRadius: PSRadius.tile, style: .continuous))
                 }
                 .buttonStyle(PSPressStyle())
                 .accessibilityAddTraits(active ? [.isSelected] : [])
@@ -292,12 +301,12 @@ struct MagicMovieSheet: View {
     @ViewBuilder private var footer: some View {
         Group {
             if let working {
-                VStack(spacing: 10) {
+                VStack(spacing: PSSpacing.small) {
                     ShimmerText(working.title, font: PSFont.headline(15))
                     ProgressView(value: working.progress).tint(PSTheme.voice)
                 }
-                .padding(.horizontal, 18).padding(.vertical, 14)
-                .psCard(cornerRadius: 22, shadow: false)
+                .padding(.horizontal, PSSpacing.mediumLarge).padding(.vertical, PSSpacing.large)
+                .psCard(cornerRadius: PSRadius.hud, shadow: false)
             } else {
                 Button {
                     Haptics.magic()

@@ -91,7 +91,9 @@ public final class PhotoEditorSession {
 
     public let projectID: UUID
     public let app: AppEnvironment
-    public private(set) var history: EditHistory<PhotoDocument>
+    public private(set) var history: EditHistory<PhotoDocument> {
+        didSet { scheduleAutosave() }
+    }
     public var document: PhotoDocument { history.present }
     /// The photo as this session opened it: Revert starts from it, so layers added since go too.
     private let openedDocument: PhotoDocument
@@ -187,6 +189,14 @@ public final class PhotoEditorSession {
     public var isVoiceReady = false
 
     private var renderTask: Task<Void, Never>?
+    /// The voice command running now; the next one waits for it.
+    @ObservationIgnored private var commandTask: Task<Void, Never>?
+    @ObservationIgnored private var autosaveTask: Task<Void, Never>?
+    @ObservationIgnored private var autosaveDeadline = ContinuousClock.now
+    @ObservationIgnored private var lastSavedDocument: PhotoDocument?
+    @ObservationIgnored private var saveSequence = 0
+    @ObservationIgnored private let writeGate = ProjectWriteGate()
+    @ObservationIgnored private var observers: [NSObjectProtocol] = []
     /// Parameter and direction of the most recent adjustment, so "a bit more" / "encore un peu" can refer to it.
     public private(set) var lastAdjustment: (parameter: AdjustmentParameter, direction: Int)?
     private var toastTask: Task<Void, Never>?
@@ -231,6 +241,8 @@ public final class PhotoEditorSession {
             Task { await self?.handleTranscript(text) }
         }
         isVoiceReady = true
+        lastSavedDocument = document
+        observeLifecycle()
         requestPreview()
         // Upside down with the reading order kept is never a look anyone chose, and a flip
         // made in an earlier session is out of Undo's reach: offer the way back.
@@ -253,12 +265,19 @@ public final class PhotoEditorSession {
         app.voice.cancel()
         app.voice.onFinalTranscript = nil
         renderTask?.cancel()
+        for observer in observers { NotificationCenter.default.removeObserver(observer) }
+        observers = []
         save()
     }
 
     public func save() {
+        autosaveTask?.cancel()
+        autosaveTask = nil
         let project = Project(id: projectID, content: .photo(document), createdAt: document.createdAt, modifiedAt: Date())
-        app.library.save(project)
+        saveSequence += 1
+        lastSavedDocument = document
+        let library = app.library
+        writeGate.write(sequence: saveSequence) { library.save(project) }
         app.styles.rememberLast(currentStyle)
         if let renderer {
             let store = app.store
@@ -270,6 +289,73 @@ public final class PhotoEditorSession {
                 await MainActor.run { library.invalidateThumbnail(for: id) }
             }
         }
+    }
+
+    // MARK: - Autosave
+
+    /// Saves ~0.8 s after the last change, so a crash or a kill loses at most that
+    /// much. Written off the main actor, without refreshing the library.
+    private func scheduleAutosave() {
+        guard isConfigured else { return }
+        autosaveDeadline = ContinuousClock.now.advanced(by: .milliseconds(800))
+        guard autosaveTask == nil else { return }
+        autosaveTask = Task { [weak self] in
+            while let self {
+                let deadline = self.autosaveDeadline
+                try? await Task.sleep(until: deadline, clock: .continuous)
+                guard !Task.isCancelled else { return }
+                if self.autosaveDeadline <= ContinuousClock.now {
+                    self.autosaveTask = nil
+                    self.autosave(synchronously: false)
+                    return
+                }
+            }
+        }
+    }
+
+    private func autosave(synchronously: Bool) {
+        let document = self.document
+        guard document != lastSavedDocument else { return }
+        lastSavedDocument = document
+        saveSequence += 1
+        let sequence = saveSequence
+        let project = Project(id: projectID, content: .photo(document), createdAt: document.createdAt, modifiedAt: Date())
+        let store = app.store
+        let gate = writeGate
+        let write: @Sendable () -> Void = {
+            gate.write(sequence: sequence) {
+                do { try store.save(project) } catch { PSLog.error("autosave failed: \(error)", category: .ui) }
+            }
+        }
+        if synchronously {
+            write()
+        } else {
+            Task.detached(priority: .utility) { write() }
+        }
+    }
+
+    private func observeLifecycle() {
+        let center = NotificationCenter.default
+        // Synchronous on the main queue: a hop through a task could run after the app is suspended.
+        observers.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.autosaveTask?.cancel()
+                self.autosaveTask = nil
+                self.autosave(synchronously: true)
+            }
+        })
+        observers.append(center.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.relieveMemoryPressure() }
+        })
+    }
+
+    /// Memory warning: everything this editor can rebuild goes, the current erase stays.
+    private func relieveMemoryPressure() {
+        lookThumbnails = nil
+        if compareSplit == nil { originalPreview = nil }
+        Diagnostics.shared.note("editor trimmed its caches")
+        if let renderer { Task { await renderer.trimForMemoryPressure() } }
     }
 
     var language: NormalizedUtterance.Language {
@@ -331,7 +417,8 @@ public final class PhotoEditorSession {
                 dirtyInteractive = false
                 let document = previewDocument()
                 let side = interactive ? governor.interactivePreviewSide : governor.previewLongestSide
-                let options = PhotoRenderer.Options(targetLongestSide: side, showOriginal: showsOriginal, allowExpensiveWork: true)
+                // A dial drag never starts an erase or an upscale: it reuses a finished one, scaled.
+                let options = PhotoRenderer.Options(targetLongestSide: side, showOriginal: showsOriginal, allowExpensiveWork: !interactive, isDisplayed: true)
                 do {
                     let image = try await renderer.render(document, options: options)
                     guard !Task.isCancelled else { return }
@@ -364,6 +451,7 @@ public final class PhotoEditorSession {
     // MARK: - History
 
     private func commit(_ newDocument: PhotoDocument, label: String) {
+        Diagnostics.shared.note("commit \(label)")
         magicSelection = nil
         var updated = newDocument
         updated.touch()
@@ -885,6 +973,12 @@ public final class PhotoEditorSession {
     public func loadSceneObjects() async {
         let key = lookThumbnailKey
         guard sceneObjectsKey != key, let services, !isFindingObjects else { return }
+        // Vision and a second erase pass would compete with the running one for memory: wait for it.
+        while isProcessing || isRendering {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+        }
+        guard sceneObjectsKey != key, key == lookThumbnailKey, !isFindingObjects else { return }
         isFindingObjects = true
         defer { isFindingObjects = false }
         let found = (try? await services.namedObjects(in: document)) ?? []
@@ -1080,14 +1174,25 @@ public final class PhotoEditorSession {
         }
         if let mask = selectionMask {
             Task {
+                guard !isProcessing else {
+                    showToast(L("One moment…"))
+                    return
+                }
                 isProcessing = true
                 processingTitle = String(format: L("Generating “%@”…"), text)
                 defer { isProcessing = false }
-                var document = self.document
-                document.apply(.generativeFill(mask, prompt: text))
+                let base = self.document
+                var updated = base
+                updated.apply(.generativeFill(mask, prompt: text))
                 // Render once so failures surface before the change lands in history.
-                if let renderer, (try? await renderer.render(document, options: .preview)) != nil {
-                    commit(document, label: "Generate “\(text)”")
+                if let renderer, (try? await renderer.render(updated, options: .preview)) != nil {
+                    // A dial moved meanwhile carries over; anything else drops the result.
+                    guard let result = base == self.document ? updated : Self.rebase(updated, from: base, onto: self.document) else {
+                        showToast(L("The photo changed in the meantime. Try again."), isError: true)
+                        Haptics.warning()
+                        return
+                    }
+                    commit(result, label: "Generate “\(text)”")
                     clearSelection()
                     Haptics.success()
                 } else {
@@ -1182,8 +1287,9 @@ public final class PhotoEditorSession {
         let scale = min(1, 160 / max(rect.width, rect.height))
         let cropped = preview.cropped(to: rect).transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         let image = cropped.transformed(by: CGAffineTransform(translationX: -cropped.extent.minX, y: -cropped.extent.minY))
-        await Task.yield()
-        return ImageSupport.cgImage(from: image).map { UIImage(cgImage: $0) }
+        // The preview is a lazy graph (a fill, blurs, a resample): rendering it can take a while, so not on the main thread.
+        let cgImage = await Task.detached(priority: .userInitiated) { ImageSupport.cgImage(from: image) }.value
+        return cgImage.map { UIImage(cgImage: $0) }
     }
 
     public func chooseAllCandidates() {
@@ -1197,7 +1303,27 @@ public final class PhotoEditorSession {
 
     // MARK: - Voice pipeline
 
+    /// Runs a spoken or typed command. Commands run one at a time: the next waits
+    /// for the previous one, and while an erase or another long step is running a
+    /// new one gets "One moment…" instead of starting from the photo as it was.
     public func handleTranscript(_ text: String) async {
+        if isProcessing {
+            Diagnostics.shared.note("busy, command set aside")
+            Haptics.warning()
+            showToast(L("One moment…"))
+            return
+        }
+        let previous = commandTask
+        let task = Task { [weak self] in
+            await previous?.value
+            await self?.processTranscript(text)
+        }
+        commandTask = task
+        await task.value
+    }
+
+    private func processTranscript(_ text: String) async {
+        Diagnostics.shared.noteCommand(text)
         transcript = text
         lastReplyIsProblem = false
         lastReplyIsError = false
@@ -1286,15 +1412,27 @@ public final class PhotoEditorSession {
         if [.generativeFill, .upscale, .expandCanvas].contains(intent.action), !app.performance.allowsHeavyWork {
             return refuse(L("The iPhone is too hot for generation right now. Let it cool for a moment."))
         }
-        if [.removeObject, .removeBackground, .blurBackground, .replaceBackground, .upscale, .selectiveAdjust, .chooseCandidate, .straighten, .generativeFill, .recolor,
-            .moveObject, .cleanUp, .expandCanvas, .textBehind, .autoCrop, .blurObject].contains(intent.action) {
+        let isHeavy = [.removeObject, .removeBackground, .blurBackground, .replaceBackground, .upscale, .selectiveAdjust, .chooseCandidate, .straighten, .generativeFill, .recolor,
+                       .moveObject, .cleanUp, .expandCanvas, .textBehind, .autoCrop, .blurObject].contains(intent.action)
+        if isHeavy {
+            // One long step at a time (a tap during a spoken erase, a second chip…).
+            guard !isProcessing else {
+                let message = L("One moment…")
+                if !isRunningVoiceCommand { showToast(message) }
+                return .info(message: message)
+            }
             isProcessing = true
             processingTitle = intent.action == .chooseCandidate ? L("Erasing…") : processingLabel(for: intent)
+            Diagnostics.shared.note("run \(intent.action)")
+            // Short of memory before a long step: previews go a size down until it recovers.
+            if MemoryBudget.isLow { app.performance.constrainMemory() }
         }
-        defer { isProcessing = false }
+        // Only the step that raised the flag lowers it.
+        defer { if isHeavy { isProcessing = false } }
         let context = intentContext
-        let (updated, result) = await executor.execute(intent, on: document, context: context)
-        handle(result, updatedDocument: updated, intent: intent)
+        let base = document
+        let (updated, result) = await executor.execute(intent, on: base, context: context)
+        handle(result, updatedDocument: updated, intent: intent, base: base)
         if case .applied = result.outcome, intent.action == .adjust || intent.action == .selectiveAdjust, let parameter = intent.parameter {
             let direction: Int
             if let amount = intent.amount {
@@ -1309,6 +1447,39 @@ public final class PhotoEditorSession {
             lastAdjustment = (parameter, direction)
         }
         return result.outcome
+    }
+
+    /// A command's result replayed onto what was committed while it ran. Only the
+    /// operations it appended carry over, and only when the photo meanwhile got
+    /// nothing but tonal steps (a slider, a look): a crop or an undo in between
+    /// would put its mask in the wrong place, so then nil. Tone is applied after
+    /// every other step, so tonal steps are left out of the comparison: a dial
+    /// nudged again rewrites its last step in place.
+    static func rebase(_ updated: PhotoDocument, from base: PhotoDocument, onto current: PhotoDocument) -> PhotoDocument? {
+        guard updated.canvasSize == base.canvasSize, current.canvasSize == base.canvasSize,
+              updated.layers.map(\.id) == base.layers.map(\.id) else { return nil }
+        var result = current
+        for (before, after) in zip(base.layers, updated.layers) {
+            var untouched = after
+            untouched.edits = before.edits
+            guard untouched == before else { return nil }
+            let old = before.edits.operations, new = after.edits.operations
+            guard new.count >= old.count, Array(new.prefix(old.count)) == old else { return nil }
+            let added = new.dropFirst(old.count)
+            guard !added.isEmpty else { continue }
+            guard let index = result.index(of: after.id) else { return nil }
+            let now = result.layers[index].edits.operations
+            guard now.filter({ !isTonal($0.kind) }) == old.filter({ !isTonal($0.kind) }) else { return nil }
+            result.layers[index].edits.operations.append(contentsOf: added)
+        }
+        return result
+    }
+
+    private static func isTonal(_ kind: EditOperation.Kind) -> Bool {
+        switch kind {
+        case .adjust, .adjustments, .toneCurve, .look, .autoEnhance, .colorMixer, .colorGrade, .colorMatch, .lut: return true
+        default: return false
+        }
     }
 
     private func processingLabel(for intent: EditIntent) -> String {
@@ -1331,14 +1502,27 @@ public final class PhotoEditorSession {
         }
     }
 
-    private func handle(_ result: ExecutionResult, updatedDocument: PhotoDocument, intent: EditIntent) {
+    /// - Parameter base: the document the command started from.
+    private func handle(_ result: ExecutionResult, updatedDocument: PhotoDocument, intent: EditIntent, base: PhotoDocument) {
         switch result.outcome {
         case .applied(let label):
             pendingClarification = nil
             candidateOverlays = []
-            let changed = updatedDocument != document
+            var resultDocument = updatedDocument
+            if base != document, updatedDocument != base {
+                // Something else was committed while this ran: carry its new steps over, or drop it.
+                guard let rebased = Self.rebase(updatedDocument, from: base, onto: document) else {
+                    Diagnostics.shared.note("stale result dropped: \(label)")
+                    if isRunningVoiceCommand { lastReplyIsProblem = true }
+                    tell(L("The photo changed in the meantime. Try again."))
+                    Haptics.warning()
+                    return
+                }
+                resultDocument = rebased
+            }
+            let changed = resultDocument != document
             if changed {
-                commit(updatedDocument, label: label)
+                commit(resultDocument, label: label)
             }
             if !label.isEmpty { showToast(toastText(for: label), undoable: changed) }
             // The new title is ready to be rewritten or moved.
@@ -1354,7 +1538,8 @@ public final class PhotoEditorSession {
                 // Listen for the answer right away.
                 Task {
                     try? await Task.sleep(for: .milliseconds(600))
-                    if app.voice.state == .idle { app.voice.start() }
+                    // After the question has been spoken, so the microphone does not hear it.
+                    if app.voice.state == .idle { app.voice.start(waitingForSpeech: true) }
                 }
             }
         case .info(let message):
@@ -1548,9 +1733,26 @@ public final class PhotoEditorSession {
         }
     }
 }
+/// Orders project writes from the main actor and background tasks, so an older
+/// snapshot never lands after a newer one.
+final class ProjectWriteGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var written = 0
+
+    func write(sequence: Int, _ body: () -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard sequence > written else { return }
+        body()
+        written = sequence
+    }
+}
+
 extension PhotoEditorSession: EditorStatus {
     /// The photo tasks report completion rather than a fraction.
     var processingProgress: Double? { nil }
+    /// Work shimmers over the picture instead; export has its own HUD.
+    var showsProcessingHUD: Bool { false }
 
     func performToastAction(_ action: Toast.Action) {
         switch action {

@@ -15,6 +15,43 @@ public enum PatchMatchCore {
     }
 
     public static func inpaint(rgba: [UInt8], mask: [UInt8], width: Int, height: Int, patchRadius: Int = 3, iterationsPerLevel: [Int] = [6, 5, 4, 3, 3, 2]) -> [UInt8] {
+        run(rgba: rgba, mask: mask, width: width, height: height, patchRadius: patchRadius, iterationsPerLevel: iterationsPerLevel, shouldCancel: { false }) ?? rgba
+    }
+
+    /// Cancellable variant: `shouldCancel` is polled every few rows, per iteration and per
+    /// pyramid level, and a stop throws `CancellationError` rather than returning a partial fill.
+    public static func inpaint(rgba: [UInt8], mask: [UInt8], width: Int, height: Int, patchRadius: Int = 3, iterationsPerLevel: [Int] = [6, 5, 4, 3, 3, 2],
+                               shouldCancel: () -> Bool) throws -> [UInt8] {
+        guard let output = run(rgba: rgba, mask: mask, width: width, height: height, patchRadius: patchRadius, iterationsPerLevel: iterationsPerLevel, shouldCancel: shouldCancel) else {
+            throw CancellationError()
+        }
+        return output
+    }
+
+    /// Thread-safe stop flag for a PatchMatch run on another thread.
+    public final class CancellationFlag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var cancelled = false
+
+        public init() {}
+
+        public var isCancelled: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return cancelled
+        }
+
+        public func cancel() {
+            lock.lock()
+            cancelled = true
+            lock.unlock()
+        }
+    }
+
+    /// nil when stopped by `shouldCancel`.
+    static func run(rgba: [UInt8], mask: [UInt8], width: Int, height: Int, patchRadius: Int, iterationsPerLevel: [Int], shouldCancel: () -> Bool) -> [UInt8]? {
+        let count = width * height
+        guard width > 0, height > 0, rgba.count >= count * 4, mask.count >= count, !iterationsPerLevel.isEmpty else { return rgba }
         // Unpack.
         var base = Level(width: width, height: height, r: [Float](repeating: 0, count: width * height), g: [Float](repeating: 0, count: width * height),
                          b: [Float](repeating: 0, count: width * height), hole: [Bool](repeating: false, count: width * height))
@@ -37,22 +74,25 @@ public enum PatchMatchCore {
         diffuseFill(&coarse, iterations: 200)
         let prior = coarse
         var nnf: [Int32] = []
-        solve(&coarse, nnf: &nnf, patchRadius: min(patchRadius, 2), iterations: iterationsPerLevel[min(levels.count - 1, iterationsPerLevel.count - 1)])
+        guard !shouldCancel() else { return nil }
+        guard solve(&coarse, nnf: &nnf, patchRadius: min(patchRadius, 2), iterations: iterationsPerLevel[min(levels.count - 1, iterationsPerLevel.count - 1)], shouldCancel: shouldCancel) else { return nil }
         var previous = coarse
         var previousNNF = nnf
 
         for levelIndex in stride(from: levels.count - 2, through: 0, by: -1) {
+            guard !shouldCancel() else { return nil }
             var current = levels[levelIndex]
             upsampleFill(from: previous, into: &current)
             var currentNNF = upsampleNNF(previousNNF, from: previous, to: current)
             let iterations = iterationsPerLevel[min(levelIndex, iterationsPerLevel.count - 1)]
-            solve(&current, nnf: &currentNNF, patchRadius: patchRadius, iterations: iterations)
+            guard solve(&current, nnf: &currentNNF, patchRadius: patchRadius, iterations: iterations, shouldCancel: shouldCancel) else { return nil }
             previous = current
             previousNNF = currentNNF
         }
 
         // Structure/texture fusion: where the surroundings are smooth (gradients, sky, skin),
         // patch copying alone drifts in colour, so we transfer the smooth prior's low frequencies.
+        guard !shouldCancel() else { return nil }
         fuseWithPrior(&previous, prior: prior)
 
         var output = rgba
@@ -282,12 +322,13 @@ public enum PatchMatchCore {
         }
     }
 
-    /// Runs PatchMatch on one level, updating hole pixels in place.
-    static func solve(_ level: inout Level, nnf: inout [Int32], patchRadius: Int, iterations: Int) {
+    /// Runs PatchMatch on one level, updating hole pixels in place. False when stopped by `shouldCancel`.
+    @discardableResult
+    static func solve(_ level: inout Level, nnf: inout [Int32], patchRadius: Int, iterations: Int, shouldCancel: () -> Bool = { false }) -> Bool {
         let w = level.width, h = level.height
         let count = w * h
         let radius = patchRadius
-        guard w > 2 * radius + 1, h > 2 * radius + 1 else { return }
+        guard w > 2 * radius + 1, h > 2 * radius + 1 else { return true }
 
         // Target pixels: hole dilated by the patch radius (patches straddling the hole boundary drive the reconstruction).
         var target = [Bool](repeating: false, count: count)
@@ -323,7 +364,7 @@ public enum PatchMatchCore {
                 }
             }
         }
-        guard !sourceList.isEmpty else { return }
+        guard !sourceList.isEmpty else { return true }
 
         if nnf.count != count { nnf = [Int32](repeating: -1, count: count) }
         var distances = [Float](repeating: .greatestFiniteMagnitude, count: count)
@@ -366,6 +407,7 @@ public enum PatchMatchCore {
         }
 
         for iteration in 0..<iterations {
+            guard !shouldCancel() else { return false }
             // Recompute distances against the current estimate.
             for i in 0..<count where target[i] {
                 distances[i] = patchDistance(level, i, Int(nnf[i]), bound: .greatestFiniteMagnitude)
@@ -375,7 +417,9 @@ public enum PatchMatchCore {
             let ys = forward ? Array(0..<h) : Array((0..<h).reversed())
             let xs = forward ? Array(0..<w) : Array((0..<w).reversed())
             let step = forward ? -1 : 1
-            for y in ys {
+            for (row, y) in ys.enumerated() {
+                // A full-size pass takes about a second: poll every few rows so a stop lands quickly.
+                if row & 31 == 31, shouldCancel() { return false }
                 for x in xs {
                     let i = y * w + x
                     guard target[i] else { continue }
@@ -452,5 +496,6 @@ public enum PatchMatchCore {
                 level.b[i] = accB[i] / accW[i]
             }
         }
+        return true
     }
 }

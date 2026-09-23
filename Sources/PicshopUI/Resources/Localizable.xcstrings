@@ -129,6 +129,22 @@
         }
       }
     },
+    "A diagnostics report is waiting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A diagnostics report is waiting"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un rapport de diagnostic est en attente"
+          }
+        }
+      }
+    },
     "A soft background, like a big lens": {
       "localizations": {
         "en": {
@@ -1617,22 +1633,6 @@
         }
       }
     },
-    "Cut, grade, caption": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cut, grade, caption"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couper, étalonner, sous-titrer"
-          }
-        }
-      }
-    },
     "Cutout": {
       "localizations": {
         "en": {
@@ -1805,6 +1805,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Grammaire déterministe, instantanée, hors ligne. Toujours active."
+          }
+        }
+      }
+    },
+    "Diagnostics": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnostics"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnostic"
+          }
+        }
+      }
+    },
+    "Dismiss": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dismiss"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignorer"
           }
         }
       }
@@ -2113,22 +2145,6 @@
         }
       }
     },
-    "Edit a PDF": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Edit a PDF"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Modifier un PDF"
-          }
-        }
-      }
-    },
     "Edit by text": {
       "localizations": {
         "en": {
@@ -2173,6 +2189,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modifier le texte"
+          }
+        }
+      }
+    },
+    "Edited": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edited"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifié"
           }
         }
       }
@@ -2621,6 +2653,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sans les euh"
+          }
+        }
+      }
+    },
+    "Filter": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filter"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filtrer"
           }
         }
       }
@@ -3617,22 +3665,6 @@
         }
       }
     },
-    "In this photo": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "In this photo"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sur cette photo"
-          }
-        }
-      }
-    },
     "Included in the app": {
       "localizations": {
         "en": {
@@ -4337,22 +4369,6 @@
         }
       }
     },
-    "Mark up, sign, replace words": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mark up, sign, replace words"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Annoter, signer, remplacer des mots"
-          }
-        }
-      }
-    },
     "Match Colour": {
       "localizations": {
         "en": {
@@ -4541,6 +4557,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Moments"
+          }
+        }
+      }
+    },
+    "More": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plus"
           }
         }
       }
@@ -4781,6 +4813,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gomme neuronale"
+          }
+        }
+      }
+    },
+    "New": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau"
           }
         }
       }
@@ -5037,6 +5085,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sur l'appareil, privé"
+          }
+        }
+      }
+    },
+    "One moment…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One moment…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un instant…"
           }
         }
       }
@@ -5585,6 +5649,38 @@
         }
       }
     },
+    "PicShop quit unexpectedly": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop quit unexpectedly"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop s'est arrêté de façon inattendue"
+          }
+        }
+      }
+    },
+    "PicShop was closed unexpectedly": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop was closed unexpectedly"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop a été fermé de façon inattendue"
+          }
+        }
+      }
+    },
     "PicShop writes down what is said. Strike words and they leave the video.": {
       "localizations": {
         "en": {
@@ -5629,22 +5725,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choisissez une photo ou une vidéo, puis dites simplement ce que vous voulez."
-          }
-        }
-      }
-    },
-    "Pick a shape, then tap the canvas to place it.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pick a shape, then tap the canvas to place it."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Choisissez une forme, puis touchez l'image pour la placer."
           }
         }
       }
@@ -6465,6 +6545,22 @@
         }
       }
     },
+    "Resume": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reprendre"
+          }
+        }
+      }
+    },
     "Retouch": {
       "localizations": {
         "en": {
@@ -6477,22 +6573,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Retouche"
-          }
-        }
-      }
-    },
-    "Retouch, erase, restyle": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Retouch, erase, restyle"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Retoucher, effacer, restyler"
           }
         }
       }
@@ -6785,6 +6865,22 @@
         }
       }
     },
+    "Say what you want to do": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Say what you want to do"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dites ce que vous voulez faire"
+          }
+        }
+      }
+    },
     "Select a clip on the timeline.": {
       "localizations": {
         "en": {
@@ -6913,6 +7009,22 @@
         }
       }
     },
+    "Share diagnostics": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share diagnostics"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partager le diagnostic"
+          }
+        }
+      }
+    },
     "Share last export": {
       "localizations": {
         "en": {
@@ -6925,6 +7037,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Partager le dernier export"
+          }
+        }
+      }
+    },
+    "Share the report": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share the report"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partager le rapport"
           }
         }
       }
@@ -7373,22 +7501,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Commencer"
-          }
-        }
-      }
-    },
-    "Start one from the tiles above.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Start one from the tiles above."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Commencez depuis les tuiles ci-dessus."
           }
         }
       }
@@ -7921,6 +8033,22 @@
         }
       }
     },
+    "The large models download over Wi‑Fi. Everything else already works.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The large models download over Wi‑Fi. Everything else already works."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les grands modèles se téléchargent en Wi‑Fi. Tout le reste fonctionne déjà."
+          }
+        }
+      }
+    },
     "The layer moves with the subject under it": {
       "localizations": {
         "en": {
@@ -7937,6 +8065,22 @@
         }
       }
     },
+    "The photo changed in the meantime. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The photo changed in the meantime. Try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La photo a changé entre-temps. Réessayez."
+          }
+        }
+      }
+    },
     "The project and its edits are removed from this iPhone. The original in Photos stays.": {
       "localizations": {
         "en": {
@@ -7949,6 +8093,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Le projet et ses retouches sont retirés de cet iPhone. L'original dans Photos est conservé."
+          }
+        }
+      }
+    },
+    "The report says what PicShop was doing, including your last commands, with the device model and free memory. No photos, videos or recordings. It leaves your iPhone only if you share it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The report says what PicShop was doing, including your last commands, with the device model and free memory. No photos, videos or recordings. It leaves your iPhone only if you share it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le rapport indique ce que faisait PicShop, y compris vos dernières commandes, avec le modèle de l'appareil et la mémoire libre. Aucune photo, vidéo ni enregistrement. Il ne quitte votre iPhone que si vous le partagez."
           }
         }
       }
@@ -8957,22 +9117,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "les véhicules"
-          }
-        }
-      }
-    },
-    "“Efface le chien” · “Make it warmer” · “Ajoute des sous-titres”": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "“Efface le chien” · “Make it warmer” · “Ajoute des sous-titres”"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "« Efface le chien » · « Rends-la plus chaude » · « Ajoute des sous-titres »"
           }
         }
       }

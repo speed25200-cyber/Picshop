@@ -29,13 +29,17 @@ public final class VoiceController {
         case handsFree
     }
 
-    public private(set) var state: State = .idle
+    public private(set) var state: State = .idle {
+        didSet {
+            // Replies are not spoken into an open microphone.
+            VoiceFeedback.shared.isMicrophoneActive = state == .preparing || state == .listening || state == .finishing
+        }
+    }
     public private(set) var partialTranscript = ""
     public private(set) var level: Double = 0
     public var mode: Mode = .tapToTalk
-    public var locale: Locale {
-        didSet { if locale != oldValue { engineSession = nil } }
-    }
+    /// Read by the next session; each utterance builds its own recogniser.
+    public var locale: Locale
     /// Seconds of silence after speech that end an utterance in tap/hands-free modes.
     public var silenceTimeout: TimeInterval = 1.1
     /// Maximum utterance length.
@@ -44,16 +48,24 @@ public final class VoiceController {
     /// Called with the final transcript of each utterance.
     public var onFinalTranscript: ((String) -> Void)?
 
-    private let audioEngine = AVAudioEngine()
+    /// Replaced after an audio configuration change: a fresh engine picks up the new hardware format.
+    private var audioEngine = AVAudioEngine()
     private var engineSession: (any TranscriptionSession)?
     private var silenceTask: Task<Void, Never>?
     private var startedAt: Date?
     private var heardSpeech = false
     private var lastSpeechAt: Date?
     private var levelSmoother = 0.0
+    /// Bumped by every start and stop: a session whose number is stale stops touching state or the engine.
+    private var generation = 0
+    /// True from the moment a session starts ending until the engine and recogniser are released.
+    private var isEnding = false
+    private var lastRecovery: Date?
+    @ObservationIgnored private var observers: [NSObjectProtocol] = []
 
     public init(locale: Locale = Locale.current) {
         self.locale = locale
+        observeAudioChanges()
     }
 
     // MARK: - Permissions
@@ -75,23 +87,41 @@ public final class VoiceController {
 
     public var isListening: Bool { state == .listening || state == .preparing }
 
+    /// False while a session is still starting or being released.
+    public var canStart: Bool {
+        switch state {
+        case .idle, .unavailable: return !isEnding
+        case .preparing, .listening, .finishing: return false
+        }
+    }
+
     public func toggle() {
         if isListening { stop() } else { start() }
     }
 
-    public func start() {
-        guard !isListening else { return }
+    /// - Parameter waitingForSpeech: an automatic restart (follow-up question, hands-free)
+    ///   lets a spoken reply finish first; a tap cuts it so the microphone does not hear it.
+    public func start(waitingForSpeech: Bool = false) {
+        guard canStart else { return }
+        generation += 1
+        let current = generation
         state = .preparing
         partialTranscript = ""
         heardSpeech = false
         lastSpeechAt = nil
         startedAt = Date()
-        Task { await beginSession() }
+        if !waitingForSpeech { VoiceFeedback.shared.stop() }
+        Task { await beginSession(generation: current, waitingForSpeech: waitingForSpeech) }
     }
 
     /// Stops listening; the final transcript is delivered through `onFinalTranscript`.
     public func stop() {
         guard isListening else { return }
+        guard state == .listening else {
+            // Nothing was heard yet: stopping while preparing is a cancel.
+            cancel()
+            return
+        }
         state = .finishing
         silenceTask?.cancel()
         Task { await endSession(deliver: true) }
@@ -104,64 +134,162 @@ public final class VoiceController {
 
     // MARK: - Session lifecycle
 
-    private func beginSession() async {
+    private func beginSession(generation current: Int, waitingForSpeech: Bool) async {
         var granted = Self.permissionsGranted
         if !granted { granted = await Self.requestPermissions() }
+        guard current == generation else { return }
         guard granted else {
             state = .unavailable(PicshopError.permissionDenied("the microphone").message)
             return
         }
+        if waitingForSpeech {
+            await VoiceFeedback.shared.waitUntilFinished()
+            guard current == generation else { return }
+        }
+        var created: (any TranscriptionSession)?
+        var tapInstalled = false
+        let engine = audioEngine
         do {
             try configureAudioSession()
             let session = try await makeSession()
-            engineSession = session
-            let input = audioEngine.inputNode
+            created = session
+            guard current == generation else { throw CancellationError() }
+            try await session.start { [weak self] text, isFinal in
+                Task { @MainActor [weak self] in self?.handleResult(text, isFinal: isFinal, generation: current) }
+            }
+            guard current == generation, engine === audioEngine else { throw CancellationError() }
+            // The format is read here, right before the tap, and nowhere earlier: a route change
+            // during the awaits above (AirPods, a call, speech playback) makes an earlier read stale,
+            // and a tap with a stale or empty format raises an exception Swift cannot catch.
+            let input = engine.inputNode
             let format = input.outputFormat(forBus: 0)
+            guard format.sampleRate > 0, format.channelCount > 0 else {
+                throw PicshopError.speechUnavailable("no microphone input")
+            }
+            session.prepare(inputFormat: format)
             input.removeTap(onBus: 0)
             input.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
                 let rms = VoiceController.rms(of: buffer)
-                Task { @MainActor [weak self] in self?.updateLevel(rms) }
+                Task { @MainActor [weak self] in self?.updateLevel(rms, generation: current) }
                 session.append(buffer)
             }
-            try await session.start { [weak self] text, isFinal in
-                Task { @MainActor [weak self] in self?.handleResult(text, isFinal: isFinal) }
-            }
-            audioEngine.prepare()
-            try audioEngine.start()
+            tapInstalled = true
+            engine.prepare()
+            try engine.start()
+            engineSession = session
+            // Timeouts count from when the microphone is really open, not from the tap.
+            startedAt = Date()
             state = .listening
             scheduleTimeout()
         } catch {
+            if tapInstalled { engine.inputNode.removeTap(onBus: 0) }
+            engine.stop()
+            if let created { Task { _ = try? await created.finish() } }
+            // A newer start or a stop took over: it owns the state now.
+            guard current == generation else { return }
+            if error is CancellationError {
+                state = .idle
+                return
+            }
             PSLog.error("voice start failed: \(error)", category: .speech)
-            audioEngine.inputNode.removeTap(onBus: 0)
-            audioEngine.stop()
             state = .unavailable(PicshopError.speechUnavailable(error.localizedDescription).message)
         }
     }
 
     private func endSession(deliver: Bool) async {
-        audioEngine.inputNode.removeTap(onBus: 0)
-        audioEngine.stop()
+        guard !isEnding else { return }
+        isEnding = true
+        generation += 1
+        let current = generation
+        silenceTask?.cancel()
+        releaseEngine(rebuild: false)
         let session = engineSession
         engineSession = nil
         var finalText = partialTranscript
         if let session {
             if let text = try? await session.finish(), !text.isEmpty { finalText = text }
         }
+        isEnding = false
         level = 0
+        levelSmoother = 0
+        guard current == generation else { return }
         state = .idle
         let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        partialTranscript = ""
         if deliver, !trimmed.isEmpty {
             onFinalTranscript?(trimmed)
         }
-        partialTranscript = ""
         if deliver, mode == .handsFree, !trimmed.isEmpty {
-            // Brief pause so spoken feedback isn't transcribed, then keep listening.
+            // Brief pause, then keep listening once any spoken reply is over.
             try? await Task.sleep(for: .milliseconds(900))
-            if state == .idle { start() }
+            if state == .idle, current == generation { start(waitingForSpeech: true) }
         }
     }
 
-    private func handleResult(_ text: String, isFinal: Bool) {
+    /// Removes the tap and stops the engine; after a configuration change the engine is replaced.
+    private func releaseEngine(rebuild: Bool) {
+        let engine = audioEngine
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        engine.reset()
+        if rebuild { audioEngine = AVAudioEngine() }
+    }
+
+    // MARK: - Audio interruptions
+
+    private func observeAudioChanges() {
+        let center = NotificationCenter.default
+        observers.append(center.addObserver(forName: .AVAudioEngineConfigurationChange, object: nil, queue: .main) { [weak self] notification in
+            let engineID = (notification.object as AnyObject?).map(ObjectIdentifier.init)
+            Task { @MainActor [weak self] in
+                guard let self, engineID == nil || engineID == ObjectIdentifier(self.audioEngine) else { return }
+                self.recoverFromAudioChange("engine configuration changed", restart: true)
+            }
+        })
+        #if os(iOS) || os(tvOS) || os(visionOS)
+        observers.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] notification in
+            let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            guard raw.flatMap(AVAudioSession.InterruptionType.init(rawValue:)) == .began else { return }
+            Task { @MainActor [weak self] in self?.recoverFromAudioChange("audio interrupted", restart: false) }
+        })
+        observers.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] notification in
+            let raw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            // Only a device coming or going changes the input format; our own category changes do not.
+            guard let reason = raw.flatMap(AVAudioSession.RouteChangeReason.init(rawValue:)),
+                  reason == .newDeviceAvailable || reason == .oldDeviceUnavailable else { return }
+            Task { @MainActor [weak self] in self?.recoverFromAudioChange("audio route changed", restart: true) }
+        })
+        #endif
+    }
+
+    /// The hardware changed under a live session: drop it without delivering half a
+    /// sentence, rebuild the engine, and listen again only if it was listening.
+    private func recoverFromAudioChange(_ reason: String, restart: Bool) {
+        guard !isEnding else { return }
+        guard state == .listening else {
+            // Idle: nothing to stop, but a fresh engine drops the old hardware format. While
+            // preparing, the format is read just before the tap, after this change.
+            if state == .idle { audioEngine = AVAudioEngine() }
+            return
+        }
+        PSLog.info("voice: \(reason), restarting the microphone", category: .speech)
+        silenceTask?.cancel()
+        let now = Date()
+        // Restart at most once every few seconds, so a flapping route cannot loop.
+        let mayRestart = restart && (lastRecovery.map { now.timeIntervalSince($0) > 3 } ?? true)
+        lastRecovery = now
+        Task {
+            await endSession(deliver: false)
+            releaseEngine(rebuild: true)
+            let after = generation
+            guard mayRestart else { return }
+            try? await Task.sleep(for: .milliseconds(350))
+            if state == .idle, after == generation { start(waitingForSpeech: true) }
+        }
+    }
+
+    private func handleResult(_ text: String, isFinal: Bool, generation current: Int) {
+        guard current == generation else { return }
         partialTranscript = text
         if !text.isEmpty {
             heardSpeech = true
@@ -172,7 +300,8 @@ public final class VoiceController {
         }
     }
 
-    private func updateLevel(_ rms: Double) {
+    private func updateLevel(_ rms: Double, generation current: Int) {
+        guard current == generation, state == .listening else { return }
         // Map RMS (≈0…0.3 for speech) to 0…1 with smoothing for the orb animation.
         let target = min(1, pow(rms * 6, 0.7))
         levelSmoother = levelSmoother * 0.6 + target * 0.4
@@ -215,11 +344,11 @@ public final class VoiceController {
         #endif
     }
 
+    /// A fresh recogniser per utterance; its converter is built later from the tap's format.
     private func makeSession() async throws -> any TranscriptionSession {
-        if let existing = engineSession { return existing }
         if #available(iOS 26.0, macOS 26.0, *) {
             if await AnalyzerTranscriptionSession.isSupported(locale: locale) {
-                return try await AnalyzerTranscriptionSession(locale: locale, inputFormat: audioEngine.inputNode.outputFormat(forBus: 0))
+                return try await AnalyzerTranscriptionSession(locale: locale)
             }
         }
         return try LegacyTranscriptionSession(locale: locale)
@@ -239,6 +368,9 @@ public final class VoiceController {
 
 protocol TranscriptionSession: AnyObject, Sendable {
     func start(onResult: @escaping @Sendable (String, Bool) -> Void) async throws
+    /// The microphone format, read right before the tap is installed.
+    func prepare(inputFormat: AVAudioFormat)
+    /// Called on the realtime audio thread.
     func append(_ buffer: AVAudioPCMBuffer)
     /// Finishes recognition and returns the best final transcript.
     func finish() async throws -> String
@@ -249,8 +381,8 @@ protocol TranscriptionSession: AnyObject, Sendable {
 final class AnalyzerTranscriptionSession: TranscriptionSession, @unchecked Sendable {
     private let transcriber: SpeechTranscriber
     private let analyzer: SpeechAnalyzer
-    private let inputFormat: AVAudioFormat
-    private var analyzerFormat: AVAudioFormat?
+    private let analyzerFormat: AVAudioFormat?
+    /// Guarded by `lock`: `append` runs on the audio thread while `finish` runs elsewhere.
     private var converter: AVAudioConverter?
     private var continuation: AsyncStream<AnalyzerInput>.Continuation?
     private var resultsTask: Task<Void, Never>?
@@ -263,23 +395,30 @@ final class AnalyzerTranscriptionSession: TranscriptionSession, @unchecked Senda
         return supported.contains { $0.identifier(.bcp47) == locale.identifier(.bcp47) || $0.language.languageCode == locale.language.languageCode }
     }
 
-    init(locale: Locale, inputFormat: AVAudioFormat) async throws {
-        transcriber = SpeechTranscriber(locale: locale, transcriptionOptions: [], reportingOptions: [.volatileResults], attributeOptions: [])
+    init(locale: Locale) async throws {
+        let transcriber = SpeechTranscriber(locale: locale, transcriptionOptions: [], reportingOptions: [.volatileResults], attributeOptions: [])
+        self.transcriber = transcriber
         analyzer = SpeechAnalyzer(modules: [transcriber])
-        self.inputFormat = inputFormat
         let installation = try await AssetInventory.assetInstallationRequest(supporting: [transcriber])
         if let installation {
             try await installation.downloadAndInstall()
         }
         analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
-        if let analyzerFormat, analyzerFormat != inputFormat {
-            converter = AVAudioConverter(from: inputFormat, to: analyzerFormat)
-        }
+    }
+
+    func prepare(inputFormat: AVAudioFormat) {
+        let converter = Self.converter(from: inputFormat, to: analyzerFormat)
+        lock.withLock { self.converter = converter }
+    }
+
+    private static func converter(from input: AVAudioFormat, to output: AVAudioFormat?) -> AVAudioConverter? {
+        guard let output, input.sampleRate > 0, input.channelCount > 0, input != output else { return nil }
+        return AVAudioConverter(from: input, to: output)
     }
 
     func start(onResult: @escaping @Sendable (String, Bool) -> Void) async throws {
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
-        self.continuation = continuation
+        lock.withLock { self.continuation = continuation }
         resultsTask = Task { [transcriber, weak self] in
             do {
                 for try await result in transcriber.results {
@@ -304,10 +443,22 @@ final class AnalyzerTranscriptionSession: TranscriptionSession, @unchecked Senda
     }
 
     func append(_ buffer: AVAudioPCMBuffer) {
+        let inputFormat = buffer.format
+        guard buffer.frameLength > 0, inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else { return }
+        // One snapshot per buffer; a buffer in a new format (route change) gets a new converter.
+        let (continuation, converter): (AsyncStream<AnalyzerInput>.Continuation?, AVAudioConverter?) = lock.withLock {
+            if let current = self.converter, current.inputFormat != inputFormat {
+                self.converter = Self.converter(from: inputFormat, to: analyzerFormat)
+            } else if self.converter == nil, let analyzerFormat, analyzerFormat != inputFormat {
+                self.converter = Self.converter(from: inputFormat, to: analyzerFormat)
+            }
+            return (self.continuation, self.converter)
+        }
         guard let continuation else { return }
         if let converter, let analyzerFormat {
             let ratio = analyzerFormat.sampleRate / inputFormat.sampleRate
-            let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 32
+            guard ratio.isFinite, ratio > 0 else { return }
+            let capacity = AVAudioFrameCount(min(Double(UInt32.max / 2), (Double(buffer.frameLength) * ratio).rounded(.up))) + 32
             guard let converted = AVAudioPCMBuffer(pcmFormat: analyzerFormat, frameCapacity: capacity) else { return }
             var consumed = false
             var error: NSError?
@@ -323,14 +474,17 @@ final class AnalyzerTranscriptionSession: TranscriptionSession, @unchecked Senda
             if error == nil, converted.frameLength > 0 {
                 continuation.yield(AnalyzerInput(buffer: converted))
             }
-        } else {
+        } else if analyzerFormat == nil || analyzerFormat == inputFormat {
             continuation.yield(AnalyzerInput(buffer: buffer))
         }
     }
 
     func finish() async throws -> String {
+        let continuation: AsyncStream<AnalyzerInput>.Continuation? = lock.withLock {
+            defer { self.continuation = nil }
+            return self.continuation
+        }
         continuation?.finish()
-        continuation = nil
         try await analyzer.finalizeAndFinishThroughEndOfInput()
         resultsTask?.cancel()
         return lock.withLock { latest }
@@ -386,7 +540,10 @@ final class LegacyTranscriptionSession: TranscriptionSession, @unchecked Sendabl
         }
     }
 
+    func prepare(inputFormat: AVAudioFormat) {}
+
     func append(_ buffer: AVAudioPCMBuffer) {
+        guard buffer.frameLength > 0 else { return }
         request.append(buffer)
     }
 

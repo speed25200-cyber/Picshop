@@ -65,10 +65,10 @@ struct EditorIntelligenceGlow: View {
 /// being worked out ("Listening…", "Removing the dog…").
 public struct ShimmerText: View {
     let text: String
-    var font: Font = PSFont.body(14)
+    var font: Font = PSFont.control()
     @Environment(\.psReducedMotion) private var reducedMotion
 
-    public init(_ text: String, font: Font = PSFont.body(14)) {
+    public init(_ text: String, font: Font = PSFont.control()) {
         self.text = text
         self.font = font
     }
@@ -110,7 +110,7 @@ public struct MagicGlyph: View {
 
     public var body: some View {
         Image(systemName: symbol)
-            .font(.system(size: size, weight: .semibold))
+            .font(.system(size: size, weight: .medium))
             .symbolRenderingMode(.hierarchical)
             .psIntelligenceForeground()
     }

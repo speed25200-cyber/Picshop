@@ -65,11 +65,11 @@ struct ColorControls: View {
         VStack(alignment: .leading, spacing: 10) {
             if let lut {
                 HStack(spacing: 10) {
-                    Image(systemName: "cube.transparent.fill").font(.system(size: 16, weight: .semibold)).foregroundStyle(PSTheme.accent)
-                    Text(lut.title).font(PSFont.headline(14)).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
+                    Image(systemName: "cube.transparent.fill").font(.system(size: 17, weight: .medium)).foregroundStyle(PSTheme.accent)
+                    Text(lut.title).font(.subheadline.weight(.medium)).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
                     Spacer()
                     Button { Haptics.tap(); onRemoveLUT?() } label: {
-                        Image(systemName: "xmark").font(.system(size: 12, weight: .bold)).frame(width: 30, height: 30).background(Circle().fill(Color.white.opacity(0.08)))
+                        Image(systemName: "xmark").font(.system(size: 13, weight: .medium)).frame(width: 30, height: 30).background(Circle().fill(PanelChipStyle.fill))
                     }
                     .buttonStyle(PSPressStyle(scale: 0.9)).foregroundStyle(PSTheme.textSecondary)
                     .accessibilityLabel(L("Remove the LUT"))
@@ -85,17 +85,17 @@ struct ColorControls: View {
             } else {
                 Button { Haptics.tap(); importsLUT = true } label: {
                     HStack(spacing: 12) {
-                        Image(systemName: "cube.transparent").font(.system(size: 22, weight: .semibold)).foregroundStyle(PSTheme.accent)
-                            .frame(width: 46, height: 46).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(L("Import a LUT")).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
-                            Text(L("A .cube look from Resolve, Premiere or a LUT pack.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                        Image(systemName: "cube.transparent").font(.system(size: 20, weight: .regular)).foregroundStyle(PSTheme.textPrimary)
+                            .frame(width: 44, height: 44).background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L("Import a LUT")).font(.subheadline.weight(.semibold)).foregroundStyle(PSTheme.textPrimary)
+                            Text(L("A .cube look from Resolve, Premiere or a LUT pack.")).font(.footnote).foregroundStyle(PSTheme.textSecondary)
                         }
                         Spacer(minLength: 0)
-                        Image(systemName: "chevron.right").font(.system(size: 12, weight: .bold)).foregroundStyle(PSTheme.textTertiary)
+                        Image(systemName: "chevron.right").font(.system(size: 13, weight: .medium)).foregroundStyle(PSTheme.textTertiary)
                     }
-                    .padding(10)
-                    .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .padding(8)
+                    .background(PanelChipStyle.fill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(PSPressStyle(scale: 0.97))
             }
@@ -177,7 +177,8 @@ struct ColorControls: View {
                         } onEditing: { editing in
                             if editing { onBegin("Colour Grading") } else { onEnd() }
                         }
-                        Text(Self.name(range).uppercased()).font(PSFont.label(10)).tracking(0.5).foregroundStyle(PSTheme.textSecondary)
+                        Text(Self.name(range)).font(.caption2.weight(.medium)).textCase(.uppercase).tracking(0.4).foregroundStyle(PSTheme.textSecondary)
+                            .lineLimit(1).minimumScaleFactor(0.8)
                         LuminanceSlider(value: grade[range].luminance) { value in
                             var next = grade
                             var wheel = next[range]

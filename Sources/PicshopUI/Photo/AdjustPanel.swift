@@ -106,8 +106,8 @@ struct ValueRing: View {
 
     var body: some View {
         ZStack {
-            Circle().fill(Color.white.opacity(isSelected ? 0.14 : 0.06))
-            Circle().stroke(Color.white.opacity(0.12), lineWidth: 2)
+            Circle().fill(Color.white.opacity(isSelected ? 0.14 : 0.08))
+            Circle().stroke(Color.white.opacity(0.08), lineWidth: 2)
             if isSet {
                 Circle()
                     .trim(from: 0, to: CGFloat(min(1, abs(value))))
@@ -116,18 +116,17 @@ struct ValueRing: View {
                     .scaleEffect(x: value < 0 ? -1 : 1)
             }
             if isSelected && isSet {
-                Text(Self.formatted(value)).font(PSFont.mono(12).weight(.semibold)).foregroundStyle(PSTheme.accent)
+                Text(Self.formatted(value)).font(.system(size: 13, weight: .semibold, design: .rounded).monospacedDigit()).foregroundStyle(PSTheme.accent)
                     .contentTransition(.numericText())
                     .minimumScaleFactor(0.7)
             } else {
                 Image(systemName: parameter.symbolName)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 17, weight: isSelected ? .medium : .regular))
                     .foregroundStyle(isSelected ? Color.white : (isSet ? PSTheme.accent : PSTheme.textSecondary))
             }
         }
         .frame(width: 46, height: 46)
         .overlay(Circle().strokeBorder(isSelected ? Color.white.opacity(0.9) : .clear, lineWidth: 1.5).padding(-4))
-        .scaleEffect(isSelected ? 1.06 : 1)
         .animation(PSMotion.quick, value: isSelected)
         .animation(PSMotion.numeric, value: value)
         .padding(.vertical, 6)

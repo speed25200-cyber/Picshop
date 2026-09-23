@@ -6,10 +6,13 @@ import PicshopImaging
 import PicshopVideo
 import PicshopSpeech
 
-/// Preferences: AI brain, models, performance, voice, feedback, export.
+/// Preferences: AI brain, models, performance, voice, feedback, export,
+/// diagnostics.
 public struct SettingsView: View {
     @Environment(\.picshop) private var app
     @Environment(\.dismiss) private var dismiss
+    /// The diagnostics text file, written when the screen opens.
+    @State private var reportURL: URL?
 
     public init() {}
 
@@ -23,6 +26,7 @@ public struct SettingsView: View {
                     performanceSection(app)
                     voiceSection(app)
                     exportSection(app)
+                    diagnosticsSection(app)
                     aboutSection
                 }
             }
@@ -39,17 +43,14 @@ public struct SettingsView: View {
     private var identityHeader: some View {
         Section {
             HStack(spacing: 14) {
-                let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+                let shape = RoundedRectangle(cornerRadius: PSRadius.tile, style: .continuous)
                 Image(systemName: "sparkles")
                     .font(.system(size: 24, weight: .medium))
-                    .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(.white)
                     .frame(width: 58, height: 58)
-                    .background { HeroMesh().clipShape(shape).overlay(shape.fill(LinearGradient(colors: [Color.white.opacity(0.22), .clear], startPoint: .top, endPoint: .center))) }
-                    .overlay(shape.strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
-                    .shadow(color: PSTheme.voice.opacity(0.4), radius: 14, y: 6)
+                    .background { HeroMesh().clipShape(shape) }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("PicShop").font(PSFont.display(22)).foregroundStyle(PSTheme.textPrimary).tracking(-0.4)
+                    Text("PicShop").font(.title2.weight(.bold)).foregroundStyle(PSTheme.textPrimary)
                     HStack(spacing: 6) {
                         Text(L("Version")).foregroundStyle(PSTheme.textTertiary)
                         Text("\(BuildInfo.version) (\(BuildInfo.buildNumber))")
@@ -58,7 +59,7 @@ public struct SettingsView: View {
                     }
                     .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
                     HStack(spacing: 6) {
-                        Image(systemName: "number").font(.system(size: 9, weight: .bold))
+                        Image(systemName: "number").font(.system(size: 9, weight: .medium))
                         Text(BuildInfo.commit).font(PSFont.mono(11))
                         if !BuildInfo.branch.isEmpty { Text(BuildInfo.branch).lineLimit(1).truncationMode(.middle) }
                         if !BuildInfo.date.isEmpty { Text(BuildInfo.date) }
@@ -79,12 +80,12 @@ public struct SettingsView: View {
     private func brainSection(_ app: AppEnvironment) -> some View {
         Section {
             HStack(spacing: 12) {
-                Image(systemName: app.activeEngine == .rules ? "bolt.fill" : "brain.head.profile")
-                    .font(.system(size: 18, weight: .semibold))
+                Image(systemName: app.activeEngine == .rules ? "bolt" : "brain.head.profile")
+                    .font(.system(size: 17, weight: .medium))
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(PSTheme.accent)
+                    .psIntelligenceForeground()
                     .frame(width: 36, height: 36)
-                    .background(PSTheme.accent.opacity(0.16), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(PSTheme.fill, in: RoundedRectangle(cornerRadius: PSRadius.thumb, style: .continuous))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(app.activeEngine.displayName).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
                     Text(description(for: app.activeEngine, app: app)).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
@@ -126,7 +127,7 @@ public struct SettingsView: View {
                     }
                 }
             }
-            SettingsRow(systemName: "arrow.down.circle.fill", tint: Color(red: 0.2, green: 0.5, blue: 1.0)) {
+            SettingsRow(systemName: "arrow.down.circle.fill", tint: PSTheme.voice) {
                 Toggle(L("Download large models automatically"), isOn: Binding(get: { app.settings.autoInstallsModels }, set: { value in
                     app.settings.autoInstallsModels = value
                     if value { Task { await app.autoInstallModels() } }
@@ -182,7 +183,7 @@ public struct SettingsView: View {
             }
         case .notInstalled:
             Button(L("Get")) { install(model, app: app) }
-                .font(PSFont.caption(13)).buttonStyle(.borderedProminent).tint(PSTheme.voice)
+                .font(.subheadline.weight(.semibold)).buttonStyle(.glass).controlSize(.small)
         }
     }
 
@@ -202,11 +203,11 @@ public struct SettingsView: View {
         Section {
             HStack(spacing: 12) {
                 Image(systemName: app.performance.statusSymbol)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 17, weight: .medium))
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(app.performance.statusTint)
                     .frame(width: 36, height: 36)
-                    .background(app.performance.statusTint.opacity(0.16), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(PSTheme.fill, in: RoundedRectangle(cornerRadius: PSRadius.thumb, style: .continuous))
                     .contentTransition(.symbolEffect(.replace))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(app.performance.statusTitle).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
@@ -287,6 +288,44 @@ public struct SettingsView: View {
         }
     }
 
+    /// A session that ended badly offers its report; the current breadcrumbs
+    /// can always be shared when asking for help.
+    @ViewBuilder
+    private func diagnosticsSection(_ app: AppEnvironment) -> some View {
+        Section {
+            if let report = app.pendingCrashReport {
+                HStack(spacing: 12) {
+                    SettingsRowIcon(systemName: "exclamationmark.triangle.fill", tint: PSTheme.warning)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(report.kind == .crash ? L("PicShop quit unexpectedly") : L("PicShop was closed unexpectedly"))
+                            .font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
+                        Text(report.date, format: .relative(presentation: .named))
+                            .font(PSFont.footnote()).foregroundStyle(PSTheme.textSecondary)
+                    }
+                }
+            }
+            if let reportURL {
+                ShareLink(item: reportURL, subject: Text(verbatim: "PicShop diagnostics")) {
+                    Label(app.pendingCrashReport == nil ? L("Share diagnostics") : L("Share the report"), systemImage: "square.and.arrow.up")
+                }
+            }
+            if app.pendingCrashReport != nil {
+                Button(L("Dismiss")) {
+                    Haptics.tap()
+                    app.dismissCrashReport()
+                }
+                .foregroundStyle(PSTheme.textSecondary)
+            }
+        } header: {
+            Text(L("Diagnostics"))
+        } footer: {
+            Text(L("The report says what PicShop was doing, including your last commands, with the device model and free memory. No photos, videos or recordings. It leaves your iPhone only if you share it."))
+        }
+        .task(id: app.pendingCrashReport?.id) {
+            reportURL = app.writeCrashReport()
+        }
+    }
+
     private var aboutSection: some View {
         Section {
             HStack(spacing: 12) {
@@ -347,7 +386,7 @@ struct SegmentedChoice<Value: Hashable>: View {
                     withAnimation(PSMotion.standard) { selection = option.value }
                 } label: {
                     VStack(spacing: 4) {
-                        Image(systemName: option.symbol).font(.system(size: 15, weight: .semibold)).symbolRenderingMode(.hierarchical)
+                        Image(systemName: option.symbol).font(.system(size: 15, weight: .medium)).symbolRenderingMode(.hierarchical)
                         Text(option.title).font(PSFont.caption(11)).lineLimit(1).minimumScaleFactor(0.8)
                     }
                     .frame(maxWidth: .infinity)
@@ -356,7 +395,6 @@ struct SegmentedChoice<Value: Hashable>: View {
                     .background {
                         if isActive {
                             RoundedRectangle(cornerRadius: 12, style: .continuous).fill(PSTheme.selection)
-                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 0.75))
                                 .matchedGeometryEffect(id: "segment", in: indicator)
                         }
                     }
@@ -368,22 +406,27 @@ struct SegmentedChoice<Value: Hashable>: View {
         }
         .padding(4)
         .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 }
 
-/// Coloured squircle in front of a settings row, like the system Settings app.
+/// Squircle in front of a settings row. Neutral, so colour keeps its
+/// meaning: `tint` shows only for success, warning and the voice; any
+/// other tint draws white.
 struct SettingsRowIcon: View {
     let systemName: String
     let tint: Color
 
+    private var glyphColor: Color {
+        [PSTheme.success, PSTheme.warning, PSTheme.voice].contains(tint) ? tint : PSTheme.textPrimary
+    }
+
     var body: some View {
         Image(systemName: systemName)
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: 13, weight: .medium))
             .symbolRenderingMode(.hierarchical)
-            .foregroundStyle(.white)
+            .foregroundStyle(glyphColor)
             .frame(width: 28, height: 28)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(tint.gradient))
+            .background(RoundedRectangle(cornerRadius: PSRadius.tiny + 1, style: .continuous).fill(PSTheme.fill))
     }
 }
 

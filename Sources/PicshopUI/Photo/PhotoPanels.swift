@@ -62,25 +62,42 @@ struct PhotoToolPanel: View {
         switch tool {
         case .crop:
             return AnyView(HStack(spacing: 8) {
-                Button { Haptics.tap(); session.cancelCrop(); session.activeTool = nil } label: {
-                    Text(L("Cancel")).font(PSFont.caption(13)).padding(.horizontal, 12).padding(.vertical, 7)
-                }
-                .buttonStyle(.plain).foregroundStyle(PSTheme.textPrimary).psGlass(interactive: true)
-                Button { session.commitCrop() } label: {
-                    Text(L("Done")).font(PSFont.headline(13)).padding(.horizontal, 14).padding(.vertical, 7)
-                }
-                .buttonStyle(.plain).foregroundStyle(PSTheme.onAccent).psAccentFill(Capsule())
+                PanelChip(title: L("Cancel")) { session.cancelCrop(); session.activeTool = nil }
+                PanelActionButton(title: L("Done")) { session.commitCrop() }
             })
         case .erase:
             return session.brushStrokes.isEmpty ? nil : AnyView(
-                Button { Haptics.confirm(); session.commitBrushErase() } label: {
-                    Label(L("Erase painted area"), systemImage: "sparkles").font(PSFont.headline(13)).padding(.horizontal, 12).padding(.vertical, 7)
-                }
-                .buttonStyle(.plain).foregroundStyle(PSTheme.onAccent).psAccentFill(Capsule())
+                PanelActionButton(title: L("Apply"), symbol: "eraser") { session.commitBrushErase() }
+                    .accessibilityLabel(L("Erase painted area"))
             )
         default:
             return nil
         }
+    }
+}
+
+/// The action that finishes a panel's work (Done, Erase): the one yellow
+/// capsule in the panel, beside the segments.
+struct PanelActionButton: View {
+    let title: String
+    var symbol: String? = nil
+    let action: () -> Void
+
+    var body: some View {
+        Button { Haptics.confirm(); action() } label: {
+            HStack(spacing: 6) {
+                if let symbol { Image(systemName: symbol).font(.system(size: 15, weight: .medium)) }
+                Text(title).lineLimit(1)
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(PSTheme.onAccent)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 34)
+            .background(Capsule().fill(PSTheme.accent))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PSPressStyle(scale: 0.96))
+        .transition(.opacity.combined(with: .scale(scale: 0.9)))
     }
 }
 
@@ -120,7 +137,7 @@ struct LooksPanel: View {
                             withAnimation(PSMotion.standard) { session.applyLook(preset, intensity: intensity) }
                         } label: {
                             VStack(spacing: 6) {
-                                let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 ZStack {
                                     if let image = thumbnails[preset] {
                                         Image(uiImage: image).resizable().scaledToFill()
@@ -132,16 +149,10 @@ struct LooksPanel: View {
                                 }
                                 .frame(width: 68, height: 68)
                                 .clipShape(shape)
-                                .overlay(shape.strokeBorder(Color.white.opacity(active ? 0 : 0.08), lineWidth: 1))
                                 .overlay {
                                     if active {
-                                        shape.strokeBorder(PSTheme.accentGradient, lineWidth: 2.5)
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .font(.system(size: 14, weight: .bold))
-                                            .foregroundStyle(.white, PSTheme.accent)
-                                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                                            .padding(4)
-                                            .transition(.scale.combined(with: .opacity))
+                                        shape.strokeBorder(PSTheme.accent, lineWidth: 2)
+                                            .transition(.opacity)
                                     }
                                 }
                                 .overlay(alignment: .topLeading) {
@@ -153,8 +164,7 @@ struct LooksPanel: View {
                                             .transition(.scale.combined(with: .opacity))
                                     }
                                 }
-                                .scaleEffect(active ? 1.04 : 1)
-                                Text(localizedName(preset)).font(PSFont.caption(10.5)).fontWeight(active ? .semibold : .medium)
+                                Text(localizedName(preset)).font(.caption2.weight(active ? .semibold : .medium))
                                     .foregroundStyle(active ? PSTheme.textPrimary : PSTheme.textSecondary).lineLimit(1)
                             }
                             .frame(width: 72)
@@ -174,15 +184,13 @@ struct LooksPanel: View {
                         .font(PSFont.headline(13))
                 }
                 .buttonStyle(MagicButtonStyle(compact: true))
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .transition(.opacity)
             }
             if session.document.baseLayer?.edits.resolvedLook != nil {
                 DialSlider(value: $intensity, range: 0...1, neutral: 1, label: L("Intensity"), format: { "\(Int(($0 * 100).rounded()))%" }) { editing in
                     if editing { session.beginSliderInteraction(.saturation) } else { session.endSliderInteraction() }
                 }
                 .onChange(of: intensity) { _, newValue in session.setLookIntensity(newValue) }
-            } else {
-                Text(L("Pick a look, then tune its intensity.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
             }
         }
         .task {
@@ -231,55 +239,48 @@ struct ErasePanel: View {
     @Bindable var session: PhotoEditorSession
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
+            // One row: the categories, then what was found in this photo.
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    EraseTargetChip(title: L("People"), symbol: "person.2.fill", tint: PSTheme.accent) { session.eraseAll(label: "person", phrase: L("people")) }
-                    EraseTargetChip(title: L("Text & logos"), symbol: "textformat.abc", tint: PSTheme.voice) { session.eraseAll(label: "text", phrase: L("text")) }
-                    EraseTargetChip(title: L("Animals"), symbol: "pawprint.fill", tint: PSTheme.warning) { session.eraseAll(label: "animal", phrase: L("animals")) }
-                    EraseTargetChip(title: L("Vehicles"), symbol: "car.fill", tint: PSTheme.success) { session.eraseAll(label: "car", phrase: L("vehicles")) }
                     if !session.brushStrokes.isEmpty {
-                        EraseTargetChip(title: L("Clear strokes"), symbol: "xmark", tint: PSTheme.danger) { withAnimation(PSMotion.quick) { session.brushStrokes = [] } }
-                            .transition(.scale.combined(with: .opacity))
+                        PanelChip(title: L("Clear strokes"), symbol: "xmark", tint: PSTheme.danger) { withAnimation(PSMotion.quick) { session.brushStrokes = [] } }
+                            .transition(.opacity)
+                    }
+                    EraseTargetChip(title: L("People"), symbol: "person.2") { session.eraseAll(label: "person", phrase: L("people")) }
+                    EraseTargetChip(title: L("Text & logos"), symbol: "textformat") { session.eraseAll(label: "text", phrase: L("text")) }
+                    EraseTargetChip(title: L("Animals"), symbol: "pawprint") { session.eraseAll(label: "animal", phrase: L("animals")) }
+                    EraseTargetChip(title: L("Vehicles"), symbol: "car") { session.eraseAll(label: "car", phrase: L("vehicles")) }
+                    if session.isFindingObjects && session.sceneObjects.isEmpty {
+                        ProgressView().controlSize(.small).tint(PSTheme.textTertiary)
+                            .frame(width: 34, height: 34)
+                            .accessibilityLabel(L("Looking for objects…"))
+                            .transition(.opacity)
+                    } else if !session.sceneObjects.isEmpty {
+                        Capsule().fill(Color.white.opacity(0.14)).frame(width: 1, height: 20)
+                            .accessibilityHidden(true)
+                        ForEach(session.sceneObjects) { candidate in
+                            SceneObjectChip(candidate: candidate, thumbnail: { await session.candidateThumbnail($0) }) {
+                                session.erase(candidate)
+                            }
+                            .transition(.opacity)
+                        }
                     }
                 }
                 .padding(.horizontal, 2)
-                .animation(PSMotion.standard, value: session.brushStrokes.isEmpty)
             }
-            if session.isFindingObjects && session.sceneObjects.isEmpty {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.mini).tint(PSTheme.textTertiary)
-                    Text(L("Looking for objects…")).font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary)
-                }
-                .transition(.opacity)
-            } else if !session.sceneObjects.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L("In this photo")).font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(session.sceneObjects) { candidate in
-                                SceneObjectChip(candidate: candidate, thumbnail: { await session.candidateThumbnail($0) }) {
-                                    session.erase(candidate)
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 2)
-                    }
-                }
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
+            .animation(PSMotion.standard, value: session.brushStrokes.isEmpty)
             DialSlider(value: $session.brushRadius, range: 0.006...0.09, neutral: 0.03, label: L("Brush size"), format: { "\(Int(($0 * 1000).rounded()))" }) { editing in
                 session.showsBrushPreview = editing
             }
-            Text(L("Tap an object to erase it, paint over it, or say “efface le poteau à droite”."))
-                .font(PSFont.caption(11)).foregroundStyle(PSTheme.textSecondary).lineLimit(2)
         }
         .animation(PSMotion.standard, value: session.sceneObjects.map(\.id))
         .task(id: session.lookThumbnailKey) { await session.loadSceneObjects() }
     }
 }
 
-/// A found object as a chip: its crop, its name, one tap to erase it.
+/// A found object as a chip: its picture in a small disc, its name, one tap
+/// to erase it.
 struct SceneObjectChip: View {
     let candidate: ObjectCandidate
     let thumbnail: (ObjectCandidate) async -> UIImage?
@@ -293,51 +294,33 @@ struct SceneObjectChip: View {
                     if let image {
                         Image(uiImage: image).resizable().scaledToFill()
                     } else {
-                        PSTheme.surfaceElevated
+                        Color.white.opacity(0.08)
                     }
                 }
-                .frame(width: 30, height: 30)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(alignment: .bottomTrailing) {
-                    Image(systemName: "eraser.fill").font(.system(size: 8, weight: .bold)).foregroundStyle(.white)
-                        .frame(width: 14, height: 14).background(Circle().fill(PSTheme.danger)).offset(x: 4, y: 4)
-                }
-                Text(candidate.label.capitalized).font(PSFont.caption(13)).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
+                .frame(width: 26, height: 26)
+                .clipShape(Circle())
+                Text(candidate.label.capitalized).font(.subheadline).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
             }
-            .padding(.leading, 5).padding(.trailing, 12).padding(.vertical, 5)
-            .psGlass(interactive: true)
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+            .padding(.leading, 4).padding(.trailing, 14)
+            .frame(minHeight: PanelChipStyle.height)
+            .background(Capsule().fill(PanelChipStyle.fill))
+            .contentShape(Capsule())
         }
-        .buttonStyle(PSPressStyle())
+        .buttonStyle(PSPressStyle(scale: 0.97))
         .task(id: candidate.id) { image = await thumbnail(candidate) }
         .accessibilityLabel(String(format: L("Erase %@"), candidate.label))
     }
 }
 
-/// One-tap erase category: tinted squircle icon and a label, in a glass chip.
+/// One-tap erase category: a monochrome glyph and a label in a panel chip.
 struct EraseTargetChip: View {
     let title: String
     let symbol: String
-    let tint: Color
     let action: () -> Void
 
     var body: some View {
-        Button { Haptics.tap(); action() } label: {
-            HStack(spacing: 8) {
-                Image(systemName: symbol)
-                    .font(.system(size: 11, weight: .bold))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.white)
-                    .frame(width: 24, height: 24)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(tint.gradient))
-                Text(title).font(PSFont.caption(13)).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
-            }
-            .padding(.leading, 6).padding(.trailing, 12).padding(.vertical, 6)
-            .psGlass(interactive: true)
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
-        }
-        .buttonStyle(PSPressStyle())
-        .accessibilityLabel(title)
+        PanelChip(title: title, symbol: symbol, action: action)
+            .accessibilityLabel(title)
     }
 }
 
@@ -382,9 +365,9 @@ struct PrecisePanel: View {
                 HStack(spacing: 8) {
                     TextField(L("Describe what to generate…"), text: $session.generativePrompt)
                         .textFieldStyle(.plain).font(PSFont.body(15)).foregroundStyle(PSTheme.textPrimary)
-                        .padding(.horizontal, 14).padding(.vertical, 9).psField(Capsule())
+                        .padding(.horizontal, 14).frame(minHeight: 36).psField(Capsule())
                         .submitLabel(.go).onSubmit { session.generateInSelection(session.generativePrompt) }
-                    Button { session.generateInSelection(session.generativePrompt) } label: { Image(systemName: "sparkles").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
+                    Button { session.generateInSelection(session.generativePrompt) } label: { Image(systemName: "sparkles").font(.system(size: 15, weight: .medium)).frame(width: 36, height: 36) }
                         .buttonStyle(.plain).foregroundStyle(PSTheme.onAccent).psAccentFill(Circle())
                         .disabled(session.generativePrompt.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
@@ -433,12 +416,12 @@ struct PrecisePanel: View {
                         Button(color.hexString) { session.recolorSelection(color) }
                     }
                 } label: {
-                    Label(L("Recolor"), systemImage: "paintpalette").font(PSFont.caption(13)).padding(.horizontal, 12).padding(.vertical, 9)
+                    Label(L("Recolor"), systemImage: "paintpalette").font(.subheadline)
+                        .padding(.horizontal, 14).frame(minHeight: PanelChipStyle.height)
+                        .background(Capsule().fill(PanelChipStyle.fill))
                 }
-                .foregroundStyle(PSTheme.textPrimary).psGlass(interactive: true)
-                Button { session.clearSelection() } label: { Image(systemName: "xmark").font(PSFont.caption(13)).padding(8) }
-                    .buttonStyle(.plain).psGlass(interactive: true, shape: AnyShape(Circle()))
-                    .accessibilityLabel(L("Clear"))
+                .foregroundStyle(PSTheme.textPrimary)
+                PanelRoundButton(symbol: "xmark", label: L("Clear")) { session.clearSelection() }
             }
         }
     }
@@ -455,7 +438,7 @@ struct CutoutPanel: View {
         VStack(alignment: .leading, spacing: 8) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    PanelChip(title: L("Remove background"), symbol: "person.crop.square.badge.minus", tint: PSTheme.accent) { session.perform(EditIntent(action: .removeBackground, background: .transparent)) }
+                    PanelChip(title: L("Remove background"), symbol: "person.crop.square.badge.minus", tint: PSTheme.voice) { session.perform(EditIntent(action: .removeBackground, background: .transparent)) }
                     PanelChip(title: L("Blur background"), symbol: "camera.aperture") { session.perform(EditIntent(action: .blurBackground, amount: .absolute(blur))) }
                     PanelChip(title: L("Gradient"), symbol: "circle.lefthalf.filled") {
                         session.perform(EditIntent(action: .replaceBackground, background: .gradient(PSColor(hex: "#1F2A4D")!, PSColor(hex: "#8A56C6")!)))
@@ -560,19 +543,18 @@ struct AspectChip: View {
             VStack(spacing: 5) {
                 ZStack {
                     let shape = RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    shape.strokeBorder(isActive ? Color.white : PSTheme.textSecondary, style: StrokeStyle(lineWidth: 1.6, dash: preset == .free ? [3, 2] : []))
+                    shape.strokeBorder(isActive ? Color.black : PSTheme.textSecondary, style: StrokeStyle(lineWidth: 1.6, dash: preset == .free ? [3, 2] : []))
                         .frame(width: frameSize.width, height: frameSize.height)
                     if preset == .original {
-                        Image(systemName: "photo").font(.system(size: 8, weight: .bold)).foregroundStyle(isActive ? Color.white : PSTheme.textSecondary)
+                        Image(systemName: "photo").font(.system(size: 8, weight: .semibold)).foregroundStyle(isActive ? Color.black : PSTheme.textSecondary)
                     }
                 }
                 .frame(width: 24, height: 24)
-                Text(preset.displayName).font(PSFont.caption(10)).lineLimit(1).minimumScaleFactor(0.8)
+                Text(preset.displayName).font(.caption2.weight(.medium)).lineLimit(1).minimumScaleFactor(0.8)
             }
-            .foregroundStyle(isActive ? Color.white : PSTheme.textSecondary)
+            .foregroundStyle(isActive ? Color.black : PSTheme.textSecondary)
             .frame(width: 52, height: 48)
-            .psActivePill(RoundedRectangle(cornerRadius: 14, style: .continuous), isActive: isActive, glow: false)
-            .background(Color.white.opacity(isActive ? 0 : 0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(isActive ? Color.white : PanelChipStyle.fill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .animation(PSMotion.quick, value: isActive)
         }
@@ -602,12 +584,12 @@ struct TextPanel: View {
                     .textFieldStyle(.plain)
                     .font(PSFont.body(15))
                     .foregroundStyle(PSTheme.textPrimary)
-                    .padding(.horizontal, 14).padding(.vertical, 9)
+                    .padding(.horizontal, 14).frame(minHeight: 36)
                     .psField(Capsule())
                     .focused($focused)
                     .submitLabel(.done)
                     .onSubmit(commit)
-                Button(action: commit) { Image(systemName: "plus").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
+                Button(action: commit) { Image(systemName: "plus").font(.system(size: 15, weight: .semibold)).frame(width: 36, height: 36) }
                     .buttonStyle(.plain).foregroundStyle(PSTheme.onAccent).psAccentFill(Circle())
                     .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityLabel(L("Add Text"))
@@ -620,7 +602,7 @@ struct TextPanel: View {
                                 session.updateText(layerID: layer.id) { $0.fontName = font.name }
                             }
                         }
-                        Divider().frame(height: 22).overlay(PSTheme.hairline)
+                        Capsule().fill(Color.white.opacity(0.14)).frame(width: 1, height: 20)
                         ForEach(TextElement.Style.allCases, id: \.self) { style in
                             PanelChip(title: styleName(style), isActive: element.style == style) {
                                 session.updateText(layerID: layer.id) { $0.style = style }
@@ -640,12 +622,8 @@ struct TextPanel: View {
                         }
                         .padding(.horizontal, 2)
                     }
-                    Button(role: .destructive) { Haptics.warning(); session.removeLayer(layer.id) } label: { Image(systemName: "trash").font(.system(size: 14, weight: .semibold)).frame(width: 34, height: 34) }
-                        .buttonStyle(.plain).foregroundStyle(PSTheme.danger).psGlass(interactive: true, shape: AnyShape(Circle()))
-                        .accessibilityLabel(L("Delete"))
+                    PanelRoundButton(symbol: "trash", label: L("Delete"), tint: PSTheme.danger) { Haptics.warning(); session.removeLayer(layer.id) }
                 }
-                Text(L("Drag the text to move it, pinch to resize, twist to rotate."))
-                    .font(PSFont.caption(11)).foregroundStyle(PSTheme.textSecondary)
             }
         }
     }
@@ -722,9 +700,7 @@ struct ShapesPanel: View {
                             }
                         }
                     }
-                    Button(role: .destructive) { Haptics.warning(); session.removeLayer(layer.id) } label: { Image(systemName: "trash").font(.system(size: 14, weight: .semibold)).frame(width: 34, height: 34) }
-                        .buttonStyle(.plain).foregroundStyle(PSTheme.danger).psGlass(interactive: true, shape: AnyShape(Circle()))
-                        .accessibilityLabel(L("Delete"))
+                    PanelRoundButton(symbol: "trash", label: L("Delete"), tint: PSTheme.danger) { Haptics.warning(); session.removeLayer(layer.id) }
                 }
                 if shape.stroke != nil || shape.kind == .line || shape.kind == .arrow {
                     DialSlider(value: Binding(get: { shape.strokeWidth * 1000 }, set: { value in session.updateShape(layerID: layer.id) { $0.strokeWidth = value / 1000 } }),
@@ -732,11 +708,6 @@ struct ShapesPanel: View {
                 }
                 DialSlider(value: Binding(get: { layer.opacity * 100 }, set: { value in session.updateLayer(layer.id) { $0.opacity = value / 100 } }),
                            range: 0...100, neutral: 100, label: L("Opacity"), units: 50, format: { String(format: "%.0f%%", $0) })
-                Text(L("Tap the canvas to place a shape. Drag to move, pinch to resize, twist to rotate."))
-                    .font(PSFont.caption(11)).foregroundStyle(PSTheme.textSecondary)
-            } else {
-                Text(L("Pick a shape, then tap the canvas to place it."))
-                    .font(PSFont.caption(11)).foregroundStyle(PSTheme.textSecondary)
             }
         }
     }
@@ -772,18 +743,16 @@ struct LayersPanel: View {
                     ForEach(Array(session.document.layers.enumerated().reversed()), id: \.element.id) { index, layer in
                         let selected = session.document.selectedLayerID == layer.id
                         let isBase = index == 0
-                        let tint: Color = layer.isText ? PSTheme.voice : (layer.isShape ? PSTheme.warning : PSTheme.accent)
                         HStack(spacing: 10) {
                             Image(systemName: layer.symbolName)
-                                .font(.system(size: 12, weight: .bold))
-                                .symbolRenderingMode(.hierarchical)
-                                .foregroundStyle(.white)
-                                .frame(width: 26, height: 26)
-                                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(selected ? AnyShapeStyle(Color.white.opacity(0.25)) : AnyShapeStyle(tint.gradient)))
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(PSTheme.textSecondary)
+                                .frame(width: 28, height: 28)
+                                .background(Circle().fill(Color.white.opacity(0.08)))
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(layer.name).font(PSFont.headline(13)).lineLimit(1)
+                                Text(layer.name).font(.subheadline.weight(.medium)).lineLimit(1)
                                 Text(isBase ? L("Photo") : (layer.isText ? L("Text") : (layer.isShape ? L("Shapes") : L("Layers"))))
-                                    .font(PSFont.caption(10)).foregroundStyle(selected ? Color.white.opacity(0.75) : PSTheme.textTertiary)
+                                    .font(.caption2).foregroundStyle(PSTheme.textTertiary)
                             }
                             Spacer(minLength: 4)
                             if !isBase {
@@ -795,10 +764,9 @@ struct LayersPanel: View {
                                 LayerRowButton(symbol: "trash", enabled: true, tint: PSTheme.danger) { Haptics.warning(); session.removeLayer(layer.id) }
                             }
                         }
-                        .foregroundStyle(selected ? Color.white : PSTheme.textPrimary)
+                        .foregroundStyle(PSTheme.textPrimary)
                         .padding(.horizontal, 10).padding(.vertical, 8)
-                        .background(Color.white.opacity(selected ? 0 : 0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .psActivePill(RoundedRectangle(cornerRadius: 14, style: .continuous), isActive: selected, glow: false)
+                        .background(Color.white.opacity(selected ? 0.16 : 0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .opacity(layer.isVisible ? 1 : 0.55)
                         .contentShape(Rectangle())
                         .animation(PSMotion.quick, value: selected)
@@ -806,7 +774,7 @@ struct LayersPanel: View {
                     }
                 }
             }
-            .frame(maxHeight: 150)
+            .frame(maxHeight: 148)
             if let selected = session.document.selectedLayer, session.document.index(of: selected.id) != 0 {
                 HStack(spacing: 10) {
                     DialSlider(value: Binding(get: { selected.opacity }, set: { value in session.updateLayer(selected.id) { $0.opacity = value } }), range: 0...1, neutral: 1, label: L("Opacity"), format: { "\(Int(($0 * 100).rounded()))%" })
@@ -830,10 +798,10 @@ struct LayerRowButton: View {
     var body: some View {
         Button { Haptics.tap(); action() } label: {
             Image(systemName: symbol)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(tint ?? Color.primary)
-                .frame(width: 28, height: 28)
-                .background(Color.white.opacity(0.08), in: Circle())
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(tint ?? PSTheme.textPrimary)
+                .frame(width: 30, height: 30)
+                .background(PanelChipStyle.fill, in: Circle())
         }
         .buttonStyle(PSPressStyle(scale: 0.88))
         .disabled(!enabled)
@@ -853,18 +821,37 @@ struct FontChip: View {
             VStack(spacing: 3) {
                 Text("Aa").font(Font(UIFont(name: name, size: 20) ?? UIFont.systemFont(ofSize: 20, weight: .bold)))
                     .frame(height: 24)
-                Text(display).font(PSFont.caption(10)).lineLimit(1).minimumScaleFactor(0.8)
+                Text(display).font(.caption2).lineLimit(1).minimumScaleFactor(0.8)
             }
-            .foregroundStyle(isActive ? Color.white : PSTheme.textPrimary)
+            .foregroundStyle(isActive ? Color.black : PSTheme.textPrimary)
             .frame(width: 60, height: 50)
-            .background(Color.white.opacity(isActive ? 0 : 0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .psActivePill(RoundedRectangle(cornerRadius: 14, style: .continuous), isActive: isActive, glow: false)
+            .background(isActive ? Color.white : PanelChipStyle.fill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .animation(PSMotion.quick, value: isActive)
         }
         .buttonStyle(PSPressStyle())
         .accessibilityLabel(display)
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
+    }
+}
+
+/// A round, icon-only control inside a panel (clear, delete): the chip fill, no glass.
+struct PanelRoundButton: View {
+    let symbol: String
+    let label: String
+    var tint: Color? = nil
+    let action: () -> Void
+
+    var body: some View {
+        Button { Haptics.tap(); action() } label: {
+            Image(systemName: symbol).font(.system(size: 15, weight: .medium))
+                .foregroundStyle(tint ?? PSTheme.textPrimary)
+                .frame(width: PanelChipStyle.height, height: PanelChipStyle.height)
+                .background(Circle().fill(PanelChipStyle.fill))
+                .contentShape(Circle())
+        }
+        .buttonStyle(PSPressStyle(scale: 0.92))
+        .accessibilityLabel(label)
     }
 }
 

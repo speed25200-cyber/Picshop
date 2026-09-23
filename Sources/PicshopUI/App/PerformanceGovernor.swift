@@ -3,6 +3,7 @@ import SwiftUI
 import UIKit
 import Observation
 import PicshopCore
+import PicshopImaging
 
 /// Turns the phone's thermal state, Low Power Mode and the user's preference
 /// into one render and animation budget that every screen reads.
@@ -45,7 +46,14 @@ public final class PerformanceGovernor {
     /// Native scale of the main display (2 or 3).
     public let displayScale: CGFloat
 
+    /// Set by a memory warning, or when little memory is left before heavy work;
+    /// previews render a step smaller until it clears.
+    public private(set) var isMemoryConstrained = false
+    /// Bumped on every system memory warning, so screens can drop their own caches.
+    public private(set) var memoryWarningCount = 0
+
     private var tokens: [NSObjectProtocol] = []
+    @ObservationIgnored private var memoryReliefTask: Task<Void, Never>?
 
     public init() {
         let process = ProcessInfo.processInfo
@@ -64,6 +72,39 @@ public final class PerformanceGovernor {
             tokens.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor [weak self] in self?.refresh() }
             })
+        }
+        tokens.append(center.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.memoryWarningReceived() }
+        })
+    }
+
+    // MARK: - Memory
+
+    /// Bytes the app may still use (nil where unknown).
+    public var availableMemory: Int? { MemoryBudget.availableBytes }
+
+    /// Whether heavy work should first free caches (under ~700 MB left).
+    public var isMemoryLow: Bool { MemoryBudget.isLow }
+
+    private func memoryWarningReceived() {
+        memoryWarningCount += 1
+        PSLog.info("memory warning (\(MemoryBudget.availableDescription) free)", category: .ui)
+        constrainMemory()
+    }
+
+    /// Renders a step smaller for a while; lifts once memory has recovered.
+    public func constrainMemory() {
+        isMemoryConstrained = true
+        memoryReliefTask?.cancel()
+        memoryReliefTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(45))
+                guard let self, !Task.isCancelled else { return }
+                if !MemoryBudget.isLow {
+                    self.isMemoryConstrained = false
+                    return
+                }
+            }
         }
     }
 
@@ -103,22 +144,26 @@ public final class PerformanceGovernor {
 
     /// Longest side of the on-screen preview once an interaction settles.
     public var previewLongestSide: Double {
+        let side: Double
         switch tier {
-        case .full: return 2048
-        case .balanced: return 1600
-        case .conserve: return 1200
-        case .critical: return 900
+        case .full: side = 2048
+        case .balanced: side = 1600
+        case .conserve: side = 1200
+        case .critical: side = 900
         }
+        return isMemoryConstrained ? min(side, 1600) : side
     }
 
     /// Longest side of the preview while a dial or slider is being dragged.
     public var interactivePreviewSide: Double {
+        let side: Double
         switch tier {
-        case .full: return 1280
-        case .balanced: return 1024
-        case .conserve: return 768
-        case .critical: return 512
+        case .full: side = 1280
+        case .balanced: side = 1024
+        case .conserve: side = 768
+        case .critical: side = 512
         }
+        return isMemoryConstrained ? min(side, 1024) : side
     }
 
     /// Pause before the sharp frame replaces the interactive one.

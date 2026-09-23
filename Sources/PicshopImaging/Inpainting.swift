@@ -108,9 +108,10 @@ public final class InpaintingPipeline: @unchecked Sendable {
         let crop = box.insetBy(dx: -margin, dy: -margin).intersection(extent).integral
         guard !crop.isEmpty else { return image }
 
-        // Working resolution.
+        // Working resolution, a step smaller when the system is short of memory.
         let longest = max(crop.width, crop.height)
-        let workScale = min(1, CGFloat(workingSide) / longest)
+        let side = MemoryBudget.isLow ? min(workingSide, 768) : workingSide
+        let workScale = min(1, CGFloat(side) / longest)
         let workWidth = max(32, Int((crop.width * workScale).rounded()))
         let workHeight = max(32, Int((crop.height * workScale).rounded()))
         let workRect = CGRect(x: 0, y: 0, width: workWidth, height: workHeight)
@@ -129,7 +130,10 @@ public final class InpaintingPipeline: @unchecked Sendable {
         maskBytes = MaskStore.dilated(maskBytes, width: workWidth, height: workHeight, radius: max(1, workWidth / 200))
         guard maskBytes.contains(where: { $0 > 0 }) else { return image }
 
+        try Task.checkCancellation()
         let filledBytes = try await worker(rgba, maskBytes, workWidth, workHeight)
+        // A fill nobody waits for any more is dropped here, never composited or cached.
+        try Task.checkCancellation()
         // Same colour space as the read, so the fill keeps the surroundings' colours.
         guard var filled = ImageSupport.ciImage(rgba: filledBytes, width: workWidth, height: workHeight) else {
             throw PicshopError.renderFailed("inpaint output")
@@ -179,12 +183,19 @@ public struct PatchMatchInpainter: Inpainter {
         self.iterationsPerLevel = iterationsPerLevel
     }
 
+    /// Runs off the caller's thread and stops within a fraction of a second when the calling task is cancelled.
     public func inpaint(rgba: [UInt8], mask: [UInt8], width: Int, height: Int) async throws -> [UInt8] {
         let radius = patchRadius
         let iterations = iterationsPerLevel
-        return await Task.detached(priority: .userInitiated) {
-            PatchMatchCore.inpaint(rgba: rgba, mask: mask, width: width, height: height, patchRadius: radius, iterationsPerLevel: iterations)
-        }.value
+        let flag = PatchMatchCore.CancellationFlag()
+        return try await withTaskCancellationHandler {
+            try await Task.detached(priority: .userInitiated) {
+                try PatchMatchCore.inpaint(rgba: rgba, mask: mask, width: width, height: height, patchRadius: radius, iterationsPerLevel: iterations,
+                                           shouldCancel: { flag.isCancelled })
+            }.value
+        } onCancel: {
+            flag.cancel()
+        }
     }
 }
 
