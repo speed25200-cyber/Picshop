@@ -84,7 +84,7 @@ public final class PhotoEditorSession {
         var action: Action?
         var id = UUID()
 
-        enum Action: Equatable {
+        public enum Action: Equatable {
             case rightWayUp
         }
     }
