@@ -224,9 +224,10 @@ public final class PhotoEditorSession {
         }
         isVoiceReady = true
         requestPreview()
-        // A flip made in an earlier session is out of Undo's reach: offer the way back.
-        if isTurnedOrMirrored, pendingCommand == nil {
-            showToast(L("This photo is flipped or turned."), action: .rightWayUp)
+        // Upside down with the reading order kept is never a look anyone chose, and a flip
+        // made in an earlier session is out of Undo's reach: offer the way back.
+        if document.baseOrientation.isVerticallyFlipped, pendingCommand == nil {
+            showToast(L("This photo is upside down."), action: .rightWayUp)
         }
         if let command = pendingCommand {
             pendingCommand = nil
@@ -393,7 +394,7 @@ public final class PhotoEditorSession {
     /// sessions — which Undo cannot reach. Itself undoable.
     public func revert() {
         let restored = document.restoredToImport()
-        guard restored != document else { return }
+        guard restored.baseLayer?.edits != document.baseLayer?.edits || restored.canvasSize != document.canvasSize else { return }
         commit(restored, label: L("Revert to Original"))
         Haptics.confirm()
     }
@@ -1203,22 +1204,35 @@ public final class PhotoEditorSession {
         if !mustFindFirst { VoiceFeedback.shared.speak(plan.reply ?? "", language: plan.language) }
         isRunningVoiceCommand = true
         defer { isRunningVoiceCommand = false }
-        for intent in plan.intents where intent.action != .unknown {
+        var told: String?
+        steps: for intent in plan.intents where intent.action != .unknown {
+            lastOutcomeNeedsHand = false
             let outcome = await run(intent)
             switch outcome {
-            case .info(let message), .failed(let message):
-                lastPlan?.reply = message
+            case .info(let message):
+                told = message
+                lastReplyIsProblem = lastOutcomeNeedsHand
+            case .failed(let message):
+                told = message
                 lastReplyIsProblem = true
-                VoiceFeedback.shared.speak(message, language: plan.language)
-                return
+                break steps
             case .needsClarification:
                 return
             case .applied, .ignored:
                 continue
             }
         }
-        if mustFindFirst { VoiceFeedback.shared.speak(plan.reply ?? "", language: plan.language) }
+        if let told {
+            // The strip says what really happened, not what was hoped for.
+            lastPlan?.reply = told
+            VoiceFeedback.shared.speak(told, language: plan.language)
+        } else if mustFindFirst {
+            VoiceFeedback.shared.speak(plan.reply ?? "", language: plan.language)
+        }
     }
+
+    /// The last command handed over to the finger (tap or lasso what was not found).
+    private var lastOutcomeNeedsHand = false
 
     private static let findsBeforeActing: Set<IntentAction> = [.removeObject, .moveObject, .blurObject, .recolor, .generativeFill, .selectiveAdjust, .cleanUp, .chooseCandidate]
 
@@ -1308,6 +1322,7 @@ public final class PhotoEditorSession {
                 }
             }
         case .info(let message):
+            lastOutcomeNeedsHand = result.effects.contains(.message("tapToErase")) || result.effects.contains(.message("selectRegion"))
             if !isRunningVoiceCommand { showToast(message) }
             if result.effects.contains(.message("tapToErase")) { activeTool = .erase }
             if result.effects.contains(.message("crop")) { activeTool = .crop }

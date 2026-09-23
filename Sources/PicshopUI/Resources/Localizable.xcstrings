@@ -7921,18 +7921,18 @@
         }
       }
     },
-    "This photo is flipped or turned.": {
+    "This photo is upside down.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This photo is flipped or turned."
+            "value": "This photo is upside down."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cette photo est retournée ou pivotée."
+            "value": "Cette photo est à l'envers."
           }
         }
       }

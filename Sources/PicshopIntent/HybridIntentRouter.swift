@@ -121,7 +121,7 @@ public actor HybridIntentRouter {
         // the full budget because it is the only thing that can answer.
         // A grammar plan about a thing it has no word for ("efface le bidule") is a guess, not a plan.
         let namesUnknownThing = fast.intents.contains { intent in
-            guard let label = intent.target?.label else { return false }
+            guard [.removeObject, .moveObject, .blurObject, .recolor].contains(intent.action), let label = intent.target?.label else { return false }
             return ObjectVocabulary.entry(forLabel: label) == nil
         }
         let hasUsableFast = !fast.isEmpty && fast.confidence >= 0.5 && !namesUnknownThing
