@@ -2,6 +2,9 @@
 
 ## 2.0.0 — PicShop, reimagined
 
+- Photos show the right way up: the canvas wrote Core Image's bottom row at the top of the screen, so every photo
+  appeared upside down (and taps, rings and erases seemed mirrored). A GPU read-back test now guards it, and pixel
+  reads no longer depend on a runtime orientation probe.
 - Right way up: "c'est à l'envers", "remets-la à l'endroit" or the Right way up chip undo every flip and quarter turn at
   once, even from an earlier session; a photo opened flipped offers it. "Inverse" alone no longer mirrors, and
   Revert to Original now reaches the photo as imported. Vertical flip in Crop.

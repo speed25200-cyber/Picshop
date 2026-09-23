@@ -20,11 +20,15 @@ public enum CanvasPlacement {
     }
 
     /// A render destination configured exactly like the canvas's drawable.
+    ///
+    /// Flipped: unflipped, Core Image writes its y = 0 row into texture row 0, which
+    /// Metal shows at the top of the screen, so every photo appeared upside down with
+    /// its reading order kept. `OrientationTests` reads the texture back to prove it.
     public static func destination(width: Int, height: Int, pixelFormat: MTLPixelFormat = .bgra8Unorm, commandBuffer: MTLCommandBuffer?,
                                    texture: @escaping () -> MTLTexture) -> CIRenderDestination {
         let destination = CIRenderDestination(width: width, height: height, pixelFormat: pixelFormat, commandBuffer: commandBuffer, mtlTextureProvider: texture)
         destination.colorSpace = RenderContext.colorSpace
-        destination.isFlipped = false
+        destination.isFlipped = true
         return destination
     }
 }
