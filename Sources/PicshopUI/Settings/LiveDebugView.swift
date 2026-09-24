@@ -248,7 +248,7 @@ private struct LiveBrainDebugSection: View {
             if let speed = status.speed {
                 LiveDebugValue(title: L("Speed test result"), value: String(format: "%.1f tok/s", speed.tokensPerSecond) + " · \(speed.firstTokenMs) ms")
             }
-            TimelineView(.periodic(from: .now, by: 2)) { _ in
+            SwiftUI.TimelineView(.periodic(from: .now, by: 2)) { _ in
                 LiveDebugValue(title: L("Thermal state"), value: LiveDebugModel.thermalDescription(ProcessInfo.processInfo.thermalState))
             }
         }
