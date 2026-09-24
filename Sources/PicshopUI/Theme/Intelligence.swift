@@ -1,6 +1,5 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
-import PicshopSpeech
 
 /// The glow that runs around the edge of the screen while PicShop listens or
 /// works — the one place the whole interface says "the AI has it".
@@ -46,18 +45,6 @@ public struct IntelligenceGlow: View {
             shape.strokeBorder(gradient, lineWidth: 2.5).opacity(0.95)
         }
         .drawingGroup()
-    }
-}
-
-/// The glow for an editor: reads the microphone in a leaf view so the level
-/// never re-evaluates the canvas.
-struct EditorIntelligenceGlow: View {
-    @Bindable var voice: VoiceController
-    var isBusy: Bool
-
-    var body: some View {
-        IntelligenceGlow(isActive: voice.isListening || isBusy, level: voice.isListening ? voice.level : 0.25)
-            .animation(.easeInOut(duration: 0.45), value: voice.isListening || isBusy)
     }
 }
 

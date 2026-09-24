@@ -61,7 +61,8 @@ public struct PhotoEditorView: View {
     }
 
     private var bar: StudioBar {
-        StudioBar(canUndo: session.canUndo, canRedo: session.canRedo, undoLabels: session.undoLabels, isBusy: session.isProcessing)
+        StudioBar(canUndo: session.canUndo, canRedo: session.canRedo, undoLabels: session.undoLabels, isBusy: session.isProcessing,
+                  canRevert: session.canRevertToImport)
     }
 
     private var actions: StudioActions {
@@ -115,43 +116,6 @@ struct ZoomBadge: View {
         }
         .buttonStyle(PSPressStyle(scale: 0.94))
         .accessibilityLabel(L("Reset zoom"))
-    }
-}
-
-/// Press-and-hold "before" button. The canvas compares on a hold of the
-/// picture itself now; this type goes when the old chrome does (phase 2).
-struct CompareButton: View {
-    var isShowingOriginal: Bool
-    var onChange: (Bool) -> Void
-    @State private var holding = false
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: isShowingOriginal ? "eye.fill" : "eye").font(.system(size: 15, weight: .medium))
-            Text(isShowingOriginal ? L("Original") : L("Before")).font(.footnote.weight(.medium))
-        }
-        .foregroundStyle(isShowingOriginal ? Color.black : PSTheme.textPrimary)
-        .padding(.horizontal, 14)
-        .frame(minHeight: 38)
-        .background(Capsule().fill(Color.white).opacity(isShowingOriginal ? 1 : 0))
-        .psGlass(interactive: true, variant: .clear)
-        .scaleEffect(holding ? 0.95 : 1)
-        .animation(PSMotion.quick, value: holding)
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    guard !holding else { return }
-                    holding = true
-                    Haptics.soft()
-                    onChange(true)
-                }
-                .onEnded { _ in
-                    holding = false
-                    onChange(false)
-                }
-        )
-        .accessibilityLabel(L("Compare with original"))
-        .accessibilityHint(L("Hold to see the original photo."))
     }
 }
 #endif

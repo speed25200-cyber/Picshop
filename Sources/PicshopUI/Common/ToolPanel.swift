@@ -18,6 +18,8 @@ struct ToolPanel<Accessory: View, Content: View>: View {
     let content: Content
 
     @State private var dragOffset: CGFloat = 0
+    /// The controls' own height, measured: the scroll view is exactly that tall up to the cap.
+    @State private var contentHeight: CGFloat?
     @Environment(\.studioPanelMaxHeight) private var maxHeight
 
     init(title: String, live: LiveSession?, onDone: @escaping () -> Void, @ViewBuilder accessory: () -> Accessory, @ViewBuilder content: () -> Content) {
@@ -34,12 +36,16 @@ struct ToolPanel<Accessory: View, Content: View>: View {
     var body: some View {
         VStack(spacing: 12) {
             header
-            ViewThatFits(in: .vertical) {
+            // One copy of the controls (two, as ViewThatFits keeps, would swap and lose their
+            // state when the height crosses the cap). It scrolls only when it does not fit, so
+            // dial and crop drags stay free of the scroll view otherwise.
+            ScrollView(.vertical, showsIndicators: false) {
                 content
-                ScrollView(.vertical, showsIndicators: false) { content }
-                    .scrollBounceBehavior(.basedOnSize)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
             }
-            .frame(maxHeight: contentCap)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollDisabled((contentHeight ?? .infinity) <= contentCap)
+            .frame(height: min(contentHeight ?? contentCap, contentCap))
         }
         .padding(16)
         .frame(maxWidth: .infinity)

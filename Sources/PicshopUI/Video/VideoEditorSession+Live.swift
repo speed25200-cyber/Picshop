@@ -140,5 +140,7 @@ extension VideoEditorSession: LiveEditingHost {
     public func livePausePlayback() {
         player.pause()
     }
+
+    public var liveIsPlaying: Bool { player.isPlaying }
 }
 #endif

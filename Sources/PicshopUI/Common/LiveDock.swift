@@ -115,9 +115,11 @@ struct LiveDock: View {
                     .padding(.bottom, PSSpacing.captionGap)
                     .transition(.opacity)
             }
-            chips(flat: isLive)
-                .frame(minHeight: PSMetrics.ideaChip)
-            Color.clear.frame(height: isLive ? PSSpacing.consoleGap : PSSpacing.dockGap)
+            if showsChipRow {
+                chips(flat: isLive)
+                    .frame(minHeight: PSMetrics.ideaChip)
+                Color.clear.frame(height: isLive ? PSSpacing.consoleGap : PSSpacing.dockGap)
+            }
             PSGlassContainer(spacing: 12) {
                 if isLive {
                     VStack(spacing: PSSpacing.dockGap) {
@@ -146,6 +148,14 @@ struct LiveDock: View {
         .animation(reduceMotion ? .easeInOut(duration: 0.25) : PSMotion.morph, value: isLive)
         .animation(PSMotion.standard, value: keyboardOpen)
         .onChange(of: isLive) { _, running in if !running { keyboardOpen = false } }
+    }
+
+    /// No empty band: PDF has no ideas (its choices still show), and every idea may be dismissed.
+    private var showsChipRow: Bool {
+        if live.choices != nil { return true }
+        if !live.canGoLive, case .loading = live.ideas { return false }
+        if case .ready(let list) = live.ideas, list.isEmpty { return false }
+        return true
     }
 
     @ViewBuilder

@@ -2049,22 +2049,6 @@
         }
       }
     },
-    "Compare with original": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Compare with original"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Comparer avec l'original"
-          }
-        }
-      }
-    },
     "Contiguous": {
       "localizations": {
         "en": {
@@ -2557,22 +2541,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "OK"
-          }
-        }
-      }
-    },
-    "Done.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Done."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "C'est fait."
           }
         }
       }
@@ -3325,6 +3293,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tous les clips"
+          }
+        }
+      }
+    },
+    "Everything stays on the iPhone, except in Live mode with Claude: once you agree, Live sends Anthropic, with your own key, the text of the conversation and, if you allow it, a reduced picture — never the audio. PicShop has no server, no account and no tracking.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Everything stays on the iPhone, except in Live mode with Claude: once you agree, Live sends Anthropic, with your own key, the text of the conversation and, if you allow it, a reduced picture — never the audio. PicShop has no server, no account and no tracking."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout reste sur l'iPhone, sauf en mode Live avec Claude : après ton accord, Live envoie à Anthropic, avec ta propre clé, le texte de la conversation et, si tu l'autorises, une image réduite — jamais l'audio. PicShop n'a ni serveur, ni compte, ni pistage."
           }
         }
       }
@@ -4241,22 +4225,6 @@
         }
       }
     },
-    "Help": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Help"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aide"
-          }
-        }
-      }
-    },
     "Hide Captions": {
       "localizations": {
         "en": {
@@ -4381,38 +4349,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Maintenez pour l'historique"
-          }
-        }
-      }
-    },
-    "Hold the mic and say what to change": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hold the mic and say what to change"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Maintenez le micro et dites quoi changer"
-          }
-        }
-      }
-    },
-    "Hold to see the original photo.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hold to see the original photo."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Maintenez pour voir la photo d'origine."
           }
         }
       }
@@ -4609,18 +4545,18 @@
         }
       }
     },
-    "In Live mode with Claude, the text of what you say and, when this is on, a reduced copy (1024 px) of the picture on screen are sent to Anthropic, with your key — never the audio. Outside Live mode, nothing is sent.": {
+    "In Live mode with Claude, once you agree, the text of the conversation and, when this is on, a reduced copy (1024 px) of the picture on screen are sent to Anthropic with your own key — never the audio. Outside Live mode, nothing is sent.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "In Live mode with Claude, the text of what you say and, when this is on, a reduced copy (1024 px) of the picture on screen are sent to Anthropic, with your key — never the audio. Outside Live mode, nothing is sent."
+            "value": "In Live mode with Claude, once you agree, the text of the conversation and, when this is on, a reduced copy (1024 px) of the picture on screen are sent to Anthropic with your own key — never the audio. Outside Live mode, nothing is sent."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "En mode Live avec Claude, le texte de ce que tu dis et, si c'est activé, une copie réduite (1024 px) de l'image affichée sont envoyés à Anthropic, avec ta clé — jamais l'audio. Hors du mode Live, rien n'est envoyé."
+            "value": "En mode Live avec Claude, après ton accord, le texte de la conversation et, si c'est activé, une copie réduite (1024 px) de l'image affichée sont envoyés à Anthropic avec ta propre clé — jamais l'audio. Hors du mode Live, rien n'est envoyé."
           }
         }
       }
@@ -5853,22 +5789,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Moments"
-          }
-        }
-      }
-    },
-    "More": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "More"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Plus"
           }
         }
       }
@@ -7137,18 +7057,18 @@
         }
       }
     },
-    "PicShop works entirely on your iPhone. If you add a Claude key in Settings › Live, Live mode sends Anthropic the text of what you say and, if you allow it, a reduced copy of the picture — never the audio. Outside Live mode, nothing is sent.": {
+    "PicShop works entirely on your iPhone. The one exception is Live mode with Claude: once you agree, it sends Anthropic, with your own key, the text of the conversation and, if you allow it, a reduced copy of the picture — never the audio. Outside Live mode, nothing is sent.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "PicShop works entirely on your iPhone. If you add a Claude key in Settings › Live, Live mode sends Anthropic the text of what you say and, if you allow it, a reduced copy of the picture — never the audio. Outside Live mode, nothing is sent."
+            "value": "PicShop works entirely on your iPhone. The one exception is Live mode with Claude: once you agree, it sends Anthropic, with your own key, the text of the conversation and, if you allow it, a reduced copy of the picture — never the audio. Outside Live mode, nothing is sent."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "PicShop fonctionne entièrement sur ton iPhone. Si tu ajoutes une clé Claude dans Réglages › Live, le mode Live envoie à Anthropic le texte de ce que tu dis et, si tu l'acceptes, une copie réduite de l'image — jamais l'audio. Hors du mode Live, rien n'est envoyé."
+            "value": "PicShop fonctionne entièrement sur ton iPhone. Seule exception, le mode Live avec Claude : après ton accord, il envoie à Anthropic, avec ta propre clé, le texte de la conversation et, si tu l'autorises, une copie réduite de l'image — jamais l'audio. Hors du mode Live, rien n'est envoyé."
           }
         }
       }
@@ -8433,22 +8353,6 @@
         }
       }
     },
-    "Say what you want to change, for example: remove the dog.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Say what you want to change, for example: remove the dog."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dites ce que vous voulez changer, par exemple : efface le chien."
-          }
-        }
-      }
-    },
     "Select a clip on the timeline.": {
       "localizations": {
         "en": {
@@ -9345,22 +9249,6 @@
         }
       }
     },
-    "Stop listening": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stop listening"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Arrêter l'écoute"
-          }
-        }
-      }
-    },
     "Stop reason": {
       "localizations": {
         "en": {
@@ -9649,22 +9537,6 @@
         }
       }
     },
-    "Tap one, or say its number.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tap one, or say its number."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Touchez-en un, ou dites son numéro."
-          }
-        }
-      }
-    },
     "Tap the canvas to place a shape. Drag to move, pinch to resize, twist to rotate.": {
       "localizations": {
         "en": {
@@ -9677,22 +9549,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Touchez l'image pour placer une forme. Glissez pour déplacer, pincez pour redimensionner, tournez pour pivoter."
-          }
-        }
-      }
-    },
-    "Tap the mic and say what to change": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tap the mic and say what to change"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Touchez le micro et dites quoi changer"
           }
         }
       }
@@ -11105,38 +10961,6 @@
         }
       }
     },
-    "Voice command": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Voice command"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Commande vocale"
-          }
-        }
-      }
-    },
-    "Voice unavailable — check microphone access in Settings.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Voice unavailable — check microphone access in Settings."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Voix indisponible — vérifiez l'accès au micro dans Réglages."
-          }
-        }
-      }
-    },
     "VoiceOver on: turn-taking.": {
       "localizations": {
         "en": {
@@ -11293,22 +11117,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Volet"
-          }
-        }
-      }
-    },
-    "Without a Claude key, everything stays on the iPhone. With Claude, only Live mode sends text and, if you allow it, a reduced picture — never the audio. PicShop has no server, no account and no tracking.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Without a Claude key, everything stays on the iPhone. With Claude, only Live mode sends text and, if you allow it, a reduced picture — never the audio. PicShop has no server, no account and no tracking."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sans clé Claude, tout reste sur l'iPhone. Avec Claude, seul le mode Live envoie du texte et, si tu l'acceptes, une image réduite — jamais l'audio. PicShop n'a ni serveur, ni compte, ni pistage."
           }
         }
       }

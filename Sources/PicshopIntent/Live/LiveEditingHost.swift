@@ -29,10 +29,14 @@ public protocol LiveEditingHost: AnyObject {
     func liveChooseCandidate(_ choice: LiveCandidateChoice) async -> LiveRunResult
     @discardableResult func liveCancelProcessing() -> Bool
     func livePausePlayback()
+    /// The video plays: its sound is not in the echo canceller's reference, so Live does not hear meanwhile.
+    var liveIsPlaying: Bool { get }
 }
 
 extension LiveEditingHost {
     public func livePausePlayback() {}
+
+    public var liveIsPlaying: Bool { false }
 
     /// Runs the intents in order through liveRun; stops after failed or needsClarification; later steps are skipped.
     public func execute(steps: [EditIntent]) async -> LiveExecution {

@@ -336,6 +336,22 @@ public struct LiveExecution: Sendable, Equatable {
 
     public var anyApplied: Bool { steps.contains { $0.status == .applied } }
 
+    /// Applied, yet no edit of their own: undo, redo and revert move through the
+    /// history, the others only change the view or the playback.
+    public static let nonEditActions: Set<IntentAction> = [.undo, .redo, .revert, .compare, .zoom, .play, .pause, .seek]
+
+    /// The label of the last applied step that is an edit.
+    public var lastEditLabel: String? {
+        steps.last { $0.status == .applied && !Self.nonEditActions.contains($0.action) }?.label
+    }
+
+    /// What the inline Undo offers after this run: its last edit, only when the
+    /// document version went up since `versionBefore`. Nil after an undo, a
+    /// comparison or a seek, so the chip never takes away an edit the run did not add.
+    public func undoLabel(since versionBefore: Int) -> String? {
+        version > versionBefore ? lastEditLabel : nil
+    }
+
     /// What to say or show after a local run: the question or the problem a step
     /// reported, else "running" for a long job, else a short done.
     public func outcomeText(language: NormalizedUtterance.Language) -> String {

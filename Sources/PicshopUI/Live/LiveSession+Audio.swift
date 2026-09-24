@@ -85,6 +85,8 @@ extension LiveSession {
         accumulator = TranscriptAccumulator()
         assignMuted(false)
         firstAudioMarked = []
+        playbackHolds = false
+        playbackTurn = nil
         sinceLastReply = []
         interruptedAfter = nil
         responseChunks = []
@@ -246,6 +248,7 @@ extension LiveSession {
         isConnecting = false
         problemState = nil
         pendingCaption = nil
+        playbackHolds = false
         assignRunning(false)
         assignActivityTitle(nil)
         meter.reset()
@@ -366,6 +369,8 @@ extension LiveSession {
 
     private func loopStep() {
         let now = clock.now()
+        let playing = host?.liveIsPlaying ?? false
+        if playing != playbackHolds { playbackChanged(playing) }
         if let audio {
             for frame in audio.engine.drainFeatures() {
                 trackLevel(frame)
@@ -385,6 +390,19 @@ extension LiveSession {
             lastDebugPush = now
             pushDebug()
         }
+    }
+
+    /// The video's sound is not in the echo canceller's reference: while it plays Live
+    /// does not hear (the reducer is muted; the user's own mute is kept apart), and when
+    /// it stops a fresh user turn begins, so nothing the soundtrack said becomes the user's.
+    private func playbackChanged(_ playing: Bool) {
+        playbackHolds = playing
+        feed(.mute(isMuted || playing))
+        if !playing, machine.state.phase != .userSpeaking {
+            accumulator.beginTurn(at: clock.now())
+            audio?.transcriber?.beginTurn()
+        }
+        debugDecision(playing ? "video playing: not hearing" : "video stopped: hearing again")
     }
 
     /// A slow noise-floor follower for the meter, the latency marks and Diagnostic Live.

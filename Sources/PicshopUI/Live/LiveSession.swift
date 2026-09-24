@@ -133,6 +133,10 @@ public final class LiveSession {
     /// Bumped at every Live start: a tool from an earlier conversation never reaches this one's reducer.
     @ObservationIgnored var liveGeneration = 0
     @ObservationIgnored var firstAudioMarked: Set<Int> = []
+    /// The video plays: Live does not hear (the reducer is muted, `isMuted` stays the user's).
+    @ObservationIgnored var playbackHolds = false
+    /// The turn whose own steps started playback ("lecture"): its reply does not pause it again.
+    @ObservationIgnored var playbackTurn: Int?
 
     @ObservationIgnored var heuristicIdeas: [LiveIdea] = []
     @ObservationIgnored var brainIdeas: [LiveIdea] = []
@@ -242,6 +246,8 @@ public final class LiveSession {
         case .connecting:
             break
         default:
+            // Over a playing video Live does not hear: the orb pauses it, and Live listens.
+            if playbackHolds { host?.livePausePlayback() }
             feed(.orbTapped(at: clock.now()))
         }
     }
@@ -276,7 +282,7 @@ public final class LiveSession {
         guard muted != isMuted else { return }
         isMuted = muted
         guard isRunning else { return }
-        feed(.mute(muted))
+        feed(.mute(muted || playbackHolds))
         debugDecision(muted ? "microphone muted" : "microphone unmuted")
     }
 

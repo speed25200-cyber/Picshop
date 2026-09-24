@@ -930,6 +930,7 @@ struct ExportSheet: View {
     }
 
     var body: some View {
+        let exporting = session.exportProgress != nil
         NavigationStack {
             ScrollView {
                 VStack(spacing: PSSpacing.large) {
@@ -979,20 +980,34 @@ struct ExportSheet: View {
                 Button {
                     Haptics.confirm()
                     Task {
-                        await session.export(options: ExportOptions(format: format, quality: quality, maxLongestSide: fullResolution ? nil : 2048, saveToPhotos: saveToPhotos))
+                        // Done: the sheet goes, and 'Saved to Photos' shows over the photo.
+                        if await session.export(options: ExportOptions(format: format, quality: quality, maxLongestSide: fullResolution ? nil : 2048,
+                                                                       saveToPhotos: saveToPhotos)) {
+                            dismiss()
+                        }
                     }
                 } label: {
-                    Label(saveToPhotos ? L("Save to Photos") : L("Export"), systemImage: saveToPhotos ? "photo.badge.arrow.down" : "square.and.arrow.down").frame(maxWidth: .infinity)
+                    if exporting {
+                        HStack(spacing: 10) {
+                            ProgressView().tint(.black)
+                            Text(L("Exporting…"))
+                        }
+                        .frame(maxWidth: .infinity)
+                    } else {
+                        Label(saveToPhotos ? L("Save to Photos") : L("Export"), systemImage: saveToPhotos ? "photo.badge.arrow.down" : "square.and.arrow.down").frame(maxWidth: .infinity)
+                    }
                 }
                 .buttonStyle(PrimaryButtonStyle())
+                .disabled(exporting)
                 .padding(.horizontal, PSSpacing.page)
                 .padding(.vertical, 10)
                 .background(LinearGradient(colors: [PSTheme.ink.opacity(0), PSTheme.ink.opacity(0.9)], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
             }
             .navigationTitle(L("Export"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("Done")) { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("Done")) { dismiss() }.disabled(exporting) } }
             .onAppear { format = app?.settings.photoExportFormat ?? .heic }
+            .interactiveDismissDisabled(exporting)
         }
         .preferredColorScheme(.dark)
         .presentationDetents([.large])

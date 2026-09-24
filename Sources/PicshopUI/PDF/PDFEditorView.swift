@@ -37,9 +37,10 @@ public struct PDFEditorView: View {
         .onAppear { session.configure() }
         .onDisappear { session.teardown() }
         .onChange(of: session.activeTool) { _, tool in
-            // The signature and image tools open their sheet with the panel.
-            if tool == .signature, SignatureStore.currentAsset() == nil { session.showsSignatureSheet = true }
-            if tool == .image { session.showsImagePicker = true }
+            // The signature and image tools open their sheet with the panel. From
+            // Outils they are actions, so Outils has gone by now.
+            guard let tool, PDFToolCatalog.presentsSheet(tool) else { return }
+            if tool == .signature { session.showsSignatureSheet = true } else { session.showsImagePicker = true }
         }
         .sheet(isPresented: $session.showsHelp) {
             HelpSheet(mode: .pdf) { text in session.live.send(text: text) }

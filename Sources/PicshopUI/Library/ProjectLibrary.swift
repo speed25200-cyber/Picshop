@@ -18,8 +18,6 @@ import PicshopPDF
 @Observable
 public final class ProjectLibrary {
     public let store: ProjectStore
-    /// Full projects, filled only by `refresh()`. Phase 2 removes it.
-    public private(set) var projects: [Project] = []
     public internal(set) var isImporting = false
     public var errorMessage: String?
 
@@ -261,46 +259,11 @@ public final class ProjectLibrary {
         slotOrder.removeAll { $0 == id }
     }
 
-    /// Phase 2 removes: the card's slot image, loading it when needed.
-    public func thumbnail(for project: Project) -> UIImage? {
-        let slot = slot(for: project.id)
-        let summary = ProjectSummary(project: project)
-        if slot.checkedFor != summary.modifiedAt {
-            Task { await loadThumbnail(for: summary) }
-        }
-        return slot.image
-    }
-
-    /// Phase 2 removes: re-reads a thumbnail rewritten on disk, keeping the
-    /// current image until the new one is decoded. No rescan.
-    public func invalidateThumbnail(for id: UUID) {
-        guard let slot = slots[id] else { return }
-        slot.checkedFor = nil
-        let summary = summaries.first { $0.id == id }
-        let url = store.thumbnailURL(for: id)
-        let known = slot.freshAsOf
-        Task {
-            if let summary {
-                await loadThumbnail(for: summary)
-                return
-            }
-            let found = await Task.detached(priority: .userInitiated) { ThumbnailIO.read(url, ifNewerThan: known) }.value
-            if case .image(let image, let date) = found { slot.update(image, modifiedAt: date, freshAsOf: date) }
-        }
-    }
-
     // MARK: Changes
 
+    /// Deletes a project: its card goes at once, its package off the main thread.
     public func delete(_ summary: ProjectSummary) {
-        deleteProject(summary.id)
-    }
-
-    /// Phase 2 removes.
-    public func delete(_ project: Project) {
-        deleteProject(project.id)
-    }
-
-    private func deleteProject(_ id: UUID) {
+        let id = summary.id
         removed.insert(id)
         if summaries.contains(where: { $0.id == id }) { summaries.removeAll { $0.id == id } }
         logEdit(id, nil)
@@ -332,12 +295,6 @@ public final class ProjectLibrary {
         }
     }
 
-    /// Phase 2 removes.
-    public func rename(_ project: Project, to title: String) {
-        let summary = summaries.first { $0.id == project.id } ?? ProjectSummary(project: project)
-        Task { await rename(summary, to: title) }
-    }
-
     /// Copies a project's package under a new id, with its card image shown at once.
     public func duplicate(_ summary: ProjectSummary) async {
         let store = self.store
@@ -367,12 +324,6 @@ public final class ProjectLibrary {
         case .failure(let error):
             errorMessage = Self.message(for: error)
         }
-    }
-
-    /// Phase 2 removes.
-    public func duplicate(_ project: Project) {
-        let summary = summaries.first { $0.id == project.id } ?? ProjectSummary(project: project)
-        Task { await duplicate(summary) }
     }
 
     nonisolated static func retitle(_ project: inout Project, _ title: String) {
@@ -472,17 +423,7 @@ public final class ProjectLibrary {
         return created.project
     }
 
-    // MARK: Phase 2 removes
-
-    /// Decodes every manifest on the calling thread. Nothing calls it any more.
-    public func refresh() {
-        projects = store.listProjects()
-    }
-
-    /// Saves synchronously and updates the one summary; no rescan.
-    public func save(_ project: Project) {
-        saveNow(project)
-    }
+    // MARK: Helpers
 
     private func defaultTitle(video: Bool) -> String {
         let formatter = DateFormatter()

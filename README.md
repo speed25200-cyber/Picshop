@@ -5,8 +5,9 @@ A Photoshop-grade photo editor and a Vegas-grade video editor in one app, design
 system Liquid Glass, one edit-yellow accent, and an iridescent glow that appears only when the AI works.
 Tap a Magic tool, type what you want, or just say it — *« efface le chien »*, *"add captions"*,
 *« coupe sur le rythme »*. Editing runs on the device. **Picshop Live** turns the editor into a spoken
-conversation that proposes ideas and edits as you talk: with your own Claude key it talks with Claude
-(the words and, if you allow it, a reduced picture go to Anthropic), otherwise it stays on the iPhone.
+conversation that proposes ideas and edits as you talk: with your own Claude key, once you agree, it talks with
+Claude (the text of the conversation and, if you allow it, a reduced picture go to Anthropic — never the audio);
+otherwise it stays on the iPhone.
 
 <p align="center">
   <img src="App/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="120" alt="PicShop icon">
@@ -121,12 +122,13 @@ docs/                    ARCHITECTURE · VOICE_COMMANDS · MODELS
 
 ## Privacy
 
-No servers, no accounts, no analytics. Speech recognition, segmentation and rendering always run on the device,
-and so does everything else without a Claude key. With a key, only Picshop Live sends data — to Anthropic, after a
-one-time consent: the text of what you say or type during Live, a description of your edits and of the picture, and,
-if you allow it, a reduced copy (1024 px) of the photo or video frame without location or camera data. Audio never
-leaves the device; outside Live mode, nothing is sent. The privacy manifest (`App/PrivacyInfo.xcprivacy`) declares
-photos or videos and other user content, used for app functionality only, not linked to you and never for tracking.
+No servers, no accounts, no analytics. Everything stays on the iPhone except Picshop Live with Claude: speech
+recognition, segmentation and rendering always run on the device, and so does Live without a Claude key. With your
+own key, and only after a one-time consent, Live mode sends Anthropic the text of the conversation (what you say or
+type during Live), a description of your edits and of the picture, and, if you allow it, a reduced copy (1024 px) of
+the photo or video frame without location or camera data. Audio never leaves the device; outside Live mode, nothing
+is sent. The privacy manifest (`App/PrivacyInfo.xcprivacy`) declares photos or videos and other user content, used
+for app functionality only, not linked to you and never for tracking.
 
 ## License
 

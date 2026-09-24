@@ -69,6 +69,8 @@ private struct ContractTransport: ClaudeTransport {
 private func exerciseEditorSide() async throws {
     let host = ContractHost()
     host.livePausePlayback()
+    // Only the video editor plays: the default is false.
+    XCTAssertFalse(host.liveIsPlaying)
     let execution = await host.execute(steps: [])
     XCTAssertEqual(execution.version, 3)
 

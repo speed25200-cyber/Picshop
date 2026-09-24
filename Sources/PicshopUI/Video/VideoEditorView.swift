@@ -128,9 +128,10 @@ struct VideoCanvas: View {
     }
 }
 
-/// The player, edge to edge: tap to play or pause, double-tap a side to skip
-/// five seconds, the timecode in a pill at the bottom left. The candidate boxes
-/// of a pending choice are drawn over the frame and can be tapped.
+/// The player, edge to edge: tap to play or pause (a play glyph shows while
+/// paused), double-tap a side to skip five seconds, the timecode in a pill at
+/// the bottom left. The candidate boxes of a pending choice are drawn over the
+/// frame and can be tapped.
 struct PlayerStage: View {
     @Bindable var session: VideoEditorSession
     /// The glyph that flashes in the centre after a tap (play.fill or pause.fill).
@@ -171,6 +172,21 @@ struct PlayerStage: View {
                     .accessibilityLabel(L("Video"))
                     .accessibilityAddTraits(.startsMediaSession)
                     .accessibilityAction { togglePlayback() }
+                // The sides carry the double tap (skip); the centre has only the single
+                // tap, so it answers at once instead of waiting out a double tap.
+                ForEach([-1, 1], id: \.self) { side in
+                    let zone = CGRect(x: side < 0 ? frame.minX : frame.maxX - frame.width / 3, y: frame.minY,
+                                      width: max(0, frame.width / 3), height: max(0, frame.height))
+                    Color.clear
+                        .frame(width: zone.width, height: zone.height)
+                        .contentShape(Rectangle())
+                        .onTapGesture(count: 2) { jump(seconds: side * 5) }
+                        .onTapGesture(count: 1, coordinateSpace: .local) { location in
+                            tap(at: CGPoint(x: zone.minX + location.x, y: zone.minY + location.y), frame: frame)
+                        }
+                        .position(x: zone.midX, y: zone.midY)
+                        .accessibilityHidden(true)
+                }
                 if !candidates.isEmpty {
                     CandidateBoxes(candidates: candidates, frame: frame)
                 }
@@ -189,6 +205,10 @@ struct PlayerStage: View {
                     .padding(8)
                     .frame(width: frame.width, height: frame.height, alignment: .bottomLeading)
                     .position(x: frame.midX, y: frame.midY)
+                if flash == nil, session.pendingClarification == nil, session.activeTool != .overlay, session.activeTool != .motion {
+                    PausedGlyph(player: session.player)
+                        .position(x: frame.midX, y: frame.midY)
+                }
                 if let flash {
                     Image(systemName: flash)
                         .font(.system(size: 26, weight: .semibold))
@@ -211,7 +231,6 @@ struct PlayerStage: View {
                 }
             }
             .contentShape(Rectangle())
-            .onTapGesture(count: 2, coordinateSpace: .local) { location in doubleTap(at: location, frame: frame) }
             .onTapGesture(count: 1, coordinateSpace: .local) { location in tap(at: location, frame: frame) }
         }
     }
@@ -231,13 +250,8 @@ struct PlayerStage: View {
         togglePlayback()
     }
 
-    private func doubleTap(at location: CGPoint, frame: CGRect) {
-        let third = frame.width / 3
-        guard frame.width > 0, location.x < frame.minX + third || location.x > frame.maxX - third else {
-            togglePlayback()
-            return
-        }
-        let delta = location.x < frame.minX + third ? -5 : 5
+    /// A double tap on a side: five seconds back or forward.
+    private func jump(seconds delta: Int) {
         Haptics.tick()
         let player = session.player
         let target = (player.currentTime + Double(delta)).clamped(to: 0...max(0, player.duration))
@@ -287,6 +301,29 @@ private struct CandidateBoxes: View {
                 context.draw(Text("\(index + 1)").font(.system(size: 14, weight: .bold, design: .rounded)).foregroundStyle(.black), at: CGPoint(x: badge.midX, y: badge.midY))
             }
         }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The play glyph in the centre while the video is paused, so playing it is
+/// never a guess. A leaf: only it reads `isPlaying`.
+private struct PausedGlyph: View {
+    let player: TimelinePlayer
+
+    var body: some View {
+        let paused = !player.isPlaying
+        ZStack {
+            if paused {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 64, height: 64)
+                    .psGlass(shape: AnyShape(Circle()), variant: .clear)
+                    .transition(.opacity)
+            }
+        }
+        .animation(PSMotion.quick, value: paused)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }

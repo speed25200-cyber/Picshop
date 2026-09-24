@@ -7,7 +7,8 @@ import PicshopVideo
 /// slides under a fixed centre playhead. Drag to scrub (the player chases the
 /// finger), pinch to zoom, tap to open the full timeline (Montage › Timeline &
 /// coupe). Under the strip, 3-point hints show where the captions, the
-/// overlays and the sound tracks sit.
+/// overlays and the sound tracks sit. With several clips, the selected one
+/// (the one the clip tools edit) is outlined.
 ///
 /// Only the offset follows the playhead: the frames are laid out once per
 /// zoom and never re-evaluated by playback.
@@ -166,11 +167,19 @@ private struct FilmstripContent: View {
 
     var body: some View {
         let width = max(1, CGFloat(timeline.duration) * pixelsPerSecond)
+        // With several clips, the one the clip tools edit (Réglages, Looks, Vitesse…) is outlined.
+        let selected = timeline.clips.count > 1 ? session.selectedClipID : nil
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 0) {
                 ForEach(timeline.clips, id: \.id) { clip in
                     FilmstripClip(thumbnailer: session.thumbnailer, clip: clip, aspect: timeline.renderSize.aspectRatio,
                                   width: max(2, CGFloat(clip.timelineDuration) * pixelsPerSecond))
+                        .overlay {
+                            if clip.id == selected {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .strokeBorder(PSTheme.accent, lineWidth: 2)
+                            }
+                        }
                 }
             }
             .frame(width: width, height: FilmstripScrubber.stripHeight, alignment: .leading)

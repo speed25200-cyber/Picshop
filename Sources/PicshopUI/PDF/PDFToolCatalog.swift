@@ -22,8 +22,14 @@ enum PDFToolCatalog {
         var categories: [ToolCategory] = []
         for entry in layout {
             let items: [ToolItem] = entry.panels.map { tool -> ToolItem in
-                ToolItem.panel(id: tool.rawValue, title: title(for: tool), symbol: tool.symbol, isModified: modified.contains(tool),
-                       open: { session.activeTool = tool })
+                // A tool that opens with a sheet of its own runs once Outils has gone:
+                // a sheet asked for while another is still leaving may never show.
+                if presentsSheet(tool) {
+                    return .action(id: tool.rawValue, title: title(for: tool), symbol: tool.symbol, isMagic: false,
+                                   run: { session.activeTool = tool })
+                }
+                return .panel(id: tool.rawValue, title: title(for: tool), symbol: tool.symbol, isModified: modified.contains(tool),
+                              open: { session.activeTool = tool })
             }
             categories.append(ToolCategory(id: entry.id, title: categoryTitle(entry.id), symbol: entry.symbol, items: items))
         }
@@ -47,6 +53,16 @@ enum PDFToolCatalog {
             }
         }
         return tools
+    }
+
+    /// Whether opening the tool presents a sheet at once: the photo picker, or
+    /// the signature pad while no signature is saved (PDFEditorView presents them).
+    static func presentsSheet(_ tool: Tool) -> Bool {
+        switch tool {
+        case .image: return true
+        case .signature: return SignatureStore.currentAsset() == nil
+        default: return false
+        }
     }
 
     static func category(of tool: Tool) -> String {

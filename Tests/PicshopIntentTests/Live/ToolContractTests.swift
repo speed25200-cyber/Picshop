@@ -620,4 +620,25 @@ final class ToolResultEncoderTests: XCTestCase {
         XCTAssertEqual(running.outcomeText(language: .english), LiveLines.line(.running, .english))
         XCTAssertEqual(LiveExecution(steps: [], version: 1, canUndo: false).outcomeText(language: .french), "")
     }
+
+    /// The inline Undo: only for an edit the run added, never for undo, compare or playback.
+    func testUndoLabelOnlyForEditsThatRaisedTheVersion() {
+        let edit = LiveExecution(steps: [LiveStepResult(index: 0, action: .adjust, status: .applied, label: "Warmth +15")], version: 4, canUndo: true)
+        XCTAssertEqual(edit.undoLabel(since: 3), "Warmth +15")
+        XCTAssertNil(edit.undoLabel(since: 4), "nothing new in the history")
+        // "annule": the executor reports it applied, labelled with the intent's summary.
+        let undo = LiveExecution(steps: [LiveStepResult(index: 0, action: .undo, status: .applied, label: "Undo")], version: 5, canUndo: true)
+        XCTAssertNil(undo.undoLabel(since: 4))
+        for action in [IntentAction.redo, .revert, .compare, .zoom, .play, .pause, .seek] {
+            let step = LiveExecution(steps: [LiveStepResult(index: 0, action: action, status: .applied, label: action.rawValue)], version: 2, canUndo: true)
+            XCTAssertNil(step.undoLabel(since: 1), action.rawValue)
+            XCTAssertNil(step.lastEditLabel, action.rawValue)
+        }
+        // An edit then a seek: the edit is what Undo takes back.
+        let mixed = LiveExecution(steps: [LiveStepResult(index: 0, action: .split, status: .applied, label: "Split"),
+                                          LiveStepResult(index: 1, action: .seek, status: .applied, label: "Seek")], version: 2, canUndo: true)
+        XCTAssertEqual(mixed.undoLabel(since: 1), "Split")
+        let failed = LiveExecution(steps: [LiveStepResult(index: 0, action: .removeObject, status: .failed, message: "x")], version: 2, canUndo: true)
+        XCTAssertNil(failed.undoLabel(since: 1))
+    }
 }

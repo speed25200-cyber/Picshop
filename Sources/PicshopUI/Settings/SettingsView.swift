@@ -126,7 +126,7 @@ public struct SettingsView: View {
         Section {
             HStack(alignment: .top, spacing: 12) {
                 SettingsRowIcon(systemName: "hand.raised.fill", tint: PSTheme.success)
-                Text(L("Without a Claude key, everything stays on the iPhone. With Claude, only Live mode sends text and, if you allow it, a reduced picture — never the audio. PicShop has no server, no account and no tracking."))
+                Text(L("Everything stays on the iPhone, except in Live mode with Claude: once you agree, Live sends Anthropic, with your own key, the text of the conversation and, if you allow it, a reduced picture — never the audio. PicShop has no server, no account and no tracking."))
                     .font(PSFont.footnote())
                     .foregroundStyle(PSTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

@@ -63,7 +63,8 @@ extension LiveSession {
 
         let language = NormalizedUtterance(text).language
         replyLanguage = language
-        let grammar = RuleBasedIntentEngine().parse(text, context: intentContext())
+        // Read fresh: the grammar bakes the playhead and the last tap into its intents.
+        let grammar = RuleBasedIntentEngine().parse(text, context: currentIntentContext())
         currentKind = chooseBrain()
         assignRoute(brain: badge(for: currentKind))
         let jobRunning = backgroundJobs > 0 || (host?.liveIsBusy ?? false)
@@ -175,16 +176,20 @@ extension LiveSession {
             self.assignActivityTitle(Self.defaultActivity(.applyEdits, language))
             toolHandler.language = language
             self.liveEditDepth += 1
+            let versionBefore = self.host?.liveVersion ?? 0
             let execution = await toolHandler.runPlan(plan)
             self.liveEditDepth -= 1
             self.noteBackgroundJob(execution)
+            self.notePlayback(execution, turn: turn)
             self.assignActivityTitle(nil)
             self.latency.mark(.toolEnd, at: self.clock.now(), turn: turn)
             if self.isRunning, self.liveGeneration == generation {
-                self.feed(.turn(turn, .toolFinished(changedDocument: execution.anyApplied), at: self.clock.now()))
+                // Play, seek, compare or zoom change nothing: no 'applied' earcon for them.
+                self.feed(.turn(turn, .toolFinished(changedDocument: execution.version > versionBefore), at: self.clock.now()))
             }
             let labels = execution.steps.filter { $0.status == .applied }.compactMap(\.label)
-            if let label = labels.last { self.offerUndo(label: label) }
+            // Only an edit this run added: after "annule" or "lecture" the chip would take away another one.
+            if let label = execution.undoLabel(since: versionBefore) { self.offerUndo(label: label) }
             self.appendSinceLastReply("said '\(text.prefix(80))'; applied \(labels.isEmpty ? "nothing" : labels.joined(separator: ", "))")
             self.refreshIdeas()
             // Interrupted meanwhile: the edit stands, its confirmation is not spoken.
@@ -309,14 +314,11 @@ extension LiveSession {
                     opened()
                     latency.mark(.toolStart, at: clock.now(), turn: id)
                     assignActivityTitle(activity ?? Self.defaultActivity(name, language))
-                case .toolFinished(_, let name, let result):
+                case .toolFinished(_, _, let result):
                     latency.mark(.toolEnd, at: clock.now(), turn: id)
                     assignActivityTitle(nil)
-                    if result.changedDocument {
-                        let label = result.execution?.steps.last(where: { $0.status == .applied })?.label
-                        offerUndo(label: label ?? Self.defaultActivity(name, language))
-                        refreshIdeas()
-                    }
+                    // The inline Undo is offered by LiveToolProxy, which knows the version before the call.
+                    if result.changedDocument { refreshIdeas() }
                 case .ideas(let proposed):
                     receiveBrainIdeas(proposed)
                 case .fallbackModel(let from, let to):
@@ -529,6 +531,7 @@ extension LiveSession {
     func speakerSignal(_ turn: Int, _ signal: SpeakerSignal) {
         guard isRunning else { return }
         if case .chunkStarted(let text) = signal {
+            pausePlaybackForVoice(turn: turn)
             var next = transcript
             next.assistant = text
             assignTranscript(next)
@@ -539,6 +542,21 @@ extension LiveSession {
             }
         }
         feed(.speaker(turn, signal, at: clock.now()))
+    }
+
+    /// The voice starts while the video plays: playback pauses, so the soundtrack never
+    /// covers the voice. Not for the turn whose own steps started it ("lecture"), nor
+    /// for captions without a voice.
+    private func pausePlaybackForVoice(turn: Int) {
+        guard captionOnly == nil, machine.state.speakingSince == nil, playbackTurn != turn, host?.liveIsPlaying == true else { return }
+        host?.livePausePlayback()
+        debugDecision("video paused for the voice")
+    }
+
+    /// Remembers the turn whose run started playback.
+    func notePlayback(_ execution: LiveExecution, turn: Int?) {
+        guard let turn, execution.steps.contains(where: { $0.status == .applied && $0.action == .play }) else { return }
+        playbackTurn = turn
     }
 
     func publishLatency(turn: Int) {
@@ -617,7 +635,9 @@ extension LiveSession {
         return task
     }
 
-    /// The host's intent context, once per document version and context change.
+    /// The host's intent context, once per document version and context change: only
+    /// for the end-of-turn parse of each transcript segment, where the playhead and the
+    /// last tap do not matter. A committed turn parses with `currentIntentContext()`.
     func intentContext() -> IntentContext {
         guard let host else { return IntentContext(mode: mode) }
         let key = "\(host.liveVersion)#\(contextGeneration)"
@@ -625,6 +645,12 @@ extension LiveSession {
         let context = host.liveIntentContext()
         cachedIntentContext = (key, context)
         return context
+    }
+
+    /// The host's intent context as it is now: the playhead where playback or a scrub
+    /// left it, the point last tapped.
+    func currentIntentContext() -> IntentContext {
+        host?.liveIntentContext() ?? IntentContext(mode: mode)
     }
 
     // MARK: What happened since the last reply
@@ -673,10 +699,8 @@ extension LiveSession {
             audio?.playEarcon(.applied)
             if state != .hearing, state != .dictating { Haptics.live(.actionApplied) }
         }
-        if let label {
-            appendSinceLastReply("finished '\(label)'")
-            offerUndo(label: label)
-        }
+        if let label { appendSinceLastReply("finished '\(label)'") }
+        if let edit = execution.lastEditLabel { offerUndo(label: edit) }
         if isRunning, !isConnecting, state != .speaking, state != .hearing, execution.anyApplied {
             speak(LiveLines.line(.jobDone, replyLanguage), turn: machine.state.turn)
         }
@@ -764,6 +788,7 @@ extension LiveSession {
         let language = live ? replyLanguage : chipLanguage
         toolHandler.language = language
         liveEditDepth += 1
+        let versionBefore = host?.liveVersion ?? 0
         Task { @MainActor [weak self] in
             let execution = await toolHandler.runIdea(idea)
             guard let self else { return }
@@ -772,7 +797,7 @@ extension LiveSession {
             self.assignActivityTitle(nil)
             let applied = execution.anyApplied
             if live, self.isRunning, self.liveGeneration == generation {
-                self.feed(.turn(turn, .toolFinished(changedDocument: applied), at: self.clock.now()))
+                self.feed(.turn(turn, .toolFinished(changedDocument: execution.version > versionBefore), at: self.clock.now()))
             } else {
                 self.restingPhase = nil
                 self.publishState()
@@ -780,9 +805,14 @@ extension LiveSession {
             self.brainIdeas.removeAll { $0.id == idea.id }
             self.appendSinceLastReply("tapped idea '\(idea.title)' -> \(applied ? "applied" : "not applied")")
             let line = applied ? LiveLines.ideaApplied(idea.title, language) : execution.outcomeText(language: language)
-            if applied { self.offerUndo(label: idea.title) }
+            if execution.undoLabel(since: versionBefore) != nil { self.offerUndo(label: idea.title) }
             if self.isRunning {
-                self.speak(line, language: language, turn: turn)
+                // Interrupted meanwhile (the user spoke, the orb): the edit stands and is in
+                // sinceLastReply; its line is not spoken over the user, nor queued behind them.
+                let phase = self.machine.state.phase
+                if self.machine.state.turn == turn, phase != .userSpeaking, phase != .interrupted {
+                    self.speak(line, language: language, turn: turn)
+                }
             } else if !line.isEmpty {
                 self.showReply(line, isProblem: !applied, isError: false)
             }
@@ -956,11 +986,21 @@ final class LiveToolProxy: LiveToolHandler {
 
     func perform(_ call: LiveToolCall) async -> LiveToolResult {
         let started = session?.brainToolStarted()
+        let versionBefore = session?.host?.liveVersion ?? 0
         session?.liveEditDepth += 1
         let result = await handler.perform(call)
         session?.liveEditDepth -= 1
-        if let execution = result.execution { session?.noteBackgroundJob(execution) }
-        if let started { session?.brainToolFinished(started, changedDocument: result.changedDocument) }
+        guard let session else { return result }
+        if let execution = result.execution {
+            session.noteBackgroundJob(execution)
+            session.notePlayback(execution, turn: started?.turn ?? session.brainTurnID)
+            // Only apply_edits that raised the version: never after undo, compare or a seek.
+            if case .applyEdits = call.tool, let label = execution.undoLabel(since: versionBefore) { session.offerUndo(label: label) }
+        }
+        if let started {
+            let changed = result.changedDocument && (session.host?.liveVersion ?? 0) > versionBefore
+            session.brainToolFinished(started, changedDocument: changed)
+        }
         return result
     }
 }

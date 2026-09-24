@@ -94,6 +94,9 @@ struct StudioBar: Equatable {
     var undoLabels: [String]
     /// A heavy step runs: Undo is dimmed.
     var isBusy: Bool
+    /// Back to the original would change something that Undo cannot reach
+    /// (edits saved in an earlier session): the revert stays offered.
+    var canRevert: Bool = false
 }
 
 /// What the top bar does.
@@ -111,7 +114,7 @@ struct StudioActions {
 /// The one editor shell for photo, video and PDF: a full-bleed black canvas,
 /// the top bar over it, and at the bottom the LiveDock, or the tool panel
 /// while a tool is open. It presents the Outils sheet (adding 'Historique'
-/// to its footer while there is something to undo), the history list and
+/// to its footer while there is something to undo or revert), the history list and
 /// LiveConsentSheet, and toggles Live on the Magic Tap.
 ///
 /// The canvas reads `studioEdges` to fit its picture between the bars; it
@@ -227,11 +230,11 @@ struct StudioChrome<Canvas: View, Panel: View>: View {
         showsTools = true
     }
 
-    /// The editor's catalog, with 'Historique' in the footer while there is something to undo.
+    /// The editor's catalog, with 'Historique' in the footer while there is something to undo or revert.
     private func sheetCatalog() -> ToolCatalog {
         var built = catalog()
         built.footer.removeAll { $0.id == Self.historyID }
-        if bar.canUndo {
+        if bar.canUndo || bar.canRevert {
             built.footer.append(.button(id: Self.historyID, title: L("History"), systemImage: "clock.arrow.circlepath",
                                         action: { showsHistory = true }))
         }
@@ -425,7 +428,7 @@ private struct UndoRedoCluster: View {
                     }
                 }
             }
-            if let revert = actions.revert, bar.canUndo || bar.canRedo {
+            if let revert = actions.revert, bar.canUndo || bar.canRedo || bar.canRevert {
                 Divider()
                 Button(role: .destructive) {
                     Haptics.confirm()

@@ -29,7 +29,7 @@ struct LiveSettingsSection: View {
             }
             .disabled(!settings.liveUseClaude)
         } footer: {
-            Text(L("In Live mode with Claude, the text of what you say and, when this is on, a reduced copy (1024 px) of the picture on screen are sent to Anthropic, with your key — never the audio. Outside Live mode, nothing is sent."))
+            Text(L("In Live mode with Claude, once you agree, the text of the conversation and, when this is on, a reduced copy (1024 px) of the picture on screen are sent to Anthropic with your own key — never the audio. Outside Live mode, nothing is sent."))
         }
 
         Section {

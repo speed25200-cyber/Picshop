@@ -109,6 +109,8 @@ public final class PhotoEditorSession {
     public private(set) var canRedo = false
     /// Past labels, oldest first.
     public private(set) var undoLabels: [String] = []
+    /// revert() would change the photo: also true on a reopened photo, whose earlier edits Undo cannot reach.
+    public private(set) var canRevertToImport = false
     /// Bumped whenever the document changes (undo and redo included); Live's document version.
     public private(set) var revision = 0
     /// The tools whose edits are in the picture (Photos' yellow dot).
@@ -291,6 +293,7 @@ public final class PhotoEditorSession {
         executor = PhotoCommandExecutor(services: services, language: language)
         isVoiceReady = true
         lastSavedDocument = document
+        canRevertToImport = differsFromImport()
         observeLifecycle()
         requestPreview()
         // Upside down with the reading order kept is never a look anyone chose, and a flip
@@ -535,6 +538,8 @@ public final class PhotoEditorSession {
         if labels != undoLabels { undoLabels = labels; changed = true }
         if documentChanged {
             revision += 1
+            let revertible = differsFromImport()
+            if revertible != canRevertToImport { canRevertToImport = revertible }
             let tools = Self.modifiedTools(in: present)
             if tools != modifiedTools { modifiedTools = tools }
             let key = Self.lookThumbnailKey(for: present, thumbnailSide: app.performance.thumbnailSide)
@@ -647,14 +652,18 @@ public final class PhotoEditorSession {
     /// this session opened. Itself undoable. False when there was nothing to revert.
     @discardableResult
     public func revert() -> Bool {
-        let restored = openedDocument.restoredToImport()
-        var compared = restored
-        compared.modifiedAt = document.modifiedAt
-        compared.selectedLayerID = document.selectedLayerID
-        guard compared != document else { return false }
-        commit(restored, label: L("Revert to Original"))
+        guard differsFromImport() else { return false }
+        commit(openedDocument.restoredToImport(), label: L("Revert to Original"))
         Haptics.confirm()
         return true
+    }
+
+    /// Whether the photo differs from the import revert() goes back to (the date and the selection do not count).
+    private func differsFromImport() -> Bool {
+        var compared = openedDocument.restoredToImport()
+        compared.modifiedAt = document.modifiedAt
+        compared.selectedLayerID = document.selectedLayerID
+        return compared != document
     }
 
     /// Whether earlier flips or quarter turns left the photo upside down, on its side or mirrored.
@@ -1476,7 +1485,11 @@ public final class PhotoEditorSession {
     // MARK: - Canvas taps
 
     public func tapCanvas(at point: PSPoint) {
-        lastTapPoint = point
+        if lastTapPoint != point {
+            lastTapPoint = point
+            // "Efface ça" points here: Live hears of it.
+            live.noteContextChanged()
+        }
         if activeTool == .focus {
             Task { await setFocus(at: point) }
             return
@@ -2009,8 +2022,10 @@ public final class PhotoEditorSession {
 
     // MARK: - Export
 
-    public func export(options: ExportOptions) async {
-        guard let renderer else { return }
+    /// True once the file is written (and saved to Photos when asked).
+    @discardableResult
+    public func export(options: ExportOptions) async -> Bool {
+        guard let renderer, exportProgress == nil else { return false }
         exportProgress = 0.05
         defer { exportProgress = nil }
         do {
@@ -2018,9 +2033,11 @@ public final class PhotoEditorSession {
             exportedURL = url
             Haptics.success()
             showToast(options.saveToPhotos ? L("Saved to Photos") : L("Exported"))
+            return true
         } catch {
             Haptics.error()
             showToast((error as? PicshopError)?.message ?? error.localizedDescription, isError: true)
+            return false
         }
     }
 

@@ -210,7 +210,7 @@ private struct OnboardingSamplePicture: View {
 struct OnboardingPrivacyPage: View {
     var body: some View {
         OnboardingPage(title: L("Private by default."),
-                       text: L("PicShop works entirely on your iPhone. If you add a Claude key in Settings › Live, Live mode sends Anthropic the text of what you say and, if you allow it, a reduced copy of the picture — never the audio. Outside Live mode, nothing is sent."),
+                       text: L("PicShop works entirely on your iPhone. The one exception is Live mode with Claude: once you agree, it sends Anthropic, with your own key, the text of the conversation and, if you allow it, a reduced copy of the picture — never the audio. Outside Live mode, nothing is sent."),
                        footnote: L("To talk with Claude, add your key in Settings › Live.")) {
             Image(systemName: "lock.shield")
                 .font(.system(size: 52, weight: .regular))
