@@ -34,9 +34,12 @@ jobs:
           python-version: "3.12"
       - run: pip install tree-sitter tree-sitter-swift
       - run: python3 Scripts/swift-syntax-check.py Sources Tests App
-      # Report only until phase 2 of the local-brain work, then it fails the job.
-      - name: No-cloud check (report)
-        run: bash Scripts/check-no-cloud.sh --report
+      # Everything stays on the iPhone: no cloud endpoint, key or copy may come back.
+      - name: No-cloud check
+        run: bash Scripts/check-no-cloud.sh
+      # The string catalog matches the sources and every key has its French.
+      - name: Strings check
+        run: python3 Scripts/generate_strings.py --check
 
   package-macos:
     name: Package tests (macOS, Xcode 26)
