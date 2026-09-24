@@ -18,6 +18,8 @@ public struct VoiceActivityDetector: Sendable {
         public var floorRelease: Float = 0.002
         public var floorClamp: ClosedRange<Float> = -80 ... -30
         public var initialFloorDB: Float = -60
+        /// Seconds of unbroken "speech" after which the level is taken as the room's noise and the floor relearned.
+        public var maxSpeechRun: Double = 8
 
         public init() {}
     }

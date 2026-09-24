@@ -11,34 +11,29 @@ extension LiveSession {
 
     func brainFor(_ kind: LiveBrainKind) -> (any LiveBrain)? {
         switch kind {
-        case .claude: return claudeBrain
+        case .model: return modelBrain
         case .onDevice: return onDeviceAvailable ? onDeviceBrain : nil
         case .local: return localBrain
         }
     }
 
-    /// Key, consent, the Claude toggle, and not turned off from the badge.
-    var claudeAllowed: Bool {
-        guard let app, claudeBrain != nil, !claudeForcedOff else { return false }
-        return LiveServices.shared.keyStore.hasKey && app.settings.liveUseClaude && app.settings.hasLiveConsent
-    }
-
-    /// Per turn: Claude, then the on-device model, then the local router (BrainSelector keeps the cooldowns).
+    /// Per turn: the local model when it is loaded, then Apple's on-device model, then
+    /// the grammar (BrainSelector keeps the cooldowns; thermal critical skips the model).
     func chooseBrain(excluding failed: Set<LiveBrainKind> = []) -> LiveBrainKind {
-        let inputs = BrainSelector.Inputs(claudeAllowed: claudeAllowed && !failed.contains(.claude),
-                                          online: LiveServices.shared.reachability.isOnline,
-                                          onDeviceAvailable: onDeviceAvailable && onDeviceBrain != nil && !failed.contains(.onDevice),
+        let inputs = BrainSelector.Inputs(modelReady: LocalBrainHub.shared.isModelReady && modelBrain != nil,
+                                          onDeviceAvailable: onDeviceAvailable && onDeviceBrain != nil,
+                                          thermalCritical: ProcessInfo.processInfo.thermalState == .critical,
                                           now: clock.now())
-        let kind = selector.choose(inputs)
-        if failed.contains(kind) || brainFor(kind) == nil { return .local }
-        return kind
+        let kind = selector.choose(inputs, excluding: failed)
+        return brainFor(kind) == nil ? .local : kind
     }
 
-    func badge(for kind: LiveBrainKind) -> LiveRoute.Brain {
+    /// The dock pill for a brain: the model with its name, Apple Intelligence, or Commandes.
+    func liveRoute(for kind: LiveBrainKind) -> LiveRoute {
         switch kind {
-        case .claude: return .claude
-        case .onDevice: return .onDevice
-        case .local: return app.map(Self.localBadge) ?? .commands
+        case .model: return LiveRoute(brain: .model, modelName: LocalBrainHub.shared.status.model?.displayName)
+        case .onDevice: return LiveRoute(brain: .onDevice)
+        case .local: return LiveRoute(brain: .commands)
         }
     }
 
@@ -66,7 +61,7 @@ extension LiveSession {
         // Read fresh: the grammar bakes the playhead and the last tap into its intents.
         let grammar = RuleBasedIntentEngine().parse(text, context: currentIntentContext())
         currentKind = chooseBrain()
-        assignRoute(brain: badge(for: currentKind))
+        assignRoute(liveRoute(for: currentKind))
         let jobRunning = backgroundJobs > 0 || (host?.liveIsBusy ?? false)
         // While a choice is pending its chips replace the ideas: "la dernière" is a candidate, not a chip.
         let choicePending = choices != nil
@@ -131,7 +126,7 @@ extension LiveSession {
         case .repeatLast:
             for chunk in lastResponseChunks { speak(chunk, language: language, turn: turn) }
         case .startOver:
-            let brains = [claudeBrain as (any LiveBrain)?, onDeviceBrain, localBrain].compactMap { $0 }
+            let brains = [modelBrain, onDeviceBrain, localBrain].compactMap { $0 }
             Task { for brain in brains { await brain.reset() } }
             brainIdeas = []
             sinceLastReply = []
@@ -238,8 +233,8 @@ extension LiveSession {
         var failed: Set<LiveBrainKind> = []
         var brainKind = forcedKind ?? chooseBrain()
         while isRunning, brainTurnID == id, !Task.isCancelled {
-            if kind == .sessionStart, brainKind != .claude {
-                // Only Claude opens with ideas; the others greet locally.
+            if kind == .sessionStart, brainFor(brainKind)?.capabilities.opensSession != true {
+                // Only a brain that opens sessions looks at the picture and proposes ideas; the others greet locally.
                 speak(LiveLines.line(.greetingLocal, language), language: language, turn: id)
                 return
             }
@@ -251,7 +246,7 @@ extension LiveSession {
             currentKind = brainKind
             activeBrainKind = brainKind
             activeBrainTurnID = id
-            assignRoute(brain: badge(for: brainKind))
+            assignRoute(liveRoute(for: brainKind))
             switch await stream(brain, brainKind: brainKind, id: id, kind: kind, text: text, language: language, isQuestion: isQuestion) {
             case .done, .cancelled:
                 return
@@ -267,8 +262,8 @@ extension LiveSession {
                 debugDecision("turn #\(id) re-run on \(brainKind.rawValue)")
             case .failedAfterOutput(let error):
                 brainFailed(error, kind: brainKind, beforeOutput: false, language: language)
-                // The chunk being heard finishes, then the connection line.
-                speak(LiveLines.line(.connectionLost, language), language: language, turn: id)
+                // The chunk being heard finishes, then the lost-thread line.
+                speak(LiveLines.line(.lostThread, language), language: language, turn: id)
                 feed(.turn(id, .ended(endsWithQuestion: false), at: clock.now()))
                 return
             }
@@ -279,7 +274,9 @@ extension LiveSession {
                         language: NormalizedUtterance.Language, isQuestion: Bool) async -> BrainOutcome {
         guard let host, let toolProxy else { return .done }
         var image: LiveImage?
-        if brainKind == .claude, wantsImages { image = await snapshotForTurn() }
+        let capabilities = brain.capabilities
+        // Only a brain that sees pictures gets one, at the size it asks for.
+        if capabilities.seesImages { image = await snapshotForTurn(maxPixel: Self.snapshotSide(capabilities)) }
         guard isRunning, brainTurnID == id, !Task.isCancelled else { return .cancelled }
         let turn = LiveUserTurn(id: id, kind: kind, text: text, language: language, image: image, editorState: host.liveContextSummary(),
                                 sinceLastReply: drainSinceLastReply(), interruptedAfter: takeInterruptedAfter())
@@ -321,21 +318,24 @@ extension LiveSession {
                     if result.changedDocument { refreshIdeas() }
                 case .ideas(let proposed):
                     receiveBrainIdeas(proposed)
-                case .fallbackModel(let from, let to):
-                    debugDecision("server fallback \(from ?? "?") -> \(to ?? "?")")
-                    LiveServices.shared.record(LiveLogEntry(time: clock.now(), event: "brain.fallback", fields: ["from": from ?? "", "to": to ?? ""]))
-                case .usage(let usage):
-                    if brainKind == .claude { LiveServices.shared.add(usage) }
-                    latency.record(usage: usage, bodyBytes: 0, turn: id)
+                case .stats(let stats):
+                    latency.record(stats: stats, turn: id)
+                    LiveServices.shared.debug.setStats(stats)
+                    LiveServices.shared.record(LiveLogEntry(time: clock.now(), event: "brain.stats", fields: [
+                        "brain": brainKind.rawValue, "model": stats.model, "prompt_tokens": String(stats.promptTokens),
+                        "cached_tokens": String(stats.cachedTokens), "generated_tokens": String(stats.generatedTokens),
+                        "first_token_ms": String(stats.firstTokenMs), "tokens_per_s": String(format: "%.1f", stats.tokensPerSecond),
+                    ]))
                 case .completed(let end):
                     for chunk in chunker.finish() { speak(chunk, language: language, turn: id, isResponse: true) }
-                    if brainKind == .claude { selector.recordSuccess() }
+                    selector.recordSuccess(brainKind)
                     finish(end, turn: id, language: language, endsWithQuestion: chunker.lastEndsWithQuestion, brainKind: brainKind)
                     return .done
                 }
             }
             guard isRunning, brainTurnID == id, !Task.isCancelled else { return .cancelled }
             for chunk in chunker.finish() { speak(chunk, language: language, turn: id, isResponse: true) }
+            selector.recordSuccess(brainKind)
             finish(.answered, turn: id, language: language, endsWithQuestion: chunker.lastEndsWithQuestion, brainKind: brainKind)
             return .done
         } catch {
@@ -416,84 +416,25 @@ extension LiveSession {
 
     // MARK: Errors
 
+    /// A real failure (cancellations never get here) counts against its brain; the
+    /// grammar never cools down. Before any output the same turn goes to the next
+    /// brain; after output what was said stays and the lost-thread line follows.
     private func brainFailed(_ error: Error, kind: LiveBrainKind, beforeOutput: Bool, language: NormalizedUtterance.Language) {
         let brainError = Self.brainError(from: error)
+        let name = BrainSelector.errorName(brainError)
         LiveServices.shared.record(LiveLogEntry(time: clock.now(), event: "brain.error", fields: [
-            "brain": kind.rawValue, "error": Self.errorName(brainError), "before_output": beforeOutput ? "1" : "0",
+            "brain": kind.rawValue, "error": name, "before_output": beforeOutput ? "1" : "0",
         ]))
-        guard kind == .claude else {
-            debugDecision("\(kind.rawValue) brain failed: \(Self.errorName(brainError)); next brain")
-            return
+        selector.recordFailure(kind, brainError, now: clock.now())
+        debugDecision("\(kind.rawValue) brain failed: \(name)\(beforeOutput ? "; next brain" : "")")
+        if !beforeOutput {
+            showNotice(LiveLines.problem(BrainSelector.problem(for: brainError), language), isProblem: true)
         }
-        selector.recordFailure(brainError, now: clock.now())
-        let keyStore = LiveServices.shared.keyStore
-        switch brainError {
-        case .missingKey, .invalidKey: keyStore.noteRejected(.invalid)
-        case .noCredit: keyStore.noteRejected(.noCredit)
-        case .forbidden, .modelUnavailable: keyStore.noteRejected(.noAccess)
-        default: break
-        }
-        let problem = Self.problem(for: brainError)
-        if beforeOutput {
-            showProblem(problem, running: true)
-        } else {
-            showNotice(LiveLines.problem(problem, language), isProblem: true)
-        }
-        assignRoute(brain: badge(for: chooseBrain(excluding: [.claude])))
     }
 
     static func brainError(from error: Error) -> LiveBrainError {
         if let known = error as? LiveBrainError { return known }
-        if let api = error as? ClaudeAPIError {
-            switch api.status ?? 0 {
-            case 401: return .invalidKey
-            case 402: return .noCredit
-            case 403: return .forbidden
-            case 404: return .modelUnavailable
-            case 413: return .requestTooLarge
-            case 429: return .rateLimited(retryAfter: api.retryAfter)
-            case 529: return .overloaded
-            case 400: return .badRequest(requestID: api.requestID, message: api.message)
-            case let status where status >= 500: return .server(status: status)
-            default: return .unavailable(api.type)
-            }
-        }
-        if error is URLError { return .network("url") }
         return .unavailable(String(describing: type(of: error)))
-    }
-
-    static func problem(for error: LiveBrainError) -> LiveProblem {
-        switch error {
-        case .missingKey, .invalidKey: return .keyInvalid
-        case .noCredit: return .noCredit
-        case .forbidden, .modelUnavailable: return .noAccess
-        case .rateLimited: return .rateLimited
-        case .network: return .offline
-        case .overloaded, .server: return .unavailable("server")
-        case .timeout: return .unavailable("timeout")
-        case .badRequest, .requestTooLarge: return .unavailable("request")
-        case .streamTruncated: return .unavailable("stream")
-        case .unavailable(let reason): return .unavailable(reason)
-        }
-    }
-
-    static func errorName(_ error: LiveBrainError) -> String {
-        switch error {
-        case .missingKey: return "missing_key"
-        case .invalidKey: return "invalid_key"
-        case .noCredit: return "no_credit"
-        case .forbidden: return "forbidden"
-        case .modelUnavailable: return "model_unavailable"
-        case .rateLimited(let retryAfter): return "rate_limited_\(Int(retryAfter ?? -1))"
-        case .overloaded: return "overloaded"
-        case .server(let status): return "server_\(status)"
-        case .badRequest(let requestID, _): return "bad_request_\(requestID ?? "none")"
-        case .requestTooLarge: return "request_too_large"
-        case .network: return "network"
-        case .timeout(let stage): return "timeout_\(stage)"
-        case .streamTruncated: return "stream_truncated"
-        case .unavailable: return "unavailable"
-        }
     }
 
     static func defaultActivity(_ tool: LiveToolName, _ language: NormalizedUtterance.Language) -> String {
@@ -572,62 +513,39 @@ extension LiveSession {
         LiveServices.shared.record(LiveLogEntry(time: clock.now(), event: "latency", fields: fields))
     }
 
-    /// At VAD speech start: reopen the HTTP/2 connection when Claude has been idle for more than 60 s.
-    func preconnectIfIdle() {
-        guard route.brain == .claude, let brain = claudeBrain, let transport = claudeTransport, let key = claudeKey else { return }
-        Task { @MainActor [weak self] in
-            guard let idle = await brain.secondsSinceLastRequest, idle > 60 else { return }
-            let request = ClaudeRequestBuilder.keyCheckRequest(apiKey: key)
-            Task.detached(priority: .userInitiated) { _ = try? await transport.send(request) }
-            self?.debugDecision("pre-connect after \(Int(idle)) s idle")
-        }
-    }
-
-    func imageUpload(_ event: URLSessionClaudeTransport.UploadEvent) {
-        var next = route
-        switch event {
-        case .started:
-            next.isUploading = true
-        case .finished(let success):
-            next.isUploading = false
-            if success {
-                // D13: Claude sees the picture only once a request carrying it got a 2xx.
-                next.sharesMedia = true
-                next.imagesSent += 1
-            }
-        }
-        assignRoute(next)
-    }
-
     // MARK: Snapshots
 
-    private var wantsImages: Bool {
-        guard let app else { return false }
-        return app.settings.liveSendsImages && app.settings.hasLiveConsent
+    /// The long side a brain asks for (the local model: 768).
+    static func snapshotSide(_ capabilities: LiveBrainCapabilities) -> Int {
+        capabilities.imageMaxPixel > 0 ? capabilities.imageMaxPixel : 768
     }
 
-    /// Photo: one render per document version; video: also per clip (contextGeneration).
-    private var snapshotKey: String? {
+    /// Photo: one render per document version and size; video: also per clip (contextGeneration).
+    private func snapshotKey(maxPixel: Int) -> String? {
         guard let host else { return nil }
-        return mode == .video ? "\(host.liveVersion)#\(contextGeneration)" : "\(host.liveVersion)"
+        let version = mode == .video ? "\(host.liveVersion)#\(contextGeneration)" : "\(host.liveVersion)"
+        return "\(version)@\(maxPixel)"
     }
 
+    /// At speech start, for a brain that sees pictures: the render is ready when the turn commits.
     func prefetchSnapshot() {
-        guard route.brain == .claude, wantsImages, let key = snapshotKey, snapshotCache?.key != key else { return }
-        _ = snapshotTask(for: key)
+        guard let capabilities = brainFor(currentKind)?.capabilities, capabilities.seesImages else { return }
+        let side = Self.snapshotSide(capabilities)
+        guard let key = snapshotKey(maxPixel: side), snapshotCache?.key != key else { return }
+        _ = snapshotTask(for: key, maxPixel: side)
     }
 
-    private func snapshotForTurn() async -> LiveImage? {
-        guard let key = snapshotKey else { return nil }
+    private func snapshotForTurn(maxPixel: Int) async -> LiveImage? {
+        guard let key = snapshotKey(maxPixel: maxPixel) else { return nil }
         if let cached = snapshotCache, cached.key == key { return cached.image }
-        return await snapshotTask(for: key).value
+        return await snapshotTask(for: key, maxPixel: maxPixel).value
     }
 
-    private func snapshotTask(for key: String) -> Task<LiveImage?, Never> {
+    private func snapshotTask(for key: String, maxPixel: Int) -> Task<LiveImage?, Never> {
         if let current = snapshotTask, current.key == key { return current.task }
         guard let host else { return Task { nil } }
         let task = Task { @MainActor [weak self] () -> LiveImage? in
-            let image = await host.liveSnapshotImage(maxPixel: 1024)
+            let image = await host.liveSnapshotImage(maxPixel: maxPixel)
             self?.snapshotCache = (key, image)
             return image
         }
@@ -759,7 +677,7 @@ extension LiveSession {
         assignIdeas(.ready(shown))
     }
 
-    /// propose_ideas, from Claude (through the tool handler and the event stream).
+    /// propose_ideas, from a model brain (through the tool handler and the event stream).
     func receiveBrainIdeas(_ incoming: [LiveIdea]) {
         let fresh = incoming.filter { !dismissedIdeas.contains($0.id) }
         guard !fresh.isEmpty else { return }

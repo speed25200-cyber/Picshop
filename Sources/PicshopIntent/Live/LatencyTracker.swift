@@ -8,8 +8,7 @@ public struct LatencyTracker: Sendable {
 
     private struct Turn: Sendable {
         var marks: [Mark: Double] = [:]
-        var usage: ClaudeUsage?
-        var bodyBytes: Int?
+        var stats: LiveGenerationStats?
     }
 
     private var turns: [Int: Turn] = [:]
@@ -24,10 +23,10 @@ public struct LatencyTracker: Sendable {
         if turns[turn]?.marks[mark] == nil { turns[turn]?.marks[mark] = at }
     }
 
-    public mutating func record(usage: ClaudeUsage, bodyBytes: Int, turn: Int) {
+    /// The brain's generation stats for the turn; the latest report wins.
+    public mutating func record(stats: LiveGenerationStats, turn: Int) {
         touch(turn)
-        turns[turn]?.usage = usage
-        turns[turn]?.bodyBytes = bodyBytes
+        turns[turn]?.stats = stats
     }
 
     /// ms from speechEnd (from committed when speechEnd is missing: typed turns).
@@ -42,7 +41,7 @@ public struct LatencyTracker: Sendable {
         return result
     }
 
-    public func usage(turn: Int) -> ClaudeUsage? { turns[turn]?.usage }
+    public func stats(turn: Int) -> LiveGenerationStats? { turns[turn]?.stats }
 
     public func percentiles(_ mark: Mark) -> (p50: Double, p90: Double)? {
         let values = order.compactMap { report(turn: $0)[mark.rawValue] }.sorted()

@@ -6,7 +6,7 @@ import ImageIO
 import UniformTypeIdentifiers
 @testable import PicshopImaging
 
-/// What Picshop Live sends Claude: at most 1024 px, and nothing but the pixels.
+/// What Picshop Live hands the on-device vision model: at most 1024 px, and nothing but the pixels.
 final class LiveMediaEncoderTests: XCTestCase {
     /// EXIF keys that are only about the picture itself, which ImageIO may add on its own.
     private static let technicalExif: Set<String> = [

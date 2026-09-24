@@ -1,23 +1,16 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import Foundation
 import Observation
+import PicshopIntent
 
 /// What Settings › Live › Diagnostic Live shows. Updated only while liveDebug is
 /// on, except the ring of recent decisions, which is always kept.
 @MainActor
 @Observable
 public final class LiveDebugModel {
-    public struct Cache: Equatable, Sendable {
-        public var read: Int
-        public var write: Int
-
-        public init(read: Int, write: Int) {
-            self.read = read
-            self.write = write
-        }
-    }
-
     public private(set) var brain = ""
+    /// simple or duplex: the voice path in use.
+    public private(set) var voicePath = ""
     public private(set) var echoCancellation = false
     public private(set) var outputRoute = ""
     public private(set) var echoRisk = ""
@@ -30,24 +23,9 @@ public final class LiveDebugModel {
     public private(set) var lastLatencyMs: [String: Double] = [:]
     /// Mark -> [p50, p90].
     public private(set) var percentilesMs: [String: [Double]] = [:]
-    public private(set) var lastCache: Cache?
-    public private(set) var lastStopReason: String?
-    public private(set) var lastRequestBytes: Int?
+    /// The last generation of a brain that reports stats (the local model).
+    public private(set) var lastStats: LiveGenerationStats?
     public private(set) var voiceDescription = ""
-
-    /// Backs `injectedFault`. Stored outside `#if` so observation tracks it.
-    private var fault: String?
-
-    #if DEBUG
-    /// 401, 402, 429, 529, timeout, refusal, offline, or nil. Read by FaultInjectingTransport.
-    public var injectedFault: String? {
-        get { fault }
-        set {
-            fault = newValue
-            LiveFaultSwitch.shared.set(newValue)
-        }
-    }
-    #endif
 
     /// Mirrors AppSettings.liveDebug; set by LiveSession.
     @ObservationIgnored var isCollecting = false
@@ -62,9 +40,8 @@ public final class LiveDebugModel {
             L("AirPods: full barge-in by default. Check the voice quality."),
             L("Café noise: the end of your turn is detected in under 2 s."),
             L("A phone call in the middle of a reply."),
-            L("Airplane mode in the middle of a turn."),
-            L("A revoked key."),
-            L("A 20-minute session: cache read above 0 on every turn after the first; note the thermal state."),
+            L("Airplane mode: Live answers the same."),
+            L("A 20-minute session: note the thermal state and the answer speed."),
             L("VoiceOver on: turn-taking."),
         ]
     }
@@ -101,11 +78,14 @@ public final class LiveDebugModel {
         if percentilesMs != percentiles { percentilesMs = percentiles }
     }
 
-    func setRequest(cache: Cache?, stopReason: String?, bytes: Int?) {
-        guard isCollecting else { return }
-        if let cache, lastCache != cache { lastCache = cache }
-        if let stopReason, lastStopReason != stopReason { lastStopReason = stopReason }
-        if let bytes, lastRequestBytes != bytes { lastRequestBytes = bytes }
+    func setStats(_ stats: LiveGenerationStats) {
+        guard isCollecting, lastStats != stats else { return }
+        lastStats = stats
+    }
+
+    func setVoicePath(_ path: String) {
+        guard isCollecting, voicePath != path else { return }
+        voicePath = path
     }
 
     func setVoice(_ description: String) {
@@ -119,18 +99,5 @@ public final class LiveDebugModel {
         formatter.dateFormat = "HH:mm:ss.S"
         return formatter
     }()
-}
-
-/// The injected fault, readable from the transport's threads.
-final class LiveFaultSwitch: @unchecked Sendable {
-    static let shared = LiveFaultSwitch()
-    private let lock = NSLock()
-    private var value: String?
-
-    var current: String? { lock.withLock { value } }
-
-    func set(_ fault: String?) {
-        lock.withLock { value = fault }
-    }
 }
 #endif

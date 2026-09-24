@@ -5,7 +5,7 @@ PicShop ships with everything it needs; nothing has to be configured.
 | Capability | Built in | Shipped in the app | On demand |
 |---|---|---|---|
 | Speech → text | `SpeechAnalyzer` (iOS 26) / `SFSpeechRecognizer` on-device | — | — |
-| Command planning | Instant grammar + Apple Intelligence foundation model | — | **Pro Brain** — Qwen3 4B 4-bit via MLX (Hugging Face) |
+| Command planning and Live | Instant grammar + Apple Intelligence foundation model | — | **Local brain** — Qwen3.5 4B or 2B, 4-bit, via MLX (Hugging Face) |
 | Segmentation & detection | Vision (instance masks, people, animals, text, saliency, classification) | — | — |
 | Object removal | `PatchMatchCore` (exemplar-based, CPU) | **LaMa** large-mask inpainting (Core ML) | — |
 | Upscaling | Lanczos + edge-aware sharpening | **Real-ESRGAN ×4** (Core ML) | — |
@@ -39,16 +39,21 @@ Generate the project with `xcodegen generate --spec project-pro.yml` (adds Apple
 (`TextEncoder.mlmodelc`, `Unet.mlmodelc`, `VAEDecoder.mlmodelc`, `VAEEncoder.mlmodelc`, `merges.txt`, `vocab.json`). The engine runs masked image-to-image on a
 512 px crop around the selection; the pipeline composites the result back inside the mask only.
 
-## Pro Brain (MLX)
+## Local brain (MLX)
 
-The app target links [`mlx-swift-lm`](https://github.com/ml-explore/mlx-swift-lm) (see
-`project.yml`). `App/ProBrain/MLXIntentEngine.swift` downloads `mlx-community/Qwen3-4B-4bit` through
-the MLX hub client on first use (≈2.5 GB) and plans commands with the same JSON schema as the other
-engines. To ship without it, generate with `project.yml` instead of `project-pro.yml`; the file is
-compiled out automatically (`#if canImport(MLXLLM)`).
+The standard app target links [`mlx-swift-lm`](https://github.com/ml-explore/mlx-swift-lm), pinned to a
+main revision (products `MLXVLM` and `MLXLMCommon`), and swift-transformers' `Tokenizers` (see
+`project.yml`); building it needs Xcode's Metal Toolchain. `App/LocalBrain/MLXLocalRuntime.swift`
+registers with `LocalBrainHub` in `PicshopApp.init`; PicshopKit itself never links MLX, and every
+MLX call stays in `App/LocalBrain`.
 
-Qwen3 4B in 4-bit runs comfortably in the iPhone 17 Pro's memory; the app requests the
-`increased-memory-limit` entitlement for headroom during video renders.
+One Qwen3.5 model is installed at a time, chosen by the iPhone's tier: `live-qwen35-4b`
+(`mlx-community/Qwen3.5-4B-MLX-4bit`, ≈3.06 GB) or `live-qwen35-2b` (`mlx-community/Qwen3.5-2B-MLX-4bit`,
+≈1.75 GB), both at pinned revisions. iPhones with 6 GB of memory or less, and the Simulator, get no
+local model: Live then uses Apple Intelligence, or the grammar. The same weights answer Live and plan
+push-to-talk commands. The app requests the `increased-memory-limit` entitlement for headroom.
+
+`project-pro.yml` is `project.yml` plus Stable Diffusion.
 
 ## Picking a brain
 

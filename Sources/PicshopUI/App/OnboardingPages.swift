@@ -142,9 +142,9 @@ private struct OnboardingIdeasDemo: View {
             [IdeaChipModel(id: "sky", title: L("Brighten the sky"), symbol: "sun.max"),
              IdeaChipModel(id: "blur", title: L("Blur the background"), symbol: "camera.aperture"),
              IdeaChipModel(id: "clean", title: L("Remove passers-by"), symbol: "eraser")],
-            [IdeaChipModel(id: "golden", title: L("Golden hour"), symbol: "cloud.sun", fromClaude: true),
-             IdeaChipModel(id: "portrait", title: L("Soft portrait"), symbol: "person.crop.circle", fromClaude: true),
-             IdeaChipModel(id: "crop", title: L("Crop"), symbol: "crop", fromClaude: true)],
+            [IdeaChipModel(id: "golden", title: L("Golden hour"), symbol: "cloud.sun", fromModel: true),
+             IdeaChipModel(id: "portrait", title: L("Soft portrait"), symbol: "person.crop.circle", fromModel: true),
+             IdeaChipModel(id: "crop", title: L("Crop"), symbol: "crop", fromModel: true)],
             [IdeaChipModel(id: "mono", title: L("Black & white"), symbol: "circle.lefthalf.filled"),
              IdeaChipModel(id: "expand", title: L("Expand the image"), symbol: "arrow.up.left.and.arrow.down.right"),
              IdeaChipModel(id: "text", title: L("Text behind"), symbol: "textformat")],
@@ -206,12 +206,12 @@ private struct OnboardingSamplePicture: View {
 
 // MARK: - Page 3
 
-/// 'Private by default.': what stays on the iPhone, what Live with Claude sends.
+/// 'Private by default.': everything, Live included, stays on the iPhone.
 struct OnboardingPrivacyPage: View {
     var body: some View {
         OnboardingPage(title: L("Private by default."),
-                       text: L("PicShop works entirely on your iPhone. The one exception is Live mode with Claude: once you agree, it sends Anthropic, with your own key, the text of the conversation and, if you allow it, a reduced copy of the picture — never the audio. Outside Live mode, nothing is sent."),
-                       footnote: L("To talk with Claude, add your key in Settings › Live.")) {
+                       text: L("Everything stays on your iPhone: your voice, your words, your photos and videos. Live thinks on the device; nothing is sent."),
+                       footnote: L("Large models download once over Wi‑Fi; your content never leaves the iPhone.")) {
             Image(systemName: "lock.shield")
                 .font(.system(size: 52, weight: .regular))
                 .symbolRenderingMode(.hierarchical)

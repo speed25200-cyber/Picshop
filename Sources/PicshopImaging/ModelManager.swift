@@ -27,6 +27,8 @@ public struct ModelDescriptor: Identifiable, Hashable, Sendable {
     public var huggingFaceFolder: HuggingFaceFolder?
     /// Ships inside the app bundle as `<id>.mlmodelc` (converted at build time).
     public var isBundledByDefault: Bool
+    /// For a language model's Hugging Face folder: the only files fetched (nil: every file).
+    public var fileAllowlist: [String]?
 
     public struct HuggingFaceFolder: Hashable, Sendable {
         public var repository: String
@@ -41,11 +43,12 @@ public struct ModelDescriptor: Identifiable, Hashable, Sendable {
     }
 
     public init(id: String, displayName: String, summary: String, kind: Kind, sizeMB: Int, remoteURL: URL? = nil, huggingFaceID: String? = nil,
-                huggingFaceFolder: HuggingFaceFolder? = nil, isBundledByDefault: Bool = false) {
+                huggingFaceFolder: HuggingFaceFolder? = nil, isBundledByDefault: Bool = false, fileAllowlist: [String]? = nil) {
         self.id = id
         self.displayName = displayName
         self.huggingFaceFolder = huggingFaceFolder
         self.isBundledByDefault = isBundledByDefault
+        self.fileAllowlist = fileAllowlist
         self.summary = summary
         self.kind = kind
         self.sizeMB = sizeMB
@@ -102,6 +105,8 @@ public actor ModelManager {
     private var downloads: [String: DownloadHandle] = [:]
     /// True between pauseAll() and resumeAll(): new downloads wait too.
     private var isPaused = false
+    /// Models that keep downloading while the others are paused (the Live model while an editor is open).
+    private var pauseExemptions: Set<String> = []
     /// Every state change from a download, in order, through one stream rather than a task per chunk.
     private nonisolated let updates: AsyncStream<StateUpdate>.Continuation
     private let updateStream: AsyncStream<StateUpdate>
@@ -142,7 +147,7 @@ public actor ModelManager {
     /// A download handle for a model, paused already when the editor holds installs.
     private func downloadHandle(for id: String) -> DownloadHandle {
         let handle = DownloadHandle()
-        if isPaused { handle.pause() }
+        if isPaused, !pauseExemptions.contains(id) { handle.pause() }
         downloads[id] = handle
         return handle
     }
@@ -178,6 +183,25 @@ public actor ModelManager {
             return resourcesURL(for: id) != nil
         }
         return compiledModelURL(for: id) != nil
+    }
+
+    /// A language model's weights folder, `<id>/model`, once installed.
+    public func languageModelDirectory(for id: String) -> URL? {
+        guard isInstalled(id) else { return nil }
+        let url = directory(for: id).appendingPathComponent("model", isDirectory: true)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    /// Bytes a model takes on disk (its whole folder, partial downloads included).
+    public func bytesOnDisk(_ id: String) -> Int64 {
+        let keys: [URLResourceKey] = [.isRegularFileKey, .totalFileAllocatedSizeKey, .fileSizeKey]
+        guard let enumerator = FileManager.default.enumerator(at: directory(for: id), includingPropertiesForKeys: keys) else { return 0 }
+        var total: Int64 = 0
+        for case let url as URL in enumerator {
+            guard let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
+            total += Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0)
+        }
+        return total
     }
 
     /// Folder of compiled Stable Diffusion resources, if installed.
@@ -370,15 +394,24 @@ public actor ModelManager {
     /// already downloaded (`cancel(byProducingResumeData:)`); downloads that start
     /// meanwhile wait. Unpacking or compiling already under way finishes.
     public func pauseAll() async {
-        guard !isPaused else { return }
+        await pauseAll(except: [])
+    }
+
+    /// pauseAll(), except for `ids`, which keep downloading (the Live model while an editor is open).
+    public func pauseAll(except ids: Set<String>) async {
+        guard !isPaused || pauseExemptions != ids else { return }
         isPaused = true
-        for handle in downloads.values { handle.pause() }
+        pauseExemptions = ids
+        for (id, handle) in downloads {
+            if ids.contains(id) { handle.resume() } else { handle.pause() }
+        }
     }
 
     /// Resumes the downloads pauseAll() stopped, from where they were.
     public func resumeAll() async {
         guard isPaused else { return }
         isPaused = false
+        pauseExemptions = []
         for handle in downloads.values { handle.resume() }
     }
 }

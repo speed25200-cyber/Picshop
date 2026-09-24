@@ -1,97 +1,103 @@
 import Foundation
 import PicshopCore
 
-/// Picks the brain for each turn: Claude, then the on-device model, then the
-/// local grammar. Live never goes silent.
+/// Picks the brain for each turn: the local model, then Apple's on-device
+/// model, then the local grammar. Everything runs on the iPhone, and Live never
+/// goes silent: the grammar is always there.
 ///
-/// A rejected key, no credit, no permission or no model access turn Claude off
-/// until resetClaude(); a rate limit without a short retry, or two failed turns
-/// in a row, cool Claude down for 60 s; three failures within 10 minutes keep
-/// it off for the rest of the editor session.
+/// Per brain kind, two failed turns in a row cool it down for 60 s, and three
+/// failures within 10 minutes keep it off for the rest of the editor session.
+/// The model is off for the session at once after a load failure or memory
+/// pressure. The grammar never cools down. Cancellations (barge-in, a tap,
+/// typing) are not failures: the session never records them.
 public struct BrainSelector: Sendable {
     public struct Inputs: Sendable, Equatable {
-        /// key && consent && liveUseClaude && not disabled
-        public var claudeAllowed: Bool
-        public var online: Bool
+        /// The model is loaded and its brain exists.
+        public var modelReady: Bool
         public var onDeviceAvailable: Bool
+        /// Thermal state critical: the model is skipped.
+        public var thermalCritical: Bool
         public var now: Double
 
-        public init(claudeAllowed: Bool, online: Bool, onDeviceAvailable: Bool, now: Double) {
-            self.claudeAllowed = claudeAllowed
-            self.online = online
+        public init(modelReady: Bool, onDeviceAvailable: Bool, thermalCritical: Bool = false, now: Double) {
+            self.modelReady = modelReady
             self.onDeviceAvailable = onDeviceAvailable
+            self.thermalCritical = thermalCritical
             self.now = now
         }
     }
 
+    /// After 2 failures in a row.
     public static let cooldown: Double = 60
+    /// 3 failures within the window: off for the editor session.
     public static let failureWindow: Double = 600
 
-    public private(set) var claudeDisabledReason: LiveProblem?
-    /// Until when Claude rests after a rate limit or failed turns.
-    public private(set) var cooldownUntil: Double?
-    private var failuresInARow = 0
-    private var failureTimes: [Double] = []
-    /// Three failures within 10 minutes: off for the rest of the editor session (a new key does not bring it back).
-    public private(set) var offForSession = false
+    private var failuresInARow: [LiveBrainKind: Int] = [:]
+    private var failureTimes: [LiveBrainKind: [Double]] = [:]
+    private var cooldownUntil: [LiveBrainKind: Double] = [:]
+    private var offForSession: Set<LiveBrainKind> = []
 
     public init() {}
 
-    public mutating func choose(_ inputs: Inputs) -> LiveBrainKind {
-        if let until = cooldownUntil, inputs.now >= until { cooldownUntil = nil }
-        if inputs.claudeAllowed, inputs.online, claudeDisabledReason == nil, !offForSession, cooldownUntil == nil { return .claude }
-        return inputs.onDeviceAvailable ? .onDevice : .local
+    /// model -> onDevice -> local, skipping `excluding`, cooled-down and switched-off kinds.
+    /// The local grammar is the answer of last resort, even when excluded.
+    public mutating func choose(_ inputs: Inputs, excluding: Set<LiveBrainKind> = []) -> LiveBrainKind {
+        for (kind, until) in cooldownUntil where inputs.now >= until { cooldownUntil[kind] = nil }
+        if inputs.modelReady, !inputs.thermalCritical, usable(.model, excluding: excluding) { return .model }
+        if inputs.onDeviceAvailable, usable(.onDevice, excluding: excluding) { return .onDevice }
+        return .local
     }
 
-    public mutating func recordFailure(_ error: LiveBrainError, now: Double) {
-        switch error {
-        case .invalidKey, .missingKey:
-            claudeDisabledReason = .keyInvalid
-            return
-        case .noCredit:
-            claudeDisabledReason = .noCredit
-            return
-        case .forbidden, .modelUnavailable:
-            claudeDisabledReason = .noAccess
-            return
-        case .rateLimited(let retryAfter):
-            cooldownUntil = max(cooldownUntil ?? now, now + max(Self.cooldown, retryAfter ?? 0))
-        default:
-            break
+    public mutating func recordFailure(_ kind: LiveBrainKind, _ error: LiveBrainError, now: Double) {
+        guard kind != .local else { return }
+        if kind == .model {
+            switch error {
+            case .memoryPressure, .modelUnavailable:
+                offForSession.insert(.model)
+                return
+            default:
+                break
+            }
         }
-        failuresInARow += 1
-        failureTimes = failureTimes.filter { now - $0 < Self.failureWindow } + [now]
-        if failuresInARow >= 2 { cooldownUntil = max(cooldownUntil ?? now, now + Self.cooldown) }
-        if failureTimes.count >= 3 {
-            offForSession = true
-            claudeDisabledReason = claudeDisabledReason ?? .unavailable("repeated failures")
-        }
+        let streak = (failuresInARow[kind] ?? 0) + 1
+        failuresInARow[kind] = streak
+        let times = (failureTimes[kind] ?? []).filter { now - $0 < Self.failureWindow } + [now]
+        failureTimes[kind] = times
+        if streak >= 2 { cooldownUntil[kind] = max(cooldownUntil[kind] ?? now, now + Self.cooldown) }
+        if times.count >= 3 { offForSession.insert(kind) }
     }
 
-    public mutating func recordSuccess() {
-        failuresInARow = 0
+    public mutating func recordSuccess(_ kind: LiveBrainKind) {
+        failuresInARow[kind] = 0
     }
 
-    /// Key changed.
-    public mutating func resetClaude() {
-        switch claudeDisabledReason {
-        case .keyInvalid?, .noCredit?, .noAccess?: claudeDisabledReason = nil
-        default: break
-        }
-        cooldownUntil = nil
-        failuresInARow = 0
+    public func isOffForSession(_ kind: LiveBrainKind) -> Bool {
+        offForSession.contains(kind)
     }
 
-    /// The problem to show for a failure, or nil when it is not worth a notice.
+    /// The problem shown and spoken for a failure.
     public static func problem(for error: LiveBrainError) -> LiveProblem {
         switch error {
-        case .missingKey, .invalidKey: return .keyInvalid
-        case .noCredit: return .noCredit
-        case .forbidden, .modelUnavailable: return .noAccess
-        case .rateLimited: return .rateLimited
-        case .network: return .offline
-        case .overloaded, .server, .timeout, .streamTruncated, .badRequest, .requestTooLarge: return .unavailable("claude")
+        case .modelNotReady, .modelUnavailable, .memoryPressure: return .modelUnavailable
+        case .timeout: return .brainTimeout
+        case .streamTruncated: return .unavailable("stream")
         case .unavailable(let reason): return .unavailable(reason)
         }
+    }
+
+    /// A log token: model_not_ready, timeout_first_token…
+    public static func errorName(_ error: LiveBrainError) -> String {
+        switch error {
+        case .modelNotReady: return "model_not_ready"
+        case .modelUnavailable: return "model_unavailable"
+        case .memoryPressure: return "memory_pressure"
+        case .timeout(let stage): return "timeout_\(stage)"
+        case .streamTruncated: return "stream_truncated"
+        case .unavailable: return "unavailable"
+        }
+    }
+
+    private func usable(_ kind: LiveBrainKind, excluding: Set<LiveBrainKind>) -> Bool {
+        !excluding.contains(kind) && !offForSession.contains(kind) && cooldownUntil[kind] == nil
     }
 }

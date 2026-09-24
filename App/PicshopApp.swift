@@ -10,20 +10,14 @@ struct PicshopApp: App {
     init() {
         // First, so a crash or memory kill in this session leaves a report for the next one.
         Diagnostics.shared.start()
-        var engines: [any IntentEngine] = []
-        #if canImport(MLXLLM)
-        engines.append(MLXIntentEngine.shared)
+        // The local brain's runtime (MLX), before AppEnvironment attaches to the hub.
+        #if canImport(MLXVLM)
+        LocalBrainHub.shared.runtime = MLXLocalRuntime.shared
         #endif
-        let environment = AppEnvironment(extraEngines: engines)
+        let environment = AppEnvironment()
         _environment = State(initialValue: environment)
         #if canImport(StableDiffusion)
         environment.generativeEngineProvider = { url in StableDiffusionFillEngine(resourcesURL: url) }
-        #endif
-        #if canImport(MLXLLM)
-        ProBrainInstaller.shared = ProBrainInstaller { model, app in
-            await MLXIntentEngine.shared.install(model, models: app.models)
-            await app.refreshEngines()
-        }
         #endif
         PSLog.info("Picshop launched", category: .ui)
     }

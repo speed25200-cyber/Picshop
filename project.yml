@@ -36,8 +36,18 @@ settings:
 packages:
   PicshopKit:
     path: .
-  # Optional on-device runtimes (MLX "Pro Brain", Stable Diffusion "Generative Fill")
-  # are added by project-pro.yml: `xcodegen generate --spec project-pro.yml`.
+  # The local brain (Qwen3.5 through MLX, App/LocalBrain). mlx-swift-lm is pinned to a
+  # main revision: the Qwen3.5 fixes it needs (#399, #409, #515, #611) are in no tag yet.
+  # Move to the next 3.x tag that contains them. Needs the Metal Toolchain to build.
+  MLXSwiftLM:
+    url: https://github.com/ml-explore/mlx-swift-lm
+    revision: ee673d6a71d76e67b532dc7eaf91d92edc3bb8bb
+  # The tokenizer the MLX loader uses (App/LocalBrain).
+  SwiftTransformers:
+    url: https://github.com/huggingface/swift-transformers
+    exactVersion: 1.3.4
+  # Stable Diffusion "Generative Fill" is added by project-pro.yml:
+  # `xcodegen generate --spec project-pro.yml`.
 
 targets:
   PicShop:
@@ -69,6 +79,12 @@ targets:
         product: PicshopSpeech
       - package: PicshopKit
         product: PicshopPDF
+      - package: MLXSwiftLM
+        product: MLXVLM
+      - package: MLXSwiftLM
+        product: MLXLMCommon
+      - package: SwiftTransformers
+        product: Tokenizers
     configFiles:
       Debug: App/BuildStamp.xcconfig
       Release: App/BuildStamp.xcconfig

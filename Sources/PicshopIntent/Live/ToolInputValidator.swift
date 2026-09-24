@@ -1,19 +1,35 @@
 import Foundation
 import PicshopCore
 
+/// A tool call as the model produced it, before validation.
+public struct RawToolUse: Sendable, Equatable {
+    public var id: String
+    public var name: String
+    /// The arguments as JSON text (ToolArgumentCoercer's output for the local model).
+    public var rawInput: String
+    public var blockIndex: Int
+
+    public init(id: String, name: String, rawInput: String, blockIndex: Int = 0) {
+        self.id = id
+        self.name = name
+        self.rawInput = rawInput
+        self.blockIndex = blockIndex
+    }
+}
+
 public enum ToolValidationError: Error, Sendable, Equatable { case invalidJSON(raw: String), notAnObject, unknownTool(String), problems([String]) }
 
-/// Strict client-side validation of tool input: eager input streaming turns
-/// the server-side checks off, so nothing unchecked may reach the executor.
+/// Strict validation of tool input: a local model's tool JSON is untrusted,
+/// so nothing unchecked may reach the executor.
 ///
 /// Checks, in order: strict JSON, an object at the top, no unknown keys at any
 /// level, types, exact enum values (no normalizer aliases), ranges (the
 /// AmountUnit table among them), the action allowed in the mode, required
 /// fields, and finally IntentNormalizer. A call with any problem runs nothing.
 public struct ToolInputValidator: Sendable {
-    /// Whether a point Claude gives still lands on the same picture.
+    /// Whether a point the model gives still lands on the same picture.
     public struct Grounding: Sendable, Equatable {
-        /// Width / height of the last image Claude saw; nil when none was sent.
+        /// Width / height of the last image the model saw; nil when none was attached.
         public var imageAspect: Double?
         /// Width / height of the document now; nil when unknown.
         public var canvasAspect: Double?
@@ -57,7 +73,7 @@ public struct ToolInputValidator: Sendable {
         return problems.isEmpty ? .success(intents) : .failure(.problems(Array(problems.prefix(Self.maxProblems))))
     }
 
-    /// One streamed tool call, checked at content_block_stop.
+    /// One tool call, checked once its arguments are complete. Ideas come back with source `.model`.
     public func validate(_ use: RawToolUse, context: IntentContext, grounding: Grounding = Grounding()) -> Result<LiveToolCall, ToolValidationError> {
         guard let name = LiveToolName(rawValue: use.name) else { return .failure(.unknownTool(use.name)) }
         let input: JSONValue
@@ -142,7 +158,7 @@ public struct ToolInputValidator: Sendable {
             var local: [String] = []
             let path = "ideas[\(index)]"
             guard case .object(let object) = item else {
-                return LiveIdea(title: "", why: "", symbol: nil, steps: [], source: .claude)
+                return LiveIdea(title: "", why: "", symbol: nil, steps: [], source: .model)
             }
             unknownKeys(object, allowed: ["title", "why", "symbol", "steps"], path: path, problems: &local)
             // Over-long titles and whys are cut by LiveIdea rather than refused.
@@ -151,9 +167,9 @@ public struct ToolInputValidator: Sendable {
             let symbol = string(object["symbol"], path: "\(path).symbol", problems: &local)
             let steps = validatedSteps(object["steps"], path: "\(path).steps", range: 1...4, required: true, context: context, grounding: grounding, problems: &local)
             guard local.isEmpty, let steps else {
-                return LiveIdea(title: title, why: why, symbol: symbol, steps: [], source: .claude)
+                return LiveIdea(title: title, why: why, symbol: symbol, steps: [], source: .model)
             }
-            return LiveIdea(title: title, why: why, symbol: symbol, steps: steps.map(\.raw), source: .claude)
+            return LiveIdea(title: title, why: why, symbol: symbol, steps: steps.map(\.raw), source: .model)
         }
     }
 

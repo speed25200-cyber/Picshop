@@ -641,7 +641,7 @@ private struct LiveOrbCustomActions: ViewModifier {
 
 #if DEBUG
 private struct LiveOrbGallery: View {
-    private let states: [LiveState] = [.off, .connecting, .listening, .hearing, .thinking, .speaking, .acting, .dictating, .problem(.offline), .problem(.noMicrophone)]
+    private let states: [LiveState] = [.off, .connecting, .listening, .hearing, .thinking, .speaking, .acting, .dictating, .problem(.audioFailed), .problem(.noMicrophone)]
     @State private var live: LiveSession?
 
     var body: some View {

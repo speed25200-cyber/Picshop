@@ -9,21 +9,21 @@ struct IdeaChipModel: Identifiable, Equatable {
     var id: String
     var title: String
     var symbol: String
-    /// Claude proposed it: a spectrum border.
-    var fromClaude: Bool
+    /// The local model proposed it: a spectrum border.
+    var fromModel: Bool
     /// Shown on a long press.
     var why: String?
 
-    init(id: String, title: String, symbol: String, fromClaude: Bool = false, why: String? = nil) {
+    init(id: String, title: String, symbol: String, fromModel: Bool = false, why: String? = nil) {
         self.id = id
         self.title = title
         self.symbol = symbol
-        self.fromClaude = fromClaude
+        self.fromModel = fromModel
         self.why = why
     }
 
     init(_ idea: LiveIdea) {
-        self.init(id: idea.id, title: idea.title, symbol: idea.symbol, fromClaude: idea.source == .claude,
+        self.init(id: idea.id, title: idea.title, symbol: idea.symbol, fromModel: idea.source == .model,
                   why: idea.why.isEmpty ? nil : idea.why)
     }
 }
@@ -139,7 +139,7 @@ private struct IdeaChip: View {
             .frame(minHeight: PSMetrics.ideaChip)
             .frame(maxWidth: fullWidth ? .infinity : 220, alignment: fullWidth ? .leading : .center)
             .fixedSize(horizontal: !fullWidth, vertical: false)
-            .modifier(IdeaChipSurface(isFlat: isFlat, fromClaude: item.fromClaude, increasedContrast: contrast == .increased))
+            .modifier(IdeaChipSurface(isFlat: isFlat, fromModel: item.fromModel, increasedContrast: contrast == .increased))
             .padding(.vertical, 2)
             .contentShape(Capsule())
         }
@@ -192,10 +192,10 @@ private struct IdeaDismissAction: ViewModifier {
     }
 }
 
-/// Glass (or a flat fill), a spectrum rim for Claude's ideas, a white rim with Increase Contrast.
+/// Glass (or a flat fill), a spectrum rim for the local model's ideas, a white rim with Increase Contrast.
 private struct IdeaChipSurface: ViewModifier {
     let isFlat: Bool
-    let fromClaude: Bool
+    let fromModel: Bool
     let increasedContrast: Bool
 
     func body(content: Content) -> some View {
@@ -207,7 +207,7 @@ private struct IdeaChipSurface: ViewModifier {
             }
         }
         .overlay {
-            if fromClaude {
+            if fromModel {
                 Capsule().strokeBorder(PSTheme.intelligenceAngular, lineWidth: 1).opacity(0.85)
             } else if increasedContrast {
                 Capsule().strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
@@ -302,7 +302,7 @@ struct ChoiceChipsRow: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(PSTheme.textSecondary)
                             .frame(width: PSMetrics.ideaChip, height: PSMetrics.ideaChip)
-                            .modifier(IdeaChipSurface(isFlat: isFlat, fromClaude: false, increasedContrast: false))
+                            .modifier(IdeaChipSurface(isFlat: isFlat, fromModel: false, increasedContrast: false))
                             .padding(.vertical, 2)
                             .contentShape(Capsule())
                     }
@@ -347,7 +347,7 @@ private struct ChoiceChip: View {
             .padding(.leading, image == nil ? 10 : 6)
             .padding(.trailing, 14)
             .frame(minHeight: PSMetrics.ideaChip)
-            .modifier(IdeaChipSurface(isFlat: isFlat, fromClaude: false, increasedContrast: false))
+            .modifier(IdeaChipSurface(isFlat: isFlat, fromModel: false, increasedContrast: false))
             .padding(.vertical, 2)
             .contentShape(Capsule())
         }
@@ -375,7 +375,7 @@ private struct IdeaChipsPreview: View {
             IdeaChipsRow(items: nil, onChoose: { _ in })
             IdeaChipsRow(items: [
                 IdeaChipModel(id: "a", title: "Ciel plus vif", symbol: "cloud.sun", why: "Le ciel manque de couleur."),
-                IdeaChipModel(id: "b", title: "Portrait doux", symbol: "person.crop.circle", fromClaude: true, why: "Un fond flou détacherait la personne."),
+                IdeaChipModel(id: "b", title: "Portrait doux", symbol: "person.crop.circle", fromModel: true, why: "Un fond flou détacherait la personne."),
                 IdeaChipModel(id: "c", title: "Recadrage 4:5", symbol: "crop"),
             ], onChoose: { _ in }, onDismiss: { _ in })
             IdeaChipsRow(items: [IdeaChipModel(id: "a", title: "Noir et blanc", symbol: "circle.lefthalf.filled")], onChoose: { _ in })

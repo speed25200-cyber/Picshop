@@ -27,7 +27,10 @@ public final class LiveSession {
     public private(set) var state: LiveState = .off
     public private(set) var transcript = LiveTranscript()
     public private(set) var ideas: LiveIdeasState = .loading
+    /// The brain that answers (and the model's name), for the dock pill.
     public private(set) var route = LiveRoute()
+    /// The voice path in use: `.duplex` while the echo-cancelling engine runs, `.simple` otherwise.
+    public private(set) var voicePath: LiveVoicePath = .simple
     public private(set) var isMuted = false
     /// 6 s after a Live, idea or choice edit.
     public private(set) var undoOffer: LiveUndoOffer?
@@ -35,8 +38,6 @@ public final class LiveSession {
     public private(set) var reply: LiveReply?
     /// A problem or info line, in or out of Live.
     public private(set) var notice: LiveNotice?
-    /// StudioChrome presents LiveConsentSheet while this is true.
-    public private(set) var needsConsent = false
     /// The one-time better-voice card.
     public private(set) var showsVoiceHint = false
 
@@ -83,17 +84,14 @@ public final class LiveSession {
     @ObservationIgnored let clock = SystemLiveClock()
     @ObservationIgnored var audio: LiveAudioStack?
     @ObservationIgnored var captionOnly: CaptionOnlySpeaker?
-    @ObservationIgnored var claudeBrain: ClaudeLiveBrain?
-    /// Read once from the Keychain at Live start, for the pre-connect. Never logged.
-    @ObservationIgnored var claudeKey: String?
-    @ObservationIgnored var claudeTransport: (any ClaudeTransport)?
+    /// The brains LocalBrainHub gives each conversation: the local model once it is
+    /// loaded, Apple's on-device model, and the rules-only grammar, always there.
+    @ObservationIgnored var modelBrain: (any LiveBrain)?
     @ObservationIgnored var onDeviceBrain: (any LiveBrain)?
     @ObservationIgnored var onDeviceAvailable = false
-    @ObservationIgnored var localBrain: LocalLiveBrain?
+    @ObservationIgnored var localBrain: (any LiveBrain)?
     /// The brain that answers the current turn.
     @ObservationIgnored var currentKind: LiveBrainKind = .local
-    /// The cloud badge's 'Continuer sur l'iPhone', for this editor.
-    @ObservationIgnored var claudeForcedOff = false
 
     @ObservationIgnored var isTornDown = false
     @ObservationIgnored var isStarting = false
@@ -181,7 +179,7 @@ public final class LiveSession {
         let turnTaking = environment != nil && UIAccessibility.isVoiceOverRunning
         machine = LiveTurnMachine(options: .init(bargeInOnSpeaker: bargeIn, turnTaking: turnTaking))
         if let environment {
-            route = LiveRoute(brain: Self.localBadge(environment))
+            route = Self.restingRoute(environment)
         }
     }
 
@@ -191,8 +189,6 @@ public final class LiveSession {
         guard !isTornDown else { return }
         self.host = host
         guard app != nil else { return }
-        // Warms the Claude key's Keychain read before the first orb tap.
-        _ = LiveServices.shared.keyStore
         let handler = EditorToolHandler(
             host: host,
             onIdeas: { [weak self] ideas in self?.receiveBrainIdeas(ideas) },
@@ -270,7 +266,7 @@ public final class LiveSession {
             return
         }
         guard !isRunning, !isStarting else { return }
-        Task { await self.beginLive(consentResolved: false) }
+        Task { await self.beginLive() }
     }
 
     public func end() {
@@ -319,22 +315,6 @@ public final class LiveSession {
     /// The inline Annuler: undoes the last Live, idea or choice edit.
     public func undoLastAction() {
         undoLast()
-    }
-
-    /// The cloud badge's 'Continuer sur l'iPhone'.
-    public func continueOnDevice() {
-        guard !claudeForcedOff else { return }
-        claudeForcedOff = true
-        debugDecision("Claude turned off for this editor (badge)")
-        if isRunning { assignRoute(brain: badge(for: chooseBrain(excluding: [.claude]))) }
-    }
-
-    public func resolveConsent(granted: Bool, sendImages: Bool) {
-        guard needsConsent, let app else { return }
-        needsConsent = false
-        app.settings.liveConsentVersion = granted ? AppSettings.liveConsentCurrent : -AppSettings.liveConsentCurrent
-        app.settings.liveSendsImages = granted && sendImages
-        Task { await self.beginLive(consentResolved: true) }
     }
 
     public func performNoticeAction() {
@@ -408,10 +388,9 @@ public final class LiveSession {
         if route != next { route = next }
     }
 
-    func assignRoute(brain: LiveRoute.Brain) {
-        var next = route
-        next.brain = brain
-        assignRoute(next)
+    func assignVoicePath(_ next: LiveVoicePath) {
+        if voicePath != next { voicePath = next }
+        LiveServices.shared.debug.setVoicePath(next.rawValue)
     }
 
     func assignMuted(_ muted: Bool) {
@@ -430,10 +409,6 @@ public final class LiveSession {
         if notice != next { notice = next }
     }
 
-    func assignNeedsConsent(_ next: Bool) {
-        if needsConsent != next { needsConsent = next }
-    }
-
     func assignShowsVoiceHint(_ next: Bool) {
         if showsVoiceHint != next { showsVoiceHint = next }
     }
@@ -442,9 +417,12 @@ public final class LiveSession {
         if activityTitle != next { activityTitle = next }
     }
 
-    /// Commandes appears only when the rule grammar is the only brain (D9).
-    static func localBadge(_ app: AppEnvironment) -> LiveRoute.Brain {
-        app.activeEngine == .rules ? .commands : .onDevice
+    /// The pill outside a conversation: the local model once it is loaded, Apple's
+    /// on-device model when push-to-talk uses it, otherwise Commandes.
+    static func restingRoute(_ app: AppEnvironment) -> LiveRoute {
+        let hub = LocalBrainHub.shared
+        if hub.isModelReady { return LiveRoute(brain: .model, modelName: hub.status.model?.displayName) }
+        return LiveRoute(brain: app.activeEngine == .appleIntelligence ? .onDevice : .commands)
     }
 }
 
@@ -479,7 +457,6 @@ extension LiveSession {
         if undoOffer != frame.undoOffer { undoOffer = frame.undoOffer }
         if reply != frame.reply { reply = frame.reply }
         if notice != frame.notice { notice = frame.notice }
-        if needsConsent != frame.needsConsent { needsConsent = frame.needsConsent }
         if showsVoiceHint != frame.showsVoiceHint { showsVoiceHint = frame.showsVoiceHint }
         if meter.input != frame.input { meter.input = frame.input }
         if meter.output != frame.output { meter.output = frame.output }

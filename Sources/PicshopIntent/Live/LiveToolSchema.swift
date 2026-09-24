@@ -1,8 +1,23 @@
 import Foundation
 import PicshopCore
 
-/// Claude's four Live tools. Built once per mode and frozen for the session:
-/// changing tools invalidates the prompt cache.
+/// One Live tool: its name, what it is for, and the JSON Schema of its input.
+public struct LiveToolDefinition: Sendable, Equatable {
+    public var name: String
+    public var description: String
+    public var inputSchema: JSONValue
+
+    public init(name: String, description: String, inputSchema: JSONValue) {
+        self.name = name
+        self.description = description
+        self.inputSchema = inputSchema
+    }
+}
+
+/// The four Live tools with their full JSON Schemas: the reference the
+/// validator follows and what the Foundation Models bridge reads. The local
+/// model gets compact specs from LocalLivePrompt.toolSpecs(mode:). Built once
+/// per mode and deterministic, so a session's tool list never changes.
 public enum LiveToolSchema {
     /// Never apply_edits steps: meta and dialogue actions have tools of their own or no place in a conversation.
     public static let excluded: Set<IntentAction> = [
@@ -36,17 +51,17 @@ public enum LiveToolSchema {
     you see. Ideas must differ from what is already applied.
     """
 
-    /// Sorted by name, each with eager_input_streaming.
-    public static func tools(for mode: EditorMode) -> [ClaudeToolDefinition] {
+    /// Sorted by name.
+    public static func tools(for mode: EditorMode) -> [LiveToolDefinition] {
         let step = stepSchema(for: mode)
         let tools = [
-            ClaudeToolDefinition(name: LiveToolName.applyEdits.rawValue, description: applyEditsDescription, inputSchema: [
+            LiveToolDefinition(name: LiveToolName.applyEdits.rawValue, description: applyEditsDescription, inputSchema: [
                 "type": "object",
                 "additionalProperties": false,
                 "required": ["steps"],
                 "properties": ["steps": ["type": "array", "minItems": 1, "maxItems": 6, "items": step]],
             ]),
-            ClaudeToolDefinition(name: LiveToolName.undo.rawValue, description: undoDescription, inputSchema: [
+            LiveToolDefinition(name: LiveToolName.undo.rawValue, description: undoDescription, inputSchema: [
                 "type": "object",
                 "additionalProperties": false,
                 "properties": [
@@ -55,12 +70,12 @@ public enum LiveToolSchema {
                     "to_original": ["type": "boolean", "description": "true to go back to the original, before every edit."],
                 ],
             ]),
-            ClaudeToolDefinition(name: LiveToolName.compareBeforeAfter.rawValue, description: compareDescription, inputSchema: [
+            LiveToolDefinition(name: LiveToolName.compareBeforeAfter.rawValue, description: compareDescription, inputSchema: [
                 "type": "object",
                 "additionalProperties": false,
                 "properties": ["seconds": ["type": "number", "minimum": 1, "maximum": 5, "description": "How long the original shows, default 2."]],
             ]),
-            ClaudeToolDefinition(name: LiveToolName.proposeIdeas.rawValue, description: proposeIdeasDescription, inputSchema: [
+            LiveToolDefinition(name: LiveToolName.proposeIdeas.rawValue, description: proposeIdeasDescription, inputSchema: [
                 "type": "object",
                 "additionalProperties": false,
                 "required": ["ideas"],

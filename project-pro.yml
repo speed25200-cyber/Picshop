@@ -1,23 +1,14 @@
-# PicShop "Pro" spec: the standard project plus the optional on-device runtimes.
+# PicShop "Pro" spec: the standard project (local brain on MLX included) plus the
+# Stable Diffusion "Generative Fill" runtime.
 #   xcodegen generate --spec project-pro.yml
 include:
   - project.yml
 packages:
-  # LLM runtime (MLXLLM / MLXLMCommon moved out of mlx-swift-examples, whose own
-  # StableDiffusion target would clash with Apple's ml-stable-diffusion).
-  # 2.x keeps the hub-backed loader API (3.x needs explicit Downloader/TokenizerLoader adapters).
-  MLXSwiftLM:
-    url: https://github.com/ml-explore/mlx-swift-lm
-    from: "2.25.0"
   StableDiffusion:
     url: https://github.com/apple/ml-stable-diffusion
     from: "1.1.0"
 targets:
   PicShop:
     dependencies:
-      - package: MLXSwiftLM
-        product: MLXLLM
-      - package: MLXSwiftLM
-        product: MLXLMCommon
       - package: StableDiffusion
         product: StableDiffusion

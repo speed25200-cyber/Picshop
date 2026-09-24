@@ -6,7 +6,7 @@ testable on Linux/CI, and isolates the Apple-only code behind clear protocols.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ App (SwiftUI)  PicshopApp · RootView · optional MLXIntentEngine      │
+│ App (SwiftUI)  PicshopApp · RootView · MLXLocalRuntime (local brain) │
 ├──────────────────────────────────────────────────────────────────────┤
 │ PicshopUI      AppEnvironment · ProjectLibrary · PhotoEditorSession  │
 │                VideoEditorSession · canvas · timeline · voice orb     │

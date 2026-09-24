@@ -57,7 +57,7 @@ public enum LiveActivityTitles {
         }
     }
 
-    /// "the dog" / "le chien" for the canonical labels Claude uses.
+    /// "the dog" / "le chien" for the canonical labels the tool schema asks the model for.
     static func object(for label: String, french: Bool) -> String {
         let table: [String: (String, String)] = [
             "person": ("la personne", "the person"), "people": ("les personnes", "the people"), "dog": ("le chien", "the dog"), "cat": ("le chat", "the cat"),

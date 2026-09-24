@@ -117,7 +117,7 @@ final class VoiceSelectorTests: XCTestCase {
 final class LiveTurnRouterTests: XCTestCase {
     private let engine = RuleBasedIntentEngine()
 
-    private func route(_ text: String, brain: LiveBrainKind = .claude, ideas: Int = 3, jobRunning: Bool = false, fastLane: Bool = true) -> LiveLane {
+    private func route(_ text: String, brain: LiveBrainKind = .model, ideas: Int = 3, jobRunning: Bool = false, fastLane: Bool = true) -> LiveLane {
         LiveTurnRouter.route(text, grammar: engine.parse(text, context: .photo), brain: brain, ideasOnScreen: ideas, jobRunning: jobRunning, fastLane: fastLane)
     }
 
@@ -157,7 +157,7 @@ final class LiveTurnRouterTests: XCTestCase {
         let context = IntentContext(mode: .photo, pendingClarification: request)
         func lane(_ text: String, fastLane: Bool = true) -> LiveLane {
             // A choice hides the idea chips: the session passes 0 ideas on screen.
-            LiveTurnRouter.route(text, grammar: engine.parse(text, context: context), brain: .claude, ideasOnScreen: 0, jobRunning: false, fastLane: fastLane)
+            LiveTurnRouter.route(text, grammar: engine.parse(text, context: context), brain: .model, ideasOnScreen: 0, jobRunning: false, fastLane: fastLane)
         }
         for text in ["le deuxième", "la dernière", "les deux", "celui de gauche", "the second one"] {
             XCTAssertTrue(isLocal(lane(text)), text)
@@ -276,81 +276,98 @@ final class IdeaEngineTests: XCTestCase {
 
     func testMerge() {
         let heuristic = IdeaEngine.generic(mode: .photo, language: .french)
-        let claude = [LiveIdea(title: "Noir et blanc", why: "", symbol: nil, steps: [RawIntentStep(action: "applyLook", look: "mono")], source: .claude),
-                      LiveIdea(title: "Plus chaud", why: "", symbol: nil, steps: [RawIntentStep(action: "adjust", parameter: "temperature", amount: 20)], source: .claude)]
-        let merged = IdeaEngine.merge(current: heuristic, incoming: claude, dismissed: [], fill: heuristic)
+        let model = [LiveIdea(title: "Noir et blanc", why: "", symbol: nil, steps: [RawIntentStep(action: "applyLook", look: "mono")], source: .model),
+                     LiveIdea(title: "Plus chaud", why: "", symbol: nil, steps: [RawIntentStep(action: "adjust", parameter: "temperature", amount: 20)], source: .model)]
+        let merged = IdeaEngine.merge(current: heuristic, incoming: model, dismissed: [], fill: heuristic)
         XCTAssertEqual(merged.map(\.title), ["Noir et blanc", "Plus chaud", "Améliorer"])
-        // A refresh keeps Claude's chips and refills the rest.
-        let refreshed = IdeaEngine.merge(current: merged, incoming: [], dismissed: [claude[0].id], fill: heuristic)
+        // A refresh keeps the model's chips and refills the rest.
+        let refreshed = IdeaEngine.merge(current: merged, incoming: [], dismissed: [model[0].id], fill: heuristic)
         XCTAssertEqual(refreshed.map(\.title), ["Plus chaud", "Améliorer", "Recadrer"])
         let duplicates = IdeaEngine.merge(current: [], incoming: [heuristic[0], heuristic[0]], dismissed: [], fill: heuristic)
         XCTAssertEqual(duplicates.map(\.title), ["Améliorer", "Recadrer", "Look éclatant"])
-        let broken = LiveIdea(title: "Cassé", why: "", symbol: nil, steps: [], source: .claude)
+        let broken = LiveIdea(title: "Cassé", why: "", symbol: nil, steps: [], source: .model)
         XCTAssertFalse(IdeaEngine.merge(current: [], incoming: [broken], dismissed: [], fill: heuristic).contains(broken))
     }
 }
 
 final class BrainSelectorTests: XCTestCase {
-    private func inputs(_ now: Double, allowed: Bool = true, online: Bool = true, onDevice: Bool = true) -> BrainSelector.Inputs {
-        .init(claudeAllowed: allowed, online: online, onDeviceAvailable: onDevice, now: now)
+    private func inputs(_ now: Double, model: Bool = true, onDevice: Bool = true, hot: Bool = false) -> BrainSelector.Inputs {
+        .init(modelReady: model, onDeviceAvailable: onDevice, thermalCritical: hot, now: now)
     }
 
-    func testPriority() {
+    func testOrderModelThenOnDeviceThenGrammar() {
         var selector = BrainSelector()
-        XCTAssertEqual(selector.choose(inputs(0)), .claude)
-        XCTAssertEqual(selector.choose(inputs(0, allowed: false)), .onDevice)
-        XCTAssertEqual(selector.choose(inputs(0, online: false)), .onDevice)
-        XCTAssertEqual(selector.choose(inputs(0, allowed: false, onDevice: false)), .local)
+        XCTAssertEqual(selector.choose(inputs(0)), .model)
+        XCTAssertEqual(selector.choose(inputs(0, model: false)), .onDevice)
+        XCTAssertEqual(selector.choose(inputs(0, model: false, onDevice: false)), .local)
+        XCTAssertEqual(selector.choose(inputs(0, hot: true)), .onDevice, "thermal critical skips the model")
+        XCTAssertEqual(selector.choose(inputs(0), excluding: [.model]), .onDevice, "a failed turn re-runs on the next brain")
+        XCTAssertEqual(selector.choose(inputs(0), excluding: [.model, .onDevice]), .local)
+        XCTAssertEqual(selector.choose(inputs(0), excluding: [.model, .onDevice, .local]), .local, "the grammar is always there")
     }
 
-    func testKeyProblemsTurnClaudeOffUntilReset() {
-        for (error, problem) in [(LiveBrainError.invalidKey, LiveProblem.keyInvalid), (.noCredit, .noCredit), (.forbidden, .noAccess), (.modelUnavailable, .noAccess)] {
-            var selector = BrainSelector()
-            selector.recordFailure(error, now: 0)
-            XCTAssertEqual(selector.claudeDisabledReason, problem)
-            XCTAssertEqual(selector.choose(inputs(10_000)), .onDevice)
-            selector.resetClaude()
-            XCTAssertEqual(selector.choose(inputs(10_000)), .claude)
-        }
-    }
-
-    func testCooldowns() {
+    func testTwoFailuresInARowCoolAKindDown() {
         var selector = BrainSelector()
-        selector.recordFailure(.rateLimited(retryAfter: 30), now: 0)
-        XCTAssertEqual(selector.choose(inputs(59)), .onDevice)
-        XCTAssertEqual(selector.choose(inputs(61)), .claude)
-        var twice = BrainSelector()
-        twice.recordFailure(.overloaded, now: 100)
-        XCTAssertEqual(twice.choose(inputs(101)), .claude, "one failed turn is not a pattern")
-        twice.recordFailure(.timeout(stage: "first_byte"), now: 102)
-        XCTAssertEqual(twice.choose(inputs(150)), .onDevice)
-        XCTAssertEqual(twice.choose(inputs(163)), .claude)
+        selector.recordFailure(.model, .timeout(stage: "first_token"), now: 100)
+        XCTAssertEqual(selector.choose(inputs(101)), .model, "one failed turn is not a pattern")
+        selector.recordFailure(.model, .timeout(stage: "first_token"), now: 102)
+        XCTAssertEqual(selector.choose(inputs(150)), .onDevice)
+        XCTAssertEqual(selector.choose(inputs(163)), .model, "back after 60 s")
         var recovered = BrainSelector()
-        recovered.recordFailure(.overloaded, now: 0)
-        recovered.recordSuccess()
-        recovered.recordFailure(.overloaded, now: 1_000)
-        XCTAssertEqual(recovered.choose(inputs(1_001)), .claude, "a success in between resets the streak")
+        recovered.recordFailure(.model, .streamTruncated, now: 0)
+        recovered.recordSuccess(.model)
+        recovered.recordFailure(.model, .streamTruncated, now: 1_000)
+        XCTAssertEqual(recovered.choose(inputs(1_001)), .model, "a success in between resets the streak")
     }
 
-    func testThreeFailuresInTenMinutesEndClaudeForTheSession() {
+    func testCooldownsArePerKind() {
         var selector = BrainSelector()
-        selector.recordFailure(.overloaded, now: 0)
-        selector.recordSuccess()
-        selector.recordFailure(.server(status: 500), now: 200)
-        selector.recordSuccess()
-        selector.recordFailure(.network("lost"), now: 500)
-        XCTAssertTrue(selector.offForSession)
-        XCTAssertEqual(selector.choose(inputs(100_000)), .onDevice)
-        selector.resetClaude()
-        XCTAssertEqual(selector.choose(inputs(100_000)), .onDevice, "a new key does not bring it back this session")
+        selector.recordFailure(.onDevice, .unavailable("x"), now: 0)
+        selector.recordFailure(.onDevice, .unavailable("x"), now: 1)
+        XCTAssertEqual(selector.choose(inputs(2)), .model, "the model is not affected")
+        XCTAssertEqual(selector.choose(inputs(2, model: false)), .local)
+        XCTAssertEqual(selector.choose(inputs(62, model: false)), .onDevice)
+        var grammar = BrainSelector()
+        for time in [0.0, 1, 2, 3] { grammar.recordFailure(.local, .unavailable("x"), now: time) }
+        XCTAssertFalse(grammar.isOffForSession(.local), "the grammar never cools down")
+        XCTAssertEqual(grammar.choose(inputs(4, model: false, onDevice: false)), .local)
+    }
+
+    func testThreeFailuresInTenMinutesEndAKindForTheSession() {
+        var selector = BrainSelector()
+        for time in [0.0, 200, 500] {
+            selector.recordFailure(.onDevice, .timeout(stage: "turn"), now: time)
+            selector.recordSuccess(.onDevice)
+        }
+        XCTAssertTrue(selector.isOffForSession(.onDevice))
+        XCTAssertFalse(selector.isOffForSession(.model))
+        XCTAssertEqual(selector.choose(inputs(100_000, model: false)), .local)
         var spread = BrainSelector()
         for time in [0.0, 400, 800] {
-            spread.recordFailure(.overloaded, now: time)
-            spread.recordSuccess()
+            spread.recordFailure(.onDevice, .timeout(stage: "turn"), now: time)
+            spread.recordSuccess(.onDevice)
         }
-        XCTAssertFalse(spread.offForSession, "not within 10 minutes")
-        XCTAssertEqual(BrainSelector.problem(for: .network("x")), .offline)
-        XCTAssertEqual(BrainSelector.problem(for: .rateLimited(retryAfter: nil)), .rateLimited)
+        XCTAssertFalse(spread.isOffForSession(.onDevice), "not within 10 minutes")
+    }
+
+    func testMemoryPressureAndLoadFailuresTurnTheModelOffAtOnce() {
+        for error in [LiveBrainError.memoryPressure, .modelUnavailable("load failed")] {
+            var selector = BrainSelector()
+            selector.recordFailure(.model, error, now: 0)
+            XCTAssertTrue(selector.isOffForSession(.model), "\(error)")
+            XCTAssertEqual(selector.choose(inputs(100_000)), .onDevice)
+        }
+    }
+
+    func testProblemsAndLogNames() {
+        XCTAssertEqual(BrainSelector.problem(for: .timeout(stage: "first_token")), .brainTimeout)
+        XCTAssertEqual(BrainSelector.problem(for: .modelNotReady), .modelUnavailable)
+        XCTAssertEqual(BrainSelector.problem(for: .modelUnavailable("x")), .modelUnavailable)
+        XCTAssertEqual(BrainSelector.problem(for: .memoryPressure), .modelUnavailable)
+        XCTAssertEqual(BrainSelector.problem(for: .unavailable("on-device")), .unavailable("on-device"))
+        XCTAssertEqual(BrainSelector.errorName(.timeout(stage: "first_token")), "timeout_first_token")
+        XCTAssertEqual(BrainSelector.errorName(.modelNotReady), "model_not_ready")
+        XCTAssertEqual(BrainSelector.errorName(.memoryPressure), "memory_pressure")
     }
 }
 
@@ -359,14 +376,33 @@ final class LiveLinesAndLatencyTests: XCTestCase {
         XCTAssertEqual(LiveLines.line(.greetingLocal, .french), "Je t'écoute. Dis-moi ce que tu veux changer.")
         XCTAssertEqual(LiveLines.line(.greetingLocal, .english), "I'm listening. Tell me what to change.")
         XCTAssertEqual(LiveLines.line(.refusal, .french), "Je ne peux pas faire ça. Une autre idée ?")
-        XCTAssertEqual(LiveLines.problem(.keyInvalid, .french), "Ta clé Claude est refusée — je continue sur l'iPhone.")
+        XCTAssertEqual(LiveLines.line(.lostThread, .french), "Je perds le fil — tu peux redire ?")
+        XCTAssertEqual(LiveLines.line(.greetingLooking, .french), "Je regarde ta photo…")
+        XCTAssertEqual(LiveLines.line(.greetingLooking, .french, mode: .video), "Je regarde ta vidéo…")
+        XCTAssertEqual(LiveLines.problem(.audioFailed, .french), "Le micro a décroché — je le relance.")
         XCTAssertEqual(LiveLines.problem(.noSpeechRecognition(language: "de-DE"), .french), "La dictée n'est pas disponible en allemand — écris ta demande.")
         XCTAssertEqual(LiveLines.ideaApplied("Portrait doux", .french), "« Portrait doux » appliqué.")
         XCTAssertEqual(LiveLines.ideaApplied("Soft portrait", .english), "Soft portrait applied.")
+        let problems: [LiveProblem] = [.noMicrophone, .noSpeechRecognition(language: "fr-FR"), .refusal, .audioFailed, .voiceFailed, .notHearing,
+                                       .brainTimeout, .modelUnavailable, .unavailable("x")]
+        var lines: [String] = []
         for language in [NormalizedUtterance.Language.french, .english] {
-            for key in LiveLineKey.allCases { XCTAssertFalse(LiveLines.line(key, language).isEmpty) }
-            for problem in [LiveProblem.noMicrophone, .offline, .refusal, .keyInvalid, .noCredit, .noAccess, .rateLimited, .unavailable("x")] {
-                XCTAssertFalse(LiveLines.problem(problem, language).isEmpty)
+            for key in LiveLineKey.allCases {
+                for mode in [EditorMode.photo, .video] { lines.append(LiveLines.line(key, language, mode: mode)) }
+            }
+            lines += problems.map { LiveLines.problem($0, language) }
+            var filler: String?
+            for _ in 0..<6 {
+                filler = LiveLines.filler(language, avoiding: filler)
+                lines.append(filler ?? "")
+            }
+        }
+        XCTAssertFalse(lines.contains(where: \.isEmpty))
+        XCTAssertNotEqual(LiveLines.problem(.brainTimeout, .french), LiveLines.problem(.brainTimeout, .english))
+        // Live runs on the iPhone: no line names a cloud service, a key or a network.
+        for line in lines {
+            for word in ["claude", "anthropic", "clé", "key", "réseau", "network", "connexion", "connection"] {
+                XCTAssertFalse(line.lowercased().contains(word), "\(line) says \(word)")
             }
         }
     }
@@ -397,10 +433,10 @@ final class LiveLinesAndLatencyTests: XCTestCase {
         let percentiles = tracker.percentiles(.firstAudio)
         XCTAssertEqual(percentiles?.p50, 1000)
         XCTAssertEqual(percentiles?.p90, 1800)
-        var usage = ClaudeUsage()
-        usage.cacheReadInputTokens = 900
-        tracker.record(usage: usage, bodyBytes: 2048, turn: 3)
-        XCTAssertEqual(tracker.usage(turn: 3)?.cacheReadInputTokens, 900)
+        let stats = LiveGenerationStats(model: "Qwen3.5 4B", promptTokens: 120, cachedTokens: 2_400, generatedTokens: 40, firstTokenMs: 640, tokensPerSecond: 24)
+        tracker.record(stats: stats, turn: 3)
+        XCTAssertEqual(tracker.stats(turn: 3), stats)
+        XCTAssertNil(tracker.stats(turn: 4))
         tracker.mark(.committed, at: 5, turn: 99)
         tracker.mark(.firstText, at: 6.2, turn: 99)
         XCTAssertEqual(tracker.report(turn: 99), ["firstText": 1200], "typed turns count from the commit")

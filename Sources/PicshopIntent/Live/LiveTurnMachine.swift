@@ -27,6 +27,8 @@ public enum LiveEvent: Sendable, Equatable {
     case mute(Bool)
     case audio(AudioFrameFeatures)
     case transcript(TranscriptSnapshot, grammar: EditPlan?, at: Double)
+    /// A recognizer's final (the simple voice path, which endpoints on its own).
+    case utterance(String, at: Double)
     case tick(Double)
     case orbTapped(at: Double)
     case typed(String, at: Double)
@@ -46,6 +48,10 @@ public enum LiveEffect: Sendable, Equatable {
     case earcon(Earcon)
     case haptic(LiveHaptic)
     case autoPaused
+    /// The committed turn got no answer within `thinkingDeadline`: the session cancels it and says so.
+    case turnTimedOut(Int)
+    /// A line queued but never started, or a chunk that never drained: the session switches voices.
+    case speakerStuck
 }
 
 public struct LiveTurnState: Sendable, Equatable {
@@ -84,6 +90,15 @@ public struct LiveTurnState: Sendable, Equatable {
     public fileprivate(set) var turnTakingMuted = false
     /// The latest end-of-turn or barge-in decision, with its reason, for diagnostics.
     public fileprivate(set) var lastDecision: String?
+    // Deadlines (see LiveTurnMachine's statics).
+    /// When the turn in flight was committed.
+    public fileprivate(set) var committedAt: Double?
+    /// When the first line still waiting to start was queued.
+    public fileprivate(set) var queuedAt: Double?
+    public fileprivate(set) var lastChunkStartedAt: Double?
+    public fileprivate(set) var lastChunkWords = 0
+    /// Hearing is ignored until then, after the voice drained on a route with echo.
+    public fileprivate(set) var echoGateUntil: Double?
 
     init(effectiveBargeIn: BargeInMode) {
         phase = .idle
@@ -106,13 +121,16 @@ public struct LiveTurnMachine: Sendable {
     public struct Options: Sendable, Equatable {
         /// .full only when AppSettings.liveBargeIn.
         public var bargeInOnSpeaker: BargeInMode
-        /// VoiceOver running: mic muted while the assistant speaks.
+        /// Mic muted while the assistant speaks (VoiceOver, or the half-duplex simple path).
         public var turnTaking: Bool
         public var autoPauseAfter: Double = 90
+        /// The recognizer decides the end of each utterance (`.utterance`); the reducer only caps it.
+        public var externalEndpointing = false
 
-        public init(bargeInOnSpeaker: BargeInMode, turnTaking: Bool) {
+        public init(bargeInOnSpeaker: BargeInMode, turnTaking: Bool, externalEndpointing: Bool = false) {
             self.bargeInOnSpeaker = bargeInOnSpeaker
             self.turnTaking = turnTaking
+            self.externalEndpointing = externalEndpointing
         }
     }
 
@@ -131,6 +149,23 @@ public struct LiveTurnMachine: Sendable {
     static let transcriptSilenceLag = 0.45
     static let preRoll = 0.3
     static let thinkingBargeIn = 0.18
+
+    // Deadlines: no state lasts forever.
+    /// Hearing with fewer than 2 recognized characters ends after this many seconds, whatever the VAD says.
+    public static let emptyHearingCap = 4.0
+    /// With external endpointing, an utterance with no final ends after this many seconds.
+    public static let externalEndpointCap = 25.0
+    /// A committed turn with no brain answer ends with `.turnTimedOut`.
+    public static let thinkingDeadline = 15.0
+    /// A queued line that never started ends with `.speakerStuck`.
+    public static let queuedLineDeadline = 4.0
+    /// Hearing stays closed this long after the voice drained, except on headphones.
+    public static let echoTail = 0.6
+
+    /// How long a started chunk of `words` words may take to drain: 3 + words/1.8 s.
+    public static func drainDeadline(words: Int) -> Double {
+        3 + Double(max(0, words)) / 1.8
+    }
 
     public init(options: Options, eot: EndOfTurnDetector = .init(), vad: VoiceActivityDetector = .init(), bargeIn: BargeInPolicy = .init()) {
         self.options = options
@@ -169,6 +204,7 @@ public struct LiveTurnMachine: Sendable {
         case .mute(let muted): return mute(muted)
         case .audio(let frame): return audio(frame)
         case .transcript(let snapshot, let plan, let time): return transcript(snapshot, plan: plan, at: time)
+        case .utterance(let text, let time): return utterance(text, at: time)
         case .tick(let time): return tick(time)
         case .orbTapped(let time): return orbTapped(at: time)
         case .typed(let text, let time): return typed(text, at: time)
@@ -306,6 +342,38 @@ public struct LiveTurnMachine: Sendable {
         case .idle, .interrupted:
             return []
         }
+    }
+
+    /// A recognizer's final: commit it. Under 2 characters (a cough), listen again.
+    /// While a reply is on its way, only new words count: a late final of the committed words is ignored.
+    private mutating func utterance(_ text: String, at time: Double) -> [LiveEffect] {
+        guard !hearingIgnored else { return [] }
+        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch state.phase {
+        case .listening, .userSpeaking:
+            guard words.count >= 2 else {
+                state.phase = .listening
+                state.listeningSince = time
+                resetUserTurn()
+                state.lastDecision = "dropped: final of \(words.count) characters"
+                return [.showCaption(TranscriptSnapshot(), paused: false), .beginUserTurn(at: time), .openMic]
+            }
+        case .thinking, .speaking, .acting:
+            guard hasNewWords(words) else { return [] }
+            // Said more before any answer: the new words continue the turn, as with a voice interruption.
+            if state.turnInFlight, !state.turnHadOutput, let committed = state.committedText, !committed.isEmpty { state.carryOver = committed }
+        case .idle, .interrupted:
+            return []
+        }
+        let effects = cancelResponse(fadeMs: 60)
+        state.lastDecision = "commit: recognizer final"
+        return effects + commit(words, at: time)
+    }
+
+    /// At least 2 tokens that are not in the committed text.
+    private func hasNewWords(_ text: String) -> Bool {
+        let committed = Set(BargeInPolicy.tokens(state.committedText ?? ""))
+        return BargeInPolicy.tokens(text).filter { !committed.contains($0) }.count >= 2
     }
 
     private mutating func beginHearing(at time: Double) -> [LiveEffect] {

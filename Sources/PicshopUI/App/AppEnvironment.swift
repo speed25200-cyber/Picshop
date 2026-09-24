@@ -35,7 +35,7 @@ public final class AppEnvironment {
     /// dismissed. Offer to share it with `writeCrashReport()`.
     public private(set) var pendingCrashReport: Diagnostics.Report?
     /// Set by EditorHost while an editor is on screen: model installs pause, and
-    /// never start or resume while it is true.
+    /// never start or resume while it is true. The Live model keeps downloading.
     @ObservationIgnored public var isEditorOpen = false {
         didSet {
             guard isEditorOpen != oldValue else { return }
@@ -45,7 +45,7 @@ public final class AppEnvironment {
             // In order: a quick close and reopen must end paused.
             installGate = Task {
                 await previous?.value
-                if open { await models.pauseAll() } else { await models.resumeAll() }
+                if open { await models.pauseAll(except: AppEnvironment.liveModelIDs) } else { await models.resumeAll() }
             }
             if !open { startAutoInstallIfDue() }
         }
@@ -66,6 +66,8 @@ public final class AppEnvironment {
     static let autoInstallDelay: TimeInterval = 60
     /// modelStates is written at most this often; terminal states go through at once.
     static let modelStatesInterval: TimeInterval = 0.25
+    /// The local brain's models: they keep downloading while an editor is open.
+    static let liveModelIDs: Set<String> = [LocalModelTiering.maxModelID, LocalModelTiering.fastModelID]
 
     public init(extraEngines: [any IntentEngine] = []) {
         let settings = AppSettings()
@@ -85,8 +87,13 @@ public final class AppEnvironment {
         pendingCrashReport = Diagnostics.shared.pendingReport
         Diagnostics.shared.setReportHandler { [weak self] report in self?.pendingCrashReport = report }
         memoryObserver = NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { _ in
-            Task { @MainActor in AppEnvironment.relieveMemoryPressure() }
+            Task { @MainActor in
+                AppEnvironment.relieveMemoryPressure()
+                LocalBrainHub.shared.release(reason: "memory_warning")
+            }
         }
+        // The runtime was registered by the app target just before; the hub reads settings and models from here.
+        LocalBrainHub.shared.attach(self)
 
         Task {
             #if canImport(FoundationModels)
@@ -106,8 +113,8 @@ public final class AppEnvironment {
         }
     }
 
-    /// Picks the most capable brain that works on this device: Pro Brain (MLX) when its
-    /// weights are installed, otherwise Apple Intelligence, otherwise the instant grammar.
+    /// Picks the most capable brain that works on this device: the local model's planner
+    /// once LocalBrainHub has loaded it, otherwise Apple Intelligence, otherwise the instant grammar.
     public func refreshEngines() async {
         availableEngines = await router.availableEngines()
         let best: IntentEngineKind = availableEngines.contains(.proLocal) ? .proLocal : (availableEngines.contains(.appleIntelligence) ? .appleIntelligence : .rules)
@@ -169,11 +176,14 @@ public final class AppEnvironment {
         if installed { Task { await refreshEngines() } }
     }
 
-    /// Whether the runtime needed by a model is linked into this build.
+    /// Whether the runtime needed by a model is linked into this build. Language models go
+    /// through LocalBrainHub: only the Live model for this iPhone's tier.
     public func canInstall(_ model: ModelDescriptor) -> Bool {
         switch model.kind {
         case .generative: return generativeEngineProvider != nil
-        case .languageModel: return ProBrainInstaller.shared != nil
+        case .languageModel:
+            let hub = LocalBrainHub.shared
+            return hub.runtime != nil && model.id == hub.status.model?.id
         case .inpainting, .superResolution: return true
         }
     }
@@ -184,8 +194,8 @@ public final class AppEnvironment {
     public func install(_ model: ModelDescriptor) -> Bool {
         guard canInstall(model) else { return false }
         settings.setAutoInstallSkipped(false, for: model.id)
-        if model.kind == .languageModel, let installer = ProBrainInstaller.shared {
-            Task { await installer.install(model, app: self) }
+        if model.kind == .languageModel {
+            LocalBrainHub.shared.download(allowCellular: false)
         } else {
             Task { await models.install(model) }
         }
@@ -200,6 +210,7 @@ public final class AppEnvironment {
 
     /// Every model ships "installed by default": the ones that are not bundled with the
     /// app download by themselves over Wi‑Fi, with progress shown on the Home screen.
+    /// Of the language models, only the Live model recommended for this iPhone (canInstall).
     public func autoInstallModels() async {
         guard settings.autoInstallsModels else { return }
         guard !isEditorOpen else {
@@ -265,8 +276,10 @@ public final class AppEnvironment {
     }
 
     /// Warms the on-device planner for the editor about to open, off the main
-    /// thread. EditorHost calls it on appear, so launch does not pay for it.
+    /// thread, and lets the local brain preload its weights when conditions allow.
+    /// EditorHost calls it on appear, so launch does not pay for it.
     public func prewarmIntentEngine(mode: EditorMode) {
+        if settings.livePreparesOnOpen { LocalBrainHub.shared.preload(reason: "editor") }
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *), let engine = appleEngine as? FoundationModelsIntentEngine {
             let now = Date()

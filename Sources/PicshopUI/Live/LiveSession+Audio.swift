@@ -12,9 +12,9 @@ import PicshopSpeech
 extension LiveSession {
     // MARK: Start
 
-    /// start(), then again after the consent sheet: permissions, consent, then connect.
-    func beginLive(consentResolved: Bool) async {
-        guard let app, host != nil, !isTornDown, !isRunning, !isStarting else { return }
+    /// start(): permissions, then connect. Everything runs on the iPhone: no consent to ask.
+    func beginLive() async {
+        guard app != nil, host != nil, !isTornDown, !isRunning, !isStarting else { return }
         isStarting = true
         cancelDictation()
         assignNotice(nil)
@@ -53,19 +53,6 @@ extension LiveSession {
         }
         recognitionAvailable = speech == .authorized
         guard !isTornDown else { return }
-
-        // Consent (cross-owner rule 4): before the first request that carries user content.
-        // On a cold launch the saved key may still be loading from the Keychain.
-        let keyStore = LiveServices.shared.keyStore
-        await keyStore.waitUntilLoaded()
-        guard !isTornDown else { return }
-        let settings = app.settings
-        let claudeWouldRun = keyStore.hasKey && settings.liveUseClaude && !claudeForcedOff
-            && LiveServices.shared.reachability.isOnline && selector.claudeDisabledReason == nil
-        if !consentResolved, claudeWouldRun, !settings.hasLiveConsent, settings.liveConsentVersion >= 0 {
-            assignNeedsConsent(true)
-            return
-        }
         await connect()
     }
 
@@ -79,8 +66,9 @@ extension LiveSession {
         assignRunning(true)
         isConnecting = true
         publishState()
-        services.beginSession()
         services.debug.isCollecting = settings.liveDebug
+        // The local model starts loading now, off the main actor, when memory and heat allow it.
+        LocalBrainHub.shared.preload(reason: "live")
         machine.setOptions(.init(bargeInOnSpeaker: settings.liveBargeIn ? .full : .safe, turnTaking: UIAccessibility.isVoiceOverRunning))
         accumulator = TranscriptAccumulator()
         assignMuted(false)
@@ -90,11 +78,6 @@ extension LiveSession {
         sinceLastReply = []
         interruptedAfter = nil
         responseChunks = []
-        var routeNow = route
-        routeNow.sharesMedia = false
-        routeNow.imagesSent = 0
-        routeNow.isUploading = false
-        assignRoute(routeNow)
 
         // Nothing else speaks or listens while Live owns the audio.
         host.liveSpeechSuppressed = true
@@ -108,6 +91,7 @@ extension LiveSession {
         // Audio and recognition, with the brains prepared in parallel.
         let stack = LiveAudioStack()
         audio = stack
+        assignVoicePath(.duplex)
         stack.onSegment = { [weak self] segment in self?.transcriptSegment(segment) }
         stack.onEngineEvent = { [weak self] event in self?.engineEvent(event) }
         stack.speaker.onSignal = { [weak self] turn, signal in self?.speakerSignal(turn, signal) }
@@ -159,58 +143,33 @@ extension LiveSession {
         ]))
         debugDecision("Live started in \(elapsed) ms · \(currentKind.rawValue) · \(stack.engine.route.rawValue)")
 
-        // The first turn: Claude greets and proposes ideas, the others greet locally.
+        // The first turn: a brain that opens sessions looks at the picture and proposes
+        // ideas after a short local line; the others greet locally.
         currentKind = chooseBrain()
-        assignRoute(brain: badge(for: currentKind))
-        if currentKind == .claude {
+        assignRoute(liveRoute(for: currentKind))
+        if brainFor(currentKind)?.capabilities.opensSession == true {
+            speak(LiveLines.line(.greetingLooking, replyLanguage, mode: mode), turn: machine.state.turn)
             startBrainTurn(id: machine.state.turn, kind: .sessionStart, text: "", isQuestion: false)
         } else {
-            if settings.liveUseClaude, LiveServices.shared.keyStore.hasKey, !LiveServices.shared.reachability.isOnline {
-                showNotice(problemText(.offline), isProblem: true)
-            }
             speak(LiveLines.line(.greetingLocal, replyLanguage), turn: machine.state.turn)
         }
     }
 
-    /// Claude (key read once), the on-device model, and the local router.
+    /// This conversation's brains, from LocalBrainHub: the local model when it is loaded,
+    /// Apple's on-device model, and the rules-only grammar. Never waits on the weights.
     private func prepareBrains() async {
-        guard let app else { return }
-        let settings = app.settings
-        localBrain = LocalLiveBrain(router: app.router, mode: mode)
-        #if canImport(FoundationModels)
-        if onDeviceBrain == nil {
-            onDeviceBrain = FoundationModelsLiveBrain(mode: mode)
+        let set = LocalBrainHub.shared.makeLiveBrains(mode: mode)
+        modelBrain = set.model
+        onDeviceBrain = set.onDevice
+        localBrain = set.local
+        onDeviceAvailable = false
+        if let onDevice = set.onDevice {
+            onDeviceAvailable = await onDevice.isAvailable()
+            if onDeviceAvailable { Task.detached(priority: .utility) { await onDevice.warmUp() } }
         }
-        #endif
-        if let onDeviceBrain {
-            onDeviceAvailable = await onDeviceBrain.isAvailable()
-            if onDeviceAvailable { Task.detached(priority: .utility) { await onDeviceBrain.warmUp() } }
+        if let model = set.model {
+            Task.detached(priority: .userInitiated) { await model.warmUp() }
         }
-        let keyStore = LiveServices.shared.keyStore
-        guard keyStore.hasKey, settings.liveUseClaude, settings.hasLiveConsent, !claudeForcedOff else {
-            claudeBrain = nil
-            return
-        }
-        guard let key = await keyStore.readKey(), APIKeyFormat.looksValid(key), isRunning else {
-            claudeBrain = nil
-            return
-        }
-        let transport = LiveServices.makeTransport { [weak self] event in
-            Task { @MainActor [weak self] in self?.imageUpload(event) }
-        }
-        claudeKey = key
-        claudeTransport = transport
-        let brain = ClaudeLiveBrain(mode: mode, apiKey: key, transport: transport, clock: clock, log: LiveServices.shared.logSink)
-        claudeBrain = brain
-        if LiveServices.shared.reachability.isOnline {
-            // Writes the tools + system cache entry and opens the HTTP/2 connection.
-            Task.detached(priority: .userInitiated) { await brain.warmUp() }
-        }
-        #if DEBUG
-        if !keyStore.verifyKeychainAttributes() {
-            debugDecision("Keychain item attributes differ from D7")
-        }
-        #endif
     }
 
     /// The one-time better-voice card, when the best installed voice for the language is standard quality.
@@ -252,9 +211,9 @@ extension LiveSession {
         assignRunning(false)
         assignActivityTitle(nil)
         meter.reset()
-        claudeKey = nil
-        claudeBrain = nil
-        claudeTransport = nil
+        // The model brain holds its conversation cache: the next Live asks the hub again.
+        modelBrain = nil
+        assignVoicePath(.simple)
         if let host { host.liveSpeechSuppressed = false }
         VoiceFeedback.shared.isSuppressed = false
         UIApplication.shared.isIdleTimerDisabled = false
@@ -263,10 +222,7 @@ extension LiveSession {
         transcriptNow.userPaused = false
         transcriptNow.assistant = ""
         assignTranscript(transcriptNow)
-        var routeNow = route
-        routeNow.isUploading = false
-        if let app { routeNow.brain = Self.localBadge(app) }
-        assignRoute(routeNow)
+        if let app { assignRoute(Self.restingRoute(app)) }
         publishState()
         if wasRunning {
             LiveServices.shared.record(LiveLogEntry(time: clock.now(), event: "live.end", fields: ["reason": reason]))
@@ -335,20 +291,34 @@ extension LiveSession {
                 self.stopLive(reason: "auto-pause")
                 self.showNotice(LiveLines.line(.resume, self.replyLanguage), isProblem: false)
             }
+        case .turnTimedOut(let id):
+            // No answer within the thinking deadline: the turn stops, counts against its brain, and Live says so.
+            let kind = activeBrainTurnID == id ? (activeBrainKind ?? currentKind) : currentKind
+            cancelBrainTurn(id, spokenText: "")
+            let error = LiveBrainError.timeout(stage: "turn")
+            selector.recordFailure(kind, error, now: clock.now())
+            LiveServices.shared.record(LiveLogEntry(time: clock.now(), event: "brain.error", fields: [
+                "brain": kind.rawValue, "error": BrainSelector.errorName(error), "before_output": brainProducedOutput ? "0" : "1",
+            ]))
+            speak(LiveLines.problem(.brainTimeout, replyLanguage), turn: machine.state.turn)
+        case .speakerStuck:
+            // A line that never started or never drained: the system voice takes over, captions carry on.
+            audio?.speaker.setUsesSystemSpeech(true)
+            LiveServices.shared.record(LiveLogEntry(time: clock.now(), event: "voice.failed", fields: ["reason": "speaker_stuck"]))
+            showNotice(LiveLines.problem(.voiceFailed, replyLanguage), isProblem: true)
         }
     }
 
     private func phaseChanged(from old: LivePhase, to new: LivePhase) {
         if old == .listening, new == .userSpeaking {
             if brainTurnKind == .sessionStart, let greeting = brainTurnID {
-                // The user spoke before Claude's greeting began: it gives way instead of talking over them.
+                // The user spoke before the brain's opening line began: it gives way instead of talking over them.
                 cancelBrainTurn(greeting, spokenText: "")
                 audio?.speaker.stop(fadeMs: 80)
                 captionOnly?.stop()
             }
             // The user started talking: warm what the next turn needs.
             prefetchSnapshot()
-            preconnectIfIdle()
         }
     }
 
@@ -437,6 +407,7 @@ extension LiveSession {
         }
         debug.isCollecting = true
         debug.pushLevel(aboveFloorDB: max(0, levelDB - floorDB), floorDB: floorDB)
+        debug.setVoicePath(voicePath.rawValue)
         if let audio {
             let risk: String
             switch machine.state.echoRisk {

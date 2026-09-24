@@ -551,3 +551,44 @@ final class AudioPolicyTests: XCTestCase {
         XCTAssertEqual(accumulator.snapshot, TranscriptSnapshot(finalized: "et chaud"))
     }
 }
+
+/// The simple voice path: the recognizer ends each utterance and the reducer commits its final.
+final class RecognizerFinalTests: XCTestCase {
+    private func simplePath() -> TurnScript {
+        var script = TurnScript.listening()
+        script.machine.setOptions(.init(bargeInOnSpeaker: .safe, turnTaking: true, externalEndpointing: true))
+        return script
+    }
+
+    func testAFinalCommits() {
+        var script = simplePath()
+        XCTAssertEqual(script.send(.utterance(" plus chaud ", at: 2)), [.commitTurn(1, text: "plus chaud"), .beginUserTurn(at: 2), .earcon(.commit)])
+        XCTAssertEqual(script.state.phase, .thinking)
+        XCTAssertEqual(script.state.committedText, "plus chaud")
+    }
+
+    func testAOneLetterFinalReopensTheMicrophone() {
+        var script = simplePath()
+        XCTAssertEqual(script.send(.utterance("a", at: 2)), [.showCaption(TranscriptSnapshot(), paused: false), .beginUserTurn(at: 2), .openMic])
+        XCTAssertEqual(script.state.phase, .listening)
+    }
+
+    func testALateFinalOfTheCommittedWordsIsIgnored() {
+        var script = TurnScript.thinking()
+        XCTAssertEqual(script.state.phase, .thinking)
+        XCTAssertEqual(script.send(.utterance("plus lumineux", at: 3)), [])
+        XCTAssertEqual(script.send(.utterance("a", at: 3.1)), [], "a cough while thinking changes nothing")
+        XCTAssertEqual(script.state.phase, .thinking)
+        let effects = script.send(.utterance("et beaucoup plus contrasté", at: 3.2))
+        XCTAssertTrue(effects.contains(.cancelTurn(1, spokenText: "")))
+        XCTAssertTrue(effects.contains(.commitTurn(2, text: "plus lumineux et beaucoup plus contrasté")), "said more before any answer: one turn")
+    }
+
+    func testIgnoredWhenIdleOrMuted() {
+        var idle = TurnScript()
+        XCTAssertEqual(idle.send(.utterance("plus chaud", at: 0)), [])
+        var muted = simplePath()
+        muted.send(.mute(true))
+        XCTAssertEqual(muted.send(.utterance("plus chaud", at: 2)), [])
+    }
+}

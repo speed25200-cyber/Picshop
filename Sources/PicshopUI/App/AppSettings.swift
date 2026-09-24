@@ -1,7 +1,9 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
 import Observation
+import Security
 import PicshopCore
+import PicshopIntent
 import PicshopSpeech
 import PicshopImaging
 import PicshopVideo
@@ -20,7 +22,7 @@ public final class AppSettings {
     public var photoExportFormat: ExportOptions.Format { didSet { defaults.set(photoExportFormat.rawValue, forKey: "photoFormat") } }
     public var videoExportQuality: VideoExportOptions.Quality { didSet { defaults.set(videoExportQuality.rawValue, forKey: "videoQuality") } }
     public var hasCompletedOnboarding: Bool { didSet { defaults.set(hasCompletedOnboarding, forKey: "onboarded") } }
-    /// Large models (Generative Fill, Pro Brain) download by themselves over Wi‑Fi.
+    /// Large models (Generative Fill, the local brain) download by themselves over Wi‑Fi.
     public var autoInstallsModels: Bool { didSet { defaults.set(autoInstallsModels, forKey: "autoInstallsModels") } }
     public var showsVoiceTranscript: Bool { didSet { defaults.set(showsVoiceTranscript, forKey: "showsTranscript") } }
     /// Settings › Performance: follow the thermal state, favour quality, or favour a cool phone.
@@ -28,20 +30,6 @@ public final class AppSettings {
 
     // MARK: Picshop Live
 
-    /// Version of the Claude consent text the person accepted.
-    public static let liveConsentCurrent = 1
-    /// 0 never asked, negative declined, `liveConsentCurrent` accepted.
-    public var liveConsentVersion: Int { didSet { defaults.set(liveConsentVersion, forKey: "liveConsentVersion") } }
-    public var hasLiveConsent: Bool { liveConsentVersion == Self.liveConsentCurrent }
-    /// Turning it back on asks for consent again when it was declined.
-    public var liveUseClaude: Bool {
-        didSet {
-            defaults.set(liveUseClaude, forKey: "liveUseClaude")
-            if liveUseClaude, !oldValue, liveConsentVersion < 0 { liveConsentVersion = 0 }
-        }
-    }
-    /// Effective only with consent.
-    public var liveSendsImages: Bool { didSet { defaults.set(liveSendsImages, forKey: "liveSendsImages") } }
     public var liveAutoStart: Bool { didSet { defaults.set(liveAutoStart, forKey: "liveAutoStart") } }
     /// Off: on the loudspeaker only stop words, a tap, typing or a chip interrupt (safe mode).
     public var liveBargeIn: Bool { didSet { defaults.set(liveBargeIn, forKey: "liveBargeIn") } }
@@ -63,6 +51,18 @@ public final class AppSettings {
     public var liveDebug: Bool { didSet { defaults.set(liveDebug, forKey: "liveDebug") } }
     /// Debug A/B: speak with `AVSpeechSynthesizer.speak` instead of the audio engine.
     public var liveSpeakerUsesSystem: Bool { didSet { defaults.set(liveSpeakerUsesSystem, forKey: "liveSpeakerUsesSystem") } }
+    /// Talking over Live with headphones (the echo-cancelling duplex path). Written by
+    /// the Live self-test when its duplex step passes; the person may turn it off.
+    public var liveDuplexAllowed: Bool { didSet { defaults.set(liveDuplexAllowed, forKey: "liveDuplexAllowed") } }
+    /// Loads the local brain as soon as an editor opens, so the first Live turn doesn't wait.
+    public var livePreparesOnOpen: Bool { didSet { defaults.set(livePreparesOnOpen, forKey: "livePreparesOnOpen") } }
+
+    // MARK: Local brain
+
+    /// Settings › Intelligence: Auto, Max (4B) or Rapide (2B), within what the iPhone's memory allows.
+    public var localModelQuality: LocalModelQuality { didSet { defaults.set(localModelQuality.rawValue, forKey: "localModelQuality") } }
+    /// The model may download over cellular; set only after a confirmation that shows its size.
+    public var localModelAllowsCellular: Bool { didSet { defaults.set(localModelAllowsCellular, forKey: "localModelAllowsCellular") } }
 
     public static let liveRateRange: ClosedRange<Double> = 0.85...1.25
 
@@ -81,9 +81,7 @@ public final class AppSettings {
         autoInstallsModels = (defaults.object(forKey: "autoInstallsModels") as? Bool) ?? true
         showsVoiceTranscript = (defaults.object(forKey: "showsTranscript") as? Bool) ?? true
         performancePreference = PerformanceGovernor.Preference(rawValue: defaults.string(forKey: "performancePreference") ?? "") ?? .automatic
-        liveConsentVersion = defaults.integer(forKey: "liveConsentVersion")
-        liveUseClaude = (defaults.object(forKey: "liveUseClaude") as? Bool) ?? true
-        liveSendsImages = (defaults.object(forKey: "liveSendsImages") as? Bool) ?? true
+        AppSettings.purgeCloudLeftovers()
         liveAutoStart = defaults.bool(forKey: "liveAutoStart")
         liveBargeIn = defaults.bool(forKey: "liveBargeIn")
         liveSpeaks = (defaults.object(forKey: "liveSpeaks") as? Bool) ?? true
@@ -95,8 +93,49 @@ public final class AppSettings {
         liveHDBluetooth = defaults.bool(forKey: "liveHDBluetooth")
         liveDebug = defaults.bool(forKey: "liveDebug")
         liveSpeakerUsesSystem = defaults.bool(forKey: "liveSpeakerUsesSystem")
+        liveDuplexAllowed = defaults.bool(forKey: "liveDuplexAllowed")
+        livePreparesOnOpen = (defaults.object(forKey: "livePreparesOnOpen") as? Bool) ?? true
+        localModelQuality = LocalModelQuality(rawValue: defaults.string(forKey: "localModelQuality") ?? "") ?? .auto
+        localModelAllowsCellular = defaults.bool(forKey: "localModelAllowsCellular")
         VoiceFeedback.shared.isEnabled = speaksReplies
         Haptics.isEnabled = hapticsEnabled
+    }
+
+    // MARK: Cloud leftovers
+
+    /// Set once the leftovers of the removed cloud option are gone.
+    static let cloudPurgedFlag = "liveCloudPurged.v1"
+    /// The Keychain item that held a pasted API key.
+    static let cloudKeychainService = "com.picshopio.picshop.anthropic"
+    static let cloudKeychainAccount = "api-key"
+    /// What the cloud option wrote to UserDefaults: its consent, its switches and its usage counters.
+    static let cloudLeftoverKeys = [
+        "liveConsentVersion", "liveUseClaude", "liveSendsImages",
+        "liveUsage.requests", "liveUsage.inputTokens", "liveUsage.cacheReadTokens",
+        "liveUsage.cacheWriteTokens", "liveUsage.outputTokens", "liveUsage.estimatedUSD",
+    ]
+
+    /// Live runs entirely on the iPhone now: erases, once, a key the person had
+    /// saved and the settings that went with it. Idempotent. The flag is set only
+    /// when the Keychain answered, so a launch before the first unlock (the item
+    /// can't be reached then) tries again next time.
+    static func purgeCloudLeftovers() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: cloudPurgedFlag) else { return }
+        for key in cloudLeftoverKeys { defaults.removeObject(forKey: key) }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: cloudKeychainService,
+            kSecAttrAccount as String: cloudKeychainAccount,
+            kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            PSLog.info("cloud leftovers: keychain answered \(status); trying again next launch", category: .ui)
+            return
+        }
+        defaults.set(true, forKey: cloudPurgedFlag)
+        if status == errSecSuccess { PSLog.info("cloud leftovers: saved key erased", category: .ui) }
     }
 
     /// Models the user removed on purpose are not re-downloaded automatically.

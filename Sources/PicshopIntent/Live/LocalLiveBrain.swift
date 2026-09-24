@@ -1,9 +1,9 @@
 import Foundation
 import PicshopCore
 
-/// The brain that never needs a network or a model: the existing
-/// HybridIntentRouter (Pro MLX, then the Apple planner, then the grammar).
-/// No conversation memory; always available.
+/// The brain that needs no model at all: Live's last resort, always available.
+/// Live hands it a rules-only HybridIntentRouter (`preferredEngine: .rules`),
+/// so a turn never waits on a language model. No conversation memory.
 public actor LocalLiveBrain: LiveBrain {
     /// .local
     public nonisolated let kind: LiveBrainKind

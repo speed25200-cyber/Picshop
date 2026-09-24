@@ -34,6 +34,9 @@ jobs:
           python-version: "3.12"
       - run: pip install tree-sitter tree-sitter-swift
       - run: python3 Scripts/swift-syntax-check.py Sources Tests App
+      # Report only until phase 2 of the local-brain work, then it fails the job.
+      - name: No-cloud check (report)
+        run: bash Scripts/check-no-cloud.sh --report
 
   package-macos:
     name: Package tests (macOS, Xcode 26)
@@ -98,6 +101,20 @@ jobs:
           ls -la App/Models || true
       - name: Install XcodeGen
         run: brew install xcodegen
+      - name: Metal Toolchain and package trust
+        run: |
+          # mlx-swift (the local brain) compiles Metal kernels: the component must be installed.
+          xcrun -sdk iphoneos metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain || true
+          xcrun -sdk iphoneos metal --version | head -1 || echo "Metal Toolchain missing"
+          # mlx-swift ships a build-tool plugin; trust package plugins and macros on this CI machine.
+          defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidatation -bool YES
+          defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: ~/picshop-spm
+          key: spm-ios-${{ runner.os }}-${{ hashFiles('project.yml') }}
+          restore-keys: spm-ios-${{ runner.os }}-
       - name: Generate project
         run: sh Scripts/build-stamp.sh && xcodegen generate
       - name: Build (iOS Simulator, Debug)
@@ -105,15 +122,22 @@ jobs:
           set -o pipefail
           xcodebuild build -project PicShop.xcodeproj -scheme PicShop \
             -destination 'generic/platform=iOS Simulator' -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO -skipPackagePluginValidation -IDEBuildingContinueBuildingAfterErrors=YES 2>&1 | tee build-sim.log | grep -E "error:|warning: (unused|var|immutable)|BUILD|Compiling|Ld " || true
+            -clonedSourcePackagesDirPath ~/picshop-spm -derivedDataPath ~/picshop-dd \
+            CODE_SIGNING_ALLOWED=NO -skipPackagePluginValidation -skipMacroValidation -IDEBuildingContinueBuildingAfterErrors=YES 2>&1 | tee build-sim.log | grep -E "error:|warning: (unused|var|immutable)|BUILD|Compiling|Ld " || true
           grep -q "BUILD SUCCEEDED" build-sim.log
       - name: Build (iOS device, Release)
         run: |
           set -o pipefail
           xcodebuild build -project PicShop.xcodeproj -scheme PicShop \
             -destination 'generic/platform=iOS' -configuration Release \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -skipPackagePluginValidation -IDEBuildingContinueBuildingAfterErrors=YES 2>&1 | tee build-device.log | grep -E "error:|BUILD" || true
+            -clonedSourcePackagesDirPath ~/picshop-spm -derivedDataPath ~/picshop-dd \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -skipPackagePluginValidation -skipMacroValidation -IDEBuildingContinueBuildingAfterErrors=YES 2>&1 | tee build-device.log | grep -E "error:|BUILD" || true
           grep -q "BUILD SUCCEEDED" build-device.log
+      - name: App size (report only)
+        run: |
+          APP=~/picshop-dd/Build/Products/Release-iphoneos/PicShop.app
+          du -sh "$APP" || true
+          find "$APP" -name '*.metallib' -exec du -h {} + || true
       - name: Errors
         if: failure()
         run: |
@@ -127,7 +151,7 @@ jobs:
           if-no-files-found: ignore
 
   pro-build:
-    name: Pro app build (MLX + Stable Diffusion, Xcode 26)
+    name: Pro app build (local brain + Stable Diffusion, Xcode 26)
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
@@ -153,17 +177,39 @@ jobs:
           ls -la App/Models || true
       - name: Install XcodeGen
         run: brew install xcodegen
+      - name: Metal Toolchain and package trust
+        run: |
+          # mlx-swift (the local brain) compiles Metal kernels: the component must be installed.
+          xcrun -sdk iphoneos metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain || true
+          xcrun -sdk iphoneos metal --version | head -1 || echo "Metal Toolchain missing"
+          # mlx-swift ships a build-tool plugin; trust package plugins and macros on this CI machine.
+          defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidatation -bool YES
+          defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: ~/picshop-spm
+          key: spm-pro-${{ runner.os }}-${{ hashFiles('project.yml', 'project-pro.yml') }}
+          restore-keys: spm-pro-${{ runner.os }}-
       - name: Generate project (pro)
         run: sh Scripts/build-stamp.sh && xcodegen generate --spec project-pro.yml
       - name: Resolve packages
-        run: xcodebuild -resolvePackageDependencies -project PicShop.xcodeproj -scheme PicShop -skipPackagePluginValidation
+        run: |
+          xcodebuild -resolvePackageDependencies -project PicShop.xcodeproj -scheme PicShop \
+            -clonedSourcePackagesDirPath ~/picshop-spm -skipPackagePluginValidation -skipMacroValidation
       - name: Build (iOS device, Release)
         run: |
           set -o pipefail
           xcodebuild build -project PicShop.xcodeproj -scheme PicShop \
             -destination 'generic/platform=iOS' -configuration Release \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -skipPackagePluginValidation -IDEBuildingContinueBuildingAfterErrors=YES 2>&1 | tee build-pro.log | grep -E "error:|BUILD" || true
+            -clonedSourcePackagesDirPath ~/picshop-spm -derivedDataPath ~/picshop-dd \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -skipPackagePluginValidation -skipMacroValidation -IDEBuildingContinueBuildingAfterErrors=YES 2>&1 | tee build-pro.log | grep -E "error:|BUILD" || true
           grep -q "BUILD SUCCEEDED" build-pro.log
+      - name: App size (report only)
+        run: |
+          APP=~/picshop-dd/Build/Products/Release-iphoneos/PicShop.app
+          du -sh "$APP" || true
+          find "$APP" -name '*.metallib' -exec du -h {} + || true
       - name: Errors
         if: failure()
         run: grep -E "error:" build-pro.log | sort -u || true

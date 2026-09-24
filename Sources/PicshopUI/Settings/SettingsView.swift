@@ -6,8 +6,8 @@ import PicshopImaging
 import PicshopVideo
 import PicshopSpeech
 
-/// Preferences, calm and short: PicShop Live, the voice, general choices,
-/// then Advanced and what stays private.
+/// Preferences, calm and short: the on-device intelligence, PicShop Live, the
+/// voice, general choices, then Advanced and what stays private.
 public struct SettingsView: View {
     @Environment(\.picshop) private var app
     @Environment(\.dismiss) private var dismiss
@@ -18,7 +18,8 @@ public struct SettingsView: View {
         NavigationStack {
             Form {
                 if let app {
-                    SettingsHeader(app: app)
+                    SettingsHeader()
+                    IntelligenceSettingsSection(app: app)
                     LiveSettingsSection(app: app)
                     voiceSection(app)
                     generalSection(app)
@@ -126,7 +127,7 @@ public struct SettingsView: View {
         Section {
             HStack(alignment: .top, spacing: 12) {
                 SettingsRowIcon(systemName: "hand.raised.fill", tint: PSTheme.success)
-                Text(L("Everything stays on the iPhone, except in Live mode with Claude: once you agree, Live sends Anthropic, with your own key, the text of the conversation and, if you allow it, a reduced picture — never the audio. PicShop has no server, no account and no tracking."))
+                Text(L("Everything stays on the iPhone. Live listens, understands, looks at the picture and answers on the device — nothing is sent. PicShop has no server, no account and no tracking."))
                     .font(PSFont.footnote())
                     .foregroundStyle(PSTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -139,14 +140,8 @@ public struct SettingsView: View {
 }
 
 /// App identity at the top, like the Apple ID card in Settings: the tile,
-/// the version, and where Live answers from.
+/// the version, and where Live answers from: always the iPhone.
 private struct SettingsHeader: View {
-    let app: AppEnvironment
-
-    private var usesClaude: Bool {
-        LiveServices.shared.keyStore.hasKey && app.settings.liveUseClaude && app.settings.hasLiveConsent
-    }
-
     var body: some View {
         Section {
             HStack(spacing: 14) {
@@ -164,9 +159,9 @@ private struct SettingsHeader: View {
                         Text(verbatim: "\(BuildInfo.version) (\(BuildInfo.buildNumber))")
                     }
                     .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
-                    Label(usesClaude ? L("Live: Claude") : L("Live: on the iPhone"), systemImage: usesClaude ? "cloud.fill" : "iphone")
+                    Label(L("Live: on the iPhone"), systemImage: "iphone")
                         .font(PSFont.caption(12))
-                        .foregroundStyle(usesClaude ? PSTheme.textPrimary : PSTheme.success)
+                        .foregroundStyle(PSTheme.success)
                 }
                 Spacer(minLength: 0)
             }
@@ -347,22 +342,6 @@ struct SettingsRow<Content: View>: View {
             SettingsRowIcon(systemName: systemName, tint: tint)
             content()
         }
-    }
-}
-
-/// Bridge so the settings screen can trigger language-model downloads that
-/// live in the app target (MLX). Registered by the app at launch.
-@MainActor
-public final class ProBrainInstaller {
-    public static var shared: ProBrainInstaller?
-    private let handler: (ModelDescriptor, AppEnvironment) async -> Void
-
-    public init(handler: @escaping (ModelDescriptor, AppEnvironment) async -> Void) {
-        self.handler = handler
-    }
-
-    public func install(_ model: ModelDescriptor, app: AppEnvironment) async {
-        await handler(model, app)
     }
 }
 #endif

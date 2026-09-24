@@ -4,7 +4,7 @@ import PicshopIntent
 
 /// The Live event log behind 'Exporter le journal Live': lengths, ids, statuses
 /// and timings only. Entries are sanitized on the way in and again on export, so
-/// neither a transcript nor a key can reach the file.
+/// no transcript can reach the file.
 @MainActor
 final class LiveLog {
     static let limit = 800
@@ -27,9 +27,9 @@ final class LiveLog {
     nonisolated static func sanitized(_ entry: LiveLogEntry) -> LiveLogEntry {
         var fields: [String: String] = [:]
         for (name, value) in entry.fields where !forbiddenFields.contains(name.lowercased()) {
-            fields[name] = String(APIKeyFormat.redact(value).prefix(80))
+            fields[name] = String(value.prefix(80))
         }
-        return LiveLogEntry(time: entry.time, event: String(APIKeyFormat.redact(entry.event).prefix(48)), fields: fields)
+        return LiveLogEntry(time: entry.time, event: String(entry.event.prefix(48)), fields: fields)
     }
 
     /// Pretty JSON: a header, then the entries oldest first.
@@ -39,9 +39,7 @@ final class LiveLog {
             let entry = sanitized(raw)
             return ["t": ((entry.time - origin) * 1000).rounded() / 1000, "event": entry.event, "fields": entry.fields]
         }
-        var cleanHeader: [String: String] = [:]
-        for (name, value) in header { cleanHeader[name] = APIKeyFormat.redact(value) }
-        let object: [String: Any] = ["picshop_live_log": 1, "header": cleanHeader, "entries": items]
+        let object: [String: Any] = ["picshop_live_log": 1, "header": header, "entries": items]
         return (try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])) ?? Data("{}".utf8)
     }
 }

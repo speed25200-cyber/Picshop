@@ -10,7 +10,7 @@ extension LiveSession {
     ///
     /// Each scenario holds one state, with a moving meter where it makes sense.
     /// `.cycle` goes through every state, a transcript, an activity with progress,
-    /// three ideas, a choice request, a notice, an undo offer and the route badge.
+    /// three ideas, a choice request, a notice, an undo offer and the brain pill.
     public static func preview(_ scenario: PreviewScenario, mode: EditorMode = .photo) -> LiveSession {
         let script = LivePreviewScript(mode: mode)
         return scripted(mode: mode) { elapsed in script.frame(scenario, at: elapsed) }
@@ -31,7 +31,6 @@ struct LivePreviewFrame: Equatable {
     var undoOffer: LiveUndoOffer?
     var reply: LiveReply?
     var notice: LiveNotice?
-    var needsConsent = false
     var showsVoiceHint = false
     var input: Double = 0
     var output: Double = 0
@@ -41,7 +40,9 @@ struct LivePreviewFrame: Equatable {
 struct LivePreviewScript: Sendable {
     let mode: EditorMode
     let heuristicIdeas: [LiveIdea]
-    let claudeIdeas: [LiveIdea]
+    let modelIdeas: [LiveIdea]
+    /// The local model's pill.
+    private let modelRoute = LiveRoute(brain: .model, modelName: "Qwen3.5 4B")
 
     init(mode: EditorMode) {
         self.mode = mode
@@ -55,13 +56,13 @@ struct LivePreviewScript: Sendable {
                 LiveIdea(title: "Recadrage 4:5", why: "Le format idéal pour un post.", symbol: "crop",
                          steps: [RawIntentStep(action: "setAspect", aspect: "4:5")], source: .heuristic),
             ]
-            claudeIdeas = [
+            modelIdeas = [
                 LiveIdea(title: "Lumière dorée", why: "Une fin de journée : un peu de chaleur la rendrait plus douce.", symbol: "sun.max",
-                         steps: [RawIntentStep(action: "adjust", parameter: "temperature", amountMode: "relative", amount: 15)], source: .claude),
+                         steps: [RawIntentStep(action: "adjust", parameter: "temperature", amountMode: "relative", amount: 15)], source: .model),
                 LiveIdea(title: "Noir et blanc", why: "Les contrastes forts s'y prêtent bien.", symbol: "circle.lefthalf.filled",
-                         steps: [RawIntentStep(action: "applyLook", look: "mono")], source: .claude),
+                         steps: [RawIntentStep(action: "applyLook", look: "mono")], source: .model),
                 LiveIdea(title: "Plus de relief", why: "Les textures du mur ressortiraient.", symbol: "wand.and.stars",
-                         steps: [RawIntentStep(action: "adjust", parameter: "clarity", amountMode: "relative", amount: 20)], source: .claude),
+                         steps: [RawIntentStep(action: "adjust", parameter: "clarity", amountMode: "relative", amount: 20)], source: .model),
             ]
         case .video:
             heuristicIdeas = [
@@ -72,13 +73,13 @@ struct LivePreviewScript: Sendable {
                 LiveIdea(title: "Couper les blancs", why: "Quelques silences ralentissent le rythme.", symbol: "scissors",
                          steps: [RawIntentStep(action: "removeSilences")], source: .heuristic),
             ]
-            claudeIdeas = [
+            modelIdeas = [
                 LiveIdea(title: "Musique douce", why: "Le montage n'a pas encore de musique.", symbol: "music.note",
-                         steps: [RawIntentStep(action: "addMusic", text: "calm")], source: .claude),
+                         steps: [RawIntentStep(action: "addMusic", text: "calm")], source: .model),
                 LiveIdea(title: "Look cinéma", why: "Des couleurs plus denses pour ces plans de coucher de soleil.", symbol: "film.stack",
-                         steps: [RawIntentStep(action: "applyLook", look: "cinematic")], source: .claude),
+                         steps: [RawIntentStep(action: "applyLook", look: "cinematic")], source: .model),
                 LiveIdea(title: "Ralenti final", why: "Le dernier plan mérite de durer.", symbol: "camera.aperture",
-                         steps: [RawIntentStep(action: "speedRamp", amount: 0.5)], source: .claude),
+                         steps: [RawIntentStep(action: "speedRamp", amount: 0.5)], source: .model),
             ]
         case .pdf:
             heuristicIdeas = [
@@ -89,7 +90,7 @@ struct LivePreviewScript: Sendable {
                 LiveIdea(title: "Numéroter les pages", why: "Plusieurs pages sans numéro.", symbol: "textformat",
                          steps: [RawIntentStep(action: "addPageNumbers")], source: .heuristic),
             ]
-            claudeIdeas = heuristicIdeas
+            modelIdeas = heuristicIdeas
         }
     }
 
@@ -135,18 +136,15 @@ struct LivePreviewScript: Sendable {
         case .thinking:
             live(&frame, .thinking, t)
             frame.transcript = userTranscript(turn: 1, words: 1, final: true)
-            frame.route.isUploading = true
         case .speaking:
             live(&frame, .speaking, t)
             frame.transcript = userTranscript(turn: 1, words: 1, final: true)
             frame.transcript.assistant = answer[Int(t / 2.5) % answer.count]
-            frame.route = LiveRoute(brain: .claude, sharesMedia: true, imagesSent: 1)
             frame.output = voiceLevel(t)
         case .acting:
             live(&frame, .acting, t)
             frame.activityTitle = activityTitle
             frame.progress = min(1, t.truncatingRemainder(dividingBy: 4.5) / 4)
-            frame.route = LiveRoute(brain: .claude, sharesMedia: true, imagesSent: 1)
         case .choices:
             live(&frame, .listening, t)
             frame.choices = choiceRequest
@@ -180,33 +178,28 @@ struct LivePreviewScript: Sendable {
         case ..<9.5:
             live(&frame, .thinking, t)
             frame.transcript = userTranscript(turn: 1, words: 1, final: true)
-            frame.route.isUploading = t < 8.9
         case ..<13.5:
             live(&frame, .speaking, t)
             frame.transcript = userTranscript(turn: 1, words: 1, final: true)
             frame.transcript.assistant = t < 11.5 ? answer[0] : answer[1]
-            frame.route = LiveRoute(brain: .claude, sharesMedia: true, imagesSent: 1)
             frame.output = voiceLevel(t)
         case ..<17:
             live(&frame, .acting, t)
             frame.activityTitle = activityTitle
             frame.progress = min(1, (t - 13.5) / 3.2)
-            frame.route = LiveRoute(brain: .claude, sharesMedia: true, imagesSent: 1)
         case ..<21:
             live(&frame, .listening, t)
-            frame.ideas = .ready(claudeIdeas)
+            frame.ideas = .ready(modelIdeas)
             frame.undoOffer = LiveUndoOffer(id: 1, label: undoLabel)
-            frame.route = LiveRoute(brain: .claude, sharesMedia: true, imagesSent: 1)
         case ..<25:
             live(&frame, .listening, t)
-            frame.ideas = .ready(claudeIdeas)
+            frame.ideas = .ready(modelIdeas)
             frame.choices = choiceRequest
-            frame.route = LiveRoute(brain: .claude, sharesMedia: true, imagesSent: 1)
         case ..<26.6:
-            frame.state = .problem(.offline)
+            frame.state = .problem(.modelUnavailable)
             frame.isRunning = true
-            frame.ideas = .ready(claudeIdeas)
-            frame.notice = LiveNotice(id: 2, text: LiveLines.problem(.offline, .french), isProblem: true)
+            frame.ideas = .ready(modelIdeas)
+            frame.notice = LiveNotice(id: 2, text: LiveLines.problem(.modelUnavailable, .french), isProblem: true)
         case ..<28.6:
             live(&frame, .listening, t)
             frame.route = LiveRoute(brain: .onDevice)
@@ -244,11 +237,11 @@ struct LivePreviewScript: Sendable {
 
     // MARK: Helpers
 
-    /// A running conversation on Claude, listening quietly.
+    /// A running conversation on the local model, listening quietly.
     private func live(_ frame: inout LivePreviewFrame, _ state: LiveState, _ t: Double) {
         frame.state = state
         frame.isRunning = true
-        frame.route = LiveRoute(brain: .claude)
+        frame.route = modelRoute
         frame.input = state == .listening ? 0.06 + 0.03 * abs(sin(t * 2.1)) : 0.04
     }
 

@@ -140,10 +140,9 @@ public final class Diagnostics: NSObject, @unchecked Sendable {
     }
 
     /// Records what the app is doing, with the free memory, in the persisted ring.
-    /// Anything shaped like an Anthropic key is redacted first.
     public func note(_ message: String) {
         let time = Self.timeFormatter.string(from: Date())
-        let line = "\(time) \(APIKeyFormat.redact(message)) [\(MemoryBudget.availableDescription) free]"
+        let line = "\(time) \(message) [\(MemoryBudget.availableDescription) free]"
         let text: String = lock.withLock {
             crumbs.append(line)
             if crumbs.count > Self.breadcrumbLimit { crumbs.removeFirst(crumbs.count - Self.breadcrumbLimit) }

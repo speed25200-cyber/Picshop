@@ -1,11 +1,54 @@
 import Foundation
 import PicshopCore
 
-// The contract between a Live session and whatever answers it: Claude, the
-// on-device model or the local grammar. One user turn goes in, a stream of
-// events comes out, and edits go through a `LiveToolHandler`.
+// The contract between a Live session and whatever answers it: the local
+// model (MLX), Apple's on-device Foundation Models, or the local grammar. All
+// of them run on the iPhone. One user turn goes in, a stream of events comes
+// out, and edits go through a `LiveToolHandler`.
 
-public enum LiveBrainKind: String, Sendable, Codable { case claude, onDevice, local }
+/// model: the downloaded local model; onDevice: Apple Foundation Models; local: the rules grammar.
+public enum LiveBrainKind: String, Sendable, Codable { case model, onDevice, local }
+
+/// What a brain can do beyond answering words, so the session knows what to hand it.
+public struct LiveBrainCapabilities: Sendable, Equatable {
+    /// Answers `.sessionStart` itself: one sentence and propose_ideas.
+    public var opensSession: Bool
+    public var seesImages: Bool
+    /// The long side the session asks `liveSnapshotImage(maxPixel:)` for (the model: 768).
+    public var imageMaxPixel: Int
+    public var proposesIdeas: Bool
+
+    public init(opensSession: Bool = false, seesImages: Bool = false, imageMaxPixel: Int = 0, proposesIdeas: Bool = false) {
+        self.opensSession = opensSession
+        self.seesImages = seesImages
+        self.imageMaxPixel = imageMaxPixel
+        self.proposesIdeas = proposesIdeas
+    }
+
+    /// Words only: no session opening, no picture, no ideas.
+    public static let none = LiveBrainCapabilities()
+}
+
+/// What one generation cost, for the latency tracker and Diagnostic Live.
+public struct LiveGenerationStats: Sendable, Equatable {
+    public var model: String
+    /// Prefilled this turn, after cache reuse.
+    public var promptTokens: Int
+    /// Reused from the KV cache.
+    public var cachedTokens: Int
+    public var generatedTokens: Int
+    public var firstTokenMs: Int
+    public var tokensPerSecond: Double
+
+    public init(model: String, promptTokens: Int, cachedTokens: Int, generatedTokens: Int, firstTokenMs: Int, tokensPerSecond: Double) {
+        self.model = model
+        self.promptTokens = promptTokens
+        self.cachedTokens = cachedTokens
+        self.generatedTokens = generatedTokens
+        self.firstTokenMs = firstTokenMs
+        self.tokensPerSecond = tokensPerSecond
+    }
+}
 
 /// Everything a brain needs to answer one turn.
 public struct LiveUserTurn: Sendable, Equatable {
@@ -16,7 +59,7 @@ public struct LiveUserTurn: Sendable, Equatable {
     public var language: NormalizedUtterance.Language
     public var image: LiveImage?
     public var editorState: LiveEditorState
-    /// "Contrast +15 (manual)"; "tapped idea 'Portrait doux' -> applied"; "offline: said X, applied Y"; "finished 'Remove dog'".
+    /// "Contrast +15 (manual)"; "tapped idea 'Portrait doux' -> applied"; "commands: said X, applied Y"; "finished 'Remove dog'".
     public var sinceLastReply: [String]
     public var interruptedAfter: String?
     /// Titles of the idea chips on screen, in order (additive to contract 6.4).
@@ -85,25 +128,31 @@ public enum LiveTurnEnd: Sendable, Equatable { case answered, editApplied, maxTo
 
 public enum LiveBrainEvent: Sendable, Equatable {
     case started(model: String)
-    /// Speakable delta.
+    /// Speakable delta, never markup.
     case text(String)
     case toolStarted(id: String, name: LiveToolName, activity: String?)
     case toolFinished(id: String, name: LiveToolName, result: LiveToolResult)
     case ideas([LiveIdea])
-    case fallbackModel(from: String?, to: String?)
-    case usage(ClaudeUsage)
+    /// Yielded before `.completed` by a brain that generates tokens.
+    case stats(LiveGenerationStats)
     case completed(LiveTurnEnd)
 }
 
 public enum LiveBrainError: Error, Sendable, Equatable {
-    case missingKey, invalidKey, noCredit, forbidden, modelUnavailable
-    case rateLimited(retryAfter: Double?), overloaded, server(status: Int)
-    case badRequest(requestID: String?, message: String), requestTooLarge
-    case network(String), timeout(stage: String), streamTruncated, unavailable(String)
+    /// Not installed, still downloading or loading.
+    case modelNotReady
+    /// Load failed, unsupported device, or no runtime in this build.
+    case modelUnavailable(String)
+    case memoryPressure
+    /// "first_token", "tool", "turn".
+    case timeout(stage: String)
+    case streamTruncated
+    case unavailable(String)
 }
 
 public protocol LiveBrain: Sendable {
     var kind: LiveBrainKind { get }
+    var capabilities: LiveBrainCapabilities { get }
     func isAvailable() async -> Bool
     func warmUp() async
     /// One user turn including every tool round trip. Cancelling the consuming Task cancels the request;
@@ -111,6 +160,10 @@ public protocol LiveBrain: Sendable {
     func respond(to turn: LiveUserTurn, tools: any LiveToolHandler) -> AsyncThrowingStream<LiveBrainEvent, Error>
     func interrupt(turn: Int, spokenText: String) async
     func reset() async
+}
+
+extension LiveBrain {
+    public var capabilities: LiveBrainCapabilities { .none }
 }
 
 // MARK: - Time and logging
@@ -136,7 +189,7 @@ public struct SystemLiveClock: LiveClock {
 public struct LiveLogEntry: Sendable, Equatable {
     public var time: Double
     public var event: String
-    /// Lengths, ids, statuses, ms; never transcripts or keys.
+    /// Lengths, ids, statuses, ms; never transcripts.
     public var fields: [String: String]
 
     public init(time: Double, event: String, fields: [String: String] = [:]) {

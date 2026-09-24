@@ -4,9 +4,10 @@ import FoundationModels
 import PicshopCore
 import PicshopIntent
 
-/// Live's on-device brain: Apple's foundation model with tool calling, streamed.
-/// It cannot see pixels, so each turn carries the compact editor state and the
-/// scene facts. Tool calls go through the same validator and handler as Claude's.
+/// Live's middle brain: Apple's on-device foundation model with tool calling,
+/// streamed, used when the local model is not ready. It cannot see pixels, so
+/// each turn carries the compact editor state and the scene facts. Tool calls go
+/// through the same validator and handler as the local model's.
 @available(iOS 26.0, *)
 final class FoundationModelsLiveBrain: LiveBrain, @unchecked Sendable {
     let kind: LiveBrainKind = .onDevice

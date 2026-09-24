@@ -114,8 +114,8 @@ struct StudioActions {
 /// The one editor shell for photo, video and PDF: a full-bleed black canvas,
 /// the top bar over it, and at the bottom the LiveDock, or the tool panel
 /// while a tool is open. It presents the Outils sheet (adding 'Historique'
-/// to its footer while there is something to undo or revert), the history list and
-/// LiveConsentSheet, and toggles Live on the Magic Tap.
+/// to its footer while there is something to undo or revert) and the history
+/// list, and toggles Live on the Magic Tap.
 ///
 /// The canvas reads `studioEdges` to fit its picture between the bars; it
 /// ignores the keyboard, and the edges come from the bars' sizes, not from
@@ -174,7 +174,7 @@ struct StudioChrome<Canvas: View, Panel: View>: View {
                 // Empty space in the stack is not hit-testable: the canvas
                 // keeps every touch between the bars.
                 VStack(spacing: 0) {
-                    StudioTopBar(bar: bar, actions: actions, live: live)
+                    StudioTopBar(bar: bar, actions: actions)
                         .padding(.top, extraTop)
                         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { topEdge = $0 }
                     Spacer(minLength: 0)
@@ -197,9 +197,6 @@ struct StudioChrome<Canvas: View, Panel: View>: View {
         }
         .background {
             StudioHistoryPresenter(isPresented: $showsHistory, bar: bar, actions: actions)
-        }
-        .background {
-            LiveConsentPresenter(live: live)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardVisible = true }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardVisible = false }
@@ -278,22 +275,6 @@ private struct ToolsZoomTransition: ViewModifier {
     }
 }
 
-/// Presents LiveConsentSheet while Live asks for it. A leaf, so the flag
-/// never re-evaluates the shell.
-private struct LiveConsentPresenter: View {
-    let live: LiveSession
-
-    var body: some View {
-        Color.clear
-            .sheet(isPresented: Binding(get: { live.needsConsent }, set: { _ in })) {
-                LiveConsentSheet { granted, sendImages in
-                    live.resolveConsent(granted: granted, sendImages: sendImages)
-                }
-            }
-            .accessibilityHidden(true)
-    }
-}
-
 /// Presents the history list from the Outils footer.
 private struct StudioHistoryPresenter: View {
     @Binding var isPresented: Bool
@@ -311,12 +292,11 @@ private struct StudioHistoryPresenter: View {
 
 // MARK: - Top bar
 
-/// Close, the cloud badge while Live runs on Claude, then Undo (with Redo
-/// after an undo) and Export. 44 points tall, 4 below the safe area.
+/// Close, then Undo (with Redo after an undo) and Export. 44 points tall,
+/// 4 below the safe area.
 struct StudioTopBar: View {
     let bar: StudioBar
     let actions: StudioActions
-    let live: LiveSession
     @Namespace private var glass
 
     var body: some View {
@@ -324,9 +304,7 @@ struct StudioTopBar: View {
             HStack(spacing: 8) {
                 PSCircleButton(systemImage: "xmark", accessibilityLabel: L("Close"), action: actions.close)
                     .glassEffectID("close", in: glass)
-                Spacer(minLength: 4)
-                StudioBadgeSlot(live: live, glass: glass)
-                Spacer(minLength: 4)
+                Spacer(minLength: 8)
                 UndoRedoCluster(bar: bar, actions: actions, glass: glass)
                 PSCapsuleButton(L("Export"), action: actions.export)
             }
@@ -335,31 +313,6 @@ struct StudioTopBar: View {
         .padding(.top, 4)
         .frame(height: PSMetrics.barButton + 4, alignment: .bottom)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-    }
-}
-
-/// The cloud badge, read in a leaf so Live's route never re-evaluates the bar.
-/// It shows while Live runs on Claude, and stays to say 'Sur l'iPhone' if
-/// Live falls back to the device in the same conversation.
-private struct StudioBadgeSlot: View {
-    let live: LiveSession
-    let glass: Namespace.ID
-    @State private var usedClaude = false
-
-    var body: some View {
-        let isLive = live.isLive
-        let onClaude = isLive && live.route.brain == .claude
-        let shows = isLive && (onClaude || usedClaude)
-        ZStack {
-            if shows {
-                LiveCloudBadge(live: live)
-                    .glassEffectID("badge", in: glass)
-                    .transition(AnyTransition.opacity.combined(with: .scale(scale: 0.8)))
-            }
-        }
-        .animation(PSMotion.morph, value: shows)
-        .onChange(of: onClaude) { _, now in if now { usedClaude = true } }
-        .onChange(of: isLive) { _, now in if !now { usedClaude = false } }
     }
 }
 

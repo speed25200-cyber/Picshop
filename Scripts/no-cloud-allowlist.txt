@@ -1,0 +1,10 @@
+# Lines Scripts/check-no-cloud.sh allows, one per line as "path:fixed text".
+# A finding is allowed when its file is `path` and its line contains `fixed text`.
+#
+# The one-time purge of the old cloud key and settings (AppSettings.purgeCloudLeftovers).
+Sources/PicshopUI/App/AppSettings.swift:com.picshopio.picshop.anthropic
+Sources/PicshopUI/App/AppSettings.swift:"liveUseClaude"
+# OCR fixture text in a benchmark table, not an integration.
+Tests/PicshopImagingTests/VisionTextQueryTests.swift:Claude Opus 5.5
+# The release note saying the cloud option is gone.
+CHANGELOG.md:Claude

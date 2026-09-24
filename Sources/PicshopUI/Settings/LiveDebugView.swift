@@ -3,8 +3,8 @@ import SwiftUI
 import PicshopIntent
 
 /// Settings › Live › Diagnostic Live: what the audio stack, the turn-taking
-/// and the last requests did, the device checklist, and the redacted log to
-/// share. Everything here is read from `LiveServices.shared.debug`.
+/// and the brain's last answer did, the device checklist, and the redacted log
+/// to share. Everything here is read from `LiveServices.shared.debug`.
 struct LiveDebugView: View {
     @Environment(\.picshop) private var app
     @State private var logURL: URL?
@@ -14,6 +14,7 @@ struct LiveDebugView: View {
         List {
             Section(L("Audio")) {
                 value(L("Brain"), debug.brain)
+                value(L("Voice path"), debug.voicePath)
                 value(L("Echo cancellation"), debug.echoCancellation ? L("On") : L("Off"))
                 value(L("Output route"), debug.outputRoute)
                 value(L("Echo risk"), debug.echoRisk)
@@ -32,11 +33,11 @@ struct LiveDebugView: View {
 
             latencySection
 
-            Section(L("Last request")) {
-                value(L("Cache read"), debug.lastCache.map { $0.read.formatted() } ?? "—")
-                value(L("Cache write"), debug.lastCache.map { $0.write.formatted() } ?? "—")
-                value(L("Request size"), debug.lastRequestBytes.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) } ?? "—")
-                value(L("Stop reason"), debug.lastStopReason ?? "—")
+            Section(L("Last answer")) {
+                value(L("Model"), debug.lastStats?.model ?? "")
+                value(L("First token"), debug.lastStats.map { "\($0.firstTokenMs) ms" } ?? "")
+                value(L("Speed"), debug.lastStats.map { String(format: "%.1f tok/s", $0.tokensPerSecond) } ?? "")
+                value(L("Prompt / cached tokens"), debug.lastStats.map { "\($0.promptTokens) / \($0.cachedTokens)" } ?? "")
             }
 
             Section(L("Decisions")) {
@@ -53,9 +54,6 @@ struct LiveDebugView: View {
                 if let settings = app?.settings {
                     Toggle(L("System voice (test)"), isOn: Binding(get: { settings.liveSpeakerUsesSystem }, set: { settings.liveSpeakerUsesSystem = $0 }))
                 }
-                #if DEBUG
-                faultPicker
-                #endif
             } header: {
                 Text(L("Tests"))
             } footer: {
@@ -125,17 +123,6 @@ struct LiveDebugView: View {
             Text(L("Last turn, then p50 / p90, in milliseconds."))
         }
     }
-
-    #if DEBUG
-    private var faultPicker: some View {
-        Picker(L("Injected fault"), selection: Binding(get: { debug.injectedFault ?? "" }, set: { debug.injectedFault = $0.isEmpty ? nil : $0 })) {
-            Text(L("None")).tag("")
-            ForEach(["401", "402", "429", "529", "timeout", "refusal", "offline"], id: \.self) { fault in
-                Text(verbatim: fault).tag(fault)
-            }
-        }
-    }
-    #endif
 
     private func value(_ title: String, _ value: String) -> some View {
         LabeledContent(title) {

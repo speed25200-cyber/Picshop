@@ -212,7 +212,7 @@ public enum PSMetrics {
     public static let consoleHeight: CGFloat = 76
     /// Tiles in the Outils sheet.
     public static let toolTile: CGFloat = 76
-    /// Badges over media (the cloud badge).
+    /// Small pills over media (the Live brain pill).
     public static let badge: CGFloat = 30
 }
 

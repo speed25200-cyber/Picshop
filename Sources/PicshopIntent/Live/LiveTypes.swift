@@ -13,9 +13,21 @@ public enum LiveState: Equatable, Sendable {
     case problem(LiveProblem)
 }
 
+/// Every problem Live shows and says. None of them names a key, a network or a cloud service.
 public enum LiveProblem: Equatable, Sendable {
-    case noMicrophone, noSpeechRecognition(language: String), offline, refusal
-    case keyInvalid, noCredit, noAccess, rateLimited, unavailable(String)
+    case noMicrophone, noSpeechRecognition(language: String), refusal
+    /// The microphone or the audio engine dropped; the session restarts it.
+    case audioFailed
+    /// The voice produced no audio; captions carry on.
+    case voiceFailed
+    /// No recognizer, or nothing heard several times in a row.
+    case notHearing
+    /// No answer within the turn's deadline.
+    case brainTimeout
+    /// The local model failed to load or ran out of memory; the turn goes to the next brain.
+    case modelUnavailable
+    /// Anything else, with a short log reason.
+    case unavailable(String)
 }
 
 /// A caption split into its settled words and the recognizer's still-changing tail.
@@ -66,19 +78,16 @@ public struct LiveActivity: Equatable, Sendable {
     }
 }
 
+/// Which brain answers, for the dock pill and the log. Everything runs on the iPhone.
 public struct LiveRoute: Equatable, Sendable {
-    public enum Brain: String, Sendable { case claude, onDevice, commands }
+    public enum Brain: String, Sendable { case model, onDevice, commands }
     public var brain: Brain
-    /// True only after a 2xx on a request carrying an image block.
-    public var sharesMedia: Bool
-    public var imagesSent: Int
-    public var isUploading: Bool
+    /// "Qwen3.5 4B" when brain == .model.
+    public var modelName: String?
 
-    public init(brain: Brain = .onDevice, sharesMedia: Bool = false, imagesSent: Int = 0, isUploading: Bool = false) {
+    public init(brain: Brain = .commands, modelName: String? = nil) {
         self.brain = brain
-        self.sharesMedia = sharesMedia
-        self.imagesSent = imagesSent
-        self.isUploading = isUploading
+        self.modelName = modelName
     }
 }
 
@@ -167,7 +176,8 @@ public enum IdeaSymbols {
 
 /// A tappable suggestion. Tapping runs its validated steps locally, with no model call.
 public struct LiveIdea: Equatable, Sendable, Identifiable, Codable {
-    public enum Source: String, Sendable, Codable { case heuristic, onDevice, claude }
+    /// heuristic: IdeaEngine; onDevice: Apple Foundation Models; model: the local model's propose_ideas.
+    public enum Source: String, Sendable, Codable { case heuristic, onDevice, model }
 
     /// FNV-1a 64-bit hex of the steps serialized with JSONValue.
     public let id: String
@@ -368,34 +378,5 @@ public struct LiveExecution: Sendable, Equatable {
             return fr ? "C'est fait." : "Done."
         }
         return ""
-    }
-}
-
-// MARK: - Claude key
-
-public enum ClaudeKeyStatus: Equatable, Sendable { case unchecked, malformed, valid, invalid, noAccess, noCredit, rateLimited, offline, server(Int) }
-
-/// Offline sanity check of an Anthropic API key, and log redaction.
-public enum APIKeyFormat {
-    /// Trimmed; sk-ant- prefix; not sk-ant-admin; 40...256 characters; [A-Za-z0-9_-] only.
-    public static func looksValid(_ key: String) -> Bool {
-        let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard key.hasPrefix("sk-ant-"), !key.hasPrefix("sk-ant-admin"), (40...256).contains(key.count) else { return false }
-        return key.unicodeScalars.allSatisfy(isKeyScalar)
-    }
-
-    /// sk-ant-...A1b2
-    public static func mask(_ key: String) -> String {
-        let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        return "sk-ant-..." + String(key.suffix(4))
-    }
-
-    /// Every sk-ant-[A-Za-z0-9_-]+ becomes sk-ant-...
-    public static func redact(_ text: String) -> String {
-        text.replacingOccurrences(of: "sk-ant-[A-Za-z0-9_-]+", with: "sk-ant-...", options: .regularExpression)
-    }
-
-    private static func isKeyScalar(_ scalar: Unicode.Scalar) -> Bool {
-        ("a"..."z").contains(scalar) || ("A"..."Z").contains(scalar) || ("0"..."9").contains(scalar) || scalar == "_" || scalar == "-"
     }
 }

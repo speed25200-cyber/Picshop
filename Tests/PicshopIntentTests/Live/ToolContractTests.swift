@@ -3,93 +3,6 @@ import XCTest
 @testable import PicshopIntent
 @testable import PicshopCore
 
-final class RequestBuilderTests: XCTestCase {
-    private let tools = [
-        ClaudeToolDefinition(name: "b", description: "B", inputSchema: ["type": "object"]),
-        ClaudeToolDefinition(name: "a", description: "A", inputSchema: ["type": "object"]),
-    ]
-    private let messages = [
-        ClaudeMessage(role: .user, content: [.text("plus chaud")]),
-        ClaudeMessage.system("<editor_state v=1>"),
-    ]
-
-    func testGoldenBodyAndHeaders() {
-        let request = ClaudeRequestBuilder(options: .init()).streamingRequest(apiKey: "sk-ant-key", system: "SYS", tools: tools, messages: messages)
-        let body = String(decoding: request.body!, as: UTF8.self)
-        XCTAssertEqual(body, #"{"cache_control":{"ttl":"1h","type":"ephemeral"},"fallbacks":"default","max_tokens":2048,"messages":[{"content":[{"text":"plus chaud","type":"text"}],"role":"user"},{"content":"<editor_state v=1>","role":"system"}],"model":"claude-opus-5","output_config":{"effort":"low"},"stream":true,"system":[{"cache_control":{"ttl":"1h","type":"ephemeral"},"text":"SYS","type":"text"}],"thinking":{"type":"adaptive"},"tools":[{"description":"A","eager_input_streaming":true,"input_schema":{"type":"object"},"name":"a"},{"description":"B","eager_input_streaming":true,"input_schema":{"type":"object"},"name":"b"}]}"#)
-        XCTAssertEqual(request.url, "https://api.anthropic.com/v1/messages")
-        XCTAssertEqual(request.method, "POST")
-        XCTAssertEqual(request.timeout, 30)
-        XCTAssertEqual(request.headers, [
-            "content-type": "application/json", "accept": "text/event-stream", "x-api-key": "sk-ant-key", "anthropic-version": "2023-06-01",
-            "anthropic-beta": "server-side-fallback-2026-07-01",
-        ])
-        XCTAssertFalse(request.carriesImage)
-    }
-
-    func testRealBodyHasEverythingRequiredAndNothingForbidden() throws {
-        let request = ClaudeRequestBuilder(options: .init()).streamingRequest(apiKey: "k", system: LivePrompt.system(mode: .photo), tools: LiveToolSchema.tools(for: .photo), messages: messages)
-        let body = try JSONValue.parse(String(decoding: request.body!, as: UTF8.self))
-        XCTAssertEqual(body["model"], "claude-opus-5")
-        XCTAssertEqual(body["stream"], true)
-        XCTAssertEqual(body["thinking"], ["type": "adaptive"])
-        XCTAssertEqual(body["output_config"], ["effort": "low"])
-        XCTAssertEqual(body["fallbacks"], "default")
-        XCTAssertEqual(body["cache_control"], ["type": "ephemeral", "ttl": "1h"])
-        XCTAssertEqual(body["system"]?.array?.first?["cache_control"], ["type": "ephemeral", "ttl": "1h"])
-        let names = body["tools"]?.array?.compactMap { $0["name"]?.string }
-        XCTAssertEqual(names, ["apply_edits", "compare_before_after", "propose_ideas", "undo"])
-        XCTAssertTrue(body["tools"]?.array?.allSatisfy { $0["eager_input_streaming"] == true } ?? false)
-        for forbidden in ["temperature", "top_p", "top_k", "tool_choice", "speed"] { XCTAssertNil(body[forbidden], forbidden) }
-        XCTAssertNil(body["thinking"]?["display"])
-        XCTAssertNotEqual(body["messages"]?.array?.last?["role"], "assistant", "never a prefilled assistant turn")
-    }
-
-    func testNoBetaHeaderWithoutFallbacks() throws {
-        var options = ClaudeRequestOptions()
-        options.useServerFallbacks = false
-        let request = ClaudeRequestBuilder(options: options).streamingRequest(apiKey: "k", system: "S", tools: tools, messages: messages)
-        XCTAssertNil(request.headers["anthropic-beta"])
-        let body = try JSONValue.parse(String(decoding: request.body!, as: UTF8.self))
-        XCTAssertNil(body["fallbacks"])
-    }
-
-    func testCarriesImageFollowsTheLastUserMessage() {
-        let image = ClaudeMessage(role: .user, content: [.image(.base64(mediaType: "image/jpeg", data: "AA==")), .text("et là ?")])
-        let builder = ClaudeRequestBuilder(options: .init())
-        XCTAssertTrue(builder.streamingRequest(apiKey: "k", system: "S", tools: [], messages: [image, .system("s")]).carriesImage)
-        let later = [image, ClaudeMessage(role: .assistant, content: [.text("Ok.")]), ClaudeMessage(role: .user, content: [.text("merci")])]
-        XCTAssertFalse(builder.streamingRequest(apiKey: "k", system: "S", tools: [], messages: later).carriesImage)
-    }
-
-    func testWarmUpShape() throws {
-        let request = ClaudeRequestBuilder(options: .init()).warmUpRequest(apiKey: "k", system: "SYS", tools: tools)
-        let body = String(decoding: request.body!, as: UTF8.self)
-        XCTAssertEqual(body, #"{"max_tokens":0,"messages":[{"content":"warmup","role":"user"}],"model":"claude-opus-5","output_config":{"effort":"low"},"system":[{"cache_control":{"ttl":"1h","type":"ephemeral"},"text":"SYS","type":"text"}],"thinking":{"type":"adaptive"},"tools":[{"description":"A","eager_input_streaming":true,"input_schema":{"type":"object"},"name":"a"},{"description":"B","eager_input_streaming":true,"input_schema":{"type":"object"},"name":"b"}]}"#)
-        XCTAssertNil(request.headers["anthropic-beta"])
-        XCTAssertEqual(request.headers["anthropic-version"], "2023-06-01")
-        XCTAssertEqual(request.method, "POST")
-    }
-
-    func testKeyCheckRequest() {
-        let request = ClaudeRequestBuilder.keyCheckRequest(apiKey: "sk-ant-x")
-        XCTAssertEqual(request.url, "https://api.anthropic.com/v1/models/claude-opus-5")
-        XCTAssertEqual(request.method, "GET")
-        XCTAssertNil(request.body)
-        XCTAssertEqual(request.headers["x-api-key"], "sk-ant-x")
-        XCTAssertEqual(request.headers["anthropic-version"], "2023-06-01")
-    }
-
-    func testCostEstimate() {
-        var usage = ClaudeUsage()
-        usage.inputTokens = 1_000_000
-        usage.outputTokens = 1_000_000
-        usage.cacheReadInputTokens = 1_000_000
-        usage.cacheCreationInputTokens = 1_000_000
-        XCTAssertEqual(LiveCostEstimator.dollars(usage), 5 + 25 + 0.5 + 10, accuracy: 1e-9)
-    }
-}
-
 final class LiveToolSchemaTests: XCTestCase {
     func testActionEnumEqualsAllowedActions() {
         for mode in [EditorMode.photo, .video] {
@@ -115,14 +28,15 @@ final class LiveToolSchemaTests: XCTestCase {
         XCTAssertTrue(photo.contains("attributes"))
     }
 
-    func testToolsAreSortedEagerAndDeterministic() {
+    func testToolsAreSortedAndDeterministic() {
         let tools = LiveToolSchema.tools(for: .photo)
         XCTAssertEqual(tools.map(\.name), ["apply_edits", "compare_before_after", "propose_ideas", "undo"])
-        XCTAssertTrue(tools.allSatisfy(\.eagerInputStreaming))
-        XCTAssertEqual(tools.map { $0.json.serialized() }, LiveToolSchema.tools(for: .photo).map { $0.json.serialized() })
+        XCTAssertEqual(Set(tools.map(\.name)), Set(LiveToolName.allCases.map(\.rawValue)))
+        XCTAssertEqual(tools, LiveToolSchema.tools(for: .photo))
+        XCTAssertEqual(tools.map { $0.inputSchema.serialized() }, LiveToolSchema.tools(for: .photo).map { $0.inputSchema.serialized() })
         for tool in tools {
             XCTAssertEqual(tool.inputSchema["additionalProperties"], false, tool.name)
-            XCTAssertNoThrow(try JSONValue.parse(tool.json.serialized()))
+            XCTAssertNoThrow(try JSONValue.parse(tool.inputSchema.serialized()))
         }
         XCTAssertTrue(tools[0].description.contains("point (x and y from 0 to 1"))
         XCTAssertTrue(tools[3].description.contains("c'est trop"))
@@ -394,7 +308,7 @@ final class ToolInputValidatorTests: XCTestCase {
         XCTAssertEqual(target?.label, "object")
         XCTAssertEqual(target?.point, PSPoint(x: 0.4, y: 0.6))
         XCTAssertEqual(target?.attributes, ["red"])
-        // The picture was rotated since Claude saw it: the point is dropped silently.
+        // The picture was rotated since the model saw it: the point is dropped silently.
         let rotated = ToolInputValidator.Grounding(imageAspect: 4.0 / 3.0, canvasAspect: 3.0 / 4.0)
         XCTAssertEqual(problems(edits(pointOnly, grounding: rotated)), ["steps[0]: removeObject needs target or point"])
         let withTarget = intents(edits(#"{"action":"removeObject","target":"lamp","point":{"x":0.4,"y":0.6}}"#, grounding: rotated)).first?.target
@@ -424,7 +338,7 @@ final class ToolInputValidatorTests: XCTestCase {
         XCTAssertEqual(ideas.count, 3)
         XCTAssertEqual(ideas.map { $0.steps.isEmpty }, [false, true, false])
         XCTAssertEqual(ideas[2].symbol, "sparkles", "unknown symbols are sanitized, not refused")
-        XCTAssertTrue(ideas.allSatisfy { $0.source == .claude })
+        XCTAssertTrue(ideas.allSatisfy { $0.source == .model })
         XCTAssertEqual(problems(photo.validate(RawToolUse(id: "t", name: "propose_ideas", rawInput: #"{"ideas":[]}"#, blockIndex: 0), context: .photo)),
                        ["ideas: 0 ideas, expected 1...3"])
         let four = "{\"ideas\":[" + Array(repeating: #"{"title":"A","why":"B","steps":[{"action":"autoEnhance"}]}"#, count: 4).joined(separator: ",") + "]}"
@@ -548,8 +462,7 @@ final class ToolResultEncoderTests: XCTestCase {
         XCTAssertTrue(result.changedDocument)
         XCTAssertEqual(result.payload.serialized(),
                        #"{"can_undo":true,"ok":true,"results":[{"action":"removeObject","label":"Remove dog","status":"applied","step":1},{"action":"adjust","reason":"a previous step did not apply","status":"skipped","step":2}],"version":13}"#)
-        XCTAssertEqual(ToolResultEncoder.block(result, toolUseID: "toolu_1"),
-                       .toolResult(toolUseID: "toolu_1", content: [.text(result.payload.serialized())], isError: false))
+        XCTAssertEqual(ToolResultEncoder.compactText(result), "1 removeObject applied: Remove dog; 2 adjust skipped")
     }
 
     func testEveryStatus() {

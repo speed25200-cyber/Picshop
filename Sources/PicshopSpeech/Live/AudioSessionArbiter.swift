@@ -4,7 +4,10 @@ import AVFoundation
 import PicshopCore
 
 /// Who holds the app's audio session: nobody, one push-to-talk command, or a Live
-/// conversation. Live wins: push-to-talk is refused while Live owns the session.
+/// conversation, on the echo-cancelling duplex engine (`.live`) or on the simple
+/// path (`.liveSimple`: VoiceController hears, `speak()` talks). Live wins: push-to-talk
+/// is refused while the duplex engine owns the session, and inside `.liveSimple` its
+/// acquire and release leave the conversation's session alone.
 ///
 /// Every session call runs in order on one serial queue, off the main thread:
 /// `setCategory` and `setActive` can block for tens of milliseconds.
@@ -12,7 +15,7 @@ import PicshopCore
 public final class AudioSessionArbiter {
     public static let shared = AudioSessionArbiter()
 
-    public enum Owner: Sendable, Equatable { case none, pushToTalk, live }
+    public enum Owner: Sendable, Equatable { case none, pushToTalk, live, liveSimple }
 
     public enum ArbiterError: Error, Sendable, Equatable { case ownedByLive }
 
@@ -28,8 +31,11 @@ public final class AudioSessionArbiter {
     public func acquire(_ owner: Owner, hdBluetooth: Bool = false) async throws {
         switch owner {
         case .none: return
-        case .pushToTalk: guard self.owner != .live else { throw ArbiterError.ownedByLive }
-        case .live: break
+        case .pushToTalk:
+            guard self.owner != .live else { throw ArbiterError.ownedByLive }
+            // Live's simple path set the session up for the whole conversation: keep it.
+            if self.owner == .liveSimple { return }
+        case .live, .liveSimple: break
         }
         let previous = self.owner
         self.owner = owner
@@ -42,11 +48,12 @@ public final class AudioSessionArbiter {
     }
 
     /// Gives the session back. Push-to-talk leaves it active, as it always has; Live
-    /// deactivates it so other apps' audio can resume.
+    /// deactivates it so other apps' audio can resume. Push-to-talk inside `.liveSimple`
+    /// does not own the session, so its release changes nothing.
     public func release(_ owner: Owner) {
         guard owner != .none, self.owner == owner else { return }
         self.owner = .none
-        guard owner == .live else { return }
+        guard owner == .live || owner == .liveSimple else { return }
         Self.queue.async { Self.deactivateAfterLive() }
     }
 
@@ -95,6 +102,12 @@ public final class AudioSessionArbiter {
             } else {
                 try? session.setPreferredInput(nil)
             }
+        case .liveSimple:
+            // VoiceController's proven capture, set once for the conversation. .default (not
+            // .measurement) keeps speak() loud on the loudspeaker.
+            try session.setCategory(.playAndRecord, mode: .default,
+                                    options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers])
+            try session.setActive(true, options: [])
         }
         #endif
     }

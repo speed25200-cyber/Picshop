@@ -1,22 +1,35 @@
 import Foundation
 import PicshopCore
 
-public enum LiveLineKey: String, Sendable, CaseIterable { case greetingLocal, refusal, connectionLost, jobDone, jobCancelled, resume, stopping, running }
+public enum LiveLineKey: String, Sendable, CaseIterable {
+    case greetingLocal, greetingLooking, refusal, lostThread, jobDone, jobCancelled, resume, stopping, running, micRestarted, modelLoading
+}
 
 /// Every line Live speaks or captions on its own, in the language of the reply.
 /// These are not L() keys: they follow the conversation, not the app locale.
+/// No line names a key, a network, a connection or a cloud service: Live runs on the iPhone.
 public enum LiveLines {
     public static func line(_ key: LiveLineKey, _ language: NormalizedUtterance.Language) -> String {
+        line(key, language, mode: .photo)
+    }
+
+    /// The same line, worded for the open editor (only greetingLooking differs).
+    public static func line(_ key: LiveLineKey, _ language: NormalizedUtterance.Language, mode: EditorMode) -> String {
         let fr = language == .french
         switch key {
         case .greetingLocal: return fr ? "Je t'écoute. Dis-moi ce que tu veux changer." : "I'm listening. Tell me what to change."
+        case .greetingLooking:
+            if mode == .video { return fr ? "Je regarde ta vidéo…" : "Looking at your video…" }
+            return fr ? "Je regarde ta photo…" : "Looking at your photo…"
         case .refusal: return fr ? "Je ne peux pas faire ça. Une autre idée ?" : "I can't do that one. Another idea?"
-        case .connectionLost: return fr ? "La connexion a coupé — je continue sur l'iPhone." : "I lost the connection — carrying on on the iPhone."
+        case .lostThread: return fr ? "Je perds le fil — tu peux redire ?" : "I lost the thread — can you say that again?"
         case .jobDone: return fr ? "C'est prêt." : "Done."
         case .jobCancelled: return fr ? "J'arrête." : "Stopping."
         case .resume: return fr ? "Touche l'orbe pour reprendre." : "Tap the orb to resume."
         case .stopping: return fr ? "À plus tard." : "See you later."
         case .running: return fr ? "Je m'en occupe, ça prend quelques secondes." : "On it, this takes a few seconds."
+        case .micRestarted: return fr ? "J'ai relancé le micro, je t'écoute." : "Mic restarted, I'm listening."
+        case .modelLoading: return fr ? "Mon cerveau local se prépare — je fais au plus simple en attendant." : "My on-device brain is still loading — keeping it simple meanwhile."
         }
     }
 
@@ -27,13 +40,13 @@ public enum LiveLines {
         case .noSpeechRecognition(let code):
             let name = languageName(code, fr: fr)
             return fr ? "La dictée n'est pas disponible en \(name) — écris ta demande." : "Dictation isn't available in \(name) — type your request."
-        case .offline: return fr ? "Pas de réseau — je continue sur l'iPhone." : "No network — carrying on on the iPhone."
         case .refusal: return line(.refusal, language)
-        case .keyInvalid: return fr ? "Ta clé Claude est refusée — je continue sur l'iPhone." : "Your Claude key was refused — carrying on on the iPhone."
-        case .noCredit: return fr ? "Crédit Anthropic épuisé — je continue sur l'iPhone." : "Your Anthropic credit has run out — carrying on on the iPhone."
-        case .noAccess: return fr ? "Cette clé n'a pas accès à Claude Opus 5 — je continue sur l'iPhone." : "This key has no access to Claude Opus 5 — carrying on on the iPhone."
-        case .rateLimited: return fr ? "Claude est très demandé — je réponds depuis l'iPhone pour l'instant." : "Claude is very busy — answering from the iPhone for now."
-        case .unavailable: return fr ? "Claude ne répond pas — je continue sur l'iPhone." : "Claude isn't answering — carrying on on the iPhone."
+        case .audioFailed: return fr ? "Le micro a décroché — je le relance." : "The microphone dropped — restarting it."
+        case .voiceFailed: return fr ? "Ma voix ne sort pas — je t'écris mes réponses." : "My voice isn't coming out — I'll write my answers."
+        case .notHearing: return fr ? "Je ne t'entends pas — parle plus près, ou touche l'orbe." : "I can't hear you — come closer, or tap the orb."
+        case .brainTimeout: return fr ? "Je n'ai pas trouvé — tu peux le redire autrement ?" : "I couldn't work that out — can you say it another way?"
+        case .modelUnavailable: return fr ? "Le modèle local n'a pas pu démarrer — je continue sans lui." : "The on-device model couldn't start — carrying on without it."
+        case .unavailable: return fr ? "Un souci technique — réessaie ou écris ta demande." : "Something went wrong — try again or type it."
         }
     }
 

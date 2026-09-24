@@ -1,8 +1,9 @@
 import Foundation
 import PicshopCore
 
-/// Tool results in the shapes each brain reads: one JSON text block for
-/// Claude, a short sentence for the on-device model.
+/// Tool results in the shapes Live's brains read: a JSON payload for the
+/// session and the log, and compactText(_:) (at most 300 characters) as the
+/// tool response the local model and the Foundation Models bridge read.
 public enum ToolResultEncoder {
     public static let invalidInputHint = "Fix these fields and call the tool again."
 
@@ -85,12 +86,7 @@ public enum ToolResultEncoder {
         LiveToolResult(isError: true, payload: ["error": "loop_limit", "hint": "Stop calling tools this turn; tell the user in one sentence."], changedDocument: false)
     }
 
-    /// The tool_result block Claude reads: one text block, serialized with JSONValue.
-    public static func block(_ result: LiveToolResult, toolUseID: String) -> ClaudeContentBlock {
-        .toolResult(toolUseID: toolUseID, content: [.text(result.payload.serialized())], isError: result.isError)
-    }
-
-    /// At most 300 characters, for the on-device model.
+    /// At most 300 characters: the tool response a local model reads.
     public static func compactText(_ result: LiveToolResult) -> String {
         let text: String
         if let execution = result.execution {

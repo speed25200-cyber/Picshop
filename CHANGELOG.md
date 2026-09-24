@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — Live, entirely on the iPhone
+
+- Live runs entirely on the iPhone: the Claude option, the API key, the consent sheet, the cloud badge and the usage
+  counters are gone. A key saved earlier is erased from the Keychain once, at launch, with the settings that went with
+  it. The privacy manifest declares no data collection again, and the copy says so: « Tout reste sur l'iPhone ».
+- Settings › Intelligence: the local brain for this iPhone and its status, Apple Intelligence, and « Préparer Live à
+  l'ouverture ». Language models leave Settings › Advanced.
+
 ## 2.0.0 — PicShop, reimagined
 
 - High-end pass: native Liquid Glass without hand-made strokes and shadows, text styles with Dynamic Type, concentric

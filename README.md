@@ -5,9 +5,7 @@ A Photoshop-grade photo editor and a Vegas-grade video editor in one app, design
 system Liquid Glass, one edit-yellow accent, and an iridescent glow that appears only when the AI works.
 Tap a Magic tool, type what you want, or just say it — *« efface le chien »*, *"add captions"*,
 *« coupe sur le rythme »*. Editing runs on the device. **Picshop Live** turns the editor into a spoken
-conversation that proposes ideas and edits as you talk: with your own Claude key, once you agree, it talks with
-Claude (the text of the conversation and, if you allow it, a reduced picture go to Anthropic — never the audio);
-otherwise it stays on the iPhone.
+conversation that proposes ideas and edits as you talk — entirely on the iPhone, even in airplane mode.
 
 <p align="center">
   <img src="App/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="120" alt="PicShop icon">
@@ -46,26 +44,32 @@ Everything is undoable, saved as a project package, and exportable to Photos.
 ```
 mic ─▶ SpeechAnalyzer (iOS 26, on-device) ─▶ transcript
       ─▶ RuleBasedIntentEngine  (FR/EN grammar, <1 ms, always on)
-      ─▶ Apple Foundation Model / Pro Brain (MLX Qwen3 4B)  for ambiguous requests, 6 s budget
+      ─▶ local brain (MLX Qwen3.5) / Apple Foundation Model  for ambiguous requests, 6 s budget
       ─▶ EditPlan (typed intents) ─▶ PhotoCommandExecutor / VideoCommandExecutor
       ─▶ Vision grounding (instance masks · people · animals · text · embeddings)
       ─▶ CandidateSelector ("the one on the left", "the second", "all", or asks which)
       ─▶ EditOperation on the document ─▶ Core Image render ─▶ Metal canvas
 ```
 
-Outside Picshop Live, commands are understood by three brains, all on the device:
+Commands and Picshop Live are understood by three brains, all on the device:
 
 1. **Instant** — a deterministic grammar covering hundreds of phrasings in French and English. It always runs first.
-2. **Apple Intelligence** — the system foundation model with guided generation (`@Generable`), constrained to the app's action schema.
-3. **Pro Brain** — Qwen3 4B (4-bit) through MLX for long, multi-step requests. Optional download.
+2. **Local brain** — Qwen3.5 4B (Max) or 2B (Rapide), 4-bit, through MLX. It talks, looks at the photo and calls
+   the app's tools. A one-time download (3.06 GB or 1.75 GB) on iPhones with enough memory; the iPhone decides the tier.
+3. **Apple Intelligence** — the system foundation model with guided generation (`@Generable`), constrained to the app's action schema.
 
 Model output is validated against the app vocabulary before execution; hallucinated actions or values are dropped.
 
-**Picshop Live** (the orb in each editor) is a real-time conversation: on-device speech recognition with active
-listening and barge-in, a natural system voice, and ideas proposed as chips. Each turn goes to the best brain
-available — Claude (`claude-opus-5`, with your own API key, kept in this iPhone's Keychain), then Apple Intelligence,
-then the grammar — so Live never goes silent. Claude acts only through four validated tools (apply edits, undo,
-compare, propose ideas).
+**Picshop Live** (the orb in each editor) is a spoken conversation: on-device speech recognition, the best system
+voice installed, and ideas proposed as chips. Each turn goes to the best brain available — confident commands straight
+to the grammar, then the local brain, then Apple Intelligence, then the grammar — so Live never goes silent. The models
+act only through four validated tools (apply edits, undo, compare, propose ideas).
+
+Honest expectations: this is a capable editing assistant that talks, looks at the photo, acts and proposes ideas, all
+offline — not a cloud chatbot. Expect about 2 s from your last word to its first word with the local brain on an
+A18 Pro or newer; simple commands answer faster. On the loudspeaker, interrupt with a tap on the orb, by typing or
+with a stop word; with headphones, you can talk over it once the Live self-test has passed. iPhones with 6 GB of
+memory or less run Live on Apple Intelligence when it is on, otherwise on the command grammar.
 
 The grammar reads intent, not only words: everyday goals (*photo de profil*, *product photo for Vinted*, *restore this old
 photo*), follow-ups on the last adjustment (*encore un peu*, *too much*), contrast clauses (*brighter but less saturated*),
@@ -99,7 +103,7 @@ swift test                    # ~115 tests, ~1 s
 ## Project layout
 
 ```
-App/                 iOS app target (entry point, Info.plist, assets, optional MLX engine)
+App/                 iOS app target (entry point, Info.plist, assets, MLX runtime for the local brain)
 Sources/PicshopCore      documents · layers · edit stack · undo history · timeline · intents · project store
   Magic/                 audio analysis (silences, beats) · captions · motion & smart reframe · Magic Movie planner ·
                          beat sync · colour transfer & .cube LUTs · HSL mixer & three-way grading
@@ -122,13 +126,10 @@ docs/                    ARCHITECTURE · VOICE_COMMANDS · MODELS
 
 ## Privacy
 
-No servers, no accounts, no analytics. Everything stays on the iPhone except Picshop Live with Claude: speech
-recognition, segmentation and rendering always run on the device, and so does Live without a Claude key. With your
-own key, and only after a one-time consent, Live mode sends Anthropic the text of the conversation (what you say or
-type during Live), a description of your edits and of the picture, and, if you allow it, a reduced copy (1024 px) of
-the photo or video frame without location or camera data. Audio never leaves the device; outside Live mode, nothing
-is sent. The privacy manifest (`App/PrivacyInfo.xcprivacy`) declares photos or videos and other user content, used
-for app functionality only, not linked to you and never for tracking.
+No servers, no accounts, no analytics. Speech recognition, Live's conversation, language models, segmentation and
+rendering run on the device; your photos, videos, voice and words never leave the iPhone. The only network traffic is
+the one-time download of large model weights (the local brain, Generative Fill), which sends no user content. The privacy manifest (`App/PrivacyInfo.xcprivacy`) declares no tracking and
+no data collection.
 
 ## License
 

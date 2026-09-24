@@ -3,7 +3,7 @@ import XCTest
 import PicshopCore
 import PicshopIntent
 
-// Compile-time guard for the frozen Live contract (shared contract 6.2-6.6):
+// Compile-time guard for the frozen Live contract (local Live contract, section 5):
 // every cross-owner symbol is used here through a plain, non-testable import,
 // so a signature or access-level change breaks this file. The assertions only
 // cover behaviour the contract states outright.
@@ -29,39 +29,22 @@ private final class ContractHost: LiveEditingHost {
     func liveCancelProcessing() -> Bool { false }
 }
 
-private struct ContractTransport: ClaudeTransport {
-    /// The smallest complete reply: one sentence, end_turn.
-    func stream(_ request: ClaudeHTTPRequest) -> AsyncThrowingStream<Data, Error> {
-        let body = """
-        event: message_start
-        data: {"type":"message_start","message":{"id":"msg_1","model":"claude-opus-5","usage":{"input_tokens":10,"output_tokens":1}}}
-
-        event: content_block_start
-        data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
-
-        event: content_block_delta
-        data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Ok."}}
-
-        event: content_block_stop
-        data: {"type":"content_block_stop","index":0}
-
-        event: message_delta
-        data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}
-
-        event: message_stop
-        data: {"type":"message_stop"}
-
-
-        """
-        return AsyncThrowingStream {
-            $0.yield(Data(body.utf8))
+/// The smallest brain that uses the protocol's default capabilities.
+private struct WordsOnlyBrain: LiveBrain {
+    var kind: LiveBrainKind { .onDevice }
+    func isAvailable() async -> Bool { true }
+    func warmUp() async {}
+    func respond(to turn: LiveUserTurn, tools: any LiveToolHandler) -> AsyncThrowingStream<LiveBrainEvent, Error> {
+        AsyncThrowingStream {
+            $0.yield(.started(model: "test"))
+            $0.yield(.text("Ok."))
+            $0.yield(.stats(LiveGenerationStats(model: "test", promptTokens: 1, cachedTokens: 0, generatedTokens: 1, firstTokenMs: 10, tokensPerSecond: 20)))
+            $0.yield(.completed(.answered))
             $0.finish()
         }
     }
-
-    func send(_ request: ClaudeHTTPRequest) async throws -> (status: Int, headers: [String: String], body: Data) {
-        (200, [:], Data())
-    }
+    func interrupt(turn: Int, spokenText: String) async {}
+    func reset() async {}
 }
 
 /// Runs on the main actor, as LiveSession does.
@@ -85,9 +68,9 @@ private func exerciseEditorSide() async throws {
     _ = await handler.runIdea(idea)
     _ = ideas
 
-    for brain in [ClaudeLiveBrain(mode: .photo, apiKey: "", transport: ContractTransport()) as any LiveBrain,
-                  LocalLiveBrain(router: HybridIntentRouter(), mode: .photo)] {
+    for brain in [WordsOnlyBrain() as any LiveBrain, LocalLiveBrain(router: HybridIntentRouter(preferredEngine: .rules), mode: .photo)] {
         _ = brain.kind
+        XCTAssertEqual(brain.capabilities, LiveBrainCapabilities.none)
         _ = await brain.isAvailable()
         await brain.warmUp()
         let turn = LiveUserTurn(id: 1, kind: .speech, text: "plus chaud", language: .french, image: nil, editorState: host.liveContextSummary())
@@ -95,9 +78,6 @@ private func exerciseEditorSide() async throws {
         await brain.interrupt(turn: 1, spokenText: "")
         await brain.reset()
     }
-    let claude = ClaudeLiveBrain(mode: .video, apiKey: "k", transport: ContractTransport(), options: .init(), clock: SystemLiveClock(), log: { _ in })
-    XCTAssertEqual(claude.kind, .claude)
-    _ = await claude.secondsSinceLastRequest
 }
 
 final class LiveContractTests: XCTestCase {
@@ -107,21 +87,55 @@ final class LiveContractTests: XCTestCase {
 
     func testPureSideOfTheContract() {
         var selector = BrainSelector()
-        _ = selector.choose(.init(claudeAllowed: true, online: true, onDeviceAvailable: true, now: 0))
-        selector.recordFailure(.rateLimited(retryAfter: 30), now: 0)
-        selector.recordSuccess()
-        selector.resetClaude()
-        _ = selector.claudeDisabledReason
+        let kind: LiveBrainKind = selector.choose(.init(modelReady: true, onDeviceAvailable: true, thermalCritical: false, now: 0), excluding: [.onDevice])
+        _ = selector.choose(.init(modelReady: false, onDeviceAvailable: true, now: 0))
+        selector.recordFailure(kind, .timeout(stage: "first_token"), now: 0)
+        selector.recordSuccess(kind)
+        _ = selector.isOffForSession(.model)
+        let problem: LiveProblem = BrainSelector.problem(for: .memoryPressure)
+        _ = BrainSelector.errorName(.modelUnavailable("x"))
+        _ = (BrainSelector.cooldown, BrainSelector.failureWindow, problem)
+        for error in [LiveBrainError.modelNotReady, .modelUnavailable("x"), .memoryPressure, .timeout(stage: "turn"), .streamTruncated, .unavailable("x")] {
+            _ = BrainSelector.problem(for: error)
+        }
+        for problem in [LiveProblem.noMicrophone, .noSpeechRecognition(language: "fr"), .refusal, .audioFailed, .voiceFailed, .notHearing, .brainTimeout,
+                        .modelUnavailable, .unavailable("x")] {
+            XCTAssertFalse(LiveLines.problem(problem, .french).isEmpty)
+        }
+
+        let capabilities = LiveBrainCapabilities(opensSession: true, seesImages: true, imageMaxPixel: 768, proposesIdeas: true)
+        _ = (capabilities.opensSession, capabilities.seesImages, capabilities.imageMaxPixel, capabilities.proposesIdeas, LiveBrainCapabilities.none)
+        let stats = LiveGenerationStats(model: "Qwen3.5 4B", promptTokens: 1, cachedTokens: 2, generatedTokens: 3, firstTokenMs: 4, tokensPerSecond: 5)
+        _ = (stats.model, stats.promptTokens, stats.cachedTokens, stats.generatedTokens, stats.firstTokenMs, stats.tokensPerSecond)
+        let events: [LiveBrainEvent] = [.started(model: "m"), .text("t"), .ideas([]), .stats(stats), .completed(.editApplied)]
+        _ = events
+        var route = LiveRoute()
+        XCTAssertEqual(route.brain, .commands)
+        route = LiveRoute(brain: .model, modelName: "Qwen3.5 4B")
+        _ = (route.brain, route.modelName, LiveRoute.Brain.onDevice)
+        _ = [LiveIdea.Source.heuristic, .onDevice, .model]
+        _ = [LiveBrainKind.model, .onDevice, .local]
 
         var machine = LiveTurnMachine(options: .init(bargeInOnSpeaker: .safe, turnTaking: false))
         machine.setOptions(.init(bargeInOnSpeaker: .full, turnTaking: true))
+        machine.setOptions(.init(bargeInOnSpeaker: .safe, turnTaking: true, externalEndpointing: true))
         _ = machine.handle(.transcript(TranscriptSnapshot(), grammar: nil, at: 0))
+        _ = machine.handle(.utterance("plus chaud", at: 0))
         machine.noteAssistantSpoke("Ok", at: 0)
         let state = machine.state
         _ = (state.phase, state.paused, state.muted, state.turn, state.caption, state.brainOpen, state.toolsRunning,
              state.chunksQueued, state.spokenText, state.echoRisk, state.effectiveBargeIn)
+        _ = (state.committedAt, state.queuedAt, state.lastChunkStartedAt, state.lastChunkWords, state.echoGateUntil)
+        let effects: [LiveEffect] = [.turnTimedOut(1), .speakerStuck]
+        _ = effects
+        _ = (LiveTurnMachine.emptyHearingCap, LiveTurnMachine.externalEndpointCap, LiveTurnMachine.thinkingDeadline,
+             LiveTurnMachine.queuedLineDeadline, LiveTurnMachine.echoTail, LiveTurnMachine.drainDeadline(words: 9))
+        var options = LiveTurnMachine.Options(bargeInOnSpeaker: .safe, turnTaking: false)
+        options.externalEndpointing = true
         _ = EndOfTurnDetector(parameters: .init()).parameters
-        _ = VoiceActivityDetector(parameters: .init()).noiseFloorDB
+        var vadParameters = VoiceActivityDetector.Parameters()
+        vadParameters.maxSpeechRun = 8
+        _ = VoiceActivityDetector(parameters: vadParameters).noiseFloorDB
         _ = BargeInPolicy(parameters: .init())
 
         var accumulator = TranscriptAccumulator()
@@ -141,52 +155,94 @@ final class LiveContractTests: XCTestCase {
         XCTAssertTrue(VoiceSelector.needsBetterVoiceHint(nil))
         XCTAssertTrue(VoiceCandidate.Quality.premium > .enhanced)
 
-        _ = LiveTurnRouter.route("plus chaud", grammar: EditPlan(utterance: "plus chaud", intents: []), brain: .claude, ideasOnScreen: 3, jobRunning: false, fastLane: true)
+        _ = LiveTurnRouter.route("plus chaud", grammar: EditPlan(utterance: "plus chaud", intents: []), brain: .model, ideasOnScreen: 3, jobRunning: false, fastLane: true)
         for key in LiveLineKey.allCases { XCTAssertFalse(LiveLines.line(key, .french).isEmpty) }
         _ = LiveLines.problem(.noSpeechRecognition(language: "fr-FR"), .english)
         _ = LiveLines.ideaApplied("Noir et blanc", .french)
         _ = LiveLines.filler(.french, avoiding: nil)
+        _ = LiveLines.line(.greetingLooking, .french, mode: .video)
+        for key in [LiveLineKey.greetingLocal, .greetingLooking, .refusal, .lostThread, .jobDone, .jobCancelled, .resume, .stopping, .running, .micRestarted,
+                    .modelLoading] {
+            _ = LiveLines.line(key, .english)
+        }
 
         var latency = LatencyTracker()
         latency.mark(.speechEnd, at: 0, turn: 1)
-        latency.record(usage: ClaudeUsage(), bodyBytes: 0, turn: 1)
+        latency.record(stats: stats, turn: 1)
+        _ = latency.stats(turn: 1)
         _ = latency.report(turn: 1)
         _ = latency.percentiles(.firstAudio)
 
-        _ = LivePrompt.system(mode: .photo)
         _ = LivePrompt.onDeviceInstructions(mode: .video)
+        _ = LivePrompt.onDevicePrompt(LiveUserTurn(id: 1, kind: .speech, text: "plus chaud", language: .french, image: nil, editorState: LiveEditorState(mode: .photo, version: 1)))
+        _ = LivePrompt.editorState(LiveEditorState(mode: .photo, version: 1))
+        let definitions: [LiveToolDefinition] = LiveToolSchema.tools(for: .photo)
+        _ = definitions.map { ($0.name, $0.description, $0.inputSchema) }
+        _ = LiveToolDefinition(name: "undo", description: "", inputSchema: ["type": "object"])
+        let use = RawToolUse(id: "call_1", name: "undo", rawInput: "{}")
+        XCTAssertEqual(use.blockIndex, 0)
+        _ = ToolInputValidator(mode: .photo).validate(use, context: .photo, grounding: .init())
         _ = ToolInputValidator(mode: .photo).steps(raw: [RawIntentStep(action: "autoEnhance")], context: .photo)
         _ = ToolResultEncoder.compactText(LiveToolResult(isError: false, payload: ["ok": true], changedDocument: false))
         _ = IdeaEngine.heuristic(LiveEditorState(mode: .photo, version: 0), dismissed: [], language: .french)
         _ = IdeaEngine.merge(current: [], incoming: [], dismissed: [], fill: [])
-        _ = LiveCostEstimator.dollars(ClaudeUsage())
-        _ = ClaudeRequestBuilder(options: ClaudeRequestOptions())
+
+        // Live/Local
+        let turn = LiveUserTurn(id: 2, kind: .sessionStart, text: "", language: .french, image: nil, editorState: LiveEditorState(mode: .photo, version: 1))
+        _ = LocalLivePrompt.system(mode: .photo, size: .full)
+        _ = LocalLivePrompt.system(mode: .video, size: .compact)
+        let specs: [JSONValue] = LocalLivePrompt.toolSpecs(mode: .photo)
+        _ = specs
+        let examples: [LocalPromptExample] = LocalLivePrompt.examples(mode: .photo, size: .compact)
+        _ = examples.map { ($0.user, $0.assistant, $0.toolName, $0.arguments, $0.toolResult) }
+        _ = LocalPromptExample(user: "plus chaud", assistant: "Je réchauffe.", toolName: .applyEdits, arguments: ["steps": []], toolResult: "Done.")
+        _ = LocalLivePrompt.userMessage(turn, previous: nil, imageAttached: false)
+        _ = LocalLivePrompt.sessionStartMessage(turn, imageAttached: true)
+        _ = LocalLivePrompt.needsFreshLook(turn, versionsSinceLastLook: 0)
+        let recap = LocalRecapInput(appliedEdits: [], lastExchanges: [], openQuestion: nil, lastLook: nil)
+        _ = (recap.appliedEdits, recap.lastExchanges, recap.openQuestion, recap.lastLook)
+        _ = LocalLivePrompt.recap(recap)
+        _ = (LocalLivePrompt.Budgets.systemFull, LocalLivePrompt.Budgets.systemCompact, LocalLivePrompt.Budgets.userMessage,
+             LocalLivePrompt.Budgets.editorDelta, LocalLivePrompt.Budgets.recap)
+        _ = LocalPromptSize(rawValue: "full")
+        let raw: RawToolUse = ToolArgumentCoercer.rawToolUse(id: "call_1", name: "undo", arguments: [:])
+        _ = raw
+        var filter = LocalOutputFilter()
+        let pieces: [LocalOutputFilter.Piece] = filter.feed("Je réchauffe.") + filter.finish()
+        for piece in pieces {
+            switch piece {
+            case .speech(let text): _ = text
+            case .toolCall(let name, let arguments): _ = (name, arguments)
+            case .malformed(let text): _ = text
+            }
+        }
     }
 
     func testStatedValues() throws {
-        XCTAssertEqual(ClaudeRequestOptions.model, "claude-opus-5")
         XCTAssertEqual(LiveToolName.allCases.map(\.rawValue), ["apply_edits", "undo", "compare_before_after", "propose_ideas"])
         XCTAssertEqual(LiveStepResult.Status.needsClarification.rawValue, "needs_clarification")
         XCTAssertEqual(LiveCaption(stable: "plus", volatile: "chaud").text, "plus chaud")
         XCTAssertEqual(IdeaSymbols.sanitize("trash"), "sparkles")
         XCTAssertEqual(IdeaSymbols.sanitize("crop"), "crop")
 
-        let request = ClaudeRequestBuilder.keyCheckRequest(apiKey: "sk-ant-test")
-        XCTAssertEqual(request.method, "GET")
-        XCTAssertEqual(request.url, ClaudeRequestBuilder.modelURL)
-        XCTAssertEqual(ClaudeRequestBuilder.keyStatus(httpStatus: 200, offline: false), .valid)
-        XCTAssertEqual(ClaudeRequestBuilder.keyStatus(httpStatus: 401, offline: false), .invalid)
-        XCTAssertEqual(ClaudeRequestBuilder.keyStatus(httpStatus: 402, offline: false), .noCredit)
-        XCTAssertEqual(ClaudeRequestBuilder.keyStatus(httpStatus: 404, offline: false), .noAccess)
-        XCTAssertEqual(ClaudeRequestBuilder.keyStatus(httpStatus: 429, offline: false), .rateLimited)
-        XCTAssertEqual(ClaudeRequestBuilder.keyStatus(httpStatus: 529, offline: false), .server(529))
-        XCTAssertEqual(ClaudeRequestBuilder.keyStatus(httpStatus: nil, offline: true), .offline)
-
-        let key = "sk-ant-api03-" + String(repeating: "a", count: 40) + "A1b2"
-        XCTAssertTrue(APIKeyFormat.looksValid(" \(key)\n"))
-        XCTAssertFalse(APIKeyFormat.looksValid("sk-ant-admin01-" + String(repeating: "a", count: 40)))
-        XCTAssertEqual(APIKeyFormat.mask(key), "sk-ant-...A1b2")
-        XCTAssertEqual(APIKeyFormat.redact("key=\(key) end"), "key=sk-ant-... end")
+        XCTAssertEqual(BrainSelector.cooldown, 60)
+        XCTAssertEqual(BrainSelector.failureWindow, 600)
+        XCTAssertEqual(LiveTurnMachine.emptyHearingCap, 4)
+        XCTAssertEqual(LiveTurnMachine.externalEndpointCap, 25)
+        XCTAssertEqual(LiveTurnMachine.thinkingDeadline, 15)
+        XCTAssertEqual(LiveTurnMachine.queuedLineDeadline, 4)
+        XCTAssertEqual(LiveTurnMachine.echoTail, 0.6)
+        XCTAssertEqual(LiveTurnMachine.drainDeadline(words: 9), 8, accuracy: 1e-9)
+        XCTAssertEqual(VoiceActivityDetector.Parameters().maxSpeechRun, 8)
+        XCTAssertFalse(LiveTurnMachine.Options(bargeInOnSpeaker: .safe, turnTaking: false).externalEndpointing)
+        XCTAssertEqual(LiveBrainKind.model.rawValue, "model")
+        XCTAssertEqual(LiveLines.line(.lostThread, .french), "Je perds le fil — tu peux redire ?")
+        XCTAssertEqual(LiveLines.problem(.audioFailed, .french), "Le micro a décroché — je le relance.")
+        XCTAssertEqual(LiveBrainCapabilities.none, LiveBrainCapabilities(opensSession: false, seesImages: false, imageMaxPixel: 0, proposesIdeas: false))
+        XCTAssertEqual(LocalLivePrompt.Budgets.systemFull, 7_500)
+        XCTAssertEqual(LocalLivePrompt.Budgets.systemCompact, 4_800)
+        XCTAssertEqual(LocalPromptSize.full.rawValue, "full")
+        XCTAssertEqual(LocalPromptSize.compact.rawValue, "compact")
 
         let value: JSONValue = ["b": 1, "a": [true, nil, 1.5, "x/\"y\""]]
         XCTAssertEqual(value.serialized(), #"{"a":[true,null,1.5,"x/\"y\""],"b":1}"#)
@@ -194,7 +250,7 @@ final class LiveContractTests: XCTestCase {
         XCTAssertEqual(value["b"]?.int, 1)
 
         let idea = LiveIdea(title: "Flouter le fond", why: "", symbol: "camera.aperture", steps: [RawIntentStep(action: "blurBackground", amount: 60)], source: .heuristic)
-        let same = LiveIdea(title: "Blur the background", why: "", symbol: nil, steps: [RawIntentStep(action: "blurBackground", amount: 60)], source: .claude)
+        let same = LiveIdea(title: "Blur the background", why: "", symbol: nil, steps: [RawIntentStep(action: "blurBackground", amount: 60)], source: .model)
         XCTAssertEqual(idea.id.count, 16)
         XCTAssertEqual(idea.id, same.id)
         XCTAssertNotEqual(idea.id, LiveIdea(title: "Améliorer", why: "", symbol: nil, steps: [RawIntentStep(action: "autoEnhance")], source: .heuristic).id)

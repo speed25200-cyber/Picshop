@@ -6,9 +6,10 @@ import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
 
-/// The picture Picshop Live shows Claude: a JPEG in sRGB, its longest side at
-/// most `maxPixel`, carrying the pixels and nothing else (no EXIF, GPS, TIFF or
-/// IPTC). Synchronous and thread-safe: call it off the main thread.
+/// The picture Picshop Live shows the on-device vision model: a JPEG in sRGB,
+/// its longest side at most `maxPixel`, carrying the pixels and nothing else
+/// (no EXIF, GPS, TIFF or IPTC). Synchronous and thread-safe: call it off the
+/// main thread.
 public enum LiveMediaEncoder {
     public static let defaultQuality = 0.75
 

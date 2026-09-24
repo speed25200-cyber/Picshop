@@ -76,7 +76,7 @@ public enum IntentPrompt {
 
     /// The field guide for the editing actions of one editor: the bullets of
     /// the other editors and the meta/dialogue actions (undo, versions,
-    /// help...) are left out. Claude Live and the on-device Live brain read it.
+    /// help...) are left out. Live's local model and on-device brain read it.
     public static func actionGuide(mode: EditorMode) -> String {
         fieldGuide.split(separator: "\n", omittingEmptySubsequences: false)
             .filter { line in

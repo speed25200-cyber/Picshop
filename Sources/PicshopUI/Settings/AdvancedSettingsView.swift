@@ -5,7 +5,8 @@ import PicshopIntent
 import PicshopImaging
 
 /// Settings › Avancé: the on-device models, the performance budget, the
-/// diagnostics report and the build this is.
+/// diagnostics report and the build this is. The local brain's language model
+/// lives in Settings › Intelligence, not here.
 struct AdvancedSettingsView: View {
     @Environment(\.picshop) private var app
     /// The diagnostics text file, written when the screen opens.
@@ -32,7 +33,7 @@ struct AdvancedSettingsView: View {
     @ViewBuilder
     private func modelsSection(_ app: AppEnvironment) -> some View {
         Section {
-            ForEach(ModelCatalog.all) { model in
+            ForEach(ModelCatalog.all.filter { $0.kind != .languageModel }) { model in
                 let state = app.modelStates[model.id] ?? .notInstalled
                 HStack(alignment: .center, spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
@@ -57,7 +58,7 @@ struct AdvancedSettingsView: View {
         } header: {
             Text(L("On-device models"))
         } footer: {
-            Text(L("The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large: they download by themselves over Wi‑Fi the first time, and everything runs on your iPhone."))
+            Text(L("The eraser and the upscaler ship with the app. Generative Fill is large: it downloads by itself over Wi‑Fi the first time, and everything runs on your iPhone. The local brain is in Settings › Intelligence."))
         }
     }
 
@@ -66,7 +67,6 @@ struct AdvancedSettingsView: View {
         case "lama-inpainting": return L("Neural eraser")
         case "realesrgan-x4": return L("Super resolution ×4")
         case "sd-generative-fill": return L("Generative Fill")
-        case "qwen3-4b-4bit": return L("Pro Brain")
         default: return model.displayName
         }
     }
@@ -76,7 +76,6 @@ struct AdvancedSettingsView: View {
         case "lama-inpainting": return L("LaMa network for clean object removal on complex backgrounds.")
         case "realesrgan-x4": return L("Real-ESRGAN upscaler for sharp enlargements.")
         case "sd-generative-fill": return L("Stable Diffusion: “replace the sky with a sunset”, “add a hat”.")
-        case "qwen3-4b-4bit": return L("Qwen3 4B language model for long, multi-step voice commands.")
         default: return model.summary
         }
     }
@@ -111,9 +110,7 @@ struct AdvancedSettingsView: View {
     private func install(_ model: ModelDescriptor, app: AppEnvironment) {
         Haptics.tap()
         guard app.install(model) else {
-            app.library.errorMessage = model.kind == .generative
-                ? L("This build was compiled without the Stable Diffusion runtime.")
-                : L("This build was compiled without the MLX runtime.")
+            app.library.errorMessage = L("This build was compiled without the Stable Diffusion runtime.")
             return
         }
     }
