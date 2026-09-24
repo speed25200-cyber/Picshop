@@ -1,7 +1,8 @@
 # Codemagic CI/CD for PicShop.
 #
 # Workflows
-#   picshop-testflight  — Pro build (MLX Pro Brain + Stable Diffusion) signed with your App Store Connect API key, uploaded to TestFlight.
+#   picshop-testflight  — Pro build (MLX Pro Brain + Stable Diffusion) signed with your App Store Connect API key, uploaded to TestFlight
+#                          automatically on every push to the development branch and to main.
 #                          Requirements in Codemagic (Teams → Integrations → Developer Portal):
 #                            • an App Store Connect integration named "PetMind ASC API"
 #                              (API key with the App Manager role)
@@ -11,7 +12,7 @@
 #                          certificate. An app record with this bundle ID must exist in
 #                          App Store Connect for the TestFlight upload.
 #                          Optional: APP_STORE_APPLE_ID (numeric app id) for build-number lookup.
-#   picshop-build       — runs on every push: tests + simulator build + unsigned archive,
+#   picshop-build       — runs on pushes to other branches and on pull requests: tests + simulator build + unsigned archive,
 #                          no Apple credentials needed.
 definitions:
   env: &env
@@ -106,8 +107,19 @@ workflows:
         distribution_type: app_store
         bundle_identifier: com.picshopio.picshop
     cache: *cache
-    # Started manually (Start new build → PicShop → TestFlight) once the App Store Connect
-    # integration exists; every push is compiled by the "picshop-build" workflow below.
+    # Every push to the development branch (and to main) is built, signed and sent to
+    # TestFlight straight away; other branches and pull requests only get the build check below.
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: "claude/picshop-app-redesign-sota-x3ljwu"
+          include: true
+          source: true
+        - pattern: "main"
+          include: true
+          source: true
+      cancel_previous_builds: true
     scripts:
       - *toolchain
       - *models
@@ -166,6 +178,13 @@ workflows:
       branch_patterns:
         - pattern: "*"
           include: true
+          source: true
+        # These branches go to TestFlight instead (picshop-testflight), which builds and tests too.
+        - pattern: "claude/picshop-app-redesign-sota-x3ljwu"
+          include: false
+          source: true
+        - pattern: "main"
+          include: false
           source: true
       cancel_previous_builds: true
     scripts:
