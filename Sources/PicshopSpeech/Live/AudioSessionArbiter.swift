@@ -57,10 +57,12 @@ public final class AudioSessionArbiter {
         Self.queue.async { Self.deactivateAfterLive() }
     }
 
-    /// Live's session again after the media services were reset.
+    /// Live's session again, on whichever path owns it (duplex or simple), after an
+    /// interruption, a media services reset or a recognizer that could not start.
     public func reactivateLive(hdBluetooth: Bool) async throws {
-        guard owner == .live else { return }
-        try await Self.run { try Self.configure(.live, hdBluetooth: hdBluetooth) }
+        let current = owner
+        guard current == .live || current == .liveSimple else { return }
+        try await Self.run { try Self.configure(current, hdBluetooth: hdBluetooth) }
     }
 
     nonisolated private static func run(_ work: @escaping @Sendable () throws -> Void) async throws {

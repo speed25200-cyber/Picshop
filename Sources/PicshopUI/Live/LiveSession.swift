@@ -82,11 +82,37 @@ public final class LiveSession {
     @ObservationIgnored var latency = LatencyTracker()
     @ObservationIgnored var selector = BrainSelector()
     @ObservationIgnored let clock = SystemLiveClock()
+    /// The duplex path (headphones, self-test passed), or nil.
     @ObservationIgnored var audio: LiveAudioStack?
+    /// The simple path (the default and the fallback), or nil.
+    @ObservationIgnored var simple: SimpleLiveVoice?
+    /// Headphones or Bluetooth on the simple path: the ear may stay open while the voice talks.
+    @ObservationIgnored var simpleHeadset = false
+    /// The recognizer gave up on the simple path (reported once): a tap on the orb retries it.
+    @ObservationIgnored var simpleEarFailed = false
+    @ObservationIgnored var switchingToSimple = false
+    /// Duplex health: when microphone frames last came, while they are expected.
+    @ObservationIgnored var lastFrameAt: Double = 0
+    @ObservationIgnored var framesExpected = false
+    /// When the voice last drained: the simple path's echo tail counts from there.
+    @ObservationIgnored var voiceDrainedAt: Double = -.infinity
+    /// liveSpeaks off, or the voice failed: captions carry the replies.
     @ObservationIgnored var captionOnly: CaptionOnlySpeaker?
+    /// The voice produced nothing and the replies moved to captions for the rest of the turn.
+    @ObservationIgnored var voiceGaveUp = false
+    /// The simple path's current utterance began (its first words) while the voice was talking:
+    /// a final that repeats the reply is then the voice heard back, not the user.
+    @ObservationIgnored var simpleUtteranceOverVoice: Bool?
+    /// Said once per conversation: the local model is still loading.
+    @ObservationIgnored var saidModelLoading = false
+    /// The model went off for this conversation (said once).
+    @ObservationIgnored var saidModelOff = false
+    @ObservationIgnored var sessionStartWatchdog: Task<Void, Never>?
     /// The brains LocalBrainHub gives each conversation: the local model once it is
     /// loaded, Apple's on-device model, and the rules-only grammar, always there.
     @ObservationIgnored var modelBrain: (any LiveBrain)?
+    /// When the hub was last asked for a model brain (it may become ready mid-conversation).
+    @ObservationIgnored var modelBrainCheckedAt: Double = -.infinity
     @ObservationIgnored var onDeviceBrain: (any LiveBrain)?
     @ObservationIgnored var onDeviceAvailable = false
     @ObservationIgnored var localBrain: (any LiveBrain)?
@@ -240,8 +266,15 @@ public final class LiveSession {
             end()
             start()
         case .connecting:
-            break
+            // Never a dead tap: the start is abandoned, and Live says so.
+            end()
+            showNotice(L("Live start cancelled."), isProblem: false)
         default:
+            if simpleEarFailed, machine.state.phase == .listening {
+                // "Je ne t'entends pas — … touche l'orbe": the ear tries again.
+                retrySimpleEar()
+                return
+            }
             // Over a playing video Live does not hear: the orb pauses it, and Live listens.
             if playbackHolds { host?.livePausePlayback() }
             feed(.orbTapped(at: clock.now()))

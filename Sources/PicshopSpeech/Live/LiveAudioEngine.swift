@@ -377,6 +377,8 @@ public final class LiveAudioEngine {
         return Built(handle: LivePlayerHandle(engine: engine, voice: voice, earcons: earcons), voiceProcessing: voiceProcessing)
     }
 
+    /// Voice processing goes off before the engine stops: the reverse order can crash in
+    /// AURemoteIO on iOS 18 and later.
     nonisolated private static func tearDown(_ handle: LivePlayerHandle) {
         handle.isValid = false
         let engine = handle.engine
@@ -384,8 +386,10 @@ public final class LiveAudioEngine {
         handle.earcons.stop()
         engine.inputNode.removeTap(onBus: 0)
         engine.mainMixerNode.removeTap(onBus: 0)
+        if engine.inputNode.isVoiceProcessingEnabled {
+            try? engine.inputNode.setVoiceProcessingEnabled(false)
+        }
         engine.stop()
-        try? engine.inputNode.setVoiceProcessingEnabled(false)
         engine.reset()
     }
 

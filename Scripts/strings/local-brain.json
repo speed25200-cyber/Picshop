@@ -1,0 +1,8 @@
+{
+  "A downloaded file was damaged. Try again.": "Un fichier téléchargé était abîmé. Réessaie.",
+  "Not enough storage: %@ must be free.": "Pas assez d'espace : il faut %@ de libre.",
+  "The download server is not answering. Try again later.": "Le serveur de téléchargement ne répond pas. Réessaie plus tard.",
+  "The download stopped with the connection. It picks up where it left off.": "Le téléchargement s'est arrêté avec la connexion. Il reprendra là où il en était.",
+  "The model could not load. Close other apps, then try again.": "Le modèle n'a pas pu se charger. Ferme d'autres apps, puis réessaie.",
+  "This model is incomplete on the server.": "Ce modèle est incomplet sur le serveur."
+}

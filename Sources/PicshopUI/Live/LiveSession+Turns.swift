@@ -20,12 +20,25 @@ extension LiveSession {
     /// Per turn: the local model when it is loaded, then Apple's on-device model, then
     /// the grammar (BrainSelector keeps the cooldowns; thermal critical skips the model).
     func chooseBrain(excluding failed: Set<LiveBrainKind> = []) -> LiveBrainKind {
+        refreshModelBrainIfReady()
         let inputs = BrainSelector.Inputs(modelReady: LocalBrainHub.shared.isModelReady && modelBrain != nil,
                                           onDeviceAvailable: onDeviceAvailable && onDeviceBrain != nil,
                                           thermalCritical: ProcessInfo.processInfo.thermalState == .critical,
                                           now: clock.now())
         let kind = selector.choose(inputs, excluding: failed)
         return brainFor(kind) == nil ? .local : kind
+    }
+
+    /// The model finished loading after this conversation started: its brain joins now
+    /// (the hub is asked at most every 5 s; it never loads anything here).
+    private func refreshModelBrainIfReady() {
+        let hub = LocalBrainHub.shared
+        guard isRunning, modelBrain == nil, hub.isModelReady, clock.now() - modelBrainCheckedAt >= 5 else { return }
+        modelBrainCheckedAt = clock.now()
+        guard let model = hub.makeLiveBrains(mode: mode).model else { return }
+        modelBrain = model
+        debugDecision("local model ready: it answers from now on")
+        Task.detached(priority: .userInitiated) { await model.warmUp() }
     }
 
     /// The dock pill for a brain: the model with its name, Apple Intelligence, or Commandes.
@@ -42,6 +55,8 @@ extension LiveSession {
     /// The reducer committed a user turn: pick the lane (control, local, brain) and run it.
     func commitTurn(_ id: Int, text: String) {
         let now = clock.now()
+        // Captions after a silent voice last one turn: this one tries the voice again.
+        restoreVoiceAfterSilence()
         flushCaption(force: true)
         let typed = pendingTypedText.map { !$0.isEmpty && text.hasSuffix($0) } ?? false
         pendingTypedText = nil
@@ -108,7 +123,7 @@ extension LiveSession {
         debugDecision("control: \(command)")
         switch command {
         case .stopTalking:
-            audio?.speaker.stop(fadeMs: 60)
+            activeSpeaker?.stop(fadeMs: 60)
             captionOnly?.stop()
         case .endLive:
             speak(LiveLines.line(.stopping, language), language: language, turn: turn)
@@ -118,7 +133,7 @@ extension LiveSession {
                 for _ in 0..<20 {
                     try? await Task.sleep(nanoseconds: 100_000_000)
                     guard let self, self.isRunning else { return }
-                    if !(self.audio?.speaker.isSpeaking ?? false) { break }
+                    if !(self.activeSpeaker?.isSpeaking ?? false) { break }
                 }
                 self?.end()
             }
@@ -189,7 +204,9 @@ extension LiveSession {
             self.refreshIdeas()
             // Interrupted meanwhile: the edit stands, its confirmation is not spoken.
             guard !Task.isCancelled, self.brainTurnID == turn else { return }
-            let reply = execution.allApplied ? (plan.reply ?? execution.outcomeText(language: language)) : execution.outcomeText(language: language)
+            var reply = execution.allApplied ? (plan.reply ?? execution.outcomeText(language: language)) : execution.outcomeText(language: language)
+            // Every step ignored or skipped: the grammar's own line, so the turn is never silent.
+            if reply.isEmpty { reply = Replies.combined(for: plan.intents, language: language) }
             if !reply.isEmpty { self.speak(reply, language: language, turn: turn, isResponse: true) }
             self.feed(.turn(turn, .ended(endsWithQuestion: reply.hasSuffix("?")), at: self.clock.now()))
             self.lastResponseChunks = self.responseChunks
@@ -215,6 +232,7 @@ extension LiveSession {
         brainProducedOutput = false
         responseChunks = []
         let language = kind == .sessionStart ? replyLanguage : NormalizedUtterance(text).language
+        if kind == .sessionStart { armSessionStartWatchdog(id: id) }
         brainTask = Task { @MainActor [weak self] in
             if let previous { await previous.value }
             guard let self else { return }
@@ -232,6 +250,12 @@ extension LiveSession {
                               forcedKind: LiveBrainKind?) async {
         var failed: Set<LiveBrainKind> = []
         var brainKind = forcedKind ?? chooseBrain()
+        let startedAt = clock.now()
+        if kind != .sessionStart, brainKind != .model, !saidModelLoading, LocalBrainHub.shared.status.phase == .loading {
+            // Once per conversation: a simpler brain answers while the local model loads, and Live says so.
+            saidModelLoading = true
+            speak(LiveLines.line(.modelLoading, language), language: language, turn: id)
+        }
         while isRunning, brainTurnID == id, !Task.isCancelled {
             if kind == .sessionStart, brainFor(brainKind)?.capabilities.opensSession != true {
                 // Only a brain that opens sessions looks at the picture and proposes ideas; the others greet locally.
@@ -239,7 +263,11 @@ extension LiveSession {
                 return
             }
             guard let brain = brainFor(brainKind) else {
-                if brainKind == .local { return }
+                if brainKind == .local {
+                    // No grammar brain (never expected): the turn fails out loud.
+                    lastBrainFailed(.unavailable("no_brain"), id: id, language: language)
+                    return
+                }
                 brainKind = .local
                 continue
             }
@@ -252,16 +280,25 @@ extension LiveSession {
                 return
             case .failedBeforeOutput(let error):
                 failed.insert(brainKind)
-                brainFailed(error, kind: brainKind, beforeOutput: true, language: language)
+                brainFailed(error, kind: brainKind, beforeOutput: true, language: language, turn: id)
                 guard brainKind != .local else {
-                    feed(.turn(id, .failed, at: clock.now()))
+                    // The last brain failed: shown and said, never silent.
+                    lastBrainFailed(BrainSelector.problem(for: Self.brainError(from: error)), id: id, language: language)
                     return
                 }
                 // The same turn, answered by the next brain.
                 brainKind = chooseBrain(excluding: failed)
                 debugDecision("turn #\(id) re-run on \(brainKind.rawValue)")
+                if kind != .sessionStart, !brainProducedOutput, clock.now() - startedAt >= 2, activeSpeaker?.isSpeaking != true {
+                    // A slow failure (the model's first-token timeout) used most of the thinking deadline:
+                    // a short line now, and the signal restarts the reducer's clock for the next brain.
+                    let line = LiveLines.filler(language, avoiding: lastFiller)
+                    lastFiller = line
+                    feed(.turn(id, .firstOutput, at: clock.now()))
+                    speak(line, language: language, turn: id)
+                }
             case .failedAfterOutput(let error):
-                brainFailed(error, kind: brainKind, beforeOutput: false, language: language)
+                brainFailed(error, kind: brainKind, beforeOutput: false, language: language, turn: id)
                 // The chunk being heard finishes, then the lost-thread line.
                 speak(LiveLines.line(.lostThread, language), language: language, turn: id)
                 feed(.turn(id, .ended(endsWithQuestion: false), at: clock.now()))
@@ -284,8 +321,20 @@ extension LiveSession {
         var chunker = SpeechChunker(language: language)
         var gotOutput = false
         latency.mark(.requestSent, at: clock.now(), turn: id)
-        let filler = isQuestion ? scheduleFiller(turn: id, language: language) : nil
+        // A question gets a short line after 1.2 s without an answer; any model turn after 2.5 s
+        // (a cold cache can take several seconds before its first token).
+        let filler: Task<Void, Never>?
+        if isQuestion {
+            filler = scheduleFiller(turn: id, language: language, after: 1.2)
+        } else if brainKind == .model, kind != .sessionStart {
+            filler = scheduleFiller(turn: id, language: language, after: 2.5)
+        } else {
+            filler = nil
+        }
         defer { filler?.cancel() }
+        // Nothing must end a turn silently: what a tool did, and whether ideas were shown.
+        var toolLine: String?
+        var gotIdeas = false
 
         func opened() {
             guard !gotOutput else { return }
@@ -316,7 +365,9 @@ extension LiveSession {
                     assignActivityTitle(nil)
                     // The inline Undo is offered by LiveToolProxy, which knows the version before the call.
                     if result.changedDocument { refreshIdeas() }
+                    if let line = result.execution?.outcomeText(language: language), !line.isEmpty { toolLine = line }
                 case .ideas(let proposed):
+                    gotIdeas = true
                     receiveBrainIdeas(proposed)
                 case .stats(let stats):
                     latency.record(stats: stats, turn: id)
@@ -328,6 +379,9 @@ extension LiveSession {
                     ]))
                 case .completed(let end):
                     for chunk in chunker.finish() { speak(chunk, language: language, turn: id, isResponse: true) }
+                    if case .refused = end {} else if let empty = endedEmpty(gotOutput: gotOutput, gotIdeas: gotIdeas, toolLine: toolLine, turn: id, language: language) {
+                        return empty
+                    }
                     selector.recordSuccess(brainKind)
                     finish(end, turn: id, language: language, endsWithQuestion: chunker.lastEndsWithQuestion, brainKind: brainKind)
                     return .done
@@ -335,6 +389,7 @@ extension LiveSession {
             }
             guard isRunning, brainTurnID == id, !Task.isCancelled else { return .cancelled }
             for chunk in chunker.finish() { speak(chunk, language: language, turn: id, isResponse: true) }
+            if let empty = endedEmpty(gotOutput: gotOutput, gotIdeas: gotIdeas, toolLine: toolLine, turn: id, language: language) { return empty }
             selector.recordSuccess(brainKind)
             finish(.answered, turn: id, language: language, endsWithQuestion: chunker.lastEndsWithQuestion, brainKind: brainKind)
             return .done
@@ -344,11 +399,24 @@ extension LiveSession {
         }
     }
 
+    /// A stream that ended with nothing said. With no output at all it failed: the next brain
+    /// (in the end the grammar) answers the same turn. After a tool call with no sentence, what
+    /// the tool did is said (or the lost-thread line); ideas on screen need no line. Nil: the
+    /// turn said something, or has now.
+    private func endedEmpty(gotOutput: Bool, gotIdeas: Bool, toolLine: String?, turn id: Int, language: NormalizedUtterance.Language) -> BrainOutcome? {
+        guard responseChunks.isEmpty, !gotIdeas else { return nil }
+        guard gotOutput else { return .failedBeforeOutput(LiveBrainError.streamTruncated) }
+        let line = toolLine.flatMap { $0.isEmpty ? nil : $0 } ?? LiveLines.line(.lostThread, language)
+        debugDecision("turn #\(id) ended with nothing said: \(toolLine == nil ? "lost-thread line" : "the tool's outcome")")
+        speak(line, language: language, turn: id, isResponse: true)
+        return nil
+    }
+
     private func finish(_ end: LiveTurnEnd, turn: Int, language: NormalizedUtterance.Language, endsWithQuestion: Bool, brainKind: LiveBrainKind) {
         switch end {
         case .refused(let category):
             // Nothing the model half-said is kept; the refusal line, the problem, local ideas.
-            audio?.speaker.stop(fadeMs: 60)
+            activeSpeaker?.stop(fadeMs: 60)
             captionOnly?.stop()
             responseChunks = []
             speak(LiveLines.line(.refusal, language), language: language, turn: turn)
@@ -369,16 +437,16 @@ extension LiveSession {
         if activityTitle != nil, !(host?.liveIsBusy ?? false) { assignActivityTitle(nil) }
     }
 
-    /// A question with no answer yet after 1.2 s: a short local line (never on command turns).
-    private func scheduleFiller(turn id: Int, language: NormalizedUtterance.Language) -> Task<Void, Never> {
+    /// No answer yet after `delay` seconds (1.2 for a question, 2.5 for any model turn): a short local line.
+    private func scheduleFiller(turn id: Int, language: NormalizedUtterance.Language, after delay: Double) -> Task<Void, Never> {
         Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             guard let self, !Task.isCancelled, self.isRunning, self.brainTurnID == id, !self.brainProducedOutput else { return }
             let line = LiveLines.filler(language, avoiding: self.lastFiller)
             self.lastFiller = line
             self.feed(.turn(id, .firstOutput, at: self.clock.now()))
             self.speak(line, language: language, turn: id)
-            self.debugDecision("filler after 1.2 s without an answer")
+            self.debugDecision("filler after \(delay) s without an answer")
         }
     }
 
@@ -418,8 +486,10 @@ extension LiveSession {
 
     /// A real failure (cancellations never get here) counts against its brain; the
     /// grammar never cools down. Before any output the same turn goes to the next
-    /// brain; after output what was said stays and the lost-thread line follows.
-    private func brainFailed(_ error: Error, kind: LiveBrainKind, beforeOutput: Bool, language: NormalizedUtterance.Language) {
+    /// brain (the model's first-token timeout lands here); after output what was said
+    /// stays, the problem shows and the caller says the lost-thread line. The model
+    /// switched off for the conversation (load failure, memory) is shown and said once.
+    private func brainFailed(_ error: Error, kind: LiveBrainKind, beforeOutput: Bool, language: NormalizedUtterance.Language, turn id: Int) {
         let brainError = Self.brainError(from: error)
         let name = BrainSelector.errorName(brainError)
         LiveServices.shared.record(LiveLogEntry(time: clock.now(), event: "brain.error", fields: [
@@ -427,9 +497,49 @@ extension LiveSession {
         ]))
         selector.recordFailure(kind, brainError, now: clock.now())
         debugDecision("\(kind.rawValue) brain failed: \(name)\(beforeOutput ? "; next brain" : "")")
-        if !beforeOutput {
-            showNotice(LiveLines.problem(BrainSelector.problem(for: brainError), language), isProblem: true)
+        if kind == .model {
+            // Memory is short: the weights go now, so the editor and the next brain have room.
+            if brainError == .memoryPressure { LocalBrainHub.shared.release(reason: "live_memory_pressure") }
+            if selector.isOffForSession(.model), !saidModelOff {
+                saidModelOff = true
+                showNotice(LiveLines.problem(.modelUnavailable, language), isProblem: true)
+                if beforeOutput { speak(LiveLines.problem(.modelUnavailable, language), language: language, turn: id) }
+            }
         }
+        if !beforeOutput {
+            showProblem(BrainSelector.problem(for: brainError), running: true)
+        }
+    }
+
+    /// Every brain failed before saying anything: the problem is shown and said.
+    private func lastBrainFailed(_ problem: LiveProblem, id: Int, language: NormalizedUtterance.Language) {
+        showProblem(problem, running: true)
+        speak(LiveLines.problem(problem, language), language: language, turn: id)
+        feed(.turn(id, .failed, at: clock.now()))
+    }
+
+    /// The opening turn has 15 s to say or show something; then it gives way to the local greeting.
+    private func armSessionStartWatchdog(id: Int) {
+        sessionStartWatchdog?.cancel()
+        sessionStartWatchdog = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+            guard let self, !Task.isCancelled, self.isRunning, self.brainTurnID == id, self.brainTurnKind == .sessionStart,
+                  !self.brainProducedOutput else { return }
+            let kind = self.activeBrainKind ?? self.currentKind
+            self.cancelBrainTurn(id, spokenText: "")
+            let error = LiveBrainError.timeout(stage: "session_start")
+            self.selector.recordFailure(kind, error, now: self.clock.now())
+            LiveServices.shared.record(LiveLogEntry(time: self.clock.now(), event: "brain.error", fields: [
+                "brain": kind.rawValue, "error": BrainSelector.errorName(error), "before_output": "1",
+            ]))
+            self.debugDecision("the opening turn said nothing in 15 s")
+            self.speak(LiveLines.line(.greetingLocal, self.replyLanguage), turn: self.machine.state.turn)
+        }
+    }
+
+    /// No Live voice to say it (Live failed to start, or already ended): the fallback voice.
+    func sayWithoutLive(_ problem: LiveProblem) {
+        SpokenFallback.say(problemText(problem), language: isRunning ? replyLanguage : chipLanguage)
     }
 
     static func brainError(from error: Error) -> LiveBrainError {
@@ -459,8 +569,11 @@ extension LiveSession {
         }
         if let captionOnly {
             captionOnly.enqueue(clean, turn: turn)
+        } else if let speaker = activeSpeaker {
+            speaker.enqueue(clean, language: language == .french ? "fr" : "en", turn: turn)
         } else {
-            audio?.speaker.enqueue(clean, language: language == .french ? "fr" : "en", turn: turn)
+            // No voice at this instant (the path is changing): the line is at least shown.
+            showReply(clean, isProblem: false, isError: false)
         }
     }
 
@@ -471,6 +584,8 @@ extension LiveSession {
     /// Speaker signals: the caption follows the chunk being heard (D11), then the reducer.
     func speakerSignal(_ turn: Int, _ signal: SpeakerSignal) {
         guard isRunning else { return }
+        // The simple path's ear waits for the echo tail from here.
+        if signal == .drained { voiceDrainedAt = clock.now() }
         if case .chunkStarted(let text) = signal {
             pausePlaybackForVoice(turn: turn)
             var next = transcript
@@ -632,7 +747,7 @@ extension LiveSession {
         return []
     }
 
-    private var chipLanguage: NormalizedUtterance.Language {
+    var chipLanguage: NormalizedUtterance.Language {
         psPrefersFrench ? .french : .english
     }
 

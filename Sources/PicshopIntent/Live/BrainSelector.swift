@@ -3,7 +3,8 @@ import PicshopCore
 
 /// Picks the brain for each turn: the local model, then Apple's on-device
 /// model, then the local grammar. Everything runs on the iPhone, and Live never
-/// goes silent: the grammar is always there.
+/// goes silent: the grammar is always there. Before any brain, LiveTurnRouter's
+/// instant lane runs a confident, simple command on the grammar at once.
 ///
 /// Per brain kind, two failed turns in a row cool it down for 60 s, and three
 /// failures within 10 minutes keep it off for the rest of the editor session.
@@ -73,6 +74,26 @@ public struct BrainSelector: Sendable {
 
     public func isOffForSession(_ kind: LiveBrainKind) -> Bool {
         offForSession.contains(kind)
+    }
+
+    /// How a brain's turn ended, as the selector counts it: nothing for a
+    /// cancellation (barge-in, a tap, typing, a newer turn), a success, or a
+    /// failure. Additive to the contract (phase 1).
+    public mutating func recordEnd(_ kind: LiveBrainKind, error: Error?, now: Double) {
+        guard let error else {
+            recordSuccess(kind)
+            return
+        }
+        guard let counted = Self.countedError(error) else { return }
+        recordFailure(kind, counted, now: now)
+    }
+
+    /// A turn's error as a failure to count; nil for a cancellation, which never is one.
+    /// Errors that are not LiveBrainErrors count as `.unavailable` with their type name.
+    public static func countedError(_ error: Error) -> LiveBrainError? {
+        if error is CancellationError { return nil }
+        if let error = error as? LiveBrainError { return error }
+        return .unavailable(String(String(describing: type(of: error)).prefix(40)))
     }
 
     /// The problem shown and spoken for a failure.

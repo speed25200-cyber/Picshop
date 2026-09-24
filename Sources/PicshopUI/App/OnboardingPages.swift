@@ -3,12 +3,14 @@ import SwiftUI
 import PicshopIntent
 
 /// One onboarding page: the hero over the top half, then a title and a short
-/// text. Scrolls only when the text is too large to fit.
-private struct OnboardingPage<Hero: View>: View {
+/// text, and an optional control under it. Scrolls only when the text is too
+/// large to fit.
+private struct OnboardingPage<Hero: View, Extra: View>: View {
     let title: String
     let text: String
     var footnote: String?
     @ViewBuilder var hero: () -> Hero
+    @ViewBuilder var extra: () -> Extra
 
     var body: some View {
         GeometryReader { proxy in
@@ -38,6 +40,8 @@ private struct OnboardingPage<Hero: View>: View {
                             .frame(maxWidth: 330)
                             .padding(.top, PSSpacing.medium)
                     }
+                    // Adds its own spacing, so an empty one takes no room.
+                    extra()
                 }
                 .padding(.horizontal, PSSpacing.xLarge)
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
@@ -45,6 +49,12 @@ private struct OnboardingPage<Hero: View>: View {
             .scrollBounceBehavior(.basedOnSize)
             .scrollIndicators(.hidden)
         }
+    }
+}
+
+extension OnboardingPage where Extra == EmptyView {
+    init(title: String, text: String, footnote: String? = nil, @ViewBuilder hero: @escaping () -> Hero) {
+        self.init(title: title, text: text, footnote: footnote, hero: hero, extra: { EmptyView() })
     }
 }
 
@@ -126,7 +136,7 @@ struct OnboardingConversationPage: View {
 
     var body: some View {
         OnboardingPage(title: L("A conversation, not menus."),
-                       text: L("Interrupt any time, it's listening. Manual tools stay one tap away in Tools.")) {
+                       text: L("Tap the orb to interrupt, or say “stop”. Manual tools stay one tap away in Tools.")) {
             OnboardingIdeasDemo(isActive: isActive)
         }
     }
@@ -206,8 +216,12 @@ private struct OnboardingSamplePicture: View {
 
 // MARK: - Page 3
 
-/// 'Private by default.': everything, Live included, stays on the iPhone.
+/// 'Private by default.': everything, Live included, stays on the iPhone. On an
+/// iPhone that can run the local brain, the first-run offer to download it over
+/// Wi‑Fi (OnboardingView acts on it with 'Get started').
 struct OnboardingPrivacyPage: View {
+    @Binding var downloadsBrain: Bool
+
     var body: some View {
         OnboardingPage(title: L("Private by default."),
                        text: L("Everything stays on your iPhone: your voice, your words, your photos and videos. Live thinks on the device; nothing is sent."),
@@ -219,6 +233,8 @@ struct OnboardingPrivacyPage: View {
                 .frame(width: 128, height: 128)
                 .psGlass(shape: AnyShape(Circle()))
                 .accessibilityHidden(true)
+        } extra: {
+            OnboardingBrainChoice(downloads: $downloadsBrain)
         }
     }
 }

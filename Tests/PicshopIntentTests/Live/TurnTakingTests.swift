@@ -159,30 +159,41 @@ final class LiveTurnMachineTests: XCTestCase {
         script.send(.turn(1, .ended(endsWithQuestion: false), at: 3.5))
         XCTAssertEqual(script.state.phase, .speaking, "still talking")
         script.send(.speaker(1, .chunkFinished, at: 4))
-        XCTAssertEqual(script.send(.speaker(1, .drained, at: 4)), [.beginUserTurn(at: 4)])
+        XCTAssertEqual(script.send(.speaker(1, .drained, at: 4)), [.beginUserTurn(at: 4 + LiveTurnMachine.echoTail)], "the loudspeaker's echo tail")
         XCTAssertEqual(script.state.phase, .listening)
     }
 
-    func testSpeechWhileThinkingAlwaysInterruptsAndCarriesOver() {
+    /// Only words cancel: energy while thinking (a TV, a cough, a latched VAD) changes nothing;
+    /// two new words interrupt, and what was said carries over into one turn.
+    func testSpeechWhileThinkingNeedsNewWordsAndCarriesOver() {
         var script = TurnScript.thinking()
-        let effects = script.audio(from: 2.8, to: 3.1, db: -20)
+        XCTAssertEqual(script.audio(from: 2.8, to: 3.1, db: -20), [], "energy alone never cancels a reply")
+        XCTAssertEqual(script.state.phase, .thinking)
+        XCTAssertEqual(script.state.turn, 1)
+        let effects = script.say("et plus chaud", at: 3.1, final: true, grammar: RuleBasedIntentEngine().parse("et plus chaud", context: .photo))
         XCTAssertEqual(effects.first, .cancelTurn(1, spokenText: ""))
-        XCTAssertTrue(effects.contains(.beginUserTurn(at: 2.8 - 0.3)))
+        XCTAssertTrue(effects.contains(.beginUserTurn(at: 2.8 - 0.3)), "the words from 0.3 s before the speech began come back")
         XCTAssertTrue(effects.contains(.haptic(.bargeIn)))
         XCTAssertFalse(effects.contains { if case .stopSpeaking = $0 { return true } else { return false } }, "nothing was playing")
         XCTAssertEqual(script.state.phase, .userSpeaking)
         XCTAssertEqual(script.state.turn, 2)
         XCTAssertEqual(script.state.carryOver, "plus lumineux")
-        script.say("et plus chaud", at: 3.0, final: true, grammar: RuleBasedIntentEngine().parse("et plus chaud", context: .photo))
         script.audio(from: 3.1, to: 4.2, db: -62)
         XCTAssertTrue(script.send(.tick(4.2)).contains(.commitTurn(3, text: "plus lumineux et plus chaud")))
     }
 
-    func testWordsWhileThinkingInterrupt() {
+    func testWordsWhileThinkingInterruptOnlyWhenNew() {
         var script = TurnScript.thinking()
-        let effects = script.say("attends", at: 2.9)
+        XCTAssertEqual(script.say("plus", at: 2.8), [], "one word is not enough")
+        XCTAssertEqual(script.say("plus lumineux", at: 2.85, final: true), [], "the committed words again: a late final")
+        XCTAssertEqual(script.state.phase, .thinking)
+        let effects = script.say("non le ciel", at: 2.9)
         XCTAssertTrue(effects.contains(.cancelTurn(1, spokenText: "")))
         XCTAssertEqual(script.state.phase, .userSpeaking)
+
+        var stop = TurnScript.thinking()
+        XCTAssertTrue(stop.say("attends", at: 2.9).contains(.cancelTurn(1, spokenText: "")), "a stop word is enough on its own")
+        XCTAssertEqual(stop.state.phase, .userSpeaking)
     }
 
     private func speaking(bargeIn: BargeInMode = .safe, turnTaking: Bool = false) -> TurnScript {
@@ -284,7 +295,7 @@ final class LiveTurnMachineTests: XCTestCase {
         XCTAssertEqual(script.send(.speaker(1, .chunkStarted("Voilà."), at: 3.1)), [.setInputMuted(true)])
         XCTAssertEqual(script.say("stop", at: 3.3), [], "the mic is off while it talks")
         script.send(.turn(1, .ended(endsWithQuestion: false), at: 3.4))
-        XCTAssertEqual(script.send(.speaker(1, .drained, at: 3.8)), [.setInputMuted(false), .beginUserTurn(at: 3.8)])
+        XCTAssertEqual(script.send(.speaker(1, .drained, at: 3.8)), [.setInputMuted(false), .beginUserTurn(at: 3.8 + LiveTurnMachine.echoTail)])
         XCTAssertEqual(script.state.phase, .listening)
     }
 

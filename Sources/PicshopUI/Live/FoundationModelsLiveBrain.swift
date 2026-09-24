@@ -7,10 +7,13 @@ import PicshopIntent
 /// Live's middle brain: Apple's on-device foundation model with tool calling,
 /// streamed, used when the local model is not ready. It cannot see pixels, so
 /// each turn carries the compact editor state and the scene facts. Tool calls go
-/// through the same validator and handler as the local model's.
+/// through the same validator and handler as the local model's, propose_ideas
+/// included (ideas with source `.onDevice`). It does not open the session: the
+/// session's opening line says it is looking at the photo, which it cannot do.
 @available(iOS 26.0, *)
 final class FoundationModelsLiveBrain: LiveBrain, @unchecked Sendable {
     let kind: LiveBrainKind = .onDevice
+    let capabilities = LiveBrainCapabilities(proposesIdeas: true)
 
     private let mode: EditorMode
     private let bridge: FoundationModelsToolBridge
@@ -154,6 +157,7 @@ final class FoundationModelsLiveBrain: LiveBrain, @unchecked Sendable {
                 LiveApplyEditsTool(bridge: bridge),
                 LiveUndoTool(bridge: bridge),
                 LiveCompareTool(bridge: bridge),
+                LiveProposeIdeasTool(bridge: bridge),
             ]
             let fresh = LanguageModelSession(tools: tools, instructions: instructions)
             session = fresh
@@ -256,6 +260,24 @@ final class FoundationModelsToolBridge: @unchecked Sendable {
         return await perform(call, tool: .compare(seconds: Double(min(max(seconds, 1), 5))), name: .compareBeforeAfter)
     }
 
+    /// Up to 3 ideas; each one's steps are checked like apply_edits. An invalid idea
+    /// keeps its title with no steps, and the session fills its slot with its own.
+    func proposeIdeas(_ proposed: [LiveIdeaArguments]) async -> String {
+        guard let call = claim() else { return "{\"ok\":false}" }
+        let context = await call.handler.context()
+        let validator = ToolInputValidator(mode: mode)
+        let ideas: [LiveIdea] = proposed.prefix(3).map { idea in
+            let steps = Array(idea.steps.prefix(4).map(\.raw))
+            let valid: Bool
+            if case .success = validator.steps(raw: steps, context: context) { valid = true } else { valid = false }
+            return LiveIdea(title: idea.title, why: idea.why, symbol: idea.symbol, steps: valid ? steps : [], source: .onDevice)
+        }
+        guard !ideas.isEmpty else { return "{\"ok\":false,\"message\":\"no ideas\"}" }
+        let reply = await perform(call, tool: .proposeIdeas(ideas), name: .proposeIdeas)
+        call.continuation.yield(.ideas(ideas))
+        return reply
+    }
+
     private func perform(_ call: (handler: any LiveToolHandler, continuation: AsyncThrowingStream<LiveBrainEvent, Error>.Continuation, id: String, turn: Int),
                          tool: LiveTool, name: LiveToolName) async -> String {
         call.continuation.yield(.toolStarted(id: call.id, name: name, activity: nil))
@@ -347,6 +369,36 @@ struct LiveUndoTool: Tool {
 
     func call(arguments: Arguments) async throws -> String {
         await bridge.undo(count: arguments.count)
+    }
+}
+
+@available(iOS 26.0, *)
+@Generable(description: "One idea for the photo or video, shown as a chip the user can tap.")
+struct LiveIdeaArguments {
+    @Guide(description: "At most 4 words, in the user's language.")
+    var title: String
+    @Guide(description: "Why it suits this photo, one short sentence.")
+    var why: String
+    @Guide(description: "An SF Symbol name such as sparkles, sun.max or camera.filters.")
+    var symbol: String?
+    @Guide(description: "The steps the chip runs when tapped.", .maximumCount(4))
+    var steps: [LiveStepArguments]
+}
+
+@available(iOS 26.0, *)
+struct LiveProposeIdeasTool: Tool {
+    let bridge: FoundationModelsToolBridge
+    let name = "propose_ideas"
+    let description = "Show up to 3 edit ideas as chips, when the user asks for your opinion or for ideas. Never for a direct request."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "1 to 3 ideas.", .maximumCount(3))
+        var ideas: [LiveIdeaArguments]
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await bridge.proposeIdeas(arguments.ideas)
     }
 }
 

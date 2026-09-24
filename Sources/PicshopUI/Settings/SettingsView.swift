@@ -59,17 +59,6 @@ public struct SettingsView: View {
             SettingsRow(systemName: "speaker.wave.2.fill", tint: PSTheme.voice) {
                 Toggle(L("Spoken replies"), isOn: $settings.liveSpeaks)
             }
-            SettingsRow(systemName: "hand.raised.fill", tint: PSTheme.textPrimary) {
-                Toggle(isOn: $settings.liveBargeIn) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(L("Let me interrupt"))
-                        Text(L("Always on with headphones. On the loudspeaker, turn it on if PicShop doesn't cut itself off while it speaks."))
-                            .font(PSFont.footnote())
-                            .foregroundStyle(PSTheme.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
             SettingsRow(systemName: "captions.bubble.fill", tint: PSTheme.textPrimary) {
                 Toggle(L("Captions"), isOn: $settings.liveCaptions)
             }
@@ -97,6 +86,8 @@ public struct SettingsView: View {
             }
         } header: {
             Text(L("Voice"))
+        } footer: {
+            Text(L("Live speaks with the best voice installed on the iPhone. A Premium or Enhanced voice sounds much more natural."))
         }
     }
 
@@ -178,6 +169,7 @@ private struct VoiceSummaryRow: View {
     let settings: AppSettings
     @State private var french: VoiceCandidate?
     @State private var english: VoiceCandidate?
+    @State private var hasLoaded = false
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -186,6 +178,12 @@ private struct VoiceSummaryRow: View {
                 Text(L("Voices")).foregroundStyle(PSTheme.textPrimary)
                 line("FR", french)
                 line("EN", english)
+                if needsBetterVoice {
+                    Label(L("Download a Premium voice for a more natural Live"), systemImage: "waveform.badge.plus")
+                        .font(PSFont.caption(12))
+                        .foregroundStyle(PSTheme.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .task(id: "\(settings.liveVoiceFR ?? "")|\(settings.liveVoiceEN ?? "")") { refresh() }
@@ -194,9 +192,17 @@ private struct VoiceSummaryRow: View {
         }
     }
 
+    /// The voice for the language Live speaks is Standard (or missing): the picker shows where to get a better one.
+    private var needsBetterVoice: Bool {
+        guard hasLoaded else { return false }
+        let speaksFrench = settings.voiceLocale.language.languageCode?.identifier == "fr"
+        return VoiceSelector.needsBetterVoiceHint(speaksFrench ? french : english)
+    }
+
     private func refresh() {
         french = SystemVoices.best(for: "fr-FR", preferredIdentifier: settings.liveVoiceFR)
         english = SystemVoices.best(for: "en-US", preferredIdentifier: settings.liveVoiceEN)
+        hasLoaded = true
     }
 
     private func line(_ code: String, _ voice: VoiceCandidate?) -> some View {

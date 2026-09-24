@@ -2,9 +2,10 @@
 import SwiftUI
 import PicshopIntent
 
-/// Settings › Live › Diagnostic Live: what the audio stack, the turn-taking
-/// and the brain's last answer did, the device checklist, and the redacted log
-/// to share. Everything here is read from `LiveServices.shared.debug`.
+/// Settings › Live › Diagnostic Live: the voice self-test, what the audio stack,
+/// the turn-taking and the brain's last answers did, the device checklist, and the
+/// redacted log to share. Everything here is read from `LiveServices.shared`
+/// (`debug`, `selfTest`) and, in a leaf, `LocalBrainHub.shared.status`.
 struct LiveDebugView: View {
     @Environment(\.picshop) private var app
     @State private var logURL: URL?
@@ -12,6 +13,8 @@ struct LiveDebugView: View {
 
     var body: some View {
         List {
+            LiveSelfTestSection(app: app)
+
             Section(L("Audio")) {
                 value(L("Brain"), debug.brain)
                 value(L("Voice path"), debug.voicePath)
@@ -33,10 +36,14 @@ struct LiveDebugView: View {
 
             latencySection
 
+            LiveBrainDebugSection()
+
             Section(L("Last answer")) {
                 value(L("Model"), debug.lastStats?.model ?? "")
                 value(L("First token"), debug.lastStats.map { "\($0.firstTokenMs) ms" } ?? "")
+                value(L("First token p50 / p90"), debug.firstTokenPercentilesMs.map { "\($0.p50) / \($0.p90) ms" } ?? "")
                 value(L("Speed"), debug.lastStats.map { String(format: "%.1f tok/s", $0.tokensPerSecond) } ?? "")
+                value(L("Median speed"), debug.medianTokensPerSecond.map { String(format: "%.1f tok/s", $0) } ?? "")
                 value(L("Prompt / cached tokens"), debug.lastStats.map { "\($0.promptTokens) / \($0.cachedTokens)" } ?? "")
             }
 
@@ -125,12 +132,7 @@ struct LiveDebugView: View {
     }
 
     private func value(_ title: String, _ value: String) -> some View {
-        LabeledContent(title) {
-            Text(verbatim: value.isEmpty ? "—" : value)
-                .font(PSFont.mono(13))
-                .foregroundStyle(PSTheme.textSecondary)
-                .multilineTextAlignment(.trailing)
-        }
+        LiveDebugValue(title: title, value: value)
     }
 
     static func milliseconds(_ value: Double?) -> String {
@@ -140,6 +142,131 @@ struct LiveDebugView: View {
     static func percentiles(_ values: [Double]?) -> String {
         guard let values, values.count >= 2 else { return "" }
         return "\(Int(values[0].rounded())) / \(Int(values[1].rounded()))"
+    }
+}
+
+/// One diagnostic row: a title and a monospaced value (a dash when empty).
+private struct LiveDebugValue: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        LabeledContent(title) {
+            Text(verbatim: value.isEmpty ? "—" : value)
+                .font(PSFont.mono(13))
+                .foregroundStyle(PSTheme.textSecondary)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+}
+
+/// Tester le vocal: the six steps with ✓/✗ and their reasons, Oui / Non while the
+/// voice step waits, and the last summary. A leaf: only it redraws while the test runs.
+private struct LiveSelfTestSection: View {
+    let app: AppEnvironment?
+    private let services = LiveServices.shared
+
+    var body: some View {
+        let test = services.selfTest
+        Section {
+            ForEach(test.steps) { step in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    symbol(step.status)
+                        .frame(width: 18)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(step.title).font(PSFont.body()).foregroundStyle(PSTheme.textPrimary)
+                        if let reason = step.status.reason {
+                            Text(verbatim: reason).font(PSFont.footnote()).foregroundStyle(PSTheme.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .combine)
+            }
+            if let instruction = test.instruction {
+                Text(verbatim: instruction).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
+            }
+            if test.asksHeard {
+                HStack(spacing: 12) {
+                    Button(L("Yes")) { test.answerHeard(true) }
+                        .buttonStyle(.borderedProminent)
+                    Button(L("No")) { test.answerHeard(false) }
+                        .buttonStyle(.bordered)
+                }
+            }
+            if let refusal = test.refusal {
+                Text(verbatim: refusal).font(PSFont.footnote()).foregroundStyle(PSTheme.warning)
+            }
+            Button {
+                guard let app else { return }
+                Task { await test.run(app: app) }
+            } label: {
+                HStack(spacing: 10) {
+                    if test.isRunning { ProgressView() }
+                    Text(test.isRunning ? L("Testing…") : L("Test the voice"))
+                }
+            }
+            .disabled(test.isRunning || app == nil)
+        } header: {
+            Text(L("Test the voice"))
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L("Six checks, about a minute: permissions, speech model, voice, listening, duplex with headphones, brain. Everything stays on the iPhone."))
+                if let summary = services.selfTestSummary {
+                    Text(verbatim: summary).font(PSFont.mono(12))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func symbol(_ status: LiveSelfTest.Status) -> some View {
+        switch status {
+        case .pending:
+            Image(systemName: "circle").foregroundStyle(PSTheme.textTertiary)
+        case .running:
+            ProgressView().controlSize(.small)
+        case .passed:
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(PSTheme.success)
+        case .failed:
+            Image(systemName: "xmark.circle.fill").foregroundStyle(PSTheme.danger)
+        case .skipped:
+            Image(systemName: "minus.circle").foregroundStyle(PSTheme.textTertiary)
+        }
+    }
+}
+
+/// The brain side: the local model, its tier and state, and the thermal state.
+/// A leaf, so the hub's status (download progress) redraws only these rows.
+private struct LiveBrainDebugSection: View {
+    var body: some View {
+        let status = LocalBrainHub.shared.status
+        Section(L("Brain")) {
+            LiveDebugValue(title: L("On-device model"), value: status.model?.displayName ?? "")
+            LiveDebugValue(title: L("Model tier"), value: "\(status.decision.tier.rawValue) · \(status.decision.reason.rawValue)")
+            LiveDebugValue(title: L("Model state"), value: Self.phase(status.phase))
+            if let speed = status.speed {
+                LiveDebugValue(title: L("Speed test result"), value: String(format: "%.1f tok/s", speed.tokensPerSecond) + " · \(speed.firstTokenMs) ms")
+            }
+            TimelineView(.periodic(from: .now, by: 2)) { _ in
+                LiveDebugValue(title: L("Thermal state"), value: LiveDebugModel.thermalDescription(ProcessInfo.processInfo.thermalState))
+            }
+        }
+    }
+
+    static func phase(_ phase: LocalBrainStatus.Phase) -> String {
+        switch phase {
+        case .notInThisBuild: return "not in this build"
+        case .unsupported: return "unsupported"
+        case .notInstalled: return "not installed"
+        case .waitingForWiFi: return "waiting for Wi-Fi"
+        case .downloading(let progress): return "downloading \(Int((progress * 100).rounded())) %"
+        case .verifying: return "verifying"
+        case .installed: return "installed"
+        case .loading: return "loading"
+        case .ready: return "ready"
+        case .failed(let message): return "failed: \(message.prefix(60))"
+        }
     }
 }
 

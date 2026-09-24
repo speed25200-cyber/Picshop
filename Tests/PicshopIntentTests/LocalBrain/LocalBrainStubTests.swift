@@ -4,24 +4,9 @@ import XCTest
 @testable import PicshopCore
 
 // What holds from the phase 0 stubs on: the frozen defaults, the brain's
-// identity, and a turn that always starts and completes.
+// identity, the catalog, and the scripted engine the brain tests rely on.
 
 final class LocalBrainStubTests: XCTestCase {
-    func testModelBrainStartsAndCompletesEveryTurn() async {
-        let factory = FakeEngineFactory()
-        let brain = LocalModelLiveBrain(mode: .photo, info: .qwen4B, makeEngine: factory.factory, fallback: nil, clock: ScaledClock())
-        XCTAssertEqual(brain.kind, .model)
-        XCTAssertEqual(brain.capabilities, LiveBrainCapabilities(opensSession: true, seesImages: true, imageMaxPixel: 768, proposesIdeas: true))
-        let available = await brain.isAvailable()
-        XCTAssertTrue(available)
-        let handler = FakeToolHandler()
-        let (events, error) = await collect(brain.respond(to: .speech("plus chaud"), tools: handler))
-        XCTAssertNil(error)
-        XCTAssertEqual(events.first, .started(model: "Qwen3.5 4B"))
-        XCTAssertEqual(events.completion, .answered)
-        XCTAssertFalse(events.spoken.contains("<"))
-    }
-
     func testTextOnlyWeightsDoNotAskForPictures() {
         var info = LocalModelInfo.qwen2B
         info.supportsVision = false
@@ -52,6 +37,26 @@ final class LocalBrainStubTests: XCTestCase {
         XCTAssertEqual(LocalModelTiering.modelID(for: .fast), "live-qwen35-2b")
         XCTAssertNil(LocalModelTiering.modelID(for: .unsupported))
         XCTAssertEqual(LocalModelQuality.allCases, [.auto, .max, .fast])
+    }
+
+    func testCatalogPinsBothModels() {
+        XCTAssertEqual(LocalModelCatalog.all.map(\.info.id), ["live-qwen35-4b", "live-qwen35-2b"])
+        XCTAssertEqual(LocalModelCatalog.max.repository, "mlx-community/Qwen3.5-4B-MLX-4bit")
+        XCTAssertEqual(LocalModelCatalog.max.info.revision, "32f3e8ecf65426fc3306969496342d504bfa13f3")
+        XCTAssertEqual(LocalModelCatalog.max.info.promptSize, .full)
+        XCTAssertEqual(LocalModelCatalog.fast.repository, "mlx-community/Qwen3.5-2B-MLX-4bit")
+        XCTAssertEqual(LocalModelCatalog.fast.info.revision, "93760be4f1f69842a46bc13dbdc0f19e291392a3")
+        XCTAssertEqual(LocalModelCatalog.fast.info.promptSize, .compact)
+        XCTAssertTrue(LocalModelCatalog.all.allSatisfy { $0.info.contextTokens == 8_192 && $0.info.supportsVision })
+        XCTAssertEqual(LocalModelCatalog.entry(for: .max), LocalModelCatalog.max)
+        XCTAssertEqual(LocalModelCatalog.entry(for: .fast), LocalModelCatalog.fast)
+        XCTAssertNil(LocalModelCatalog.entry(for: .unsupported))
+        XCTAssertEqual(LocalModelCatalog.fileAllowlist.count, 10)
+        XCTAssertTrue(LocalModelCatalog.isAllowed("model.safetensors"))
+        XCTAssertFalse(LocalModelCatalog.isAllowed("README.md"))
+        XCTAssertEqual(LocalModelCatalog.max.memoryNeededToLoad, 4_260_000_000)
+        XCTAssertEqual(LocalModelCatalog.fast.storageNeededToDownload, 2_750_000_000)
+        XCTAssertEqual(LocalModelCatalog.retiredModelIDs, ["qwen3-4b-4bit"])
     }
 
     func testScriptedEngineReplaysItsTurns() async throws {

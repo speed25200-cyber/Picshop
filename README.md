@@ -60,21 +60,56 @@ Commands and Picshop Live are understood by three brains, all on the device:
 
 Model output is validated against the app vocabulary before execution; hallucinated actions or values are dropped.
 
-**Picshop Live** (the orb in each editor) is a spoken conversation: on-device speech recognition, the best system
-voice installed, and ideas proposed as chips. Each turn goes to the best brain available — confident commands straight
-to the grammar, then the local brain, then Apple Intelligence, then the grammar — so Live never goes silent. The models
-act only through four validated tools (apply edits, undo, compare, propose ideas).
-
-Honest expectations: this is a capable editing assistant that talks, looks at the photo, acts and proposes ideas, all
-offline — not a cloud chatbot. Expect about 2 s from your last word to its first word with the local brain on an
-A18 Pro or newer; simple commands answer faster. On the loudspeaker, interrupt with a tap on the orb, by typing or
-with a stop word; with headphones, you can talk over it once the Live self-test has passed. iPhones with 6 GB of
-memory or less run Live on Apple Intelligence when it is on, otherwise on the command grammar.
-
 The grammar reads intent, not only words: everyday goals (*photo de profil*, *product photo for Vinted*, *restore this old
 photo*), follow-ups on the last adjustment (*encore un peu*, *too much*), contrast clauses (*brighter but less saturated*),
 corrections while PicShop is asking which object (*non, le chat*) and subjective adjectives (*dull*, *jaunâtre*, *harsh*).
 See [docs/VOICE_COMMANDS.md](docs/VOICE_COMMANDS.md).
+
+## Picshop Live
+
+The orb in each editor starts a spoken conversation, **entirely on the iPhone** — no account, no key, no server, and it
+works the same in airplane mode. Live listens with on-device speech recognition, looks at the photo, answers with the
+best system voice installed, proposes three ideas as chips and edits as you talk.
+
+Each turn goes to the best brain available, so Live never goes silent:
+
+1. confident commands (« plus chaud », « annule ») go straight to the grammar, instantly;
+2. the **local brain** — Qwen3.5 4B (Max) or 2B (Rapide), 4-bit, through MLX — talks, looks at the photo and calls
+   the app's tools;
+3. **Apple Intelligence** when the local brain isn't there (not downloaded, still loading, too hot, too little memory);
+4. the grammar, which always answers.
+
+The models act only through four validated tools (apply edits, undo, compare before/after, propose ideas); anything
+they produce outside the app's vocabulary is dropped. Every failure is shown and said out loud, in French or English.
+
+**Honest expectations.** This is a capable editing assistant that talks, looks at the photo, acts and proposes ideas,
+all offline — not a cloud chatbot.
+
+| | Picshop Live |
+|---|---|
+| Last word → first word heard | about 2 s with the local brain on an A18 Pro or A19 Pro; about 1.2 s for simple commands |
+| An edit in words the grammar lacks | a short sentence, then 1.5–3 s more before the edit lands |
+| Interrupting | loudspeaker: tap the orb, type, or say « stop ». Headphones, once the voice test has passed: just talk over it |
+| Voice | the best voice installed; a Premium or Enhanced French voice (Settings › Accessibility) sounds much better |
+| Understanding | short opinions, three ideas grounded in the photo, vague requests (« plus cinéma », « un peu moins ») — not general knowledge |
+| Memory | about 15 exchanges, then a recap |
+
+**Which iPhone gets which brain.** The iPhone decides, and Settings › Intelligence says why:
+
+| iPhone | Local brain |
+|---|---|
+| 16 Pro, 16 Pro Max, 17, Air, 17 Pro, 17 Pro Max (A18 Pro, A19, A19 Pro) | Max · Qwen3.5 4B · 3.06 GB download |
+| 15 Pro, 15 Pro Max, 16, 16 Plus, 16e (A17 Pro, A18) | Rapide · Qwen3.5 2B · 1.75 GB download |
+| 15, 15 Plus and older (6 GB of memory or less) | none: Apple Intelligence when it is on, otherwise the commands |
+
+The Max tier drops to Rapide in Low Power Mode, with little free memory, after a memory kill or when the speed test is
+slow; Settings › Intelligence › Quality can pick Max or Rapide within the memory limits.
+
+**Settings.** Settings › Intelligence: the model, its tier and why, download over Wi‑Fi (cellular only after a
+confirmation that shows the size), cancel, delete, storage used, the speed test, Apple Intelligence, and « Préparer Live
+à l'ouverture ». Settings › PicShop Live: auto-start, instant commands, duplex conversation with headphones, and
+Diagnostic Live with a six-step voice test (permissions, speech model, voice, ear, headphones, brain) and a log to export
+that holds no transcript.
 
 ## Fluidity and heat
 
@@ -122,14 +157,15 @@ docs/                    ARCHITECTURE · VOICE_COMMANDS · MODELS
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — modules, data flow, rendering and concurrency model
 - [docs/VOICE_COMMANDS.md](docs/VOICE_COMMANDS.md) — what you can say (FR/EN)
-- [docs/MODELS.md](docs/MODELS.md) — optional neural models (LaMa, Real-ESRGAN, Qwen3) and how to host them
+- [docs/MODELS.md](docs/MODELS.md) — the neural models (LaMa, Real-ESRGAN, Stable Diffusion, the Qwen3.5 local brain) and how they are fetched
 
 ## Privacy
 
 No servers, no accounts, no analytics. Speech recognition, Live's conversation, language models, segmentation and
 rendering run on the device; your photos, videos, voice and words never leave the iPhone. The only network traffic is
-the one-time download of large model weights (the local brain, Generative Fill), which sends no user content. The privacy manifest (`App/PrivacyInfo.xcprivacy`) declares no tracking and
-no data collection.
+the one-time download of large model weights (the local brain from Hugging Face at pinned revisions, Generative Fill),
+which sends no user content. The privacy manifest (`App/PrivacyInfo.xcprivacy`) declares no tracking and no data
+collection, and the App Store label is « Data Not Collected ».
 
 ## License
 

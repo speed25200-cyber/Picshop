@@ -26,11 +26,13 @@ public enum LiveTranscriberFactory {
     /// SpeechAnalyzer when the locale is supported (its model installed first, with
     /// `installing` called when a download is needed), else the on-device
     /// SFSpeechRecognizer, else nil: Live then works by typing only.
+    /// The locale is resolved with `SpeechTranscriber.supportedLocale(equivalentTo:)`; a model
+    /// still downloading after 6 s keeps downloading while SFSpeechRecognizer takes this session.
     public static func make(locale: Locale, installing: @escaping @Sendable () -> Void) async -> (any LiveTranscribing)? {
         if #available(iOS 26.0, macOS 26.0, *) {
-            if await ContinuousTranscriber.isSupported(locale: locale) {
+            if let resolved = await ContinuousTranscriber.resolvedLocale(for: locale) {
                 do {
-                    return try await ContinuousTranscriber(locale: locale, installing: installing)
+                    return try await ContinuousTranscriber(locale: resolved, installing: installing)
                 } catch {
                     PSLog.error("live: SpeechAnalyzer unavailable (\(error)), trying SFSpeechRecognizer", category: .speech)
                 }
@@ -76,11 +78,20 @@ public final class ContinuousTranscriber: LiveTranscribing, @unchecked Sendable 
     private var timeline = TranscriberTimeline()
     private var framesFed: Double = 0
 
-    static func isSupported(locale: Locale) async -> Bool {
+    /// The locale SpeechTranscriber supports for `locale` (Apple's equivalent first, then the same language), or nil.
+    static func resolvedLocale(for locale: Locale) async -> Locale? {
+        if let equivalent = await SpeechTranscriber.supportedLocale(equivalentTo: locale) { return equivalent }
         let supported = await SpeechTranscriber.supportedLocales
-        return supported.contains { $0.identifier(.bcp47) == locale.identifier(.bcp47) || $0.language.languageCode == locale.language.languageCode }
+        return supported.first { $0.identifier(.bcp47) == locale.identifier(.bcp47) }
+            ?? supported.first { $0.language.languageCode == locale.language.languageCode }
     }
 
+    static func isSupported(locale: Locale) async -> Bool {
+        await resolvedLocale(for: locale) != nil
+    }
+
+    /// `locale` is already resolved. The model install is waited for 6 s at most
+    /// (`LiveDeadline.Expired`); it goes on in the background for the next session.
     init(locale: Locale, installing: @escaping @Sendable () -> Void) async throws {
         let transcriber = SpeechTranscriber(locale: locale, transcriptionOptions: [], reportingOptions: [.volatileResults], attributeOptions: [.audioTimeRange])
         self.transcriber = transcriber
@@ -88,7 +99,8 @@ public final class ContinuousTranscriber: LiveTranscribing, @unchecked Sendable 
         let installation = try await AssetInventory.assetInstallationRequest(supporting: [transcriber])
         if let installation {
             installing()
-            try await installation.downloadAndInstall()
+            let install = Task { try await installation.downloadAndInstall() }
+            try await LiveDeadline.run(6) { try await install.value }
         }
         let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
         converter = AnalyzerInputConverter(outputFormat: format)
@@ -138,6 +150,7 @@ public final class ContinuousTranscriber: LiveTranscribing, @unchecked Sendable 
         continuation?.yield(AnalyzerInput(buffer: converted))
     }
 
+    /// Nothing to do: the reducer ignores a late final of the words already committed.
     public func beginTurn() {}
 
     public func stop() async {

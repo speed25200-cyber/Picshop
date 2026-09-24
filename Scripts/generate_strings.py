@@ -10,6 +10,11 @@ English is the source language. French comes from three places, merged:
 A key translated two different ways (in FR or the owner files), or whose
 French drops or adds a format specifier, fails the run and nothing is
 written. Keys without French fall back to English and are listed.
+
+    python3 Scripts/generate_strings.py           write the catalog
+    python3 Scripts/generate_strings.py --check   exit 1 if the committed catalog is
+        stale, French is missing, translations disagree, or it names a cloud
+        assistant or an API key (CI); writes nothing
 """
 import json, pathlib, re, sys
 
@@ -469,7 +474,12 @@ def load_owner_files():
     return merged, conflicts
 
 
-def main():
+# Words that must never reach the catalog again (Live runs on the iPhone; no cloud assistant, no key).
+FORBIDDEN = re.compile(r"claude|anthropic|clé api|api key|sk-ant", re.IGNORECASE)
+
+
+def build():
+    """The catalog text, or None when translations disagree; with what is missing."""
     keys = set(DYNAMIC_KEYS)
     for f in UI.rglob("*.swift"):
         for m in re.finditer(r'L\("((?:[^"\\]|\\.)*)"\)', f.read_text()):
@@ -492,11 +502,8 @@ def main():
     for key, (value, source) in french.items():
         if key in keys and specifiers(key) != specifiers(value):
             problems.append(f"“{key}” → “{value}” ({source}): format specifiers differ")
-
     if problems:
-        print("French translations disagree; nothing written:")
-        for problem in problems: print("  -", problem)
-        return 1
+        return None, keys, [], problems, superseded
 
     strings = {}
     missing = []
@@ -508,9 +515,50 @@ def main():
             missing.append(key)
         strings[key] = entry
     catalog = {"sourceLanguage": "en", "version": "1.0", "strings": strings}
+    text = json.dumps(catalog, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    return text, keys, missing, problems, superseded
+
+
+def check():
+    """--check: exit 1 when the committed catalog is stale, French is missing,
+    translations disagree, or a cloud assistant or an API key is mentioned. Writes nothing."""
+    text, keys, missing, problems, superseded = build()
+    failures = []
+    if problems:
+        failures.append("French translations disagree:")
+        failures += [f"  - {problem}" for problem in problems]
+    else:
+        current = OUT.read_text() if OUT.exists() else ""
+        if current != text:
+            failures.append(f"{OUT.relative_to(ROOT)} is stale: run python3 Scripts/generate_strings.py and commit it.")
+        forbidden = sorted({m.group(0).lower() for m in FORBIDDEN.finditer(text)})
+        if forbidden:
+            failures.append(f"the catalog mentions {', '.join(forbidden)}.")
+    if missing:
+        failures.append(f"{len(missing)} key(s) without French:")
+        failures += [f"  - {key}" for key in missing]
+    if superseded:
+        print("FALLBACK_FR entries an owner now translates differently (the owner's wins; delete them):")
+        for key in superseded: print("  -", key)
+    if failures:
+        print("strings check failed:")
+        for line in failures: print(line)
+        return 1
+    print(f"strings check: {len(keys)} keys, catalog up to date, French complete.")
+    return 0
+
+
+def main():
+    if "--check" in sys.argv[1:]:
+        return check()
+    text, keys, missing, problems, superseded = build()
+    if problems:
+        print("French translations disagree; nothing written:")
+        for problem in problems: print("  -", problem)
+        return 1
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(catalog, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
-    print(f"wrote {len(strings)} keys to {OUT.relative_to(ROOT)}")
+    OUT.write_text(text)
+    print(f"wrote {len(keys)} keys to {OUT.relative_to(ROOT)}")
     if superseded:
         print("FALLBACK_FR entries an owner now translates differently (the owner's wins; delete them):")
         for key in superseded: print("  -", key)

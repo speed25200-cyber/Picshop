@@ -6,7 +6,9 @@ import PicshopCore
 /// A frame is voiced when it is `marginDB` above the floor (15 dB while the
 /// assistant speaks) and above -55 dBFS. Six voiced frames in a row start
 /// speech, ten unvoiced ones end it. The floor falls fast (attack) and rises
-/// slowly (release), and only while nobody speaks.
+/// slowly (release), and only while nobody speaks. A "speech" run longer than
+/// `maxSpeechRun` is taken for the room's noise: the floor jumps to it, so a loud
+/// room can never latch the detector.
 public struct VoiceActivityDetector: Sendable {
     public struct Parameters: Sendable {
         public var onsetFrames = 6
@@ -58,6 +60,14 @@ public struct VoiceActivityDetector: Sendable {
         noiseFloorDB = min(max(noiseFloorDB, parameters.floorClamp.lowerBound), parameters.floorClamp.upperBound)
 
         if voiced {
+            if isSpeech, let start = speechStartedAt, frame.time - start > parameters.maxSpeechRun {
+                // Eight seconds of unbroken "speech" is the room (a TV, a fan), not a person: learn it.
+                noiseFloorDB = min(max(level - 3, parameters.floorClamp.lowerBound), parameters.floorClamp.upperBound)
+                isSpeech = false
+                voicedRun = 0
+                unvoicedRun = 0
+                return .speechEnd(lastVoicedAt ?? frame.time)
+            }
             lastVoicedAt = frame.time
             unvoicedRun = 0
             if voicedRun == 0 { voicedRunStart = frame.time }

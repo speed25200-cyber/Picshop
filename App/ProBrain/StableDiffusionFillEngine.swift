@@ -9,6 +9,7 @@ import CoreGraphics
 import StableDiffusion
 import PicshopCore
 import PicshopImaging
+import PicshopUI
 
 /// Masked image-to-image: the crop around the selection is re-imagined from the
 /// prompt with a strength that keeps the surrounding composition; the pipeline
@@ -38,9 +39,15 @@ public final class StableDiffusionFillEngine: GenerativeFillEngine, @unchecked S
     }
 
     public func generate(rgba: [UInt8], mask: [UInt8], width: Int, height: Int, prompt: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [UInt8] {
-        try await Task.detached(priority: .userInitiated) { [self] in
-            try self.generateSync(rgba: rgba, mask: mask, width: width, height: height, prompt: prompt, progress: progress)
+        // Stable Diffusion and the local brain do not fit in memory together (D13):
+        // the Live model's weights go first; the next Live turn or editor reloads them.
+        await LocalBrainHub.shared.releaseNow(reason: "stable_diffusion")
+        let result = await Task.detached(priority: .userInitiated) { [self] in
+            Result { try self.generateSync(rgba: rgba, mask: mask, width: width, height: height, prompt: prompt, progress: progress) }
         }.value
+        // Back to the conversation: the model loads again if the memory allows it.
+        await MainActor.run { LocalBrainHub.shared.preload(reason: "after_fill") }
+        return try result.get()
     }
 
     /// Pads the crop to a square (edge-extended) so the network never sees a stretched image.

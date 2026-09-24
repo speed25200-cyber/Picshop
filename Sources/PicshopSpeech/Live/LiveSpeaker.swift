@@ -13,11 +13,20 @@ import PicshopIntent
 /// `chunkFinished` when its last buffer was played, `drained` when nothing is left.
 /// The next chunk is synthesized as soon as the previous one is, so sentences follow
 /// each other with no gap.
+///
+/// Audio that was not played is never reported as played: a buffer no running
+/// engine accepted, a chunk that retired far faster than its audio lasts (buffers
+/// cleared by a configuration change), a render that produced nothing or never
+/// ended — each moves the voice to `speak()`, which replays what was not heard.
 @MainActor
 public final class LiveSpeaker {
     public var onSignal: ((Int, SpeakerSignal) -> Void)?
-    /// The synthesizer produced nothing in time: speech moved to `speak()`, outside the echo canceller.
+    /// The engine voice failed (nothing rendered in time, a buffer no engine played,
+    /// buffers cleared): speech moved to `speak()`, outside the echo canceller.
     public var onFallback: ((String) -> Void)?
+    /// `speak()` itself stayed silent (it did not start within 2.5 s): the line was only
+    /// captioned. The session shows it and may keep to captions.
+    public var onVoiceFailure: ((String) -> Void)?
     /// liveRate, 0.85...1.25, times the system default rate.
     public var rateMultiplier: Double = 1
     /// Language code ("fr", "en") -> voice identifier chosen in Settings.
@@ -40,6 +49,10 @@ public final class LiveSpeaker {
         var started = false
         /// The renderer produced audio (scheduled or not: the engine may be paused).
         var rendered = false
+        /// Seconds of audio scheduled, and when the first buffer was: a chunk that
+        /// retires in less than 40% of that time was not heard.
+        var audioSeconds = 0.0
+        var firstScheduledAt: Double?
 
         init(id: Int, text: String, language: String, turn: Int) {
             self.id = id
@@ -68,6 +81,7 @@ public final class LiveSpeaker {
         self.renderer = renderer
         system = SystemSpeechPlayer()
         system.onSignal = { [weak self] turn, signal in self?.onSignal?(turn, signal) }
+        system.onSilent = { [weak self] reason in self?.onVoiceFailure?(reason) }
     }
 
     /// Debug A/B: the system speech path for the whole session.
@@ -93,6 +107,12 @@ public final class LiveSpeaker {
 
     private func markWarmedUp() {
         warmedUp = true
+    }
+
+    /// Media services were reset: `speak()` gets a fresh synthesizer (the old one is no
+    /// longer valid), and the line it held is said again.
+    public func resetSystemVoice() {
+        system.resetSynthesizer()
     }
 
     // MARK: Queue
@@ -226,19 +246,31 @@ public final class LiveSpeaker {
         startWatchdog(for: chunk, epoch: epoch)
     }
 
-    /// No buffer in time: the synthesizer is stuck for this voice. Speak() for the rest of the session.
+    /// Two limits per chunk: its first buffer (0.7 s once the voice is warm, 2 s before),
+    /// and the end of its render, 3 s + words/1.5 (a write() stream that never sends its
+    /// empty end buffer would otherwise hold the queue forever). Either moves the voice
+    /// to `speak()` for the rest of the session.
     private func startWatchdog(for chunk: Chunk, epoch: Int) {
         watchdog?.cancel()
-        let limit: UInt64 = warmedUp ? 700_000_000 : 2_000_000_000
+        let first = warmedUp ? 0.7 : 2.0
+        let words = chunk.text.split(whereSeparator: { $0.isWhitespace }).count
+        let complete = max(first, 3 + Double(words) / 1.5)
         watchdog = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: limit)
+            try? await Task.sleep(nanoseconds: UInt64(first * 1_000_000_000))
             guard let self, !Task.isCancelled, self.epochBox.value == epoch else { return }
-            guard !chunk.rendered, !chunk.synthesized else { return }
-            self.fallBackToSystemSpeech(reason: "no audio buffer after \(limit / 1_000_000) ms")
+            if !chunk.rendered, !chunk.synthesized {
+                self.fallBackToSystemSpeech(reason: "no audio buffer after \(Int(first * 1000)) ms")
+                return
+            }
+            try? await Task.sleep(nanoseconds: UInt64((complete - first) * 1_000_000_000))
+            guard !Task.isCancelled, self.epochBox.value == epoch, !chunk.synthesized else { return }
+            self.fallBackToSystemSpeech(reason: "render stream never ended")
         }
     }
 
+    /// Everything not heard yet (the chunk playing included) is said again with `speak()`.
     private func fallBackToSystemSpeech(reason: String) {
+        guard !usesSystemSpeech else { return }
         let remaining = playing + pending
         epochBox.bump()
         renderTask?.cancel()
@@ -277,15 +309,23 @@ public final class LiveSpeaker {
         return converted
     }
 
+    /// On the audio queue. A buffer goes only to a valid player on a running engine; with
+    /// none (stopped, rebuilding, never started) the chunk cannot play, and is never
+    /// counted as played.
     nonisolated private static func schedule(_ buffer: AVAudioPCMBuffer, handle: LivePlayerHandle?, chunkID: Int, epoch: Int, box: LiveSpeakerEpoch, speaker: LiveSpeaker?) {
+        let seconds = buffer.format.sampleRate > 0 ? Double(buffer.frameLength) / buffer.format.sampleRate : 0
         LiveAudioQueue.queue.async {
-            guard box.value == epoch, let handle else { return }
+            guard box.value == epoch else { return }
+            guard let handle, handle.isValid, handle.engine.isRunning else {
+                Self.post(speaker, epoch: epoch, box: box) { $0.cannotPlay(chunkID) }
+                return
+            }
             // Counted before scheduling: the played callback can never overtake it.
-            Self.post(speaker, epoch: epoch, box: box) { $0.scheduled(chunkID) }
+            Self.post(speaker, epoch: epoch, box: box) { $0.scheduled(chunkID, seconds: seconds) }
             let accepted = handle.scheduleVoice(buffer) {
                 Self.post(speaker, epoch: epoch, box: box) { $0.played(chunkID) }
             }
-            if !accepted { Self.post(speaker, epoch: epoch, box: box) { $0.played(chunkID) } }
+            if !accepted { Self.post(speaker, epoch: epoch, box: box) { $0.cannotPlay(chunkID) } }
         }
     }
 
@@ -315,10 +355,18 @@ public final class LiveSpeaker {
         playing.first(where: { $0.id == id })?.rendered = true
     }
 
-    private func scheduled(_ id: Int) {
+    private func scheduled(_ id: Int, seconds: Double) {
         guard let chunk = playing.first(where: { $0.id == id }) else { return }
         chunk.scheduled += 1
+        chunk.audioSeconds += seconds
+        if chunk.firstScheduledAt == nil { chunk.firstScheduledAt = ProcessInfo.processInfo.systemUptime }
         if chunk.id == playing.first?.id { announceStartIfNeeded(chunk) }
+    }
+
+    /// No running engine took the buffer: the voice moves to `speak()`, which says this chunk again.
+    private func cannotPlay(_ id: Int) {
+        guard playing.contains(where: { $0.id == id }) else { return }
+        fallBackToSystemSpeech(reason: "engine could not play chunk \(id)")
     }
 
     private func played(_ id: Int) {
@@ -344,9 +392,20 @@ public final class LiveSpeaker {
         onSignal?(chunk.turn, .chunkStarted(chunk.text))
     }
 
-    /// Retires the chunks that were fully heard; the next one becomes audible.
+    /// Retires the chunks that were fully heard; the next one becomes audible. A chunk
+    /// whose render produced no audio, or whose buffers "played" in less than 40% of their
+    /// length (a configuration change unscheduled them), was not heard: `speak()` says it.
     private func settle() {
         while let first = playing.first, first.synthesized, first.played >= first.scheduled {
+            if first.scheduled == 0 {
+                fallBackToSystemSpeech(reason: "the renderer produced no audio")
+                return
+            }
+            if first.audioSeconds > 0.4, let start = first.firstScheduledAt,
+               ProcessInfo.processInfo.systemUptime - start < first.audioSeconds * 0.4 {
+                fallBackToSystemSpeech(reason: "voice buffers cleared by a configuration change")
+                return
+            }
             playing.removeFirst()
             onSignal?(first.turn, .chunkFinished)
         }
@@ -369,16 +428,68 @@ final class LiveSpeakerEpoch: @unchecked Sendable {
     }
 }
 
-/// The fallback voice: AVSpeechSynthesizer.speak(), whose audio bypasses the
-/// echo canceller. Barge-in then relies on stop words, taps and typing.
+/// The system voice: AVSpeechSynthesizer.speak(). Live's simple path talks with it,
+/// and the engine voice falls back to it; its audio bypasses the echo canceller, so
+/// barge-in then relies on stop words, taps and typing.
+///
+/// One utterance is handed to the synthesizer at a time, so each has its own limits:
+/// it must start within 2.5 s and finish within 2.5 s + words/1.8 of starting. A line
+/// that does not start is captioned at once and said again by a fresh synthesizer (a cold
+/// voice, a Premium voice still loading, a synthesizer left invalid by a media reset); only
+/// when that retry misses 2.5 s too is the line captioned for its reading time and
+/// reported through `onSilent`. The reducer is never left waiting.
 @MainActor
 final class SystemSpeechPlayer: NSObject, AVSpeechSynthesizerDelegate {
     var onSignal: ((Int, SpeakerSignal) -> Void)?
-    private let synthesizer = AVSpeechSynthesizer()
-    private var utterances: [ObjectIdentifier: (turn: Int, text: String, started: Bool)] = [:]
-    private var lastTurn = 0
+    /// A line did not start in time: it was captioned, not heard.
+    var onSilent: ((String) -> Void)?
 
-    var isBusy: Bool { !utterances.isEmpty }
+    private final class Entry {
+        /// Replaced by a fresh copy when the line is said again (an utterance is spoken once).
+        var utterance: AVSpeechUtterance
+        let turn: Int
+        let text: String
+        let language: String
+        let voiceIdentifier: String?
+        let rate: Float
+        var started: Bool
+        /// Utterances this line replaced, kept alive so a late callback's ObjectIdentifier never matches the new one.
+        private var replaced: [AVSpeechUtterance] = []
+
+        init(turn: Int, text: String, language: String, voiceIdentifier: String?, rate: Float, started: Bool) {
+            self.turn = turn
+            self.text = text
+            self.language = language
+            self.voiceIdentifier = voiceIdentifier
+            self.rate = rate
+            self.started = started
+            utterance = Entry.makeUtterance(text: text, language: language, voiceIdentifier: voiceIdentifier, rate: rate)
+        }
+
+        /// A fresh utterance for the same line, for another synthesizer.
+        func renew() {
+            replaced.append(utterance)
+            utterance = Entry.makeUtterance(text: text, language: language, voiceIdentifier: voiceIdentifier, rate: rate)
+        }
+
+        private static func makeUtterance(text: String, language: String, voiceIdentifier: String?, rate: Float) -> AVSpeechUtterance {
+            let utterance = SynthesizerSpeechRenderer.utterance(text: text, language: language, voiceIdentifier: voiceIdentifier, rate: rate)
+            utterance.volume = 1
+            return utterance
+        }
+    }
+
+    static let startLimit = 2.5
+
+    private var synthesizer = AVSpeechSynthesizer()
+    /// In speaking order; only the first one is with the synthesizer.
+    private var queue: [Entry] = []
+    private var watchdog: Task<Void, Never>?
+    private var lastTurn = 0
+    /// Lines in a row that did not start in time; reset by a line that starts and by `stop()`.
+    private var consecutiveStartFailures = 0
+
+    var isBusy: Bool { !queue.isEmpty }
 
     override init() {
         super.init()
@@ -386,27 +497,115 @@ final class SystemSpeechPlayer: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     func enqueue(text: String, language: String, voiceIdentifier: String?, rate: Float, turn: Int, alreadyStarted: Bool = false) {
-        let utterance = SynthesizerSpeechRenderer.utterance(text: text, language: language, voiceIdentifier: voiceIdentifier, rate: rate)
-        utterances[ObjectIdentifier(utterance)] = (turn, text, alreadyStarted)
+        queue.append(Entry(turn: turn, text: text, language: language, voiceIdentifier: voiceIdentifier, rate: rate, started: alreadyStarted))
         lastTurn = turn
-        synthesizer.speak(utterance)
+        if queue.count == 1 { speakHead() }
     }
 
     func stop() {
-        utterances.removeAll()
-        synthesizer.stopSpeaking(at: .immediate)
+        watchdog?.cancel()
+        watchdog = nil
+        consecutiveStartFailures = 0
+        let wasBusy = !queue.isEmpty
+        queue.removeAll()
+        if wasBusy { synthesizer.stopSpeaking(at: .immediate) }
+    }
+
+    /// Media services were reset: the synthesizer is no longer valid. A fresh one takes
+    /// over, and the line it held (if any) is said again from its start.
+    func resetSynthesizer() {
+        replaceSynthesizer()
+        guard let head = queue.first else { return }
+        head.renew()
+        speakHead()
+    }
+
+    private func replaceSynthesizer() {
+        let old = synthesizer
+        old.delegate = nil
+        old.stopSpeaking(at: .immediate)
+        synthesizer = AVSpeechSynthesizer()
+        synthesizer.delegate = self
+    }
+
+    private func speakHead() {
+        guard let head = queue.first else { return }
+        synthesizer.speak(head.utterance)
+        let id = ObjectIdentifier(head.utterance)
+        watchdog?.cancel()
+        watchdog = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Self.startLimit * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            self.startTimedOut(id)
+        }
+    }
+
+    private func isHead(_ id: ObjectIdentifier) -> Entry? {
+        guard let head = queue.first, ObjectIdentifier(head.utterance) == id else { return nil }
+        return head
     }
 
     private func started(_ id: ObjectIdentifier) {
-        guard let entry = utterances[id], !entry.started else { return }
-        utterances[id]?.started = true
-        onSignal?(entry.turn, .chunkStarted(entry.text))
+        guard let head = isHead(id) else { return }
+        consecutiveStartFailures = 0
+        if !head.started {
+            head.started = true
+            onSignal?(head.turn, .chunkStarted(head.text))
+        }
+        // didFinish may never come: the line is retired anyway, well after its real length.
+        let words = head.text.split(whereSeparator: { $0.isWhitespace }).count
+        let limit = 2.5 + Double(words) / 1.8
+        watchdog?.cancel()
+        watchdog = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(limit * 1_000_000_000))
+            guard let self, !Task.isCancelled, self.isHead(id) != nil else { return }
+            PSLog.error("live: speak() never finished a line; retired after \(Int(limit)) s", category: .speech)
+            self.complete(id)
+        }
     }
 
-    private func finished(_ id: ObjectIdentifier) {
-        guard let entry = utterances.removeValue(forKey: id) else { return }
-        onSignal?(entry.turn, .chunkFinished)
-        if utterances.isEmpty { onSignal?(lastTurn, .drained) }
+    /// The head did not start: this synthesizer is stuck (or only slow: a cold voice). The
+    /// line is captioned now, and a fresh synthesizer says it again; the reducer's drain
+    /// deadline (3 s + words/1.8 from `chunkStarted`) leaves room for that retry. When the
+    /// retry misses its 2.5 s too, the line stays captioned for its reading time and
+    /// `onSilent` reports the voice.
+    private func startTimedOut(_ id: ObjectIdentifier) {
+        guard let head = isHead(id) else { return }
+        replaceSynthesizer()
+        if !head.started {
+            head.started = true
+            onSignal?(head.turn, .chunkStarted(head.text))
+        }
+        consecutiveStartFailures += 1
+        if consecutiveStartFailures < 2 {
+            PSLog.error("live: speak() did not start within \(Self.startLimit) s; said again by a fresh synthesizer", category: .speech)
+            head.renew()
+            speakHead()
+            return
+        }
+        onSilent?("speak() did not start within \(Self.startLimit) s, twice")
+        let words = head.text.split(whereSeparator: { $0.isWhitespace }).count
+        let reading = max(1.5, Double(words) / 2.5)
+        watchdog?.cancel()
+        watchdog = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(reading * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            self.complete(id)
+        }
+    }
+
+    /// The head is over (finished, cancelled by the system, or retired by a watchdog).
+    private func complete(_ id: ObjectIdentifier) {
+        guard let head = isHead(id) else { return }
+        watchdog?.cancel()
+        watchdog = nil
+        queue.removeFirst()
+        onSignal?(head.turn, .chunkFinished)
+        if queue.isEmpty {
+            onSignal?(lastTurn, .drained)
+        } else {
+            speakHead()
+        }
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
@@ -416,7 +615,13 @@ final class SystemSpeechPlayer: NSObject, AVSpeechSynthesizerDelegate {
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         let id = ObjectIdentifier(utterance)
-        Task { @MainActor [weak self] in self?.finished(id) }
+        Task { @MainActor [weak self] in self?.complete(id) }
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        // Only a cancel we did not ask for reaches the head: stop() empties the queue first.
+        let id = ObjectIdentifier(utterance)
+        Task { @MainActor [weak self] in self?.complete(id) }
     }
 }
 #endif

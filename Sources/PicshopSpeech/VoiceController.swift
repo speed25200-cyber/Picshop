@@ -44,6 +44,18 @@ public final class VoiceController {
     public var silenceTimeout: TimeInterval = 1.1
     /// Maximum utterance length.
     public var maximumDuration: TimeInterval = 12
+    /// When set, an utterance also ends once its words stopped changing for this long,
+    /// even if the room stays loud (a fan, music): Live sets it, push-to-talk does not.
+    public var textSilenceTimeout: TimeInterval?
+    /// Live sets it: the SFSpeechRecognizer fallback must run on the iPhone, or not at all
+    /// (a language with no on-device recognizer then fails instead of reaching Apple's servers).
+    public var requiresOnDeviceRecognition = false
+    /// SpeechAnalyzer's model for the locale is downloading: utterances meanwhile use
+    /// SFSpeechRecognizer, with no wait. Live shows a notice while it is true.
+    public private(set) var isInstallingSpeechModel = false
+    /// The last start failed in the recognizer (none for the language, none on the iPhone,
+    /// or it refused to start), not in the microphone or the audio session.
+    public private(set) var lastFailureWasRecognizer = false
 
     /// Called with the final transcript of each utterance.
     public var onFinalTranscript: ((String) -> Void)?
@@ -57,6 +69,15 @@ public final class VoiceController {
     private var startedAt: Date?
     private var heardSpeech = false
     private var lastSpeechAt: Date?
+    /// When the recognized words last changed, for `textSilenceTimeout`.
+    private var lastTextChangeAt: Date?
+    /// The SpeechTranscriber locale each requested locale resolves to, asked once per locale.
+    private var analyzerLocales: [String: Locale] = [:]
+    private var analyzerUnsupported: Set<String> = []
+    /// SpeechAnalyzer model downloads in progress, by resolved locale; never awaited by an utterance.
+    private var analyzerInstalls: [String: Task<Void, Error>] = [:]
+    /// A download that failed is tried again after this date, not at every utterance.
+    private var analyzerInstallRetryAfter: [String: Date] = [:]
     private var levelSmoother = 0.0
     /// Bumped by every start and stop: a session whose number is stale stops touching state or the engine.
     private var generation = 0
@@ -121,6 +142,7 @@ public final class VoiceController {
         partialTranscript = ""
         heardSpeech = false
         lastSpeechAt = nil
+        lastTextChangeAt = nil
         startedAt = Date()
         if !waitingForSpeech { VoiceFeedback.shared.stop() }
         Task { await beginSession(generation: current, waitingForSpeech: waitingForSpeech) }
@@ -160,15 +182,18 @@ public final class VoiceController {
         }
         var created: (any TranscriptionSession)?
         var tapInstalled = false
+        var inRecognizer = false
         let engine = audioEngine
         do {
             try await AudioSessionArbiter.shared.acquire(.pushToTalk)
+            inRecognizer = true
             let session = try await makeSession()
             created = session
             guard current == generation else { throw CancellationError() }
             try await session.start { [weak self] text, isFinal in
                 Task { @MainActor [weak self] in self?.handleResult(text, isFinal: isFinal, generation: current) }
             }
+            inRecognizer = false
             guard current == generation, engine === audioEngine else { throw CancellationError() }
             // The format is read here, right before the tap, and nowhere earlier: a route change
             // during the awaits above (AirPods, a call, speech playback) makes an earlier read stale,
@@ -189,6 +214,7 @@ public final class VoiceController {
             engine.prepare()
             try engine.start()
             engineSession = session
+            lastFailureWasRecognizer = false
             // Timeouts count from when the microphone is really open, not from the tap.
             startedAt = Date()
             state = .listening
@@ -204,6 +230,7 @@ public final class VoiceController {
                 return
             }
             PSLog.error("voice start failed: \(error)", category: .speech)
+            lastFailureWasRecognizer = inRecognizer
             state = .unavailable(PicshopError.speechUnavailable(error.localizedDescription).message)
         }
     }
@@ -219,7 +246,14 @@ public final class VoiceController {
         engineSession = nil
         var finalText = partialTranscript
         if let session {
-            if let text = try? await session.finish(), !text.isEmpty { finalText = text }
+            if deliver {
+                // A recognizer that never finishes cannot hold the microphone closed: 2.5 s at most.
+                let finished = try? await LiveDeadline.run(2.5) { try await session.finish() }
+                if let finished, !finished.isEmpty { finalText = finished }
+            } else {
+                // Nothing to deliver: the recognizer is released on its own, and the next start never waits for it.
+                Task.detached { _ = try? await session.finish() }
+            }
         }
         isEnding = false
         level = 0
@@ -265,6 +299,10 @@ public final class VoiceController {
             guard raw.flatMap(AVAudioSession.InterruptionType.init(rawValue:)) == .began else { return }
             Task { @MainActor [weak self] in self?.recoverFromAudioChange("audio interrupted", restart: false) }
         })
+        observers.append(center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { [weak self] _ in
+            // Every audio object is invalid now: a fresh engine, and no half sentence delivered.
+            Task { @MainActor [weak self] in self?.recoverFromAudioChange("media services reset", restart: false) }
+        })
         observers.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] notification in
             let raw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
             // Only a device coming or going changes the input format; our own category changes do not.
@@ -303,7 +341,10 @@ public final class VoiceController {
 
     private func handleResult(_ text: String, isFinal: Bool, generation current: Int) {
         guard current == generation else { return }
-        if text != partialTranscript { onPartialTranscript?(text) }
+        if text != partialTranscript {
+            onPartialTranscript?(text)
+            if !text.isEmpty { lastTextChangeAt = Date() }
+        }
         partialTranscript = text
         if !text.isEmpty {
             heardSpeech = true
@@ -341,6 +382,11 @@ public final class VoiceController {
                     self.stop()
                     return
                 }
+                if let limit = self.textSilenceTimeout, let changed = self.lastTextChangeAt, now.timeIntervalSince(changed) > limit {
+                    // Words, then none for a while, in a room too loud for the level to fall silent.
+                    self.stop()
+                    return
+                }
                 if !self.heardSpeech, let started = self.startedAt, now.timeIntervalSince(started) > 6 {
                     // Nothing heard at all.
                     self.cancel()
@@ -351,13 +397,63 @@ public final class VoiceController {
     }
 
     /// A fresh recogniser per utterance; its converter is built later from the tap's format.
+    /// SpeechAnalyzer for the locale it resolves to, once its model is installed. A missing
+    /// model downloads in the background, once per locale, and no utterance waits for it:
+    /// until it is there (or when SpeechAnalyzer fails), SFSpeechRecognizer hears this one.
     private func makeSession() async throws -> any TranscriptionSession {
         if #available(iOS 26.0, macOS 26.0, *) {
-            if await AnalyzerTranscriptionSession.isSupported(locale: locale) {
-                return try await AnalyzerTranscriptionSession(locale: locale)
+            if let resolved = await analyzerLocale(for: locale) {
+                let key = resolved.identifier(.bcp47)
+                if analyzerInstalls[key] != nil {
+                    PSLog.info("voice: the speech model for \(key) is still downloading; SFSpeechRecognizer for this utterance", category: .speech)
+                } else if let retry = analyzerInstallRetryAfter[key], Date() < retry {
+                    PSLog.info("voice: the speech model for \(key) failed to download; SFSpeechRecognizer for now", category: .speech)
+                } else {
+                    do {
+                        let install = try await AnalyzerTranscriptionSession.startInstallIfNeeded(locale: resolved)
+                        guard let install else { return try await AnalyzerTranscriptionSession(locale: resolved) }
+                        track(install, key: key)
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        PSLog.error("voice: SpeechAnalyzer unavailable (\(error)), using SFSpeechRecognizer", category: .speech)
+                    }
+                }
             }
         }
-        return try LegacyTranscriptionSession(locale: locale)
+        return try LegacyTranscriptionSession(locale: locale, requiresOnDevice: requiresOnDeviceRecognition)
+    }
+
+    /// Follows a model download: `isInstallingSpeechModel` while any runs; a failure waits 30 s before the next try.
+    private func track(_ install: Task<Void, Error>, key: String) {
+        analyzerInstalls[key] = install
+        isInstallingSpeechModel = true
+        PSLog.info("voice: downloading the speech model for \(key)", category: .speech)
+        Task { @MainActor [weak self] in
+            let result = await install.result
+            guard let self else { return }
+            self.analyzerInstalls[key] = nil
+            self.isInstallingSpeechModel = !self.analyzerInstalls.isEmpty
+            switch result {
+            case .success:
+                self.analyzerInstallRetryAfter[key] = nil
+                PSLog.info("voice: the speech model for \(key) is installed", category: .speech)
+            case .failure(let error):
+                self.analyzerInstallRetryAfter[key] = Date().addingTimeInterval(30)
+                PSLog.error("voice: the speech model for \(key) did not install: \(error)", category: .speech)
+            }
+        }
+    }
+
+    /// `SpeechTranscriber.supportedLocale(equivalentTo:)`, remembered per locale (nil: unsupported).
+    @available(iOS 26.0, macOS 26.0, *)
+    private func analyzerLocale(for locale: Locale) async -> Locale? {
+        let key = locale.identifier(.bcp47)
+        if let known = analyzerLocales[key] { return known }
+        if analyzerUnsupported.contains(key) { return nil }
+        let resolved = await AnalyzerTranscriptionSession.resolvedLocale(for: locale)
+        if let resolved { analyzerLocales[key] = resolved } else { analyzerUnsupported.insert(key) }
+        return resolved
     }
 
     nonisolated static func rms(of buffer: AVAudioPCMBuffer) -> Double {
@@ -396,19 +492,31 @@ final class AnalyzerTranscriptionSession: TranscriptionSession, @unchecked Senda
     private var latest = ""
     private var finalText = ""
 
-    static func isSupported(locale: Locale) async -> Bool {
+    /// The locale SpeechTranscriber supports for `locale` (fr-BE may resolve to fr-FR), or nil.
+    static func resolvedLocale(for locale: Locale) async -> Locale? {
+        if let equivalent = await SpeechTranscriber.supportedLocale(equivalentTo: locale) { return equivalent }
         let supported = await SpeechTranscriber.supportedLocales
-        return supported.contains { $0.identifier(.bcp47) == locale.identifier(.bcp47) || $0.language.languageCode == locale.language.languageCode }
+        return supported.first { $0.identifier(.bcp47) == locale.identifier(.bcp47) }
+            ?? supported.first { $0.language.languageCode == locale.language.languageCode }
     }
 
+    static func isSupported(locale: Locale) async -> Bool {
+        await resolvedLocale(for: locale) != nil
+    }
+
+    /// Starts downloading the model for `locale` (already resolved) when it is not installed,
+    /// and returns that download; nil when the model is there. The caller never awaits it.
+    static func startInstallIfNeeded(locale: Locale) async throws -> Task<Void, Error>? {
+        let transcriber = SpeechTranscriber(locale: locale, transcriptionOptions: [], reportingOptions: [.volatileResults], attributeOptions: [])
+        guard let installation = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) else { return nil }
+        return Task { try await installation.downloadAndInstall() }
+    }
+
+    /// `locale` is already resolved and its model installed (`startInstallIfNeeded` returned nil).
     init(locale: Locale) async throws {
         let transcriber = SpeechTranscriber(locale: locale, transcriptionOptions: [], reportingOptions: [.volatileResults], attributeOptions: [])
         self.transcriber = transcriber
         analyzer = SpeechAnalyzer(modules: [transcriber])
-        let installation = try await AssetInventory.assetInstallationRequest(supporting: [transcriber])
-        if let installation {
-            try await installation.downloadAndInstall()
-        }
         let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
         converter = AnalyzerInputConverter(outputFormat: format)
     }
@@ -462,7 +570,8 @@ final class AnalyzerTranscriptionSession: TranscriptionSession, @unchecked Senda
     }
 }
 
-/// `SFSpeechRecognizer` session (on-device when the language supports it).
+/// `SFSpeechRecognizer` session: on-device when the language supports it, and only
+/// on-device when `requiresOnDevice` (Live): a language without it then throws.
 final class LegacyTranscriptionSession: TranscriptionSession, @unchecked Sendable {
     private let recognizer: SFSpeechRecognizer
     private let request = SFSpeechAudioBufferRecognitionRequest()
@@ -471,14 +580,17 @@ final class LegacyTranscriptionSession: TranscriptionSession, @unchecked Sendabl
     private var latest = ""
     private var finalContinuation: CheckedContinuation<String, Never>?
 
-    init(locale: Locale) throws {
+    init(locale: Locale, requiresOnDevice: Bool = false) throws {
         guard let recognizer = SFSpeechRecognizer(locale: locale) ?? SFSpeechRecognizer() else {
             throw PicshopError.speechUnavailable("no recogniser for \(locale.identifier)")
+        }
+        if requiresOnDevice, !recognizer.supportsOnDeviceRecognition {
+            throw PicshopError.speechUnavailable("no on-device recogniser for \(locale.identifier)")
         }
         self.recognizer = recognizer
         request.shouldReportPartialResults = true
         request.taskHint = .search
-        if recognizer.supportsOnDeviceRecognition {
+        if requiresOnDevice || recognizer.supportsOnDeviceRecognition {
             request.requiresOnDeviceRecognition = true
         }
         if #available(iOS 16.0, *) {

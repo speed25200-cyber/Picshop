@@ -5,8 +5,29 @@
 - Live runs entirely on the iPhone: the Claude option, the API key, the consent sheet, the cloud badge and the usage
   counters are gone. A key saved earlier is erased from the Keychain once, at launch, with the settings that went with
   it. The privacy manifest declares no data collection again, and the copy says so: « Tout reste sur l'iPhone ».
-- Settings › Intelligence: the local brain for this iPhone and its status, Apple Intelligence, and « Préparer Live à
-  l'ouverture ». Language models leave Settings › Advanced.
+- A local brain that sees the photo: Qwen3.5 4B (Max) or 2B (Rapide), 4-bit, through MLX in the standard app. It
+  talks, looks at the picture, proposes ideas and edits through the four validated tools. The iPhone decides the tier;
+  iPhones with 6 GB of memory or less use Apple Intelligence or the commands. Each turn: instant commands, then the
+  local brain, then Apple Intelligence, then the grammar.
+- Live is never silent: the voice runs on the simple, proven path by default (one side at a time, the system voice),
+  every state has a deadline, sound alone never cancels a reply, and every problem is shown and spoken.
+- Settings › Intelligence: the model for this iPhone, its tier and why, download over Wi‑Fi (cellular only after a
+  confirmation that shows the size), cancel, delete, storage used, Quality (Auto, Max, Rapide), the speed test, Apple
+  Intelligence, and « Préparer Live à l'ouverture ». Language models leave Settings › Advanced.
+- Settings › PicShop Live: « Conversation duplex (écouteurs) », offered once the voice test has passed with
+  headphones, and Diagnostic Live with its six-step voice test and the last result. The old « Me laisser
+  l'interrompre » switch is gone: on the loudspeaker, a tap on the orb, typing or « stop » interrupts.
+- The editors' top bar shows which brain answers during Live, offers the local brain when this iPhone can run it,
+  with its download progress and « Chargement du cerveau… ». Onboarding offers it on its last page (Wi‑Fi), and Home
+  offers it once to people who were onboarded before.
+- Voices: Settings › Voice flags a Standard voice and points to the Premium ones.
+- The local brain keeps its cache between turns (the chat template writes every reply as the model generated it, and
+  pictures no longer force a rebuild), gives a turn with a new picture the longer first-word deadline, and lets go of
+  its weights whenever they are unloaded. Low Power Mode or a busy moment at launch never decide which model is
+  downloaded. Push-to-talk keeps Apple Intelligence when the iPhone has it.
+- A slow voice is retried before Live falls back to captions, and captions last one turn; the speech model downloads
+  in the background while the iPhone's own recognizer listens (never Apple's servers); a Bluetooth speaker is no longer
+  taken for headphones; a hung recognizer or a turn with nothing to say is always caught, shown and spoken.
 
 ## 2.0.0 — PicShop, reimagined
 

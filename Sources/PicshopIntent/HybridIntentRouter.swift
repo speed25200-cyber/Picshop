@@ -79,6 +79,11 @@ public actor HybridIntentRouter {
         preferredEngine = kind
     }
 
+    /// Additive (Local Live, phase 1): the waits change with the preferred engine.
+    public func setConfiguration(_ configuration: Configuration) {
+        self.configuration = configuration
+    }
+
     public func availableEngines() async -> [IntentEngineKind] {
         var result: [IntentEngineKind] = [.rules]
         for (kind, engine) in llmEngines where await engine.isAvailable() {

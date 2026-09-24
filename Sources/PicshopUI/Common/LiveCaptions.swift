@@ -163,7 +163,7 @@ struct LiveCaptions: View {
                 Text(VoiceDownloadHint.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(PSTheme.textPrimary)
-                Text(VoiceDownloadHint.path)
+                Text(VoiceDownloadHint.path(forLanguage: app?.settings.voiceLocale.identifier ?? "fr"))
                     .font(.footnote)
                     .foregroundStyle(PSTheme.textSecondary)
                     .lineLimit(3)

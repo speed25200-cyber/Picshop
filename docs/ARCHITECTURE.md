@@ -238,6 +238,38 @@ attaches the engines from a detached task; a fill that arrives first waits for t
 rather than silently falling back to the patch-based eraser. Caches are bounded (the renderer's operation cache, the
 library's decoded thumbnails) so a long session does not drift into memory pressure.
 
+## Picshop Live
+
+Live is a spoken conversation in each editor, entirely on the iPhone: no server, no key, no network code.
+
+```
+orb tap ─▶ LiveSession (PicshopUI/Live, @MainActor)
+             voice path: simple (VoiceController + AVSpeechSynthesizer.speak, half-duplex, the default)
+                         duplex (LiveAudioStack, echo-cancelling; headphones, after the self-test)
+             LiveTurnMachine (PicshopIntent/Live, pure reducer: deadlines, echo gate, only words cancel)
+             each turn ─▶ LiveTurnRouter fast lane (grammar, instant)
+                       ─▶ BrainSelector: model ─▶ onDevice ─▶ local
+                            model    LocalModelLiveBrain over LocalChatEngine (Qwen3.5 4B/2B, MLX, sees the photo)
+                            onDevice FoundationModelsLiveBrain (Apple Intelligence)
+                            local    LocalLiveBrain (the rules-only grammar, never waits)
+                       ─▶ four validated tools: apply_edits · undo · compare_before_after · propose_ideas
+```
+
+- **The local brain** is pure Swift behind `LocalChatEngine` (PicshopIntent/LocalBrain), so the whole turn logic
+  (tool calls, pictures, timeouts, fallback, compaction) is tested on Linux with a fake engine. The app target plugs in
+  MLX (`App/LocalBrain`, mlx-swift-lm `ChatSession`) through `LocalBrainHub.shared.runtime`; PicshopKit never links MLX.
+- **`LocalBrainHub`** decides the tier from the iPhone (`LocalModelTiering`: 4B on A18 Pro and newer, 2B on A17 Pro and
+  A18, none with 6 GB of memory or less), downloads the weights through `ModelManager` (pinned Hugging Face revisions,
+  Wi‑Fi unless the person confirms cellular, checked by size and SHA-256), loads them off the main actor when memory,
+  heat and power allow, and releases them on memory warnings, in the background, before Stable Diffusion and a minute
+  after the last editor closes. Push-to-talk uses the same weights through its planner.
+- **Never silent**: every state has a deadline, a failure before any output re-runs the turn on the next brain, and every
+  problem is shown and spoken (`LiveLines`) — none of them mentions a key or the network.
+- **The UI**: the brain pill in the studio's top bar (which brain answers; the download offer, its progress and
+  « Chargement du cerveau… »), Settings › Intelligence (model, tier, download, quality, storage, speed test) and
+  Settings › PicShop Live (duplex with headphones, Diagnostic Live and its six-step voice self-test). Only leaf views
+  read `LocalBrainHub.status`, the meter and the captions.
+
 ## Concurrency
 
 - Documents and intents are `Sendable` values; `PhotoRenderer`, `ModelManager`, `VideoThumbnailer`

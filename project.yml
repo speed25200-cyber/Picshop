@@ -42,6 +42,12 @@ packages:
   MLXSwiftLM:
     url: https://github.com/ml-explore/mlx-swift-lm
     revision: ee673d6a71d76e67b532dc7eaf91d92edc3bb8bb
+  # MLX itself, only for its memory controls (App/LocalBrain/MemoryGuard: the 64 MB buffer
+  # cache and the allocation limit, contract D13). The same range mlx-swift-lm asks for, so
+  # this pins nothing new: one mlx-swift is resolved for both.
+  MLXSwift:
+    url: https://github.com/ml-explore/mlx-swift
+    minorVersion: 0.31.6
   # The tokenizer the MLX loader uses (App/LocalBrain).
   SwiftTransformers:
     url: https://github.com/huggingface/swift-transformers
@@ -83,6 +89,8 @@ targets:
         product: MLXVLM
       - package: MLXSwiftLM
         product: MLXLMCommon
+      - package: MLXSwift
+        product: MLX
       - package: SwiftTransformers
         product: Tokenizers
     configFiles:

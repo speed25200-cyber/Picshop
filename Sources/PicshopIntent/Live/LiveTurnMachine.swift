@@ -140,6 +140,8 @@ public struct LiveTurnMachine: Sendable {
     private var vad: VoiceActivityDetector
     private var bargeIn: BargeInPolicy
     private var grammar: EditPlan?
+    /// The last sign of life of the turn in flight (commit, output, a tool, the voice): the thinking deadline counts from it.
+    private var progressAt: Double?
 
     /// Resuming after the app comes back is allowed within this many seconds.
     static let resumeWindow = 60.0
@@ -148,7 +150,6 @@ public struct LiveTurnMachine: Sendable {
     static let captionPauseAfter = 0.35
     static let transcriptSilenceLag = 0.45
     static let preRoll = 0.3
-    static let thinkingBargeIn = 0.18
 
     // Deadlines: no state lasts forever.
     /// Hearing with fewer than 2 recognized characters ends after this many seconds, whatever the VAD says.
@@ -224,6 +225,8 @@ public struct LiveTurnMachine: Sendable {
         state.phase = .listening
         state.listeningSince = time
         state.toolsRunning = 0
+        state.echoGateUntil = nil
+        resetVoiceWatch()
         resetUserTurn()
         return [.openMic, .beginUserTurn(at: time), .earcon(.open), .haptic(.liveStart)]
     }
@@ -236,6 +239,7 @@ public struct LiveTurnMachine: Sendable {
         state.phase = .idle
         state.paused = false
         state.pausedAt = nil
+        state.echoGateUntil = nil
         resetUserTurn()
         effects += [.closeMic, .earcon(.close), .haptic(.liveEnd)]
         return effects
@@ -247,6 +251,7 @@ public struct LiveTurnMachine: Sendable {
         state.phase = .idle
         state.paused = true
         state.pausedAt = time
+        state.echoGateUntil = nil
         resetUserTurn()
         effects.append(.closeMic)
         if !effects.contains(.stopSpeaking(fadeMs: 0)) { effects.insert(.stopSpeaking(fadeMs: 0), at: 0) }
@@ -284,8 +289,17 @@ public struct LiveTurnMachine: Sendable {
 
     private var audioActive: Bool { state.speakingSince != nil || state.chunksQueued > 0 }
 
+    /// Right after the voice drained on a route with echo, what is heard is its tail.
+    private func echoGated(_ time: Double) -> Bool {
+        guard let gate = state.echoGateUntil else { return false }
+        return time < gate
+    }
+
+    /// Energy only starts hearing. It never cancels a reply: thinking, acting and the
+    /// greeting ignore it, and while the voice plays (full barge-in) it only re-weighs
+    /// words already recognized.
     private mutating func audio(_ frame: AudioFrameFeatures) -> [LiveEffect] {
-        guard !hearingIgnored else { return [] }
+        guard !hearingIgnored, !echoGated(frame.time) else { return [] }
         let event = vad.process(frame, assistantSpeaking: state.phase == .speaking)
         if vad.isSpeech, let voiced = vad.lastVoicedAt { state.lastVoiceAt = voiced }
         let time = frame.time
@@ -294,23 +308,17 @@ public struct LiveTurnMachine: Sendable {
             if case .speechStart(let start) = event { return beginHearing(at: start) }
         case .userSpeaking:
             if case .speechStart(let start) = event, state.speechStartedAt == nil { state.speechStartedAt = start }
-        case .thinking:
-            if vad.speechDuration(at: time) >= Self.thinkingBargeIn { return interruptByVoice(at: time, reason: "speech while thinking") }
         case .speaking, .acting:
-            guard vad.isSpeech else { return [] }
-            // A tool running with nothing playing: no echo to fear, as while thinking.
-            if !audioActive {
-                return vad.speechDuration(at: time) >= Self.thinkingBargeIn ? interruptByVoice(at: time, reason: "speech while acting") : []
-            }
-            if state.effectiveBargeIn == .full { return evaluateBargeIn(at: time) }
-        case .idle, .interrupted:
+            guard vad.isSpeech, audioActive, state.effectiveBargeIn == .full, !state.caption.text.isEmpty else { return [] }
+            return evaluateBargeIn(at: time)
+        case .thinking, .idle, .interrupted:
             break
         }
         return []
     }
 
     private mutating func transcript(_ snapshot: TranscriptSnapshot, plan: EditPlan?, at time: Double) -> [LiveEffect] {
-        guard !hearingIgnored else { return [] }
+        guard !hearingIgnored, !echoGated(time) else { return [] }
         grammar = plan
         let changed = snapshot != state.caption
         switch state.phase {
@@ -326,13 +334,18 @@ public struct LiveTurnMachine: Sendable {
             state.captionPaused = false
             return [.showCaption(snapshot, paused: false)]
         case .thinking:
-            guard !snapshot.text.isEmpty else { return [] }
+            // A late or re-emitted result of the committed words is not the user talking again.
+            guard !snapshot.text.isEmpty, hasNewWords(snapshot.text) || isStopWord(snapshot.text, at: time) else { return [] }
             state.caption = snapshot
             return interruptByVoice(at: time, reason: "words while thinking")
         case .speaking, .acting:
             guard !snapshot.text.isEmpty else { return [] }
+            if !audioActive {
+                guard hasNewWords(snapshot.text) || isStopWord(snapshot.text, at: time) else { return [] }
+                state.caption = snapshot
+                return interruptByVoice(at: time, reason: "words while acting")
+            }
             state.caption = snapshot
-            if !audioActive { return interruptByVoice(at: time, reason: "words while acting") }
             if state.effectiveBargeIn == .full { return evaluateBargeIn(at: time) }
             // Safe mode on the loudspeaker: only a stop word interrupts; nothing else is shown or committed.
             if BargeInPolicy.containsStopPhrase(snapshot.text), !bargeIn.isEcho(BargeInPolicy.tokens(snapshot.text), now: time, threshold: 1) {
@@ -347,7 +360,7 @@ public struct LiveTurnMachine: Sendable {
     /// A recognizer's final: commit it. Under 2 characters (a cough), listen again.
     /// While a reply is on its way, only new words count: a late final of the committed words is ignored.
     private mutating func utterance(_ text: String, at time: Double) -> [LiveEffect] {
-        guard !hearingIgnored else { return [] }
+        guard !hearingIgnored, !echoGated(time) else { return [] }
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
         switch state.phase {
         case .listening, .userSpeaking:
@@ -359,7 +372,7 @@ public struct LiveTurnMachine: Sendable {
                 return [.showCaption(TranscriptSnapshot(), paused: false), .beginUserTurn(at: time), .openMic]
             }
         case .thinking, .speaking, .acting:
-            guard hasNewWords(words) else { return [] }
+            guard hasNewWords(words) || isStopWord(words, at: time) else { return [] }
             // Said more before any answer: the new words continue the turn, as with a voice interruption.
             if state.turnInFlight, !state.turnHadOutput, let committed = state.committedText, !committed.isEmpty { state.carryOver = committed }
         case .idle, .interrupted:
@@ -374,6 +387,11 @@ public struct LiveTurnMachine: Sendable {
     private func hasNewWords(_ text: String) -> Bool {
         let committed = Set(BargeInPolicy.tokens(state.committedText ?? ""))
         return BargeInPolicy.tokens(text).filter { !committed.contains($0) }.count >= 2
+    }
+
+    /// "stop", "attends": always the user, unless the assistant just said it.
+    private func isStopWord(_ text: String, at time: Double) -> Bool {
+        BargeInPolicy.containsStopPhrase(text) && !bargeIn.isEcho(BargeInPolicy.tokens(text), now: time, threshold: 1)
     }
 
     private mutating func beginHearing(at time: Double) -> [LiveEffect] {
@@ -395,6 +413,8 @@ public struct LiveTurnMachine: Sendable {
             state.lastDecision = "backchannel '\(words.count) chars' kept for a question"
             return []
         case .interrupt:
+            // Only words cancel: two of them that the user had not already said.
+            guard hasNewWords(state.caption.text) else { return [] }
             return interruptByVoice(at: time, reason: "barge-in")
         case .hardStop:
             return interruptByVoice(at: time, reason: "stop word")
@@ -416,10 +436,67 @@ public struct LiveTurnMachine: Sendable {
             return []
         case .userSpeaking:
             guard !state.muted else { return [] }
+            if options.externalEndpointing { return externalHearingCaps(at: time) }
             return endOfTurn(at: time)
-        default:
+        case .thinking, .speaking, .acting:
+            if let effects = voiceWatchdog(at: time) { return effects }
+            // A brain still open with nothing playing, queued or running: no sign of life for 15 s ends the turn.
+            if state.turnInFlight || state.brainOpen, state.toolsRunning == 0, state.chunksQueued == 0, let since = progressAt ?? state.committedAt,
+               time - since > Self.thinkingDeadline {
+                state.lastDecision = "thinking deadline: nothing for \(Int(Self.thinkingDeadline)) s"
+                let id = state.turn
+                return cancelResponse(fadeMs: 0) + [.turnTimedOut(id)] + settle(at: time)
+            }
+            return []
+        case .idle, .interrupted:
             return []
         }
+    }
+
+    /// The recognizer ends each utterance; the reducer only caps hearing: 4 s with
+    /// no words (a latched VAD, a noise), 25 s in all. Then the ear reopens.
+    private mutating func externalHearingCaps(at time: Double) -> [LiveEffect] {
+        let hearingFor = time - (state.speechStartedAt ?? time)
+        let empty = state.caption.text.trimmingCharacters(in: .whitespacesAndNewlines).count < 2
+        guard (empty && hearingFor >= Self.emptyHearingCap) || hearingFor >= Self.externalEndpointCap else { return [] }
+        state.phase = .listening
+        state.listeningSince = time
+        state.lastDecision = empty ? "dropped: no words after \(format(hearingFor)) s" : "dropped: no final after \(format(hearingFor)) s"
+        resetUserTurn()
+        return [.showCaption(TranscriptSnapshot(), paused: false), .beginUserTurn(at: time), .openMic]
+    }
+
+    /// A line queued that never started, or a started chunk that never drained.
+    private mutating func voiceWatchdog(at time: Double) -> [LiveEffect]? {
+        if state.chunksQueued > 0, let queued = state.queuedAt, time - queued > Self.queuedLineDeadline {
+            return speakerWatchdog(at: time, reason: "queued line never started")
+        }
+        if let started = state.lastChunkStartedAt, time - started > Self.drainDeadline(words: state.lastChunkWords) {
+            return speakerWatchdog(at: time, reason: "chunk never drained")
+        }
+        return nil
+    }
+
+    /// The voice is stuck: stop it, tell the session (it switches voices), and carry on.
+    private mutating func speakerWatchdog(at time: Double, reason: String) -> [LiveEffect] {
+        state.lastDecision = "speaker watchdog: \(reason)"
+        var effects: [LiveEffect] = [.stopSpeaking(fadeMs: 0), .speakerStuck]
+        state.chunksQueued = 0
+        state.speakingSince = nil
+        resetVoiceWatch()
+        bargeIn.forgetSpoken()
+        progressAt = time
+        if state.turnTakingMuted {
+            state.turnTakingMuted = false
+            effects.append(.setInputMuted(state.muted))
+        }
+        let before = state.phase
+        effects += settle(at: time)
+        if before != .listening, state.phase == .listening {
+            resetUserTurn()
+            effects.append(.beginUserTurn(at: time))
+        }
+        return effects
     }
 
     private mutating func endOfTurn(at time: Double) -> [LiveEffect] {
@@ -435,11 +512,13 @@ public struct LiveTurnMachine: Sendable {
         }
         let text = state.caption.text
         if text.count < 2 {
-            if silence >= Self.noiseDropAfter {
+            // A latched VAD can no longer pin "hearing": 4 s without words ends it.
+            let hearingFor = time - (state.speechStartedAt ?? time)
+            if silence >= Self.noiseDropAfter || hearingFor >= Self.emptyHearingCap {
                 state.phase = .listening
                 state.listeningSince = time
                 resetUserTurn()
-                state.lastDecision = "dropped: \(text.count) characters after \(format(silence)) s"
+                state.lastDecision = "dropped: \(text.count) characters after \(format(max(silence, hearingFor))) s"
                 return [.showCaption(TranscriptSnapshot(), paused: false), .beginUserTurn(at: time)]
             }
             return effects
@@ -459,6 +538,7 @@ public struct LiveTurnMachine: Sendable {
             effects.append(.stopSpeaking(fadeMs: 60))
             state.chunksQueued = 0
             state.speakingSince = nil
+            resetVoiceWatch()
             bargeIn.forgetSpoken()
             if state.turnTakingMuted {
                 state.turnTakingMuted = false
@@ -470,6 +550,8 @@ public struct LiveTurnMachine: Sendable {
         state.carryOver = nil
         state.committedText = full
         state.turnInFlight = true
+        state.committedAt = time
+        progressAt = time
         state.brainOpen = false
         state.turnHadOutput = false
         state.spokenText = ""
@@ -564,6 +646,7 @@ public struct LiveTurnMachine: Sendable {
         state.brainOpen = false
         state.chunksQueued = 0
         state.speakingSince = nil
+        resetVoiceWatch()
         state.spokenText = ""
         state.pendingBackchannel = nil
         state.turnHadOutput = false
@@ -587,6 +670,7 @@ public struct LiveTurnMachine: Sendable {
             return []
         }
         var effects: [LiveEffect] = []
+        progressAt = time
         switch signal {
         case .firstOutput:
             state.brainOpen = true
@@ -617,7 +701,12 @@ public struct LiveTurnMachine: Sendable {
         switch signal {
         case .chunkQueued:
             state.chunksQueued += 1
+            // Waiting behind a chunk that plays is normal; waiting on nothing is watched.
+            if state.lastChunkStartedAt == nil, state.queuedAt == nil { state.queuedAt = time }
         case .chunkStarted(let text):
+            state.queuedAt = nil
+            state.lastChunkStartedAt = time
+            state.lastChunkWords = text.split(whereSeparator: { $0.isWhitespace }).count
             if state.speakingSince == nil, options.turnTaking, !state.turnTakingMuted {
                 state.turnTakingMuted = true
                 effects.append(.setInputMuted(true))
@@ -627,19 +716,26 @@ public struct LiveTurnMachine: Sendable {
             bargeIn.noteSpoken(text, at: time)
         case .chunkFinished:
             state.chunksQueued = max(0, state.chunksQueued - 1)
+            state.lastChunkStartedAt = nil
+            state.queuedAt = state.chunksQueued > 0 ? time : nil
         case .drained:
             state.chunksQueued = 0
             state.speakingSince = nil
+            resetVoiceWatch()
             if state.turnTakingMuted {
                 state.turnTakingMuted = false
                 effects.append(.setInputMuted(state.muted))
             }
-            // What was heard over the voice in safe mode is dropped: listen afresh.
+            // What was heard over the voice in safe mode is dropped: listen afresh,
+            // after the echo tail unless the route has no echo (headphones).
             if state.phase != .userSpeaking {
+                let tail = state.echoRisk == .low ? 0 : Self.echoTail
+                state.echoGateUntil = tail > 0 ? time + tail : nil
                 resetUserTurn()
-                effects.append(.beginUserTurn(at: time))
+                effects.append(.beginUserTurn(at: time + tail))
             }
         }
+        progressAt = time
         return effects + settle(at: time)
     }
 
@@ -664,6 +760,8 @@ public struct LiveTurnMachine: Sendable {
                 state.lastAssistantEndsWithQuestion = false
                 return commit(backchannel, at: time)
             }
+            // The recognizer path closed its ear for the reply (or an edit said nothing): reopen it.
+            if options.externalEndpointing { return [.openMic] }
         }
         return []
     }
@@ -677,6 +775,12 @@ public struct LiveTurnMachine: Sendable {
         state.lastTextChangeAt = nil
         state.captionPaused = false
         grammar = nil
+    }
+
+    private mutating func resetVoiceWatch() {
+        state.queuedAt = nil
+        state.lastChunkStartedAt = nil
+        state.lastChunkWords = 0
     }
 
     private mutating func updateBargeInMode() {

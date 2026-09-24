@@ -60,6 +60,8 @@ public struct HomeView: View {
                 if let library = app?.library { HomeImportHUD(library: library, isHidden: showsMagicMovie) }
             }
             .task { await app?.library.reload() }
+            // Once, for people onboarded before the local brain: download it over Wi‑Fi?
+            .modifier(LocalBrainFirstRunPrompt(isBusy: openProject != nil || showsSettings || showsMagicMovie || showsPicker || showsPDFPicker))
             .sheet(isPresented: $showsSettings) { SettingsView() }
             .sheet(isPresented: $showsMagicMovie) {
                 MagicMovieSheet { project in

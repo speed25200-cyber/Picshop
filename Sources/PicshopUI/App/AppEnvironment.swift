@@ -47,6 +47,8 @@ public final class AppEnvironment {
                 await previous?.value
                 if open { await models.pauseAll(except: AppEnvironment.liveModelIDs) } else { await models.resumeAll() }
             }
+            // The last editor closed: the local brain's weights go after a minute, unless one opens again.
+            if !open { LocalBrainHub.shared.release(reason: "editor_closed") }
             if !open { startAutoInstallIfDue() }
         }
     }
@@ -57,6 +59,8 @@ public final class AppEnvironment {
     /// Registered at launch, prewarmed only when an editor appears.
     @ObservationIgnored private var appleEngine: (any IntentEngine)?
     @ObservationIgnored private var lastPrewarm: [EditorMode: Date] = [:]
+    /// The mode of the editor opened last, for the local planner's warm-up.
+    @ObservationIgnored private var lastEditorMode: EditorMode?
     @ObservationIgnored private var pendingModelStates: [String: ModelManager.State] = [:]
     @ObservationIgnored private var modelStatesFlush: Task<Void, Never>?
     @ObservationIgnored private var lastModelStatesFlush = Date.distantPast
@@ -68,6 +72,13 @@ public final class AppEnvironment {
     static let modelStatesInterval: TimeInterval = 0.25
     /// The local brain's models: they keep downloading while an editor is open.
     static let liveModelIDs: Set<String> = [LocalModelTiering.maxModelID, LocalModelTiering.fastModelID]
+    /// How long push-to-talk waits for a language model. The local planner answers
+    /// in 1–2 s now (no thinking, a reused session), so a stalled model costs less:
+    /// 4 s when the grammar has nothing, 1.5 s when it already has a usable plan.
+    static let routerConfiguration = HybridIntentRouter.Configuration(llmTimeout: .seconds(4), improveTimeout: .milliseconds(1_500))
+    /// With the local planner preferred (no Apple Intelligence): a command the grammar cannot
+    /// read waits longer, so a cold first command (its examples prefilled) is not always given up on.
+    static let localRouterConfiguration = HybridIntentRouter.Configuration(llmTimeout: .seconds(8), improveTimeout: .milliseconds(1_500))
 
     public init(extraEngines: [any IntentEngine] = []) {
         let settings = AppSettings()
@@ -81,7 +92,7 @@ public final class AppEnvironment {
         let performance = PerformanceGovernor()
         performance.preference = settings.performancePreference
         self.performance = performance
-        router = HybridIntentRouter(preferredEngine: .appleIntelligence)
+        router = HybridIntentRouter(preferredEngine: .appleIntelligence, configuration: Self.routerConfiguration)
         voice = VoiceController(locale: settings.voiceLocale)
         voice.mode = settings.voiceMode
         pendingCrashReport = Diagnostics.shared.pendingReport
@@ -113,13 +124,20 @@ public final class AppEnvironment {
         }
     }
 
-    /// Picks the most capable brain that works on this device: the local model's planner
-    /// once LocalBrainHub has loaded it, otherwise Apple Intelligence, otherwise the instant grammar.
+    /// Picks push-to-talk's planner: Apple Intelligence when it works on this device (warm,
+    /// and quick on a command the grammar cannot read), otherwise the local model's planner
+    /// once LocalBrainHub has loaded it (the hub registers it then, and calls this again after
+    /// loading and releasing), otherwise the instant grammar. Live's own order is not this one.
     public func refreshEngines() async {
         availableEngines = await router.availableEngines()
-        let best: IntentEngineKind = availableEngines.contains(.proLocal) ? .proLocal : (availableEngines.contains(.appleIntelligence) ? .appleIntelligence : .rules)
+        let best: IntentEngineKind = availableEngines.contains(.appleIntelligence)
+            ? .appleIntelligence : (availableEngines.contains(.proLocal) ? .proLocal : .rules)
+        let changed = best != activeEngine
         activeEngine = best
         await router.setPreferredEngine(best)
+        await router.setConfiguration(best == .proLocal ? Self.localRouterConfiguration : Self.routerConfiguration)
+        // The local planner's first command would prefill its instructions and examples: done now, off the main actor.
+        if best == .proLocal, changed, let mode = lastEditorMode { LocalBrainHub.shared.warmPlanner(mode: mode) }
     }
 
     // MARK: Models
@@ -279,8 +297,12 @@ public final class AppEnvironment {
     /// thread, and lets the local brain preload its weights when conditions allow.
     /// EditorHost calls it on appear, so launch does not pay for it.
     public func prewarmIntentEngine(mode: EditorMode) {
-        if settings.livePreparesOnOpen { LocalBrainHub.shared.preload(reason: "editor") }
+        let hub = LocalBrainHub.shared
+        lastEditorMode = mode
+        if settings.livePreparesOnOpen { hub.preload(reason: "editor") }
+        if activeEngine == .proLocal { hub.warmPlanner(mode: mode) }
         #if canImport(FoundationModels)
+        // Push-to-talk plans with Apple's model whenever it is available, the local model loaded or not.
         if #available(iOS 26.0, *), let engine = appleEngine as? FoundationModelsIntentEngine {
             let now = Date()
             if let last = lastPrewarm[mode], now.timeIntervalSince(last) < 60 { return }

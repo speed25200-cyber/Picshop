@@ -17,15 +17,19 @@ public final class LiveServices {
     public let selfTest: LiveSelfTest
     /// The last self-test, "5/6 ✓ · 24 sept.", persisted under liveSelfTest.v1.
     public private(set) var selfTestSummary: String? = nil
+    /// The last self-test's duplex step passed (headphones): Settings › Live may offer duplex.
+    public private(set) var selfTestDuplexPassed = false
 
     @ObservationIgnored let log = LiveLog()
     @ObservationIgnored private let defaults = UserDefaults.standard
     private static let selfTestKey = "liveSelfTest.v1"
+    private static let selfTestDuplexKey = "liveSelfTest.duplex.v1"
 
     private init() {
         debug = LiveDebugModel()
         selfTest = LiveSelfTest()
         selfTestSummary = defaults.string(forKey: Self.selfTestKey)
+        selfTestDuplexPassed = defaults.bool(forKey: Self.selfTestDuplexKey)
     }
 
     /// Writes the Live log as redacted JSON (no transcript) to a temporary file to share.
@@ -42,7 +46,17 @@ public final class LiveServices {
             "echo_cancellation": debug.echoCancellation ? "on" : "off",
             "voice": debug.voiceDescription,
             "self_test": selfTestSummary ?? "none",
+            "self_test_duplex": selfTestDuplexPassed ? "passed" : "not_passed",
+            "thermal": LiveDebugModel.thermalDescription(ProcessInfo.processInfo.thermalState),
         ]
+        let hub = LocalBrainHub.shared.status
+        header["local_model"] = hub.model?.displayName ?? "none"
+        header["local_tier"] = hub.decision.tier.rawValue
+        header["local_tier_reason"] = hub.decision.reason.rawValue
+        if let ttft = debug.firstTokenPercentilesMs {
+            header["first_token_p50_ms"] = String(ttft.p50)
+            header["first_token_p90_ms"] = String(ttft.p90)
+        }
         if let stats = debug.lastStats {
             header["model"] = stats.model
             header["first_token_ms"] = String(stats.firstTokenMs)
@@ -82,9 +96,14 @@ public final class LiveServices {
     }
 
     /// The self-test finished: its summary for Settings › Live and the log header.
-    func recordSelfTest(summary: String) {
+    /// `duplexPassed` is nil when the duplex step was skipped (no headphones): the last verdict stays.
+    func recordSelfTest(summary: String, duplexPassed: Bool? = nil) {
         if selfTestSummary != summary { selfTestSummary = summary }
         defaults.set(summary, forKey: Self.selfTestKey)
+        if let duplexPassed {
+            if selfTestDuplexPassed != duplexPassed { selfTestDuplexPassed = duplexPassed }
+            defaults.set(duplexPassed, forKey: Self.selfTestDuplexKey)
+        }
     }
 
     /// The one-time better-voice card, once per install.

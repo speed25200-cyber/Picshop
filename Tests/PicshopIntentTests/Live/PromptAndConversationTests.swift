@@ -95,6 +95,9 @@ final class PromptDumpTests: XCTestCase {
         for mode in [EditorMode.photo, .video] {
             for size in [LocalPromptSize.full, .compact] {
                 try LocalLivePrompt.system(mode: mode, size: size).write(toFile: "\(path)/local-\(size.rawValue)-\(mode.rawValue).txt", atomically: true, encoding: .utf8)
+                // The whole cached prefix as the model reads it: tools, system, examples.
+                try QwenChatTemplate.render(LocalLivePromptTests.setup(mode: mode, size: size), addGenerationPrompt: false)
+                    .write(toFile: "\(path)/local-\(size.rawValue)-\(mode.rawValue)-rendered.txt", atomically: true, encoding: .utf8)
             }
             try LivePrompt.onDeviceInstructions(mode: mode).write(toFile: "\(path)/ondevice-\(mode.rawValue).txt", atomically: true, encoding: .utf8)
         }

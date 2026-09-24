@@ -1,7 +1,9 @@
 #if canImport(CoreML)
 import Foundation
 import CoreML
+import CryptoKit
 import PicshopCore
+import PicshopIntent
 
 /// A downloadable on-device model.
 public struct ModelDescriptor: Identifiable, Hashable, Sendable {
@@ -77,9 +79,16 @@ public enum ModelCatalog {
             ModelDescriptor(id: "sd-generative-fill", displayName: "Generative Fill (Stable Diffusion)", summary: "Text-guided replacement: “remplace le ciel par un coucher de soleil”, “add a hat”.",
                             kind: .generative, sizeMB: 1900, remoteURL: baseURL?.appendingPathComponent("sd-generative-fill.zip"),
                             huggingFaceFolder: ModelDescriptor.HuggingFaceFolder(repository: "apple/coreml-stable-diffusion-v1-5", path: "split_einsum/compiled")),
-            ModelDescriptor(id: "qwen3-4b-4bit", displayName: "Pro Brain (Qwen3 4B)", summary: "Larger on-device language model for complex, multi-step voice commands.",
-                            kind: .languageModel, sizeMB: 2500, huggingFaceID: "mlx-community/Qwen3-4B-4bit"),
-        ]
+        ] + LocalModelCatalog.all.map(liveModel)
+    }
+
+    /// A Live model (Qwen3.5 through MLX): its pinned Hugging Face files, installed into `<id>/model`.
+    static func liveModel(_ entry: LocalModelEntry) -> ModelDescriptor {
+        ModelDescriptor(id: entry.info.id, displayName: "Live brain (\(entry.info.displayName))",
+                        summary: "The on-device model Picshop Live talks, looks and edits with. Everything stays on the iPhone.",
+                        kind: .languageModel, sizeMB: Int(entry.downloadBytes / 1_000_000), huggingFaceID: entry.repository,
+                        huggingFaceFolder: ModelDescriptor.HuggingFaceFolder(repository: entry.repository, path: "", revision: entry.info.revision),
+                        fileAllowlist: LocalModelCatalog.fileAllowlist)
     }
 
     public static func descriptor(id: String) -> ModelDescriptor? { all.first { $0.id == id } }
@@ -119,13 +128,56 @@ public actor ModelManager {
 
     public let rootURL: URL
 
+    /// Why a language-model install failed, as the `.failed` message: LocalBrainHub turns it into words.
+    public enum FailureCode {
+        /// "storage:<bytes needed>"
+        public static let storage = "storage"
+        public static let network = "network"
+        /// A file's size or SHA-256 did not match the pinned revision.
+        public static let verify = "verify"
+        /// "server:<HTTP status>"
+        public static let server = "server"
+        /// The pinned revision lacks a file the model needs.
+        public static let files = "files"
+    }
+
+    /// Retries after a network error, keeping what was downloaded (D12).
+    static let retryDelays: [Double] = [2, 8, 30]
+
     public init(rootURL: URL? = nil) {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
         self.rootURL = rootURL ?? support.appendingPathComponent("Models", isDirectory: true)
         try? FileManager.default.createDirectory(at: self.rootURL, withIntermediateDirectories: true)
+        // Gigabytes of weights never go into iCloud backups; they download again.
+        var root = self.rootURL
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? root.setResourceValues(values)
         let (stream, continuation) = AsyncStream.makeStream(of: StateUpdate.self, bufferingPolicy: .unbounded)
         updateStream = stream
         updates = continuation
+        Self.removeRetiredModels(root: self.rootURL)
+    }
+
+    /// Models that left the catalog (the old Pro Brain, Qwen3 4B): their folders
+    /// and the MLX hub's cached copy go, once, off the caller's thread. Idempotent.
+    private static func removeRetiredModels(root: URL) {
+        var folders = LocalModelCatalog.retiredModelIDs.map { root.appendingPathComponent($0, isDirectory: true) }
+        if let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
+            folders.append(caches.appendingPathComponent("models/mlx-community/Qwen3-4B-4bit", isDirectory: true))
+        }
+        let present = folders.filter { FileManager.default.fileExists(atPath: $0.path) }
+        guard !present.isEmpty else { return }
+        Task.detached(priority: .utility) {
+            for folder in present {
+                do {
+                    try FileManager.default.removeItem(at: folder)
+                    PSLog.info("removed retired model \(folder.lastPathComponent)", category: .models)
+                } catch {
+                    PSLog.error("could not remove retired model \(folder.lastPathComponent): \(error)", category: .models)
+                }
+            }
+        }
     }
 
     /// Queues a state change behind the ones already sent: the progress ring never jumps back.
@@ -260,10 +312,21 @@ public actor ModelManager {
 
     /// Downloads and compiles a Core ML model archive, or fetches a Hugging Face folder.
     /// Unpacking and moving files run off the actor, so a call to the manager never
-    /// waits behind an install.
+    /// waits behind an install. Language models download over Wi‑Fi only this way.
     public func install(_ descriptor: ModelDescriptor) {
+        install(descriptor, allowsCellular: descriptor.kind != .languageModel)
+    }
+
+    /// install(_:), choosing whether the transfer may use cellular data (or a
+    /// hotspot, or Low Data Mode). Without it, losing Wi‑Fi fails the install with
+    /// `FailureCode.network`, keeping what was downloaded for the next attempt.
+    public func install(_ descriptor: ModelDescriptor, allowsCellular: Bool) {
         guard activeTasks[descriptor.id] == nil, !isInstalled(descriptor.id) else { return }
         startUpdatePump()
+        if descriptor.kind == .languageModel, let folder = descriptor.huggingFaceFolder {
+            installLanguageModel(descriptor, folder: folder, allowsCellular: allowsCellular)
+            return
+        }
         if descriptor.remoteURL == nil, let folder = descriptor.huggingFaceFolder {
             installHuggingFaceFolder(descriptor, folder: folder)
             return
@@ -381,6 +444,158 @@ public actor ModelManager {
         activeTasks[id] = task
     }
 
+    /// A language model's pinned files into `<id>/model`:
+    /// 1. the revision's listing, filtered by the allowlist (the required files must be there);
+    /// 2. free storage for what is left plus 1 GB;
+    /// 3. each file into `<id>/staging`, byte-accurate progress, 3 retries that keep
+    ///    the resume data (also saved beside the file, for the next attempt); a file
+    ///    already staged with the right size is kept, so a relaunch picks up there;
+    /// 4. every size, then every LFS file's SHA-256 against the listing's `lfs.oid`;
+    /// 5. one move of the whole folder, the `installed` mark, and the other Live
+    ///    model's folder removed (one installed at a time).
+    private func installLanguageModel(_ descriptor: ModelDescriptor, folder: ModelDescriptor.HuggingFaceFolder, allowsCellular: Bool) {
+        set(.downloading(progress: 0), for: descriptor.id)
+        let id = descriptor.id
+        let directory = directory(for: id)
+        let root = rootURL
+        let allowlist = Set(descriptor.fileAllowlist ?? [])
+        let others = ModelCatalog.all.filter { $0.kind == .languageModel && $0.id != id }.map { self.directory(for: $0.id) }
+        let handle = downloadHandle(for: id)
+        let task = Task { [weak self] in
+            guard let self else { return }
+            let staging = directory.appendingPathComponent("staging", isDirectory: true)
+            do {
+                let listing = try await HuggingFaceHub.listFiles(repository: folder.repository, path: folder.path, revision: folder.revision, recursive: false)
+                let files = listing.filter { allowlist.isEmpty || allowlist.contains($0.path) }
+                let names = Set(files.map(\.path))
+                let hasWeights = names.contains("model.safetensors") || names.contains("model.safetensors.index.json")
+                guard hasWeights, LocalModelCatalog.requiredFiles.allSatisfy(names.contains) else {
+                    throw LanguageModelInstallError(code: FailureCode.files)
+                }
+                try await Task.detached(priority: .utility) {
+                    try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+                }.value
+                let total = max(1, files.reduce(0) { $0 + $1.size })
+                let staged = await Task.detached(priority: .utility) { Self.stagedBytes(files, in: staging) }.value
+                let free = Self.availableCapacity(at: root)
+                let needed = total - staged + LocalModelCatalog.storageHeadroomBytes
+                if let free, free < needed {
+                    throw LanguageModelInstallError(code: "\(FailureCode.storage):\(needed)")
+                }
+                var done: Int64 = 0
+                for file in files {
+                    try Task.checkCancellation()
+                    let destination = staging.appendingPathComponent(file.path)
+                    if Self.fileSize(destination) == file.size, file.size > 0 {
+                        done += file.size
+                        self.post(.downloading(progress: Double(done) / Double(total)), for: id)
+                        continue
+                    }
+                    let url = HuggingFaceHub.fileURL(repository: folder.repository, path: file.path, revision: folder.revision)
+                    let base = done
+                    let size = file.size
+                    let resumeFile = staging.appendingPathComponent("." + file.path + ".resume")
+                    let temporary: URL
+                    do {
+                        temporary = try await ModelDownloader.download(url, handle: handle, allowsCellular: allowsCellular, retryDelays: Self.retryDelays,
+                                                                       resumeFile: resumeFile) { fraction in
+                            let bytes = base + Int64(fraction * Double(size))
+                            self.post(.downloading(progress: min(0.999, Double(bytes) / Double(total))), for: id)
+                        }
+                    } catch let error as DownloadHTTPError {
+                        throw LanguageModelInstallError(code: "\(FailureCode.server):\(error.status)")
+                    } catch let error as NSError where error.domain == NSURLErrorDomain && error.code != NSURLErrorCancelled {
+                        throw LanguageModelInstallError(code: FailureCode.network)
+                    }
+                    try await Task.detached(priority: .utility) {
+                        defer { try? FileManager.default.removeItem(at: resumeFile) }
+                        if size > 0, Self.fileSize(temporary) != size {
+                            try? FileManager.default.removeItem(at: temporary)
+                            throw LanguageModelInstallError(code: FailureCode.verify)
+                        }
+                        try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                        try? FileManager.default.removeItem(at: destination)
+                        try FileManager.default.moveItem(at: temporary, to: destination)
+                    }.value
+                    done += file.size
+                }
+                // Verifying: sizes first, then the SHA-256 of every LFS file.
+                self.post(.compiling, for: id)
+                try await Task.detached(priority: .utility) {
+                    for file in files {
+                        try Task.checkCancellation()
+                        let url = staging.appendingPathComponent(file.path)
+                        guard Self.fileSize(url) == file.size || file.size == 0 else {
+                            try? FileManager.default.removeItem(at: url)
+                            throw LanguageModelInstallError(code: FailureCode.verify)
+                        }
+                        if let expected = file.sha256, try Self.sha256(of: url) != expected.lowercased() {
+                            try? FileManager.default.removeItem(at: url)
+                            throw LanguageModelInstallError(code: FailureCode.verify)
+                        }
+                    }
+                    let model = directory.appendingPathComponent("model", isDirectory: true)
+                    try? FileManager.default.removeItem(at: model)
+                    try FileManager.default.moveItem(at: staging, to: model)
+                    try Data().write(to: directory.appendingPathComponent("installed"))
+                    for other in others where FileManager.default.fileExists(atPath: other.path) {
+                        try? FileManager.default.removeItem(at: other)
+                    }
+                }.value
+                for other in ModelCatalog.all where other.kind == .languageModel && other.id != id {
+                    self.post(.notInstalled, for: other.id)
+                }
+                PSLog.info("language model \(id) installed (\(total / 1_000_000) MB)", category: .models)
+                self.post(.installed, for: id)
+            } catch is CancellationError {
+                self.post(.notInstalled, for: id)
+            } catch let error as LanguageModelInstallError {
+                PSLog.error("language model install failed: \(error.code)", category: .models)
+                self.post(.failed(error.code), for: id)
+            } catch let error as DownloadHTTPError {
+                PSLog.error("language model listing failed: HTTP \(error.status)", category: .models)
+                self.post(.failed("\(FailureCode.server):\(error.status)"), for: id)
+            } catch {
+                PSLog.error("language model install failed: \(error)", category: .models)
+                let nsError = error as NSError
+                self.post(.failed(nsError.domain == NSURLErrorDomain ? FailureCode.network : String(describing: error).prefix(80).description), for: id)
+            }
+            await self.clearTask(id)
+        }
+        activeTasks[id] = task
+    }
+
+    /// Bytes already staged with their final size (a download picked up after a relaunch).
+    private static func stagedBytes(_ files: [HuggingFaceHub.File], in staging: URL) -> Int64 {
+        files.reduce(0) { total, file in
+            file.size > 0 && fileSize(staging.appendingPathComponent(file.path)) == file.size ? total + file.size : total
+        }
+    }
+
+    static func fileSize(_ url: URL) -> Int64? {
+        (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value
+    }
+
+    /// Free space for large, important downloads; nil where the system does not say.
+    static func availableCapacity(at url: URL) -> Int64? {
+        let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        guard let capacity = values?.volumeAvailableCapacityForImportantUsage, capacity > 0 else { return nil }
+        return capacity
+    }
+
+    /// Streams the file through SHA-256 (lowercase hex), 8 MB at a time.
+    static func sha256(of url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while true {
+            let chunk: Data? = try autoreleasepool { try handle.read(upToCount: 8 * 1_048_576) }
+            guard let chunk, !chunk.isEmpty else { break }
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
     private func clearTask(_ id: String) {
         activeTasks[id] = nil
         downloads[id] = nil
@@ -496,27 +711,66 @@ struct DownloadPaused: Error {
     var resumeData: Data?
 }
 
+/// The server answered, but not with the file.
+struct DownloadHTTPError: Error {
+    var status: Int
+
+    /// Worth another try: rate limits and server errors.
+    var isTransient: Bool { status == 429 || status >= 500 }
+}
+
+/// A language-model install that failed for a reason the hub can name (ModelManager.FailureCode).
+struct LanguageModelInstallError: Error {
+    var code: String
+}
+
 enum ModelDownloader {
     /// Downloads to a temporary file with progress, using a download task so large
     /// archives never pass through memory. A pause through `handle` keeps the
     /// resume data and continues from there once resumed.
-    static func download(_ url: URL, handle: DownloadHandle? = nil, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
-        var resumeData: Data?
+    ///
+    /// A network error (or a rate limit, or a server error) is retried after each
+    /// of `retryDelays`, from the resume data it left. When the retries run out,
+    /// the resume data is written to `resumeFile`, where the next call picks it up.
+    static func download(_ url: URL, handle: DownloadHandle? = nil, allowsCellular: Bool = true, retryDelays: [Double] = ModelManager.retryDelays,
+                         resumeFile: URL? = nil, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
+        var resumeData: Data? = resumeFile.flatMap { try? Data(contentsOf: $0) }
+        var attempt = 0
         while true {
             if let handle { try await handle.waitUntilResumed() }
             do {
-                return try await transfer(url, resumeData: resumeData, handle: handle, progress: progress)
+                return try await transfer(url, resumeData: resumeData, handle: handle, allowsCellular: allowsCellular, progress: progress)
             } catch let paused as DownloadPaused {
                 // Stopped before it started: the earlier resume data still holds.
                 resumeData = paused.resumeData ?? resumeData
                 try Task.checkCancellation()
+            } catch {
+                try Task.checkCancellation()
+                let nsError = error as NSError
+                let isNetwork = nsError.domain == NSURLErrorDomain && nsError.code != NSURLErrorCancelled
+                let isTransientHTTP = (error as? DownloadHTTPError)?.isTransient ?? false
+                // Go on from what this transfer got; with nothing new (or stale resume data), start the file over.
+                resumeData = isNetwork ? nsError.userInfo[NSURLSessionDownloadTaskResumeData] as? Data : nil
+                guard isNetwork || isTransientHTTP, attempt < retryDelays.count else {
+                    if let resumeFile {
+                        if let resumeData { try? resumeData.write(to: resumeFile, options: .atomic) } else { try? FileManager.default.removeItem(at: resumeFile) }
+                    }
+                    throw error
+                }
+                PSLog.info("download retry \(attempt + 1) in \(Int(retryDelays[attempt])) s (\(isNetwork ? "network \(nsError.code)" : "http"))", category: .models)
+                try await Task.sleep(nanoseconds: UInt64(retryDelays[attempt] * 1_000_000_000))
+                attempt += 1
             }
         }
     }
 
-    private static func transfer(_ url: URL, resumeData: Data?, handle: DownloadHandle?, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
+    private static func transfer(_ url: URL, resumeData: Data?, handle: DownloadHandle?, allowsCellular: Bool,
+                                 progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
         let delegate = DownloadDelegate(progress: progress, handle: handle)
-        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        let configuration = URLSessionConfiguration.default
+        configuration.allowsExpensiveNetworkAccess = allowsCellular
+        configuration.allowsConstrainedNetworkAccess = allowsCellular
+        let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
         defer {
             handle?.finished()
             session.finishTasksAndInvalidate()
@@ -571,7 +825,7 @@ enum ModelDownloader {
 
         func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
             if let http = downloadTask.response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                finish(.failure(PicshopError.modelUnavailable("download failed (\(http.statusCode))")))
+                finish(.failure(DownloadHTTPError(status: http.statusCode)))
                 return
             }
             let destination = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".zip")
@@ -630,26 +884,38 @@ enum ModelDownloader {
 /// Minimal Hugging Face Hub client: folder listing and file URLs.
 enum HuggingFaceHub {
     struct Entry: Decodable {
+        struct LFS: Decodable {
+            /// The SHA-256 of the file's content.
+            var oid: String
+            var size: Int64?
+        }
+
         var type: String
         var path: String
         var size: Int64?
+        var lfs: LFS?
     }
 
     struct File: Sendable {
         var path: String
         var size: Int64
+        /// LFS files only: the SHA-256 the content must have.
+        var sha256: String?
     }
 
-    /// Lists every file under a folder (recursively).
-    static func listFiles(repository: String, path: String, revision: String) async throws -> [File] {
-        var components = URLComponents(string: "https://huggingface.co/api/models/\(repository)/tree/\(revision)/\(path)")!
-        components.queryItems = [URLQueryItem(name: "recursive", value: "true")]
-        let (data, response) = try await URLSession.shared.data(from: components.url!)
+    /// Lists the files under a folder ("" for the repository root), recursively by default.
+    static func listFiles(repository: String, path: String, revision: String, recursive: Bool = true) async throws -> [File] {
+        let folder = path.isEmpty ? "" : "/" + path
+        var components = URLComponents(string: "https://huggingface.co/api/models/\(repository)/tree/\(revision)\(folder)")!
+        if recursive { components.queryItems = [URLQueryItem(name: "recursive", value: "true")] }
+        var request = URLRequest(url: components.url!)
+        request.timeoutInterval = 30
+        let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            throw PicshopError.modelUnavailable("Hugging Face listing failed (\(http.statusCode))")
+            throw DownloadHTTPError(status: http.statusCode)
         }
         let entries = try JSONDecoder().decode([Entry].self, from: data)
-        return entries.filter { $0.type == "file" }.map { File(path: $0.path, size: $0.size ?? 0) }
+        return entries.filter { $0.type == "file" }.map { File(path: $0.path, size: $0.lfs?.size ?? $0.size ?? 0, sha256: $0.lfs?.oid) }
     }
 
     static func fileURL(repository: String, path: String, revision: String) -> URL {

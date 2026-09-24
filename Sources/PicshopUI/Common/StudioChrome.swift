@@ -174,7 +174,7 @@ struct StudioChrome<Canvas: View, Panel: View>: View {
                 // Empty space in the stack is not hit-testable: the canvas
                 // keeps every touch between the bars.
                 VStack(spacing: 0) {
-                    StudioTopBar(bar: bar, actions: actions)
+                    StudioTopBar(bar: bar, actions: actions, live: live)
                         .padding(.top, extraTop)
                         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { topEdge = $0 }
                     Spacer(minLength: 0)
@@ -292,11 +292,14 @@ private struct StudioHistoryPresenter: View {
 
 // MARK: - Top bar
 
-/// Close, then Undo (with Redo after an undo) and Export. 44 points tall,
-/// 4 below the safe area.
+/// Close, the brain pill, then Undo (with Redo after an undo) and Export.
+/// 44 points tall, 4 below the safe area. The pill (LocalBrainOffer.swift)
+/// names Live's brain while it runs and offers the local brain at rest; it
+/// sits here so the dock and the picture never move for it.
 struct StudioTopBar: View {
     let bar: StudioBar
     let actions: StudioActions
+    let live: LiveSession
     @Namespace private var glass
 
     var body: some View {
@@ -304,9 +307,15 @@ struct StudioTopBar: View {
             HStack(spacing: 8) {
                 PSCircleButton(systemImage: "xmark", accessibilityLabel: L("Close"), action: actions.close)
                     .glassEffectID("close", in: glass)
-                Spacer(minLength: 8)
+                Spacer(minLength: 4)
+                // Takes its full width first; it shrinks to its symbol when the bar is short.
+                LocalBrainPill(live: live, glass: glass)
+                    .layoutPriority(1)
+                Spacer(minLength: 4)
                 UndoRedoCluster(bar: bar, actions: actions, glass: glass)
+                // Never truncated by the pill, whatever its words.
                 PSCapsuleButton(L("Export"), action: actions.export)
+                    .fixedSize(horizontal: true, vertical: false)
             }
         }
         .padding(.horizontal, PSSpacing.editorSide)

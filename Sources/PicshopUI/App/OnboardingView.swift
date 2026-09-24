@@ -5,14 +5,17 @@ import PicshopSpeech
 import PicshopImaging
 
 /// First launch, three pages: talk to your photos, a conversation rather than
-/// menus (and the microphone), private by default. A slow spectrum at the
-/// top, custom dots, one white button.
+/// menus (and the microphone), private by default, with the offer to download
+/// the local brain over Wi‑Fi. A slow spectrum at the top, custom dots, one
+/// white button.
 public struct OnboardingView: View {
     @Environment(\.picshop) private var app
     @State private var page = 0
     @State private var micGranted = VoiceController.permissionsGranted
     @State private var permissionsAsked = false
     @State private var isAsking = false
+    /// The last page's switch: download the local brain over Wi‑Fi (on by default).
+    @State private var downloadsBrain = true
 
     static let pageCount = 3
 
@@ -39,7 +42,7 @@ public struct OnboardingView: View {
                 TabView(selection: $page) {
                     OnboardingTalkPage(isActive: page == 0).tag(0)
                     OnboardingConversationPage(isActive: page == 1).tag(1)
-                    OnboardingPrivacyPage().tag(2)
+                    OnboardingPrivacyPage(downloadsBrain: $downloadsBrain).tag(2)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 OnboardingDots(count: Self.pageCount, current: page)
@@ -72,7 +75,9 @@ public struct OnboardingView: View {
             default:
                 OnboardingPrimaryButton(title: L("Get started")) {
                     Haptics.magic()
-                    app?.settings.hasCompletedOnboarding = true
+                    guard let app else { return }
+                    LocalBrainFirstRun.resolve(app: app, download: downloadsBrain)
+                    app.settings.hasCompletedOnboarding = true
                 }
                 secondarySlot(nil)
             }

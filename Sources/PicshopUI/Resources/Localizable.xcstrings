@@ -1,6 +1,22 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ (%@) replaces the model on the iPhone once downloaded.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (%@) replaces the model on the iPhone once downloaded."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (%@) remplacera le modèle de l'iPhone une fois téléchargé."
+          }
+        }
+      }
+    },
     "%@ copy": {
       "localizations": {
         "en": {
@@ -13,6 +29,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ (copie)"
+          }
+        }
+      }
+    },
+    "%@ weighs %@. Your carrier may charge for this data. Nothing else is sent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ weighs %@. Your carrier may charge for this data. Nothing else is sent."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ pèse %@. Ton opérateur peut facturer ces données. Rien d'autre n'est envoyé."
           }
         }
       }
@@ -81,6 +113,22 @@
         }
       }
     },
+    "%d tok/s · first answer in %d ms": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d tok/s · first answer in %d ms"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d tok/s · 1re réponse en %d ms"
+          }
+        }
+      }
+    },
     "%d words · tap to strike": {
       "localizations": {
         "en": {
@@ -113,34 +161,18 @@
         }
       }
     },
-    "A 20-minute session: cache read above 0 on every turn after the first; note the thermal state.": {
+    "A 10-minute session with a large photo: note the thermal state and the answer speed.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A 20-minute session: cache read above 0 on every turn after the first; note the thermal state."
+            "value": "A 10-minute session with a large photo: note the thermal state and the answer speed."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Une session de 20 minutes : lecture du cache supérieure à 0 à chaque tour après le premier ; note l'état thermique."
-          }
-        }
-      }
-    },
-    "A Claude key starts with sk-ant-": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A Claude key starts with sk-ant-"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Une clé Claude commence par sk-ant-"
+            "value": "Une session de 10 minutes avec une grande photo : note l'état thermique et la vitesse des réponses."
           }
         }
       }
@@ -177,6 +209,22 @@
         }
       }
     },
+    "A downloaded file was damaged. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A downloaded file was damaged. Try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un fichier téléchargé était abîmé. Réessaie."
+          }
+        }
+      }
+    },
     "A more natural voice": {
       "localizations": {
         "en": {
@@ -205,38 +253,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Un appel téléphonique au milieu d'une réponse."
-          }
-        }
-      }
-    },
-    "A revoked key.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A revoked key."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Une clé révoquée."
-          }
-        }
-      }
-    },
-    "Accept and continue": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Accept and continue"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Accepter et continuer"
           }
         }
       }
@@ -301,22 +317,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ajouter du texte"
-          }
-        }
-      }
-    },
-    "Add a Claude key for the most natural conversation.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add a Claude key for the most natural conversation."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ajoute une clé Claude pour la conversation la plus naturelle."
           }
         }
       }
@@ -433,34 +433,18 @@
         }
       }
     },
-    "AirPods: full barge-in by default. Check the voice quality.": {
+    "Airplane mode: Live answers the same.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "AirPods: full barge-in by default. Check the voice quality."
+            "value": "Airplane mode: Live answers the same."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "AirPods : interruption par la voix active par défaut. Vérifie la qualité de la voix."
-          }
-        }
-      }
-    },
-    "Airplane mode in the middle of a turn.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Airplane mode in the middle of a turn."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Le mode Avion au milieu d'un échange."
+            "value": "Mode Avion : Live répond de la même façon."
           }
         }
       }
@@ -477,6 +461,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tous"
+          }
+        }
+      }
+    },
+    "Allow cellular": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow cellular"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autoriser le cellulaire"
           }
         }
       }
@@ -509,38 +509,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Autoriser le micro"
-          }
-        }
-      }
-    },
-    "Also send the picture": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Also send the picture"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Envoyer aussi l'image"
-          }
-        }
-      }
-    },
-    "Always on with headphones. On the loudspeaker, turn it on if PicShop doesn't cut itself off while it speaks.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Always on with headphones. On the loudspeaker, turn it on if PicShop doesn't cut itself off while it speaks."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Toujours actif avec des écouteurs. Sur le haut-parleur, active-le si PicShop ne se coupe pas tout seul quand il parle."
           }
         }
       }
@@ -593,34 +561,18 @@
         }
       }
     },
-    "Anthropic credit used up": {
+    "Answers on the iPhone, even in airplane mode.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Anthropic credit used up"
+            "value": "Answers on the iPhone, even in airplane mode."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Crédit Anthropic épuisé"
-          }
-        }
-      }
-    },
-    "Anthropic isn't answering — try again": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Anthropic isn't answering — try again"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Anthropic ne répond pas — réessaie"
+            "value": "Répond sur l'iPhone, même en mode Avion."
           }
         }
       }
@@ -641,6 +593,22 @@
         }
       }
     },
+    "Apple Intelligence is off in Settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence is off in Settings"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence est désactivé dans Réglages"
+          }
+        }
+      }
+    },
     "Apple Intelligence is ready": {
       "localizations": {
         "en": {
@@ -657,6 +625,22 @@
         }
       }
     },
+    "Apple Intelligence is still getting ready": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence is still getting ready"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence se prépare encore"
+          }
+        }
+      }
+    },
     "Apple Intelligence is unavailable.": {
       "localizations": {
         "en": {
@@ -669,6 +653,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Apple Intelligence n'est pas disponible."
+          }
+        }
+      }
+    },
+    "Apple Intelligence on": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence on"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence activé"
+          }
+        }
+      }
+    },
+    "Apple Intelligence unavailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence unavailable"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence indisponible"
+          }
+        }
+      }
+    },
+    "Apple Intelligence: not on this iPhone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence: not on this iPhone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence : pas sur cet iPhone"
           }
         }
       }
@@ -845,6 +877,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Niveau auto"
+          }
+        }
+      }
+    },
+    "Auto picks Max or Fast from this iPhone's chip, memory and temperature.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto picks Max or Fast from this iPhone's chip, memory and temperature."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto choisit Max ou Rapide selon la puce, la mémoire et la température de l'iPhone."
           }
         }
       }
@@ -1393,66 +1441,18 @@
         }
       }
     },
-    "Built-in grammar": {
+    "Built-in commands": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Built-in grammar"
+            "value": "Built-in commands"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Grammaire intégrée"
-          }
-        }
-      }
-    },
-    "Cache read": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cache read"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cache lu"
-          }
-        }
-      }
-    },
-    "Cache write": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cache write"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cache écrit"
-          }
-        }
-      }
-    },
-    "Café noise: the end of your turn is detected in under 2 s.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Café noise: the end of your turn is detected in under 2 s."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bruit de café : la fin de ta phrase est détectée en moins de 2 s."
+            "value": "Commandes intégrées"
           }
         }
       }
@@ -1485,6 +1485,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Annuler"
+          }
+        }
+      }
+    },
+    "Cancel the download": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel the download"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annuler le téléchargement"
           }
         }
       }
@@ -1585,38 +1601,6 @@
         }
       }
     },
-    "Check again": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Check again"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vérifier à nouveau"
-          }
-        }
-      }
-    },
-    "Checking…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Checking…"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vérification…"
-          }
-        }
-      }
-    },
     "Choice %d: %@": {
       "localizations": {
         "en": {
@@ -1661,150 +1645,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cinéma"
-          }
-        }
-      }
-    },
-    "Claude API key": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude API key"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Clé API Claude"
-          }
-        }
-      }
-    },
-    "Claude Opus 5 with your key, while Live runs.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude Opus 5 with your key, while Live runs."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude Opus 5 avec ta clé, pendant Live."
-          }
-        }
-      }
-    },
-    "Claude asks for your consent the first time Live starts.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude asks for your consent the first time Live starts."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude te demandera ton accord au premier lancement de Live."
-          }
-        }
-      }
-    },
-    "Claude can see this image": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude can see this image"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude voit l'image"
-          }
-        }
-      }
-    },
-    "Claude can see this photo": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude can see this photo"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude voit la photo"
-          }
-        }
-      }
-    },
-    "Claude is off: Live stays on the iPhone.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude is off: Live stays on the iPhone."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude est désactivé : Live reste sur l'iPhone."
-          }
-        }
-      }
-    },
-    "Claude usage": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude usage"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Utilisation de Claude"
-          }
-        }
-      }
-    },
-    "Claude → Apple Intelligence → Pro Brain → built-in grammar": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude → Apple Intelligence → Pro Brain → built-in grammar"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude → Apple Intelligence → Pro Brain → grammaire intégrée"
-          }
-        }
-      }
-    },
-    "Claude → Apple Intelligence → built-in grammar": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude → Apple Intelligence → built-in grammar"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude → Apple Intelligence → grammaire intégrée"
           }
         }
       }
@@ -2049,6 +1889,22 @@
         }
       }
     },
+    "Connect headphones to test it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect headphones to test it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branche des écouteurs pour le tester."
+          }
+        }
+      }
+    },
     "Contiguous": {
       "localizations": {
         "en": {
@@ -2077,22 +1933,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Continuer"
-          }
-        }
-      }
-    },
-    "Continue on the iPhone": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Continue on the iPhone"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Continuer sur l'iPhone"
           }
         }
       }
@@ -2369,6 +2209,22 @@
         }
       }
     },
+    "Delete %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer %@"
+          }
+        }
+      }
+    },
     "Delete clip": {
       "localizations": {
         "en": {
@@ -2385,34 +2241,18 @@
         }
       }
     },
-    "Delete the Claude key?": {
+    "Delete the local brain?": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Delete the Claude key?"
+            "value": "Delete the local brain?"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Supprimer la clé Claude ?"
-          }
-        }
-      }
-    },
-    "Delete the key": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delete the key"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Supprimer la clé"
+            "value": "Supprimer le cerveau local ?"
           }
         }
       }
@@ -2429,6 +2269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Supprimer « %@ » ?"
+          }
+        }
+      }
+    },
+    "Deleting…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleting…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suppression…"
           }
         }
       }
@@ -2481,6 +2337,22 @@
         }
       }
     },
+    "Diagnostic Live": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnostic Live"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnostic Live"
+          }
+        }
+      }
+    },
     "Diagnostics": {
       "localizations": {
         "en": {
@@ -2493,6 +2365,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Diagnostic"
+          }
+        }
+      }
+    },
+    "Did you hear the voice?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Did you hear the voice?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu as entendu la voix ?"
           }
         }
       }
@@ -2593,6 +2481,70 @@
         }
       }
     },
+    "Download %@ over cellular": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download %@ over cellular"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharger %@ en cellulaire"
+          }
+        }
+      }
+    },
+    "Download %@ over cellular?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download %@ over cellular?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharger %@ en cellulaire ?"
+          }
+        }
+      }
+    },
+    "Download (Wi‑Fi)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download (Wi‑Fi)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharger (Wi‑Fi)"
+          }
+        }
+      }
+    },
+    "Download a Premium voice for a more natural Live": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download a Premium voice for a more natural Live"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharge une voix Premium pour un Live plus naturel"
+          }
+        }
+      }
+    },
     "Download a Premium voice: Settings › Accessibility › Spoken Content › Voices › English.": {
       "localizations": {
         "en": {
@@ -2641,6 +2593,102 @@
         }
       }
     },
+    "Download over Wi‑Fi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download over Wi‑Fi"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharger en Wi‑Fi"
+          }
+        }
+      }
+    },
+    "Download size: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download size: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taille du téléchargement : %@"
+          }
+        }
+      }
+    },
+    "Download the local brain": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download the local brain"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharger le cerveau local"
+          }
+        }
+      }
+    },
+    "Download the local brain over Wi‑Fi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download the local brain over Wi‑Fi"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharger le cerveau local en Wi‑Fi"
+          }
+        }
+      }
+    },
+    "Download the local brain?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download the local brain?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharger le cerveau local ?"
+          }
+        }
+      }
+    },
+    "Downloaded · loads when Live needs it": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloaded · loads when Live needs it"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Téléchargé · se charge quand Live en a besoin"
+          }
+        }
+      }
+    },
     "Downloading the speech model…": {
       "localizations": {
         "en": {
@@ -2653,6 +2701,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Téléchargement du modèle vocal…"
+          }
+        }
+      }
+    },
+    "Downloading · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading · %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Téléchargement · %@"
           }
         }
       }
@@ -2801,6 +2865,38 @@
         }
       }
     },
+    "Duplex conversation (headphones)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplex conversation (headphones)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversation duplex (écouteurs)"
+          }
+        }
+      }
+    },
+    "Duplex didn't start: Live takes turns to talk.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplex didn't start: Live takes turns to talk."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le duplex n'a pas démarré : Live parle chacun son tour."
+          }
+        }
+      }
+    },
     "Duplicate": {
       "localizations": {
         "en": {
@@ -2865,6 +2961,22 @@
         }
       }
     },
+    "Echo cancellation is not available on this route.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Echo cancellation is not available on this route."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'annulation d'écho n'est pas disponible sur cette sortie audio."
+          }
+        }
+      }
+    },
     "Echo risk": {
       "localizations": {
         "en": {
@@ -2877,6 +2989,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Risque d'écho"
+          }
+        }
+      }
+    },
+    "Echo-cancelled audio (headphones)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Echo-cancelled audio (headphones)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio sans écho (écouteurs)"
           }
         }
       }
@@ -3233,38 +3361,6 @@
         }
       }
     },
-    "Estimated cost, in total": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Estimated cost, in total"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Coût estimé, au total"
-          }
-        }
-      }
-    },
-    "Estimated cost, this session": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Estimated cost, this session"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Coût estimé, cette session"
-          }
-        }
-      }
-    },
     "Estimated from the subject.": {
       "localizations": {
         "en": {
@@ -3297,18 +3393,50 @@
         }
       }
     },
-    "Everything stays on the iPhone, except in Live mode with Claude: once you agree, Live sends Anthropic, with your own key, the text of the conversation and, if you allow it, a reduced picture — never the audio. PicShop has no server, no account and no tracking.": {
+    "Everything stays on the iPhone.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Everything stays on the iPhone, except in Live mode with Claude: once you agree, Live sends Anthropic, with your own key, the text of the conversation and, if you allow it, a reduced picture — never the audio. PicShop has no server, no account and no tracking."
+            "value": "Everything stays on the iPhone."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tout reste sur l'iPhone, sauf en mode Live avec Claude : après ton accord, Live envoie à Anthropic, avec ta propre clé, le texte de la conversation et, si tu l'autorises, une image réduite — jamais l'audio. PicShop n'a ni serveur, ni compte, ni pistage."
+            "value": "Tout reste sur l'iPhone."
+          }
+        }
+      }
+    },
+    "Everything stays on the iPhone. Live listens, understands, looks at the picture and answers on the device — nothing is sent. PicShop has no server, no account and no tracking.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Everything stays on the iPhone. Live listens, understands, looks at the picture and answers on the device — nothing is sent. PicShop has no server, no account and no tracking."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout reste sur l'iPhone. Live écoute, comprend, regarde l'image et répond sur l'appareil — rien n'est envoyé. PicShop n'a ni serveur, ni compte, ni pistage."
+          }
+        }
+      }
+    },
+    "Everything stays on your iPhone: your voice, your words, your photos and videos. Live thinks on the device; nothing is sent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Everything stays on your iPhone: your voice, your words, your photos and videos. Live thinks on the device; nothing is sent."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout reste sur ton iPhone : ta voix, tes mots, tes photos et vidéos. Live réfléchit sur l'appareil ; rien n'est envoyé."
           }
         }
       }
@@ -3453,6 +3581,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fondu au blanc"
+          }
+        }
+      }
+    },
+    "Failed: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Échec : %@"
+          }
+        }
+      }
+    },
+    "Fast": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fast"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rapide"
+          }
+        }
+      }
+    },
+    "Fast: Qwen3.5 2B, quicker and lighter on memory and battery.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fast: Qwen3.5 2B, quicker and lighter on memory and battery."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rapide : Qwen3.5 2B, plus vif et plus léger pour la mémoire et la batterie."
           }
         }
       }
@@ -3661,6 +3837,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Je cherche les mots…"
+          }
+        }
+      }
+    },
+    "First token": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First token"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Premier jeton"
+          }
+        }
+      }
+    },
+    "First token p50 / p90": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First token p50 / p90"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Premier jeton p50 / p90"
           }
         }
       }
@@ -4097,22 +4305,6 @@
         }
       }
     },
-    "Get a key": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Get a key"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Obtenir une clé"
-          }
-        }
-      }
-    },
     "Get started": {
       "localizations": {
         "en": {
@@ -4225,6 +4417,22 @@
         }
       }
     },
+    "Headphones: run the test again, so duplex is allowed, then talk over a reply.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Headphones: run the test again, so duplex is allowed, then talk over a reply."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Écouteurs : refais le test pour autoriser le duplex, puis parle par-dessus une réponse."
+          }
+        }
+      }
+    },
     "Hide Captions": {
       "localizations": {
         "en": {
@@ -4253,22 +4461,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Masquer les sous-titres"
-          }
-        }
-      }
-    },
-    "Hide the key": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hide the key"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Masquer la clé"
           }
         }
       }
@@ -4545,38 +4737,6 @@
         }
       }
     },
-    "In Live mode with Claude, once you agree, the text of the conversation and, when this is on, a reduced copy (1024 px) of the picture on screen are sent to Anthropic with your own key — never the audio. Outside Live mode, nothing is sent.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "In Live mode with Claude, once you agree, the text of the conversation and, when this is on, a reduced copy (1024 px) of the picture on screen are sent to Anthropic with your own key — never the audio. Outside Live mode, nothing is sent."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "En mode Live avec Claude, après ton accord, le texte de la conversation et, si c'est activé, une copie réduite (1024 px) de l'image affichée sont envoyés à Anthropic avec ta propre clé — jamais l'audio. Hors du mode Live, rien n'est envoyé."
-          }
-        }
-      }
-    },
-    "In Live mode with Claude, these are sent to Anthropic to answer you, with your own API key: what you say or type during Live (the text, never the audio); the list of your edits and their settings; what the iPhone recognised in the picture (for example “1 person in the centre, a dog on the left”); the text in your photo or video and a few sentences spoken in the video around the playhead; if you allow it, a reduced copy (1024 px) of the photo or video frame on screen, without location or camera data. Your voice is transcribed on the iPhone: the audio never leaves the device. Outside Live mode, nothing is sent. Anthropic keeps this data according to its privacy policy, and usage is billed to your Anthropic account. You can stop at any time with the End button or in Settings › Live.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "In Live mode with Claude, these are sent to Anthropic to answer you, with your own API key: what you say or type during Live (the text, never the audio); the list of your edits and their settings; what the iPhone recognised in the picture (for example “1 person in the centre, a dog on the left”); the text in your photo or video and a few sentences spoken in the video around the playhead; if you allow it, a reduced copy (1024 px) of the photo or video frame on screen, without location or camera data. Your voice is transcribed on the iPhone: the audio never leaves the device. Outside Live mode, nothing is sent. Anthropic keeps this data according to its privacy policy, and usage is billed to your Anthropic account. You can stop at any time with the End button or in Settings › Live."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "En mode Live avec Claude, ces éléments sont envoyés à Anthropic pour te répondre, avec ta propre clé API : ce que tu dis ou écris pendant Live (le texte, jamais l'audio) ; la liste de tes retouches et leurs réglages ; ce que l'iPhone a reconnu dans l'image (par exemple « 1 personne au centre, un chien à gauche ») ; les textes présents dans ta photo ou ta vidéo et quelques phrases prononcées dans la vidéo autour de la tête de lecture ; si tu l'autorises, une copie réduite (1024 px) de la photo ou de l'image vidéo affichée, sans localisation ni données de l'appareil photo. Ta voix est transcrite sur l'iPhone : l'audio ne quitte jamais l'appareil. Hors du mode Live, rien n'est envoyé. Anthropic conserve ces données selon sa politique de confidentialité, et l'usage est facturé sur ton compte Anthropic. Tu peux arrêter à tout moment avec le bouton Fin ou dans Réglages › Live."
-          }
-        }
-      }
-    },
     "In the order you like. Up to 30.": {
       "localizations": {
         "en": {
@@ -4605,22 +4765,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Inclus dans l'app"
-          }
-        }
-      }
-    },
-    "Injected fault": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Injected fault"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Panne simulée"
           }
         }
       }
@@ -4689,6 +4833,22 @@
         }
       }
     },
+    "Intelligence": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intelligence"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intelligence"
+          }
+        }
+      }
+    },
     "Intensity": {
       "localizations": {
         "en": {
@@ -4721,22 +4881,6 @@
         }
       }
     },
-    "Interrupt any time, it's listening. Manual tools stay one tap away in Tools.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Interrupt any time, it's listening. Manual tools stay one tap away in Tools."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Interromps-la quand tu veux, elle t'écoute. Les outils manuels restent à un geste, dans Outils."
-          }
-        }
-      }
-    },
     "Isolating the voice…": {
       "localizations": {
         "en": {
@@ -4765,22 +4909,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jump cuts"
-          }
-        }
-      }
-    },
-    "Key refused by Anthropic": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Key refused by Anthropic"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Clé refusée par Anthropic"
           }
         }
       }
@@ -4913,6 +5041,22 @@
         }
       }
     },
+    "Large models download once over Wi‑Fi; your content never leaves the iPhone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Large models download once over Wi‑Fi; your content never leaves the iPhone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les gros modèles se téléchargent une fois en Wi‑Fi ; ton contenu ne quitte jamais l'iPhone."
+          }
+        }
+      }
+    },
     "Lasso": {
       "localizations": {
         "en": {
@@ -4925,6 +5069,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lasso"
+          }
+        }
+      }
+    },
+    "Last answer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last answer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dernière réponse"
           }
         }
       }
@@ -4945,22 +5105,6 @@
         }
       }
     },
-    "Last request": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Last request"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dernière requête"
-          }
-        }
-      }
-    },
     "Last turn, then p50 / p90, in milliseconds.": {
       "localizations": {
         "en": {
@@ -4973,6 +5117,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dernier échange, puis p50 / p90, en millisecondes."
+          }
+        }
+      }
+    },
+    "Last voice test: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last voice test: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dernier test vocal : %@"
           }
         }
       }
@@ -5053,22 +5213,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Calques"
-          }
-        }
-      }
-    },
-    "Let me interrupt": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Let me interrupt"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Me laisser l'interrompre"
           }
         }
       }
@@ -5185,6 +5329,22 @@
         }
       }
     },
+    "Listening": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Écoute"
+          }
+        }
+      }
+    },
     "Listening and writing captions…": {
       "localizations": {
         "en": {
@@ -5281,18 +5441,34 @@
         }
       }
     },
-    "Live answers here, on the iPhone: your words and the picture stay on the device.": {
+    "Live answers with %@, on the iPhone.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Live answers here, on the iPhone: your words and the picture stay on the device."
+            "value": "Live answers with %@, on the iPhone."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Live répond ici, sur l'iPhone : tes paroles et l'image restent sur l'appareil."
+            "value": "Live répond avec %@, sur l'iPhone."
+          }
+        }
+      }
+    },
+    "Live answers with voice commands only.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live answers with voice commands only."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live répond seulement aux commandes vocales."
           }
         }
       }
@@ -5313,50 +5489,82 @@
         }
       }
     },
-    "Live on this iPhone": {
+    "Live keeps working with Apple Intelligence or the commands meanwhile. Keep PicShop open: the download pauses in the background.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Live on this iPhone"
+            "value": "Live keeps working with Apple Intelligence or the commands meanwhile. Keep PicShop open: the download pauses in the background."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Live sur cet iPhone"
+            "value": "En attendant, Live fonctionne avec Apple Intelligence ou les commandes. Garde PicShop ouvert : le téléchargement se met en pause en arrière-plan."
           }
         }
       }
     },
-    "Live will answer from the iPhone until you add a key again.": {
+    "Live listens, looks at the picture and answers with it, entirely on the iPhone.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Live will answer from the iPhone until you add a key again."
+            "value": "Live listens, looks at the picture and answers with it, entirely on the iPhone."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Live répondra depuis l'iPhone jusqu'à ce que tu ajoutes une clé."
+            "value": "Live écoute, regarde l'image et répond avec lui, entièrement sur l'iPhone."
           }
         }
       }
     },
-    "Live: Claude": {
+    "Live speaks with the best voice installed on the iPhone. A Premium or Enhanced voice sounds much more natural.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Live: Claude"
+            "value": "Live speaks with the best voice installed on the iPhone. A Premium or Enhanced voice sounds much more natural."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Live : Claude"
+            "value": "Live parle avec la meilleure voix installée sur l'iPhone. Une voix Premium ou Améliorée est bien plus naturelle."
+          }
+        }
+      }
+    },
+    "Live start cancelled.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live start cancelled."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Démarrage de Live annulé."
+          }
+        }
+      }
+    },
+    "Live then answers with Apple Intelligence or the commands. You can download it again here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live then answers with Apple Intelligence or the commands. You can download it again here."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live répondra alors avec Apple Intelligence ou les commandes. Tu pourras le retélécharger ici."
           }
         }
       }
@@ -5373,6 +5581,118 @@
           "stringUnit": {
             "state": "translated",
             "value": "Live : sur l'iPhone"
+          }
+        }
+      }
+    },
+    "Loading the brain…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading the brain…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement du cerveau…"
+          }
+        }
+      }
+    },
+    "Loading the model and timing an answer…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading the model and timing an answer…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement du modèle et chronométrage d'une réponse…"
+          }
+        }
+      }
+    },
+    "Loads the local brain as the editor opens, so the first answer doesn't wait.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loads the local brain as the editor opens, so the first answer doesn't wait."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Charge le cerveau local dès l'ouverture de l'éditeur, pour que la première réponse n'attende pas."
+          }
+        }
+      }
+    },
+    "Local assistant · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local assistant · %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Assistant local · %@"
+          }
+        }
+      }
+    },
+    "Local brain": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local brain"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerveau local"
+          }
+        }
+      }
+    },
+    "Local brain · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local brain · %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerveau local · %@"
+          }
+        }
+      }
+    },
+    "Local brain → Apple Intelligence → commands, all on the iPhone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local brain → Apple Intelligence → commands, all on the iPhone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerveau local → Apple Intelligence → commandes, tout sur l'iPhone."
           }
         }
       }
@@ -5457,18 +5777,18 @@
         }
       }
     },
-    "Loudspeaker at full volume in a quiet room: talk over the assistant in safe mode. It must not interrupt itself. Say “stop”: it stops within 0.3 s.": {
+    "Loudspeaker, tap the orb: “Looking at your photo…” within 1 s, then a sentence and three ideas.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Loudspeaker at full volume in a quiet room: talk over the assistant in safe mode. It must not interrupt itself. Say “stop”: it stops within 0.3 s."
+            "value": "Loudspeaker, tap the orb: “Looking at your photo…” within 1 s, then a sentence and three ideas."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Haut-parleur à fond dans une pièce calme : parle par-dessus l'assistant en mode sûr. Il ne doit pas s'interrompre tout seul. Dis « stop » : il s'arrête en moins de 0,3 s."
+            "value": "Haut-parleur, touche l'orbe : « Je regarde ta photo… » en moins d'une seconde, puis une phrase et trois idées."
           }
         }
       }
@@ -5665,18 +5985,50 @@
         }
       }
     },
-    "Measures latency, echo and end-of-turn decisions while Live runs. The log holds no transcript and no key.": {
+    "Max": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Measures latency, echo and end-of-turn decisions while Live runs. The log holds no transcript and no key."
+            "value": "Max"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mesure la latence, l'écho et les décisions de fin de phrase pendant Live. Le journal ne contient ni transcription ni clé."
+            "value": "Max"
+          }
+        }
+      }
+    },
+    "Max: Qwen3.5 4B, the most natural answers. Falls back to Fast when memory runs short.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Max: Qwen3.5 4B, the most natural answers. Falls back to Fast when memory runs short."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Max : Qwen3.5 4B, les réponses les plus naturelles. Passe en Rapide si la mémoire manque."
+          }
+        }
+      }
+    },
+    "Median speed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Median speed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vitesse médiane"
           }
         }
       }
@@ -5709,6 +6061,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fusionner un PDF"
+          }
+        }
+      }
+    },
+    "Microphone and speech recognition allowed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microphone and speech recognition allowed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Micro et reconnaissance vocale autorisés"
           }
         }
       }
@@ -5773,6 +6141,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mélangeur"
+          }
+        }
+      }
+    },
+    "Model": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modèle"
+          }
+        }
+      }
+    },
+    "Model state": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model state"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "État du modèle"
+          }
+        }
+      }
+    },
+    "Model tier": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model tier"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Palier du modèle"
           }
         }
       }
@@ -6097,6 +6513,22 @@
         }
       }
     },
+    "No": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non"
+          }
+        }
+      }
+    },
     "No animation": {
       "localizations": {
         "en": {
@@ -6113,18 +6545,34 @@
         }
       }
     },
-    "No connection — the key will be checked later": {
+    "No answer.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No connection — the key will be checked later"
+            "value": "No answer."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pas de connexion — la clé sera vérifiée plus tard"
+            "value": "Pas de réponse."
+          }
+        }
+      }
+    },
+    "No local brain on this iPhone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No local brain on this iPhone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas de cerveau local sur cet iPhone"
           }
         }
       }
@@ -6157,6 +6605,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aucune version enregistrée. Dites « enregistre cette version sous … »."
+          }
+        }
+      }
+    },
+    "No sound from the microphone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No sound from the microphone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun son du micro."
+          }
+        }
+      }
+    },
+    "No speech recognition for this language on this iPhone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No speech recognition for this language on this iPhone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas de reconnaissance vocale pour cette langue sur cet iPhone."
           }
         }
       }
@@ -6305,18 +6785,98 @@
         }
       }
     },
-    "Not checked yet": {
+    "Not available on this iPhone": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Not checked yet"
+            "value": "Not available on this iPhone"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pas encore vérifiée"
+            "value": "Indisponible sur cet iPhone"
+          }
+        }
+      }
+    },
+    "Not downloaded": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not downloaded"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas téléchargé"
+          }
+        }
+      }
+    },
+    "Not enough storage: %@ must be free.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not enough storage: %@ must be free."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas assez d'espace : il faut %@ de libre."
+          }
+        }
+      }
+    },
+    "Not heard: check the volume, the silent switch and where the sound goes (AirPlay, Bluetooth).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not heard: check the volume, the silent switch and where the sound goes (AirPlay, Bluetooth)."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas entendu : vérifie le volume, le mode silencieux et la sortie du son (AirPlay, Bluetooth)."
+          }
+        }
+      }
+    },
+    "Not in this build": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not in this build"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Absent de cette version"
+          }
+        }
+      }
+    },
+    "Not measured yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not measured yet"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas encore mesuré"
           }
         }
       }
@@ -6333,6 +6893,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rien ici pour l'instant."
+          }
+        }
+      }
+    },
+    "Nothing recognized: speak closer, or check the microphone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing recognized: speak closer, or check the microphone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien de reconnu : parle plus près, ou vérifie le micro."
           }
         }
       }
@@ -6417,18 +6993,50 @@
         }
       }
     },
-    "On this iPhone": {
+    "On the loudspeaker, interrupt PicShop with a tap on the orb, by typing, or by saying “stop”. Everything stays on the iPhone.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "On this iPhone"
+            "value": "On the loudspeaker, interrupt PicShop with a tap on the orb, by typing, or by saying “stop”. Everything stays on the iPhone."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sur l'iPhone"
+            "value": "Sur le haut-parleur, interromps PicShop en touchant l'orbe, en écrivant ou en disant « stop ». Tout reste sur l'iPhone."
+          }
+        }
+      }
+    },
+    "On-device brain": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device brain"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerveau sur l'iPhone"
+          }
+        }
+      }
+    },
+    "On-device model": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device model"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modèle sur l'iPhone"
           }
         }
       }
@@ -6493,22 +7101,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Opacité"
-          }
-        }
-      }
-    },
-    "Open Live diagnostics": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open Live diagnostics"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ouvrir le diagnostic Live"
           }
         }
       }
@@ -6913,6 +7505,22 @@
         }
       }
     },
+    "Permissions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permissions"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autorisations"
+          }
+        }
+      }
+    },
     "Perspective": {
       "localizations": {
         "en": {
@@ -6993,6 +7601,22 @@
         }
       }
     },
+    "PicShop Live works entirely on your iPhone. The local brain lets it look at the picture and talk more naturally.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop Live works entirely on your iPhone. The local brain lets it look at the picture and talk more naturally."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop Live fonctionne entièrement sur ton iPhone. Le cerveau local lui permet de regarder l'image et de parler plus naturellement."
+          }
+        }
+      }
+    },
     "PicShop couldn't find a subject to focus on.": {
       "localizations": {
         "en": {
@@ -7053,22 +7677,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "PicShop a été fermé de façon inattendue"
-          }
-        }
-      }
-    },
-    "PicShop works entirely on your iPhone. The one exception is Live mode with Claude: once you agree, it sends Anthropic, with your own key, the text of the conversation and, if you allow it, a reduced copy of the picture — never the audio. Outside Live mode, nothing is sent.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PicShop works entirely on your iPhone. The one exception is Live mode with Claude: once you agree, it sends Anthropic, with your own key, the text of the conversation and, if you allow it, a reduced copy of the picture — never the audio. Outside Live mode, nothing is sent."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PicShop fonctionne entièrement sur ton iPhone. Seule exception, le mode Live avec Claude : après ton accord, il envoie à Anthropic, avec ta propre clé, le texte de la conversation et, si tu l'autorises, une copie réduite de l'image — jamais l'audio. Hors du mode Live, rien n'est envoyé."
           }
         }
       }
@@ -7345,6 +7953,22 @@
         }
       }
     },
+    "Prepare Live when an editor opens": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prepare Live when an editor opens"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Préparer Live à l'ouverture"
+          }
+        }
+      }
+    },
     "Preparing the PDF…": {
       "localizations": {
         "en": {
@@ -7425,18 +8049,18 @@
         }
       }
     },
-    "Pro Brain": {
+    "Prompt / cached tokens": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pro Brain"
+            "value": "Prompt / cached tokens"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pro Brain"
+            "value": "Jetons de contexte / en cache"
           }
         }
       }
@@ -7489,34 +8113,18 @@
         }
       }
     },
-    "Qwen3 4B language model for long, multi-step voice commands.": {
+    "Quality can change once the download or the loading is over.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qwen3 4B language model for long, multi-step voice commands."
+            "value": "Quality can change once the download or the loading is over."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Modèle de langage Qwen3 4B pour les commandes vocales longues, en plusieurs étapes."
-          }
-        }
-      }
-    },
-    "Read from cache": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Read from cache"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lus depuis le cache"
+            "value": "La qualité pourra changer une fois le téléchargement ou le chargement terminé."
           }
         }
       }
@@ -7565,6 +8173,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Prêt"
+          }
+        }
+      }
+    },
+    "Ready · on the iPhone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ready · on the iPhone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prêt · sur l'iPhone"
           }
         }
       }
@@ -7629,6 +8253,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recoloration…"
+          }
+        }
+      }
+    },
+    "Recommended for this iPhone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recommended for this iPhone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recommandé pour cet iPhone"
+          }
+        }
+      }
+    },
+    "Record Live measurements": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record Live measurements"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer les mesures Live"
           }
         }
       }
@@ -7985,54 +8641,6 @@
         }
       }
     },
-    "Request size": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Request size"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Taille de la requête"
-          }
-        }
-      }
-    },
-    "Requests": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Requests"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Requêtes"
-          }
-        }
-      }
-    },
-    "Requests: this session · in total. The cost is an estimate from public prices; your Anthropic console has the real bill.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Requests: this session · in total. The cost is an estimate from public prices; your Anthropic console has the real bill."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Requêtes : cette session · au total. Le coût est une estimation d'après les tarifs publics ; la vraie facture est dans ta console Anthropic."
-          }
-        }
-      }
-    },
     "Reset": {
       "localizations": {
         "en": {
@@ -8225,6 +8833,38 @@
         }
       }
     },
+    "Run Test the voice above: all six steps, answering Yes or No. On any ✗, export the log.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run Test the voice above: all six steps, answering Yes or No. On any ✗, export the log."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lance « Tester le vocal » ci-dessus : les six étapes, en répondant Oui ou Non. Au moindre ✗, exporte le journal."
+          }
+        }
+      }
+    },
+    "Run the voice test in Diagnostic Live with headphones on: this turns on once it passes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run the voice test in Diagnostic Live with headphones on: this turns on once it passes."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lance le test vocal dans Diagnostic Live avec des écouteurs : l'option s'active dès qu'il réussit."
+          }
+        }
+      }
+    },
     "Saturation": {
       "localizations": {
         "en": {
@@ -8349,6 +8989,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dis ce que tu veux, PicShop le fait — et te propose des idées en direct, comme dans une vraie conversation."
+          }
+        }
+      }
+    },
+    "Say “bonjour Picshop” after the prompt.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Say “bonjour Picshop” after the prompt."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dis « bonjour Picshop » après la consigne."
           }
         }
       }
@@ -8625,66 +9281,18 @@
         }
       }
     },
-    "Show the frame to Claude": {
+    "Shows the local brain and its download.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Show the frame to Claude"
+            "value": "Shows the local brain and its download."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Montrer l'image à Claude"
-          }
-        }
-      }
-    },
-    "Show the key": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show the key"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Afficher la clé"
-          }
-        }
-      }
-    },
-    "Show the photo to Claude": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show the photo to Claude"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Montrer la photo à Claude"
-          }
-        }
-      }
-    },
-    "Show the picture to Claude": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show the picture to Claude"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Montrer l'image à Claude"
+            "value": "Affiche le cerveau local et son téléchargement."
           }
         }
       }
@@ -8701,22 +9309,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Affiche les pages."
-          }
-        }
-      }
-    },
-    "Shows what is sent to Claude.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Shows what is sent to Claude."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Montre ce qui est envoyé à Claude."
           }
         }
       }
@@ -8765,6 +9357,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Signature"
+          }
+        }
+      }
+    },
+    "Six checks, about a minute: permissions, speech model, voice, listening, duplex with headphones, brain. Everything stays on the iPhone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Six checks, about a minute: permissions, speech model, voice, listening, duplex with headphones, brain. Everything stays on the iPhone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Six vérifications, environ une minute : autorisations, modèle vocal, voix, écoute, duplex avec écouteurs, cerveau. Tout reste sur l'iPhone."
           }
         }
       }
@@ -8993,6 +9601,54 @@
         }
       }
     },
+    "Speech model": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speech model"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modèle vocal"
+          }
+        }
+      }
+    },
+    "Speech recognition for this language is not on the iPhone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speech recognition for this language is not on the iPhone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La reconnaissance vocale de cette langue n'est pas sur l'iPhone."
+          }
+        }
+      }
+    },
+    "Speech recognition is not allowed: Settings › Picshop › Speech Recognition.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speech recognition is not allowed: Settings › Picshop › Speech Recognition."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La reconnaissance vocale n'est pas autorisée : Réglages › Picshop › Reconnaissance vocale."
+          }
+        }
+      }
+    },
     "Speed": {
       "localizations": {
         "en": {
@@ -9021,6 +9677,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ralenti progressif ici"
+          }
+        }
+      }
+    },
+    "Speed test": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speed test"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test de vitesse"
+          }
+        }
+      }
+    },
+    "Speed test result": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speed test result"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test de vitesse"
           }
         }
       }
@@ -9201,22 +9889,6 @@
         }
       }
     },
-    "Stay on the iPhone": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stay on the iPhone"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rester sur l'iPhone"
-          }
-        }
-      }
-    },
     "Still getting ready — try again in a moment.": {
       "localizations": {
         "en": {
@@ -9249,18 +9921,34 @@
         }
       }
     },
-    "Stop reason": {
+    "Stop Live or dictation first, then test again.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stop reason"
+            "value": "Stop Live or dictation first, then test again."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Raison de l'arrêt"
+            "value": "Arrête d'abord Live ou la dictée, puis relance le test."
+          }
+        }
+      }
+    },
+    "Storage used": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Storage used"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Espace utilisé"
           }
         }
       }
@@ -9409,22 +10097,6 @@
         }
       }
     },
-    "Talk with Claude": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Talk with Claude"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Parler avec Claude"
-          }
-        }
-      }
-    },
     "Talk with PicShop": {
       "localizations": {
         "en": {
@@ -9553,6 +10225,38 @@
         }
       }
     },
+    "Tap the orb during a reply: it stops at once.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the orb during a reply: it stops at once."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touche l'orbe pendant une réponse : elle s'arrête aussitôt."
+          }
+        }
+      }
+    },
+    "Tap the orb to interrupt, or say “stop”. Manual tools stay one tap away in Tools.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the orb to interrupt, or say “stop”. Manual tools stay one tap away in Tools."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touche l'orbe pour l'interrompre, ou dis « stop ». Les outils manuels restent à un geste, dans Outils."
+          }
+        }
+      }
+    },
     "Tap the orb to talk live. Hold it to dictate.": {
       "localizations": {
         "en": {
@@ -9645,6 +10349,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sarcelle et orange"
+          }
+        }
+      }
+    },
+    "Test": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tester"
+          }
+        }
+      }
+    },
+    "Test the voice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test the voice"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tester le vocal"
+          }
+        }
+      }
+    },
+    "Test the voice, the ear and the brain": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test the voice, the ear and the brain"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tester la voix, l'écoute et le cerveau"
+          }
+        }
+      }
+    },
+    "Testing…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Testing…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test en cours…"
           }
         }
       }
@@ -9809,6 +10577,54 @@
         }
       }
     },
+    "The audio configuration keeps changing.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The audio configuration keeps changing."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La configuration audio change sans arrêt."
+          }
+        }
+      }
+    },
+    "The audio engine failed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The audio engine failed."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le moteur audio a échoué."
+          }
+        }
+      }
+    },
+    "The audio session did not start.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The audio session did not start."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La session audio n'a pas démarré."
+          }
+        }
+      }
+    },
     "The best installed voice": {
       "localizations": {
         "en": {
@@ -9873,18 +10689,98 @@
         }
       }
     },
-    "The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large: they download by themselves over Wi‑Fi the first time, and everything runs on your iPhone.": {
+    "The download server is not answering. Try again later.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large: they download by themselves over Wi‑Fi the first time, and everything runs on your iPhone."
+            "value": "The download server is not answering. Try again later."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "La gomme et l'upscaler sont livrés avec l'app. Le Remplissage génératif et le Pro Brain sont volumineux : ils se téléchargent seuls en Wi‑Fi la première fois, et tout fonctionne sur votre iPhone."
+            "value": "Le serveur de téléchargement ne répond pas. Réessaie plus tard."
+          }
+        }
+      }
+    },
+    "The download starts by itself on Wi‑Fi. Live keeps working with Apple Intelligence or the commands meanwhile.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The download starts by itself on Wi‑Fi. Live keeps working with Apple Intelligence or the commands meanwhile."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le téléchargement démarre tout seul en Wi‑Fi. En attendant, Live fonctionne avec Apple Intelligence ou les commandes."
+          }
+        }
+      }
+    },
+    "The download stopped with the connection. It picks up where it left off.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The download stopped with the connection. It picks up where it left off."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le téléchargement s'est arrêté avec la connexion. Il reprendra là où il en était."
+          }
+        }
+      }
+    },
+    "The echo-cancelling engine did not start.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The echo-cancelling engine did not start."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le moteur anti-écho n'a pas démarré."
+          }
+        }
+      }
+    },
+    "The engine voice did not play:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The engine voice did not play:"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La voix du moteur n'a pas joué :"
+          }
+        }
+      }
+    },
+    "The eraser and the upscaler ship with the app. Generative Fill is large: it downloads by itself over Wi‑Fi the first time, and everything runs on your iPhone. The local brain is in Settings › Intelligence.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The eraser and the upscaler ship with the app. Generative Fill is large: it downloads by itself over Wi‑Fi the first time, and everything runs on your iPhone. The local brain is in Settings › Intelligence."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La gomme et l'upscaler sont livrés avec l'app. Le Remplissage génératif est volumineux : il se télécharge seul en Wi‑Fi la première fois, et tout fonctionne sur votre iPhone. Le cerveau local se trouve dans Réglages › Intelligence."
           }
         }
       }
@@ -9905,38 +10801,6 @@
         }
       }
     },
-    "The key could not be saved in the keychain.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The key could not be saved in the keychain."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "La clé n'a pas pu être enregistrée dans le trousseau."
-          }
-        }
-      }
-    },
-    "The key stays in this iPhone's keychain and is not transferred to a new iPhone.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The key stays in this iPhone's keychain and is not transferred to a new iPhone."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "La clé reste dans le trousseau de cet iPhone et n'est pas transférée sur un nouvel iPhone."
-          }
-        }
-      }
-    },
     "The layer moves with the subject under it": {
       "localizations": {
         "en": {
@@ -9949,6 +10813,182 @@
           "stringUnit": {
             "state": "translated",
             "value": "Le calque bouge avec le sujet en dessous"
+          }
+        }
+      }
+    },
+    "The lighter model suits this chip.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The lighter model suits this chip."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le modèle léger convient à cette puce."
+          }
+        }
+      }
+    },
+    "The lighter model, while Low Power Mode is on.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The lighter model, while Low Power Mode is on."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le modèle léger, tant que le mode Économie d'énergie est activé."
+          }
+        }
+      }
+    },
+    "The lighter model, while the iPhone is hot.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The lighter model, while the iPhone is hot."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le modèle léger, tant que l'iPhone est chaud."
+          }
+        }
+      }
+    },
+    "The lighter model: last time, the iPhone ran out of memory.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The lighter model: last time, the iPhone ran out of memory."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le modèle léger : la dernière fois, l'iPhone a manqué de mémoire."
+          }
+        }
+      }
+    },
+    "The lighter model: the speed test was slow.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The lighter model: the speed test was slow."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le modèle léger : le test de vitesse était lent."
+          }
+        }
+      }
+    },
+    "The local brain did not answer within 20 s.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The local brain did not answer within 20 s."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le cerveau local n'a pas répondu en 20 s."
+          }
+        }
+      }
+    },
+    "The local brain doesn't run in the Simulator.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The local brain doesn't run in the Simulator."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le cerveau local ne tourne pas dans le simulateur."
+          }
+        }
+      }
+    },
+    "The local brain is on its way": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The local brain is on its way"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le cerveau local arrive"
+          }
+        }
+      }
+    },
+    "The local brain is on this iPhone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The local brain is on this iPhone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le cerveau local est sur cet iPhone"
+          }
+        }
+      }
+    },
+    "The microphone is not allowed: Settings › Picshop › Microphone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The microphone is not allowed: Settings › Picshop › Microphone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le micro n'est pas autorisé : Réglages › Picshop › Micro."
+          }
+        }
+      }
+    },
+    "The model could not load. Close other apps, then try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The model could not load. Close other apps, then try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le modèle n'a pas pu se charger. Ferme d'autres apps, puis réessaie."
           }
         }
       }
@@ -10001,6 +11041,22 @@
         }
       }
     },
+    "The speech model is still downloading: test again in a minute.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The speech model is still downloading: test again in a minute."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le modèle vocal se télécharge encore : refais le test dans une minute."
+          }
+        }
+      }
+    },
     "The system voice speaks through AVSpeechSynthesizer instead of the audio engine, to compare them.": {
       "localizations": {
         "en": {
@@ -10017,18 +11073,18 @@
         }
       }
     },
-    "The text of your words and a 1024 px copy of the picture. Never the audio: your voice is transcribed on the iPhone.": {
+    "The test couldn't run: the model didn't load. Close other apps, then try again.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The text of your words and a 1024 px copy of the picture. Never the audio: your voice is transcribed on the iPhone."
+            "value": "The test couldn't run: the model didn't load. Close other apps, then try again."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le texte de tes paroles et une copie de l'image en 1024 px. Jamais l'audio : ta voix est transcrite sur l'iPhone."
+            "value": "Le test n'a pas pu se faire : le modèle ne s'est pas chargé. Ferme d'autres apps, puis réessaie."
           }
         }
       }
@@ -10049,6 +11105,86 @@
         }
       }
     },
+    "The voice did not finish playing.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The voice did not finish playing."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La voix n'a pas fini de jouer."
+          }
+        }
+      }
+    },
+    "The voice is too quiet on this route.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The voice is too quiet on this route."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La voix est trop faible sur cette sortie audio."
+          }
+        }
+      }
+    },
+    "The voice started but never finished.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The voice started but never finished."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La voix a démarré mais ne s'est jamais arrêtée."
+          }
+        }
+      }
+    },
+    "The voice test checks the microphone, the speech model, the voice, the ear, headphones and the brain, and says what failed. Measurements record latency, echo and end-of-turn decisions while Live runs; the log holds no transcript.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The voice test checks the microphone, the speech model, the voice, the ear, headphones and the brain, and says what failed. Measurements record latency, echo and end-of-turn decisions while Live runs; the log holds no transcript."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le test vocal vérifie le micro, le modèle de reconnaissance, la voix, l'écoute, les écouteurs et le cerveau, et dit ce qui a échoué. Les mesures enregistrent la latence, l'écho et les décisions de fin de phrase pendant Live ; le journal ne contient aucune transcription."
+          }
+        }
+      }
+    },
+    "Thermal state": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thermal state"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "État thermique"
+          }
+        }
+      }
+    },
     "Thickness": {
       "localizations": {
         "en": {
@@ -10065,18 +11201,18 @@
         }
       }
     },
-    "This build was compiled without the MLX runtime.": {
+    "This build has no local brain; Live uses Apple Intelligence or the commands.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This build was compiled without the MLX runtime."
+            "value": "This build has no local brain; Live uses Apple Intelligence or the commands."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cette version a été compilée sans le moteur MLX."
+            "value": "Cette version n'a pas de cerveau local ; Live utilise Apple Intelligence ou les commandes."
           }
         }
       }
@@ -10113,6 +11249,22 @@
         }
       }
     },
+    "This iPhone doesn't have enough memory for the local brain; Live uses Apple Intelligence or the commands.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This iPhone doesn't have enough memory for the local brain; Live uses Apple Intelligence or the commands."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet iPhone n'a pas assez de mémoire pour le cerveau local ; Live utilise Apple Intelligence ou les commandes."
+          }
+        }
+      }
+    },
     "This is already the original photo.": {
       "localizations": {
         "en": {
@@ -10145,18 +11297,18 @@
         }
       }
     },
-    "This key has no access to Claude Opus 5": {
+    "This model is incomplete on the server.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This key has no access to Claude Opus 5"
+            "value": "This model is incomplete on the server."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cette clé n'a pas accès à Claude Opus 5"
+            "value": "Ce modèle est incomplet sur le serveur."
           }
         }
       }
@@ -10257,54 +11409,6 @@
         }
       }
     },
-    "To talk with Claude, add your key in Settings › Live.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "To talk with Claude, add your key in Settings › Live."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pour parler avec Claude, ajoute ta clé dans Réglages › Live."
-          }
-        }
-      }
-    },
-    "Tokens received": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tokens received"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Jetons reçus"
-          }
-        }
-      }
-    },
-    "Tokens sent": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tokens sent"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Jetons envoyés"
-          }
-        }
-      }
-    },
     "Tolerance": {
       "localizations": {
         "en": {
@@ -10317,22 +11421,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tolérance"
-          }
-        }
-      }
-    },
-    "Too many requests — try again in a moment": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Too many requests — try again in a moment"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Trop de requêtes — réessaie dans un instant"
           }
         }
       }
@@ -10529,6 +11617,38 @@
         }
       }
     },
+    "Try again (Wi‑Fi)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again (Wi‑Fi)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réessayer (Wi‑Fi)"
+          }
+        }
+      }
+    },
+    "Try again over Wi‑Fi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again over Wi‑Fi"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réessayer en Wi‑Fi"
+          }
+        }
+      }
+    },
     "Trying framings…": {
       "localizations": {
         "en": {
@@ -10541,22 +11661,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "J'essaie des cadrages…"
-          }
-        }
-      }
-    },
-    "Turn on Let me interrupt and repeat step 1, noting false interruptions in the decisions list.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Turn on Let me interrupt and repeat step 1, noting false interruptions in the decisions list."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Active « Me laisser l'interrompre » et refais l'étape 1, en notant les fausses interruptions dans la liste des décisions."
           }
         }
       }
@@ -10589,6 +11693,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Écrivez ou dites « ajoute le texte … »"
+          }
+        }
+      }
+    },
+    "Understands editing commands until the local brain is downloaded (Settings › Intelligence).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Understands editing commands until the local brain is downloaded (Settings › Intelligence)."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprend les commandes de retouche jusqu'au téléchargement du cerveau local (Réglages › Intelligence)."
+          }
+        }
+      }
+    },
+    "Understands editing commands, on the iPhone. Turn on Apple Intelligence for a real conversation.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Understands editing commands, on the iPhone. Turn on Apple Intelligence for a real conversation."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprend les commandes de retouche, sur l'iPhone. Active Apple Intelligence pour une vraie conversation."
           }
         }
       }
@@ -10705,18 +11841,18 @@
         }
       }
     },
-    "Use Claude": {
+    "Use cellular data…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Use Claude"
+            "value": "Use cellular data…"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Utiliser Claude"
+            "value": "Utiliser les données cellulaires…"
           }
         }
       }
@@ -10753,22 +11889,6 @@
         }
       }
     },
-    "Valid key · %@ available": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Valid key · %@ available"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Clé valide · %@ disponible"
-          }
-        }
-      }
-    },
     "Vehicles": {
       "localizations": {
         "en": {
@@ -10785,18 +11905,18 @@
         }
       }
     },
-    "Verify": {
+    "Verifying…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Verify"
+            "value": "Verifying…"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vérifier"
+            "value": "Vérification…"
           }
         }
       }
@@ -10961,18 +12081,18 @@
         }
       }
     },
-    "VoiceOver on: turn-taking.": {
+    "Voice path": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "VoiceOver on: turn-taking."
+            "value": "Voice path"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "VoiceOver activé : chacun son tour de parole."
+            "value": "Chemin audio"
           }
         }
       }
@@ -11009,6 +12129,22 @@
         }
       }
     },
+    "Waiting for Wi‑Fi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for Wi‑Fi"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En attente du Wi‑Fi"
+          }
+        }
+      }
+    },
     "Warm": {
       "localizations": {
         "en": {
@@ -11037,22 +12173,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Je cherche les meilleurs moments…"
-          }
-        }
-      }
-    },
-    "What Claude receives": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "What Claude receives"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ce que Claude reçoit"
           }
         }
       }
@@ -11121,18 +12241,34 @@
         }
       }
     },
-    "Without a key or a network": {
+    "With a TV on in the room: “Listening…” never stays stuck more than 4 s, and no reply cancels itself.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Without a key or a network"
+            "value": "With a TV on in the room: “Listening…” never stays stuck more than 4 s, and no reply cancels itself."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sans clé ou sans réseau"
+            "value": "Avec une télé allumée dans la pièce : « Je t'écoute… » ne reste jamais bloqué plus de 4 s, et aucune réponse ne s'annule d'elle-même."
+          }
+        }
+      }
+    },
+    "With headphones, talk over PicShop to interrupt it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With headphones, talk over PicShop to interrupt it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avec des écouteurs, parle par-dessus PicShop pour l'interrompre."
           }
         }
       }
@@ -11153,18 +12289,50 @@
         }
       }
     },
-    "You chose to stay on the iPhone. Turn Use Claude off and on to be asked again.": {
+    "Yes": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You chose to stay on the iPhone. Turn Use Claude off and on to be asked again."
+            "value": "Yes"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tu as choisi de rester sur l'iPhone. Désactive puis réactive Utiliser Claude pour qu'on te redemande."
+            "value": "Oui"
+          }
+        }
+      }
+    },
+    "You chose Fast.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You chose Fast."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu as choisi Rapide."
+          }
+        }
+      }
+    },
+    "You chose Max.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You chose Max."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu as choisi Max."
           }
         }
       }
@@ -11313,6 +12481,22 @@
         }
       }
     },
+    "installed now": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "installed now"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "installé à l'instant"
+          }
+        }
+      }
+    },
     "listening": {
       "localizations": {
         "en": {
@@ -11357,6 +12541,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "micro coupé"
+          }
+        }
+      }
+    },
+    "not the expected words": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "not the expected words"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "pas les mots attendus"
           }
         }
       }
@@ -11441,6 +12641,22 @@
         }
       }
     },
+    "speak() did not start within 2.5 s: the system voice is stuck.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "speak() did not start within 2.5 s: the system voice is stuck."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "speak() n'a pas démarré en 2,5 s : la voix système est bloquée."
+          }
+        }
+      }
+    },
     "speaking": {
       "localizations": {
         "en": {
@@ -11517,6 +12733,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "les véhicules"
+          }
+        }
+      }
+    },
+    "“Plus chaud”, “annule”: done at once by the built-in grammar, without waiting for the brain.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“Plus chaud”, “annule”: done at once by the built-in grammar, without waiting for the brain."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "« Plus chaud », « annule » : fait aussitôt par la grammaire intégrée, sans attendre le cerveau."
           }
         }
       }

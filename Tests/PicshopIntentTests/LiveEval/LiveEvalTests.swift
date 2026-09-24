@@ -5,6 +5,8 @@ import XCTest
 
 /// Runs the Live eval set through the rules and LocalLiveBrain in CI and prints the
 /// accuracy per category. It fails only below the baseline measured when it was written.
+/// LiveEvalHarness runs any LiveBrain the same way; the conversational set for the
+/// local model is LiveConversationEvalTests.
 final class LiveEvalTests: XCTestCase {
     struct Score {
         var cases = 0
@@ -67,16 +69,11 @@ final class LiveEvalTests: XCTestCase {
             if lane == .brain(isQuestion: true) { score.routedAsQuestion += 1 }
             if case .local = lane { score.fastLane += 1 }
 
-            let handler = FakeToolHandler()
-            let context = testCase.context
-            await MainActor.run { handler.intentContext = context }
+            // The harness takes any LiveBrain; the baseline is the rules-only grammar brain.
             let brain = LocalLiveBrain(router: HybridIntentRouter(preferredEngine: .rules), mode: testCase.mode)
-            let turn = LiveUserTurn(id: 1, kind: .speech, text: testCase.text, language: NormalizedUtterance(testCase.text).language,
-                                    image: nil, editorState: LiveEditorState(mode: testCase.mode, version: 1))
-            _ = await collect(brain.respond(to: turn, tools: handler))
-            let calls = await MainActor.run { handler.calls }
+            let outcome = await LiveEvalHarness.run(brain, text: testCase.text, mode: testCase.mode, context: testCase.context)
             var firstApplied: EditIntent?
-            if case .applyEdits(let intents)? = calls.first?.tool { firstApplied = intents.first }
+            if case .applyEdits(let intents)? = outcome.calls.first?.tool { firstApplied = intents.first }
             if Self.matches(firstApplied, testCase) { score.local += 1 }
             scores[testCase.category] = score
         }

@@ -2,8 +2,9 @@
 import SwiftUI
 import PicshopIntent
 
-/// No projects yet: the orb at rest, one line of invitation and two ways in.
-/// The dock stays below, so 'sous-titre une vidéo' works from here too.
+/// No projects yet: the orb at rest, one line of invitation, two ways in, and
+/// the promise that everything stays on the iPhone. The dock stays below, so
+/// 'sous-titre une vidéo' works from here too.
 struct HomeEmptyState: View {
     let onOpenMedia: () -> Void
     let onImportPDF: () -> Void
@@ -62,6 +63,10 @@ struct HomeEmptyState: View {
             .buttonStyle(.glass)
             .controlSize(.large)
             .frame(width: 280)
+            Label(L("Everything stays on the iPhone."), systemImage: "lock.fill")
+                .font(.footnote)
+                .foregroundStyle(PSTheme.textTertiary)
+                .padding(.top, PSSpacing.xLarge)
         }
         .padding(.horizontal, PSSpacing.page)
         .frame(maxWidth: .infinity)
