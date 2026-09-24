@@ -6,7 +6,13 @@ import PicshopCore
 import PicshopIntent
 import PicshopVideo
 
-/// The video editing screen: player, timeline, tools and the voice orb.
+/// The video editing screen in the studio shell: the player edge to edge
+/// between the top bar and the filmstrip, Live at the bottom, every manual
+/// tool behind Outils.
+///
+/// The body reads only coarse mirrors (canUndo, canRedo, undoLabels, the open
+/// tool, whether work runs); the playhead, the frames and Live's levels are
+/// read by leaves.
 public struct VideoEditorView: View {
     @State var session: VideoEditorSession
     @Environment(\.dismiss) private var dismiss
@@ -17,42 +23,27 @@ public struct VideoEditorView: View {
     }
 
     public var body: some View {
-        EditorChrome {
-            // Picture, then time, then the controls: the filmstrip sits directly
-            // under the frame it describes, and the transport is the row closest
-            // to the thumb.
-            VStack(spacing: 0) {
-                PlayerPreview(session: session)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                TimelineView(session: session)
-                    .frame(height: TimelineView.height(for: session.timeline))
-                    .animation(PSMotion.standard, value: session.timeline.audioTracks.count)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .padding(.horizontal, 10)
-                    .padding(.top, 4)
-                TransportBar(session: session)
-                    .padding(.bottom, 2)
+        #if DEBUG
+        let _ = ViewTrace.changes(Self.self)
+        #endif
+        StudioChrome(bar: bar, actions: actions, live: session.live,
+                     catalog: { VideoToolCatalog.make(session: session) },
+                     isToolOpen: session.activeTool != nil) {
+            VideoCanvas(session: session)
+        } panel: {
+            if let tool = session.activeTool {
+                VideoToolCard(session: session, tool: tool)
             }
-        } top: {
-            EditorTopBar(
-                title: L("Video"),
-                subtitle: "\(Int(session.timeline.renderSize.width)) × \(Int(session.timeline.renderSize.height)) · \(psTimecode(session.timeline.duration, frameRate: session.timeline.frameRate))",
-                canUndo: session.history.canUndo, canRedo: session.history.canRedo,
-                onClose: { session.teardown(); dismiss() },
-                onUndo: { session.undo() }, onRedo: { session.redo() },
-                onHelp: { session.showsHelp = true }, onExport: { session.showsExport = true },
-                history: session.history.past.map(\.label), onUndoSteps: { session.undo(steps: $0) })
-        } bottom: {
-            bottomArea
         }
-        .overlay {
-            if let app { EditorIntelligenceGlow(voice: app.voice, isBusy: session.isProcessing) }
-        }
+        // Progress and toasts live in their own view, so a progress tick never
+        // re-evaluates the player and the dock.
         .overlay { EditorStatusOverlay(session: session) }
-        .task { await session.configure() }
+        .task { await open() }
         .onDisappear { session.teardown() }
         .sheet(isPresented: $session.showsExport) { VideoExportSheet(session: session) }
-        .sheet(isPresented: $session.showsHelp) { HelpSheet(mode: .video) { text in Task { await session.handleTranscript(text) } } }
+        .sheet(isPresented: $session.showsHelp) {
+            HelpSheet(mode: .video) { text in session.live.send(text: text) }
+        }
         .fileImporter(isPresented: $session.showsMusicPicker, allowedContentTypes: [.audio, .mp3, .mpeg4Audio, .wav, .aiff]) { result in
             if case .success(let url) = result { Task { await session.addMusic(from: url) } }
         }
@@ -60,36 +51,33 @@ public struct VideoEditorView: View {
         .persistentSystemOverlays(.hidden)
     }
 
-    private var bottomArea: some View {
-        VStack(spacing: 8) {
-            if let tool = session.activeTool {
-                let group = VideoEditorSession.Tool.groups.first { $0.contains(tool) }
-                let grouped = (group?.tools.count ?? 1) > 1
-                ToolPanelContainer(title: grouped ? group?.title ?? tool.title : tool.title, symbol: grouped ? group?.symbol ?? tool.symbol : tool.symbol,
-                                   onClose: { session.activeTool = nil },
-                                   modes: grouped ? AnyView(ModeSegments(modes: group?.tools ?? [], selection: $session.activeTool, title: { $0.title }, symbol: { $0.symbol })) : nil) {
-                    VideoToolPanel(session: session, tool: tool)
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.98, anchor: .bottom)))
-            }
-            if let app {
-                VoiceStrip(voice: app.voice, isBusy: session.isProcessing, busyTitle: session.processingTitle,
-                           transcript: session.transcript, plan: session.lastPlan, clarification: session.pendingClarification,
-                           showsHint: session.activeTool == nil,
-                           onChoose: { session.choose(candidateIndex: $0) }, onChooseAll: { session.chooseAllCandidates() }, onCancel: { session.cancelClarification() })
-            }
-            HStack(spacing: 8) {
-                GroupedToolDock(groups: VideoEditorSession.Tool.groups, selection: $session.activeTool)
-                if let app { MicButton(voice: app.voice, isBusy: session.isProcessing) }
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.top, 8)
-        .padding(.bottom, 4)
-        .psDockBackground()
-        .animation(PSMotion.standard, value: session.activeTool)
+    private var bar: StudioBar {
+        StudioBar(canUndo: session.canUndo, canRedo: session.canRedo, undoLabels: session.undoLabels, isBusy: session.isProcessing)
     }
 
+    private var actions: StudioActions {
+        let session = session
+        let dismiss = dismiss
+        // A step undone under a running job would only make it drop its result.
+        return StudioActions(close: { dismiss() },
+                             undo: { guard !session.isProcessing else { return }; session.undo() },
+                             redo: { guard !session.isProcessing else { return }; session.redo() },
+                             undoSteps: { steps in guard !session.isProcessing else { return }; session.undo(steps: steps) },
+                             revert: { guard !session.isProcessing else { return }; session.revert() },
+                             export: {
+                                 session.player.pause()
+                                 session.showsExport = true
+                             })
+    }
+
+    /// Configures the session, then starts Live on its own when Settings asks for it.
+    private func open() async {
+        await session.configure()
+        guard app?.settings.liveAutoStart == true else { return }
+        try? await Task.sleep(for: .milliseconds(600))
+        guard !Task.isCancelled else { return }
+        session.live.start()
+    }
 }
 
 /// Minutes, seconds and frames, the way an editor reads a timeline.
@@ -101,91 +89,91 @@ func psTimecode(_ seconds: Double, frameRate: Double) -> String {
     return String(format: "%02d:%02d.%02d", minutes, secs, frames)
 }
 
-/// Transport row: timecode, frame stepping, play/pause, and a horizontal drag
-/// anywhere on the row to scrub (a second per 120 pt).
-///
-/// Its own view because the playhead moves many times a second: read in the
-/// editor's body, every tick would re-evaluate the player, the timeline, the
-/// tool panel and the dock.
-private struct TransportBar: View {
-    @Bindable var session: VideoEditorSession
-    @State private var scrubStart: Double?
+/// Minutes and seconds ('mm:ss'), for the timecode pill.
+func psClock(_ seconds: Double) -> String {
+    let total = Int(max(0, seconds).rounded(.down))
+    return String(format: "%02d:%02d", total / 60, total % 60)
+}
+
+// MARK: - Canvas
+
+/// The canvas under the studio's bars: the player fitted between the top bar
+/// and the filmstrip, the filmstrip just above the dock (hidden while the full
+/// timeline is open in its panel).
+struct VideoCanvas: View {
+    let session: VideoEditorSession
+    @Environment(\.studioEdges) private var studioEdges
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 14) {
-            Text(psTimecode(session.player.currentTime, frameRate: session.timeline.frameRate))
-                .font(PSFont.mono(12)).foregroundStyle(PSTheme.textSecondary).frame(width: 64, alignment: .leading)
-                .contentTransition(.numericText())
-            Spacer()
-            GlassIconButton("backward.frame", label: L("Previous frame"), size: 34) { Task { await session.player.step(frames: -1, frameRate: session.timeline.frameRate) } }
-            GlassIconButton(session.player.isPlaying ? "pause.fill" : "play.fill", label: session.player.isPlaying ? L("Pause") : L("Play"), tint: PSTheme.accent, isActive: true, size: 44) { session.player.togglePlayback() }
-            GlassIconButton("forward.frame", label: L("Next frame"), size: 34) { Task { await session.player.step(frames: 1, frameRate: session.timeline.frameRate) } }
-            Spacer()
-            Text(psTimecode(session.timeline.duration, frameRate: session.timeline.frameRate))
-                .font(PSFont.mono(12)).foregroundStyle(PSTheme.textSecondary).frame(width: 64, alignment: .trailing)
+        #if DEBUG
+        let _ = ViewTrace.changes(Self.self)
+        #endif
+        let showsFilmstrip = session.activeTool != .cut
+        GeometryReader { proxy in
+            let chrome = studioEdges.insets(over: proxy.frame(in: .global))
+            VStack(spacing: 0) {
+                Color.clear.frame(height: chrome.top + 8)
+                PlayerStage(session: session)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if showsFilmstrip {
+                    FilmstripScrubber(session: session)
+                        .padding(.top, 16)
+                        .transition(.opacity)
+                }
+                Color.clear.frame(height: chrome.bottom + (showsFilmstrip ? 16 : 8))
+            }
+            .animation(reduceMotion ? nil : PSMotion.standard, value: chrome)
         }
-        .padding(.horizontal, 20).padding(.vertical, 4)
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 12)
-                .onChanged { value in
-                    if scrubStart == nil {
-                        scrubStart = session.player.currentTime
-                        Haptics.soft()
-                    }
-                    guard let start = scrubStart else { return }
-                    let target = (start + Double(value.translation.width) / 120).clamped(to: 0...max(0, session.timeline.duration))
-                    Task { await session.player.seek(to: target) }
-                }
-                .onEnded { _ in
-                    scrubStart = nil
-                    Haptics.tick()
-                }
-        )
     }
 }
 
-/// AVPlayer surface with tap-to-choose overlays.
-struct PlayerPreview: View {
+/// The player, edge to edge: tap to play or pause, double-tap a side to skip
+/// five seconds, the timecode in a pill at the bottom left. The candidate boxes
+/// of a pending choice are drawn over the frame and can be tapped.
+struct PlayerStage: View {
     @Bindable var session: VideoEditorSession
+    /// The glyph that flashes in the centre after a tap (play.fill or pause.fill).
+    @State private var flash: String?
+    @State private var flashID = 0
+    /// -5 or +5 after a double tap on a side.
+    @State private var skip: Int?
+    @State private var skipID = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// Fitted edge to edge: no side inset, the height left by the bars.
     private func videoFrame(in container: CGSize) -> CGRect {
         let aspect = CGFloat(max(0.1, session.timeline.renderSize.aspectRatio))
-        let available = CGSize(width: container.width - 24, height: container.height - 12)
-        var size = CGSize(width: available.width, height: available.width / aspect)
-        if size.height > available.height { size = CGSize(width: available.height * aspect, height: available.height) }
+        var size = CGSize(width: container.width, height: container.width / aspect)
+        if size.height > container.height { size = CGSize(width: container.height * aspect, height: container.height) }
         return CGRect(x: (container.width - size.width) / 2, y: (container.height - size.height) / 2, width: size.width, height: size.height)
     }
 
     var body: some View {
         GeometryReader { proxy in
             let frame = videoFrame(in: proxy.size)
+            // Rounded only when the frame stands clear of the screen's sides.
+            let radius: CGFloat = frame.width < proxy.size.width - 1 ? 14 : 0
             let candidates = session.candidateOverlays
             ZStack {
-                PlayerLayerView(player: session.player.player)
-                    .frame(width: frame.width, height: frame.height)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    // Lit edge and a soft drop, so the frame sits on the studio floor like the photo canvas.
-                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(PSTheme.strokeGradient, lineWidth: 1))
-                    .shadow(color: .black.opacity(session.app.performance.effectsLevel == .rich ? 0.5 : 0), radius: 22, y: 12)
-                    .position(x: frame.midX, y: frame.midY)
-                    .onTapGesture { location in
-                        let point = PSPoint(x: Double((location.x - frame.minX) / frame.width), y: Double((location.y - frame.minY) / frame.height))
-                        if point.x >= 0, point.x <= 1, point.y >= 0, point.y <= 1 { session.tapPreview(at: point) }
-                    }
-                Canvas { context, _ in
-                    for (index, candidate) in candidates.enumerated() {
-                        let rect = CGRect(x: frame.minX + candidate.boundingBox.minX * frame.width, y: frame.minY + candidate.boundingBox.minY * frame.height,
-                                          width: candidate.boundingBox.width * frame.width, height: candidate.boundingBox.height * frame.height)
-                        let path = Path(roundedRect: rect, cornerRadius: 10)
-                        context.stroke(path, with: .color(PSTheme.accent), lineWidth: 2.5)
-                        context.fill(path, with: .color(PSTheme.accent.opacity(0.12)))
-                        let badge = CGRect(x: rect.minX + 6, y: rect.minY + 6, width: 26, height: 26)
-                        context.fill(Path(ellipseIn: badge), with: .color(PSTheme.accent))
-                        context.draw(Text("\(index + 1)").font(.system(size: 14, weight: .bold, design: .rounded)).foregroundStyle(.black), at: CGPoint(x: badge.midX, y: badge.midY))
-                    }
+                // The shadow on a sibling shape: the video layer itself is never drawn offscreen.
+                if radius > 0 {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(Color.black)
+                        .shadow(color: .black.opacity(0.35), radius: 18, y: 10)
+                        .frame(width: frame.width, height: frame.height)
+                        .position(x: frame.midX, y: frame.midY)
                 }
-                .allowsHitTesting(false)
+                PlayerLayerView(player: session.player.player, cornerRadius: radius)
+                    .frame(width: frame.width, height: frame.height)
+                    .position(x: frame.midX, y: frame.midY)
+                    .accessibilityElement()
+                    .accessibilityLabel(L("Video"))
+                    .accessibilityAddTraits(.startsMediaSession)
+                    .accessibilityAction { togglePlayback() }
+                if !candidates.isEmpty {
+                    CandidateBoxes(candidates: candidates, frame: frame)
+                }
                 if session.activeTool == .overlay {
                     OverlayArrangeLayer(session: session, frame: frame)
                 }
@@ -193,17 +181,154 @@ struct PlayerPreview: View {
                     MotionFramingLayer(session: session, frame: frame)
                 }
                 // The explicitly selected clip only: resolving the clip under the
-                // playhead here would re-evaluate the preview on every tick.
+                // playhead here would re-evaluate the stage on every tick.
                 if let id = session.selectedClipID, let clip = session.timeline.clips.first(where: { $0.id == id }), let label = clip.processedLabel {
                     GlassChip(label, systemImage: "sparkles").position(x: frame.minX + 60, y: frame.minY + 22)
                 }
+                TimecodePill(player: session.player)
+                    .padding(8)
+                    .frame(width: frame.width, height: frame.height, alignment: .bottomLeading)
+                    .position(x: frame.midX, y: frame.midY)
+                if let flash {
+                    Image(systemName: flash)
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 64, height: 64)
+                        .psGlass(shape: AnyShape(Circle()))
+                        .position(x: frame.midX, y: frame.midY)
+                        .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
+                        .id(flashID)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+                if let skip {
+                    SkipBadge(seconds: skip)
+                        .position(x: skip < 0 ? frame.minX + frame.width / 6 : frame.maxX - frame.width / 6, y: frame.midY)
+                        .transition(.opacity)
+                        .id(skipID)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
             }
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2, coordinateSpace: .local) { location in doubleTap(at: location, frame: frame) }
+            .onTapGesture(count: 1, coordinateSpace: .local) { location in tap(at: location, frame: frame) }
         }
+    }
+
+    private func normalized(_ location: CGPoint, in frame: CGRect) -> PSPoint? {
+        guard frame.width > 0, frame.height > 0 else { return nil }
+        let point = PSPoint(x: Double((location.x - frame.minX) / frame.width), y: Double((location.y - frame.minY) / frame.height))
+        return point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1 ? point : nil
+    }
+
+    private func tap(at location: CGPoint, frame: CGRect) {
+        // A pending choice: a tap on a numbered box chooses it.
+        if session.pendingClarification != nil, let point = normalized(location, in: frame) {
+            session.tapPreview(at: point)
+            return
+        }
+        togglePlayback()
+    }
+
+    private func doubleTap(at location: CGPoint, frame: CGRect) {
+        let third = frame.width / 3
+        guard frame.width > 0, location.x < frame.minX + third || location.x > frame.maxX - third else {
+            togglePlayback()
+            return
+        }
+        let delta = location.x < frame.minX + third ? -5 : 5
+        Haptics.tick()
+        let player = session.player
+        let target = (player.currentTime + Double(delta)).clamped(to: 0...max(0, player.duration))
+        Task { await player.seek(to: target) }
+        skipID += 1
+        let id = skipID
+        withAnimation(PSMotion.quick) { skip = delta }
+        Task {
+            try? await Task.sleep(for: .milliseconds(700))
+            guard skipID == id else { return }
+            withAnimation(PSMotion.quick) { skip = nil }
+        }
+    }
+
+    private func togglePlayback() {
+        let player = session.player
+        let willPlay = !player.isPlaying
+        player.togglePlayback()
+        Haptics.tap()
+        flashID += 1
+        let id = flashID
+        withAnimation(PSMotion.quick) { flash = willPlay ? "play.fill" : "pause.fill" }
+        Task {
+            try? await Task.sleep(for: .milliseconds(600))
+            guard flashID == id else { return }
+            withAnimation(PSMotion.quick) { flash = nil }
+        }
+        UIAccessibility.post(notification: .announcement, argument: willPlay ? L("Play") : L("Pause"))
     }
 }
 
+/// The numbered boxes of a pending choice, over the frame.
+private struct CandidateBoxes: View {
+    let candidates: [ObjectCandidate]
+    let frame: CGRect
+
+    var body: some View {
+        Canvas { context, _ in
+            for (index, candidate) in candidates.enumerated() {
+                let rect = CGRect(x: frame.minX + candidate.boundingBox.minX * frame.width, y: frame.minY + candidate.boundingBox.minY * frame.height,
+                                  width: candidate.boundingBox.width * frame.width, height: candidate.boundingBox.height * frame.height)
+                let path = Path(roundedRect: rect, cornerRadius: 10)
+                context.stroke(path, with: .color(PSTheme.accent), lineWidth: 2.5)
+                context.fill(path, with: .color(PSTheme.accent.opacity(0.12)))
+                let badge = CGRect(x: rect.minX + 6, y: rect.minY + 6, width: 26, height: 26)
+                context.fill(Path(ellipseIn: badge), with: .color(PSTheme.accent))
+                context.draw(Text("\(index + 1)").font(.system(size: 14, weight: .bold, design: .rounded)).foregroundStyle(.black), at: CGPoint(x: badge.midX, y: badge.midY))
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// 'gobackward.5' or 'goforward.5' after a double tap on a side.
+private struct SkipBadge: View {
+    let seconds: Int
+
+    var body: some View {
+        Image(systemName: seconds < 0 ? "gobackward.5" : "goforward.5")
+            .font(.system(size: 22, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 56, height: 56)
+            .psGlass(shape: AnyShape(Circle()), variant: .clear)
+    }
+}
+
+/// 'mm:ss / mm:ss' at the player's bottom left. A leaf of its own: the playhead
+/// moves many times a second and must re-evaluate nothing else.
+struct TimecodePill: View {
+    let player: TimelinePlayer
+
+    var body: some View {
+        Text(verbatim: "\(psClock(player.currentTime)) / \(psClock(player.duration))")
+            .font(PSFont.timecode(12))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .psGlass(variant: .clear)
+            .fixedSize()
+            .allowsHitTesting(false)
+            .accessibilityLabel(L("Timecode"))
+            .accessibilityValue(Text(verbatim: "\(psClock(player.currentTime)) / \(psClock(player.duration))"))
+    }
+}
+
+/// AVPlayer surface. The corners are cut by the layer itself (a SwiftUI clip
+/// would draw the moving video offscreen every frame).
 struct PlayerLayerView: UIViewRepresentable {
     let player: AVPlayer
+    var cornerRadius: CGFloat = 0
 
     final class View: UIView {
         override class var layerClass: AnyClass { AVPlayerLayer.self }
@@ -215,11 +340,18 @@ struct PlayerLayerView: UIViewRepresentable {
         view.playerLayer.player = player
         view.playerLayer.videoGravity = .resizeAspect
         view.backgroundColor = .black
+        view.layer.cornerCurve = .continuous
+        view.layer.cornerRadius = cornerRadius
+        view.layer.masksToBounds = cornerRadius > 0
         return view
     }
 
     func updateUIView(_ view: View, context: Context) {
         if view.playerLayer.player !== player { view.playerLayer.player = player }
+        if view.layer.cornerRadius != cornerRadius {
+            view.layer.cornerRadius = cornerRadius
+            view.layer.masksToBounds = cornerRadius > 0
+        }
     }
 }
 
@@ -436,19 +568,6 @@ struct VideoExportSheet: View {
         .padding(4)
         .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
-    }
-}
-
-extension VideoEditorSession.Tool {
-    /// Dock entries, grouped by purpose. Sub-modes appear as segments in the panel.
-    static var groups: [ToolGroup<VideoEditorSession.Tool>] {
-        [
-            ToolGroup(id: "magic", title: L("Magic"), symbol: "sparkles", tools: [.magic, .transcript], isMagic: true),
-            ToolGroup(id: "cut", title: L("Edit"), symbol: "scissors", tools: [.cut, .speed, .motion, .transitions, .frame]),
-            ToolGroup(id: "color", title: L("Colour"), symbol: "camera.filters", tools: [.adjust, .color, .looks]),
-            ToolGroup(id: "audio", title: L("Audio"), symbol: "speaker.wave.2", tools: [.audio]),
-            ToolGroup(id: "layers", title: L("Layers"), symbol: "square.3.layers.3d", tools: [.text, .overlay]),
-        ]
     }
 }
 #endif

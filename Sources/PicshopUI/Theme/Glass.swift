@@ -8,8 +8,8 @@ import SwiftUI
 /// shadow show. Neighbouring pieces sit in a `PSGlassContainer` so they melt
 /// into each other and morph. Controls inside glass use a plain fill
 /// (`psChipFill`), never glass on glass. Every surface reads `psEffects`:
-/// at `.minimal` (a hot phone) glass becomes a flat fill and the layout
-/// never moves.
+/// at `.minimal` (a hot phone), and with Reduce Transparency, glass becomes a
+/// flat fill with a hairline and the layout never moves.
 public extension View {
     /// Glass in `shape`. `.clear` is for controls floating over the photo;
     /// `.regular` (the default) for panels, docks and bars.
@@ -92,9 +92,10 @@ struct PSGlassModifier: ViewModifier {
     let shape: AnyShape
     var variant: PSGlassVariant = .regular
     @Environment(\.psEffects) private var effects
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
-        if effects == .minimal {
+        if effects == .minimal || reduceTransparency {
             content.background(shape.fill(PSTheme.surfaceFlat)).overlay(shape.stroke(PSTheme.hairline, lineWidth: 1))
         } else {
             content.glassEffect(psMakeGlass(tint: tint, interactive: interactive, variant: variant), in: shape)
@@ -106,11 +107,12 @@ struct PSCardModifier: ViewModifier {
     let cornerRadius: CGFloat
     var variant: PSGlassVariant = .regular
     @Environment(\.psEffects) private var effects
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         // The content is clipped, never the glass, so its rim stays whole.
-        if effects == .minimal {
+        if effects == .minimal || reduceTransparency {
             content.clipShape(shape)
                 .background(shape.fill(PSTheme.surfaceFlat))
                 .overlay(shape.strokeBorder(PSTheme.hairline, lineWidth: 1))
@@ -173,6 +175,7 @@ public struct GlassIconButton: View {
     var variant: PSGlassVariant = .regular
     let action: () -> Void
     @Environment(\.psEffects) private var effects
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     public init(_ systemName: String, label: String, tint: Color? = nil, isActive: Bool = false, size: CGFloat = 44, variant: PSGlassVariant = .regular, action: @escaping () -> Void) {
         self.systemName = systemName
@@ -186,7 +189,7 @@ public struct GlassIconButton: View {
 
     public var body: some View {
         Group {
-            if effects == .minimal {
+            if effects == .minimal || reduceTransparency {
                 Button(action: tap) {
                     glyph.background(Circle().fill(isActive ? Color.white : PSTheme.surfaceFlat))
                 }
@@ -288,6 +291,7 @@ struct PSSystemButton: View {
     let configuration: PrimitiveButtonStyleConfiguration
     let kind: Kind
     @Environment(\.psEffects) private var effects
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         let button = Button(role: configuration.role, action: configuration.trigger) {
@@ -297,7 +301,7 @@ struct PSSystemButton: View {
                 .foregroundStyle(kind == .primary ? Color.black : PSTheme.textPrimary)
                 .frame(maxWidth: kind == .magicCompact ? nil : .infinity)
         }
-        if effects == .minimal {
+        if effects == .minimal || reduceTransparency {
             button.buttonStyle(PSFlatButtonStyle(fill: kind == .primary ? Color.white : PSTheme.surfaceFlat, compact: kind == .magicCompact))
         } else if kind == .primary {
             button.buttonStyle(.glassProminent).tint(.white).controlSize(.large)

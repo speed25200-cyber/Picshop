@@ -4,8 +4,9 @@ import PicshopCore
 import PicshopIntent
 import PicshopSpeech
 
-/// Voice command cheat-sheet: examples as plain chips, grouped by what they
-/// do; the spectrum marks only the voice glyph at the top.
+/// 'Que puis-je dire ?': examples as plain chips, grouped by what they do,
+/// with Live's conversational ones first; the spectrum marks only the voice
+/// glyph at the top.
 struct HelpSheet: View {
     let mode: EditorMode
     /// Runs an example as if it had been spoken; the sheet closes first.
@@ -34,6 +35,8 @@ struct HelpSheet: View {
             result.removeAll { $0.0 == L("Magic") }
             result.insert((L("Video"), ["Coupe ici", "Coupe les 3 premières secondes", "Delete from 5 to 12 seconds", "Accélère x2", "Slow motion", "Coupe le son", "Ajoute un fondu entre tous les clips", "Extract this frame", "Stabilise la vidéo", "Va à 10 secondes", "Ajoute un deuxième son à 10 secondes", "Baisse la musique à 30 %", "Fade out the music over 2 seconds", "Supprime la deuxième piste"]), at: 0)
         }
+        // Live: talk it through; the editor's orb starts it.
+        result.insert((L("Live"), [mode == .video ? "Qu'est-ce que tu ferais sur cette vidéo ?" : "Qu'est-ce que tu ferais sur cette photo ?", "Enlève le truc à côté de la lampe", "Un peu moins", "Montre-moi l'avant", "La deuxième idée", "Stop"]), at: 0)
         result.append((L("Control"), ["Annule", "Redo", "Montre l'original", "Zoom sur le visage", "Enregistre", "Reviens à l'original", "Enregistre cette version sous brouillon", "Reviens à la version brouillon", "Qu'est-ce que j'ai modifié ?", "Décris la photo", "Enregistre ce style sous plage", "Applique le même style que la dernière photo"]))
         return result
     }
@@ -51,6 +54,7 @@ struct HelpSheet: View {
         case L("Video"): return "film"
         case L("Magic"), L("Video magic"): return "sparkles"
         case L("PDF"): return "doc.text"
+        case L("Live"): return "bubble.left.and.text.bubble.right"
         default: return "command"
         }
     }
@@ -64,7 +68,8 @@ struct HelpSheet: View {
                             .frame(width: 48, height: 48)
                             .background(PSTheme.fill, in: Circle())
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(L("Say it")).font(.title2.weight(.bold)).foregroundStyle(PSTheme.textPrimary)
+                            Text(L("What can I say?")).font(.title2.weight(.bold)).foregroundStyle(PSTheme.textPrimary)
+                                .accessibilityAddTraits(.isHeader)
                             Text(onSay == nil ? L("French or English, several requests in one breath.") : L("French or English. Tap an example to run it."))
                                 .font(PSFont.footnote()).foregroundStyle(PSTheme.textSecondary)
                         }

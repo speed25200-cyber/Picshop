@@ -91,7 +91,8 @@ struct VideoOverlayPanel: View {
                         PanelChip(title: String(format: L("Layer %d"), index + 1), symbol: overlay.mediaAsset?.kind == .video ? "film" : "photo",
                                   isActive: session.selectedOverlayID == overlay.id) {
                             session.selectedOverlayID = overlay.id
-                            session.player.scrub(to: overlay.span.start + 0.05)
+                            let player = session.player
+                            Task { await player.seek(to: overlay.span.start + 0.05) }
                         }
                     }
                 }

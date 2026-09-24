@@ -9,8 +9,13 @@ import PicshopImaging
 import PicshopSpeech
 
 /// State and behaviour of the photo editor screen. Owns the undo history,
-/// renders previews, and runs the voice pipeline:
+/// renders previews, and runs the command pipeline:
 /// transcript → `HybridIntentRouter` → `PhotoCommandExecutor` → history → render.
+///
+/// Views never read `history`: they read the coarse mirrors below, brought up to
+/// date by didChangeHistory() after every history write. A dial drag edits a
+/// private copy of the document (read by the renderer and `dial` only) and
+/// commits once, when it ends.
 @MainActor
 @Observable
 public final class PhotoEditorSession {
@@ -91,7 +96,8 @@ public final class PhotoEditorSession {
 
     public let projectID: UUID
     public let app: AppEnvironment
-    public private(set) var history: EditHistory<PhotoDocument> {
+    /// Views never read it: they read the mirrors below.
+    @ObservationIgnored public private(set) var history: EditHistory<PhotoDocument> {
         didSet {
             didChangeHistory()
             scheduleAutosave()
@@ -114,6 +120,27 @@ public final class PhotoEditorSession {
     /// True for the whole of a Live session: no toast for Live steps, no spoken reply, no recogniser start.
     @ObservationIgnored public var liveSpeechSuppressed = false
     @ObservationIgnored private var isTornDown = false
+    /// > 0 while Live runs a step (liveRun, a chip, a choice, an undo): no toast, no speech.
+    @ObservationIgnored var liveRunDepth = 0
+    /// The effects the last executed step reported (Live reads needs_user hints from them).
+    @ObservationIgnored var lastEffects: [EditorEffect] = []
+    /// The heavy step running now; cancelProcessing() drops its result.
+    @ObservationIgnored private var processingTask: Task<(PhotoDocument, ExecutionResult), Never>?
+    @ObservationIgnored private var processingGeneration = 0
+    @ObservationIgnored private var droppedGenerations: Set<Int> = []
+    /// Undo and redo are not new steps: Live is told no label for them.
+    @ObservationIgnored private var isStepping = false
+    /// The dial being dragged: its label and its latest (absolute) edit. The
+    /// document is committed once, when the drag ends; meanwhile the renderer
+    /// draws `interactiveDocument`, the document with that edit applied.
+    @ObservationIgnored private var interaction: (label: String, edit: ((inout PhotoDocument) -> Void)?)?
+    @ObservationIgnored private var interactiveDocument: PhotoDocument?
+    /// Live's picture: one JPEG per revision.
+    @ObservationIgnored var snapshotCache: (revision: Int, image: LiveImage)?
+    /// The wand's analysis pixels for one picture state (lookThumbnailKey).
+    @ObservationIgnored private var wandAnalysis: (key: String, analysis: VisionGrounding.WandAnalysis)?
+    /// Revision at the last thumbnail handed to the library.
+    @ObservationIgnored private var thumbnailRevision = 0
     /// The photo as this session opened it: Revert starts from it, so layers added since go too.
     private let openedDocument: PhotoDocument
 
@@ -122,7 +149,7 @@ public final class PhotoEditorSession {
     private var executor: PhotoCommandExecutor?
 
     public private(set) var preview: CIImage?
-    public private(set) var isRendering = false
+    @ObservationIgnored public private(set) var isRendering = false
     public var showsOriginal = false { didSet { requestPreview() } }
     /// Split before/after: the original shows left of this point (0…1), nil when off.
     public var compareSplit: Double? {
@@ -163,7 +190,9 @@ public final class PhotoEditorSession {
     public var wandContiguous = true
     public var lassoPoints: [PSPoint] = []
     /// Current selection made with the wand or lasso, ready for erase/generate/recolor.
-    public var selectionMask: MaskReference?
+    public var selectionMask: MaskReference? {
+        didSet { if selectionMask != oldValue { live.noteContextChanged() } }
+    }
     public var selectionPreview: CIImage?
     public var paintColor: PSColor = .white
     public var pixelBrushRadius: Double = 0.004
@@ -172,7 +201,7 @@ public final class PhotoEditorSession {
     public var cloneOffset: PSPoint?
     public var generativePrompt = ""
     public var hasGenerativeEngine = false
-    public var lastTapPoint: PSPoint?
+    @ObservationIgnored public var lastTapPoint: PSPoint?
     public var isProcessing = false
     public var processingTitle = ""
     public var toast: Toast?
@@ -187,14 +216,20 @@ public final class PhotoEditorSession {
     public private(set) var replyID = UUID()
     /// While a spoken command runs, its outcome is told in the voice strip rather than a second banner.
     private var isRunningVoiceCommand = false
-    public var pendingClarification: ClarificationRequest?
+    public var pendingClarification: ClarificationRequest? {
+        didSet { if pendingClarification != oldValue { live.noteContextChanged() } }
+    }
     public var candidateOverlays: [ObjectCandidate] = []
     /// Main objects found in the picture, offered as one-tap erase targets.
     public var sceneObjects: [ObjectCandidate] = []
     /// The object tapped in the Magic tool, with its actions floating beside it.
-    public var magicSelection: ObjectCandidate?
+    public var magicSelection: ObjectCandidate? {
+        didSet { if magicSelection != oldValue { live.noteContextChanged() } }
+    }
     /// What the picture is (people, sky, product…), so Magic can lead with what suits it.
-    public var sceneDescription: SceneDescription?
+    public var sceneDescription: SceneDescription? {
+        didSet { if sceneDescription != oldValue { live.noteContextChanged() } }
+    }
     /// The picker for a picture whose colours this photo should take.
     public var showsColorReferencePicker = false
     public var isFindingObjects = false
@@ -207,19 +242,17 @@ public final class PhotoEditorSession {
     public var showsHelp = false
     public var isVoiceReady = false
 
-    private var renderTask: Task<Void, Never>?
+    @ObservationIgnored private var renderTask: Task<Void, Never>?
     /// The voice command running now; the next one waits for it.
     @ObservationIgnored private var commandTask: Task<Void, Never>?
     @ObservationIgnored private var autosaveTask: Task<Void, Never>?
     @ObservationIgnored private var autosaveDeadline = ContinuousClock.now
     @ObservationIgnored private var lastSavedDocument: PhotoDocument?
-    @ObservationIgnored private var saveSequence = 0
-    @ObservationIgnored private let writeGate = ProjectWriteGate()
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     /// Parameter and direction of the most recent adjustment, so "a bit more" / "encore un peu" can refer to it.
-    public private(set) var lastAdjustment: (parameter: AdjustmentParameter, direction: Int)?
-    private var toastTask: Task<Void, Never>?
-    private var isConfigured = false
+    @ObservationIgnored public private(set) var lastAdjustment: (parameter: AdjustmentParameter, direction: Int)?
+    @ObservationIgnored private var toastTask: Task<Void, Never>?
+    @ObservationIgnored private var isConfigured = false
     /// Look thumbnails rendered for the current photo state (see `LooksPanel`).
     public var lookThumbnails: (key: String, images: [FilterPreset: UIImage])?
     /// Changes whenever the base photo's pixels change (crop, erase, look…), invalidating the thumbnails.
@@ -249,15 +282,13 @@ public final class PhotoEditorSession {
         // the pipeline in the background: it is a reference type, so the
         // renderer built here picks them up as soon as they land, and a fill
         // that arrives first waits for them rather than using the fallback.
+        // Nor for the upscaler's model: it is handed over once located.
         let pipeline = InpaintingPipeline()
-        let renderer = PhotoRenderer(store: app.store, projectID: projectID, inpainting: pipeline, upscaler: await app.makeUpscaler())
+        let renderer = PhotoRenderer(store: app.store, projectID: projectID, inpainting: pipeline)
         self.renderer = renderer
         let services = VisionPhotoServices(renderer: renderer, store: app.store, projectID: projectID)
         self.services = services
         executor = PhotoCommandExecutor(services: services, language: language)
-        app.voice.onFinalTranscript = { [weak self] text in
-            Task { await self?.handleTranscript(text) }
-        }
         isVoiceReady = true
         lastSavedDocument = document
         observeLifecycle()
@@ -277,6 +308,10 @@ public final class PhotoEditorSession {
             hasGenerativeEngine = pipeline.hasGenerativeEngine
         }
         pipeline.setLoading(load)
+        Task { [environment = app] in
+            let upscaler = await environment.makeUpscaler()
+            await renderer.setUpscaler(upscaler)
+        }
         // Reading the file's auxiliary data is disk I/O: off the main thread, once (the base image never changes).
         if let asset = document.baseLayer?.imageAsset {
             let url = app.store.url(for: asset.relativePath, in: projectID)
@@ -292,40 +327,48 @@ public final class PhotoEditorSession {
     public func teardown() {
         guard !isTornDown else { return }
         isTornDown = true
+        Diagnostics.shared.note("photo editor teardown")
+        // A drag cut short by the close still counts.
+        if interaction != nil { endInteraction() }
         live.teardown()
         app.voice.cancel()
-        app.voice.onFinalTranscript = nil
         renderTask?.cancel()
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers = []
         save()
     }
 
+    /// Saves off the main thread (the library orders the writes), and hands the
+    /// library the new thumbnail, rendered off the main thread too: Home shows it
+    /// at once, with no blank in between.
     public func save() {
         autosaveTask?.cancel()
         autosaveTask = nil
-        let project = Project(id: projectID, content: .photo(document), createdAt: document.createdAt, modifiedAt: Date())
-        saveSequence += 1
-        lastSavedDocument = document
+        let modifiedAt = Date()
         let library = app.library
-        writeGate.write(sequence: saveSequence) { library.save(project) }
+        if document != lastSavedDocument {
+            let project = Project(id: projectID, content: .photo(document), createdAt: document.createdAt, modifiedAt: modifiedAt)
+            lastSavedDocument = document
+            Task { await library.persist(project) }
+        }
         app.styles.rememberLast(currentStyle)
-        if let renderer {
-            let store = app.store
-            let document = self.document
-            let library = app.library
-            let id = projectID
-            Task.detached(priority: .utility) {
-                await ThumbnailGenerator.writeThumbnail(for: document, renderer: renderer, store: store)
-                await MainActor.run { library.invalidateThumbnail(for: id) }
-            }
+        guard let renderer, revision != thumbnailRevision else { return }
+        thumbnailRevision = revision
+        let saved = document
+        let id = projectID
+        Task.detached(priority: .utility) {
+            guard let image = try? await renderer.render(saved, options: .thumbnail) else { return }
+            let background = CIImage(color: CIColor(red: 0.08, green: 0.08, blue: 0.1)).cropped(to: image.extent)
+            guard let cgImage = ImageSupport.cgImage(from: image.composited(over: background)) else { return }
+            let thumbnail = UIImage(cgImage: cgImage)
+            await MainActor.run { library.setThumbnail(thumbnail, for: id, modifiedAt: modifiedAt) }
         }
     }
 
     // MARK: - Autosave
 
     /// Saves ~0.8 s after the last change, so a crash or a kill loses at most that
-    /// much. Written off the main actor, without refreshing the library.
+    /// much. Written off the main actor; the library orders it with every other write.
     private func scheduleAutosave() {
         guard isConfigured else { return }
         autosaveDeadline = ContinuousClock.now.advanced(by: .milliseconds(800))
@@ -348,20 +391,13 @@ public final class PhotoEditorSession {
         let document = self.document
         guard document != lastSavedDocument else { return }
         lastSavedDocument = document
-        saveSequence += 1
-        let sequence = saveSequence
         let project = Project(id: projectID, content: .photo(document), createdAt: document.createdAt, modifiedAt: Date())
-        let store = app.store
-        let gate = writeGate
-        let write: @Sendable () -> Void = {
-            gate.write(sequence: sequence) {
-                do { try store.save(project) } catch { PSLog.error("autosave failed: \(error)", category: .ui) }
-            }
-        }
+        let library = app.library
         if synchronously {
-            write()
+            // Going to the background: this must land before the app is suspended.
+            library.saveNow(project)
         } else {
-            Task.detached(priority: .utility) { write() }
+            Task { await library.persist(project) }
         }
     }
 
@@ -424,11 +460,12 @@ public final class PhotoEditorSession {
         }
     }
 
-    private var dirtyInteractive = false
-    private var renderGeneration = 0
+    @ObservationIgnored private var dirtyInteractive = false
+    @ObservationIgnored private var renderGeneration = 0
 
+    /// What the canvas shows: the dragged copy during a dial drag, with the crop tool's pending geometry.
     private func previewDocument() -> PhotoDocument {
-        var document = self.document
+        var document = interactiveDocument ?? self.document
         if straightenPreview != 0 { document.apply(.straighten(degrees: straightenPreview)) }
         if perspectiveHorizontal != 0 || perspectiveVertical != 0 { document.apply(.perspective(horizontal: perspectiveHorizontal, vertical: perspectiveVertical)) }
         return document
@@ -441,8 +478,8 @@ public final class PhotoEditorSession {
         let generation = renderGeneration
         renderTask = Task { [weak self] in
             guard let self else { return }
-            isRendering = true
-            defer { if renderGeneration == generation { isRendering = false } }
+            if !isRendering { isRendering = true }
+            defer { if renderGeneration == generation, isRendering { isRendering = false } }
             var interactive = interactive
             while !Task.isCancelled {
                 dirtyInteractive = false
@@ -481,17 +518,20 @@ public final class PhotoEditorSession {
 
     // MARK: - History
 
-    /// Brings the stored mirrors up to date after any change to `history`, each
-    /// assigned only when its value changes, then tells Live.
+    /// The one place the mirrors are brought up to date, after every write to
+    /// `history` (commit, undo, redo, revert, versions, styles, a rebased result,
+    /// transactions): each is assigned only when its value changes, then Live is told.
     private func didChangeHistory() {
         let present = history.present
         let documentChanged = present != document
-        let grew = history.past.count > undoLabels.count
+        let labels = history.past.map(\.label)
+        // A new step (not an undo or a redo): the list grew, or at the limit its oldest entry went.
+        let isNewStep = !isStepping && !history.canRedo && labels != undoLabels
+            && (labels.count > undoLabels.count || labels.count == history.limit)
         var changed = documentChanged
         if documentChanged { document = present }
         if canUndo != history.canUndo { canUndo = history.canUndo; changed = true }
         if canRedo != history.canRedo { canRedo = history.canRedo; changed = true }
-        let labels = history.past.map(\.label)
         if labels != undoLabels { undoLabels = labels; changed = true }
         if documentChanged {
             revision += 1
@@ -499,10 +539,18 @@ public final class PhotoEditorSession {
             if tools != modifiedTools { modifiedTools = tools }
             let key = Self.lookThumbnailKey(for: present, thumbnailSide: app.performance.thumbnailSide)
             if key != lookThumbnailKey { lookThumbnailKey = key }
+            // A step landed under a dial drag (a voice edit, an erase finishing): the drag carries on over it.
+            if let edit = interaction?.edit {
+                var working = present
+                edit(&working)
+                interactiveDocument = working
+            } else if interaction != nil {
+                interactiveDocument = present
+            }
         }
-        // A dial drag is one change, told when it ends.
+        // A text drag is one change, told when it ends.
         guard changed, !history.isInTransaction else { return }
-        live.noteDocumentChanged(label: grew ? history.undoLabel : nil)
+        live.noteDocumentChanged(label: isNewStep ? history.undoLabel : nil)
     }
 
     /// Which tools' edits are in the picture: the dock's yellow dots, one per tool.
@@ -551,30 +599,47 @@ public final class PhotoEditorSession {
 
     public func undo() {
         guard history.canUndo else { return }
+        if interaction != nil { endInteraction() }
         magicSelection = nil
+        isStepping = true
         let label = history.undo()
+        isStepping = false
         Haptics.tick()
-        showToast(label.map { "\(L("Undo")) · \($0)" } ?? L("Undo"))
+        if liveRunDepth == 0 { showToast(label.map { "\(L("Undo")) · \($0)" } ?? L("Undo")) }
         requestPreview()
     }
 
     /// Goes back several steps at once (the History list): one refresh, one toast.
-    public func undo(steps: Int) {
-        guard steps > 0, history.canUndo else { return }
+    /// Returns the labels undone, newest first.
+    @discardableResult
+    public func undo(steps: Int) -> [String] {
+        guard steps > 0, history.canUndo else { return [] }
+        if interaction != nil { endInteraction() }
         magicSelection = nil
-        var last: String?
-        for _ in 0..<steps where history.canUndo { last = history.undo() }
+        var labels: [String] = []
+        isStepping = true
+        for _ in 0..<steps where history.canUndo {
+            if let label = history.undo() { labels.append(label) }
+        }
+        isStepping = false
         Haptics.tick()
-        showToast(last.map { "\(L("Undo")) · \($0)" } ?? L("Undo"))
+        if liveRunDepth == 0 { showToast(labels.last.map { "\(L("Undo")) · \($0)" } ?? L("Undo")) }
         requestPreview()
+        return labels
     }
 
-    public func redo() {
-        guard history.canRedo else { return }
+    /// Returns the label redone, nil when there was nothing to redo.
+    @discardableResult
+    public func redo() -> String? {
+        guard history.canRedo else { return nil }
+        if interaction != nil { endInteraction() }
+        isStepping = true
         let label = history.redo()
+        isStepping = false
         Haptics.tick()
-        showToast(label.map { "\(L("Redo")) · \($0)" } ?? L("Redo"))
+        if liveRunDepth == 0 { showToast(label.map { "\(L("Redo")) · \($0)" } ?? L("Redo")) }
         requestPreview()
+        return label
     }
 
     /// Back to the photo as imported, including edits saved in earlier
@@ -607,22 +672,73 @@ public final class PhotoEditorSession {
     // MARK: - Direct (touch) edits
 
     public func beginSliderInteraction(_ parameter: AdjustmentParameter) {
-        history.beginTransaction(label: parameter.englishName)
+        beginInteraction(label: parameter.englishName)
+        setDial(parameter: parameter, group: nil, value: document.activeAdjustments[parameter])
     }
 
     public func endSliderInteraction() {
-        history.endTransaction()
-        requestPreview()
+        endInteraction()
     }
 
     public func setAdjustment(_ parameter: AdjustmentParameter, value: Double) {
-        var document = self.document
         guard let layerID = document.activeImageLayerID else { return }
-        let previous = document.activeAdjustments[parameter]
-        document.update(layerID: layerID) { $0.edits.setAdjustment(parameter, value: value) }
-        history.commit(document, label: parameter.englishName)
+        let previous = (interactiveDocument ?? document).activeAdjustments[parameter]
         if abs(value - previous) > 0.0005 { lastAdjustment = (parameter, value > previous ? 1 : -1) }
+        if interaction != nil { setDial(parameter: parameter, group: nil, value: value) }
+        interactiveEdit(label: parameter.englishName) { document in
+            document.update(layerID: layerID) { $0.edits.setAdjustment(parameter, value: value) }
+        }
+    }
+
+    // MARK: - Dial drags
+
+    /// Starts a drag: the document stays as it is until the drag ends.
+    private func beginInteraction(label: String) {
+        if interaction != nil, interactiveDocument != document { endInteraction() }
+        interaction = (label, nil)
+        interactiveDocument = document
+    }
+
+    /// Applies a dial's latest value: to the dragged copy during a drag (the
+    /// renderer and the dial see it, nothing else), else as one committed step.
+    private func interactiveEdit(label: String, _ edit: @escaping (inout PhotoDocument) -> Void) {
+        guard interaction != nil else {
+            var updated = document
+            edit(&updated)
+            guard updated != document else { return }
+            commit(updated, label: label)
+            return
+        }
+        interaction = (label, edit)
+        var working = document
+        edit(&working)
+        interactiveDocument = working
         requestPreview(interactive: true)
+    }
+
+    /// Ends a drag: one commit (one undo step, one revision, one note to Live).
+    private func endInteraction() {
+        guard let current = interaction else {
+            setDial(parameter: nil, group: nil, value: dial.value)
+            requestPreview()
+            return
+        }
+        let working = interactiveDocument
+        interaction = nil
+        interactiveDocument = nil
+        setDial(parameter: nil, group: nil, value: dial.value)
+        if let working, working != document {
+            commit(working, label: current.label)
+        } else {
+            requestPreview()
+        }
+    }
+
+    /// The dial's leaf reads these; each is assigned only when it changes.
+    private func setDial(parameter: AdjustmentParameter?, group: String?, value: Double) {
+        if dial.parameter != parameter { dial.parameter = parameter }
+        if dial.group != group { dial.group = group }
+        if dial.value != value { dial.value = value }
     }
 
     // MARK: - Depth and colour magic
@@ -710,11 +826,13 @@ public final class PhotoEditorSession {
         Haptics.soft(0.8)
     }
 
-    public func beginApertureInteraction() { history.beginTransaction(label: "Aperture") }
+    public func beginApertureInteraction() {
+        beginInteraction(label: "Aperture")
+        setDial(parameter: nil, group: "aperture", value: focusAperture)
+    }
 
     public func endApertureInteraction() {
-        history.endTransaction()
-        requestPreview()
+        endInteraction()
     }
 
     public func setAperture(_ aperture: Double) {
@@ -722,10 +840,10 @@ public final class PhotoEditorSession {
             if case .lensBlur(let focus, let aperture, let mask) = operation.kind { return (focus, aperture, mask) }
             return nil
         }).first else { return }
-        var updated = document
-        updated.update(layerID: baseID) { $0.edits.setColor(.lensBlur(focus: lens.focus, aperture: aperture, mask: lens.mask)) }
-        history.commit(updated, label: "Aperture")
-        requestPreview(interactive: true)
+        if interaction != nil { setDial(parameter: nil, group: "aperture", value: aperture) }
+        interactiveEdit(label: "Aperture") { document in
+            document.update(layerID: baseID) { $0.edits.setColor(.lensBlur(focus: lens.focus, aperture: aperture, mask: lens.mask)) }
+        }
     }
 
     public func removeFocusBlur() {
@@ -747,11 +865,12 @@ public final class PhotoEditorSession {
         document.activeImageLayerID.flatMap { document.layer(id: $0)?.edits.resolvedColorGrade } ?? .neutral
     }
 
-    public func beginColorInteraction(_ label: String) { history.beginTransaction(label: label) }
+    public func beginColorInteraction(_ label: String) {
+        beginInteraction(label: label)
+    }
 
     public func endColorInteraction() {
-        history.endTransaction()
-        requestPreview()
+        endInteraction()
     }
 
     /// The active layer's imported look, nil when none.
@@ -784,15 +903,21 @@ public final class PhotoEditorSession {
         requestPreview()
     }
 
-    public func setColorMixer(_ mixer: ColorMixer) { setColor(.colorMixer(mixer), label: "Colour Mixer") }
-    public func setColorGrade(_ grade: ColorGrade) { setColor(.colorGrade(grade), label: "Colour Grading") }
+    public func setColorMixer(_ mixer: ColorMixer) {
+        if interaction != nil { setDial(parameter: nil, group: "colorMixer", value: dial.value) }
+        setColor(.colorMixer(mixer), label: "Colour Mixer")
+    }
+
+    public func setColorGrade(_ grade: ColorGrade) {
+        if interaction != nil { setDial(parameter: nil, group: "colorGrade", value: dial.value) }
+        setColor(.colorGrade(grade), label: "Colour Grading")
+    }
 
     private func setColor(_ kind: EditOperation.Kind, label: String) {
-        var document = self.document
         guard let layerID = document.activeImageLayerID else { return }
-        document.update(layerID: layerID) { $0.edits.setColor(kind) }
-        history.commit(document, label: label)
-        requestPreview(interactive: true)
+        interactiveEdit(label: label) { document in
+            document.update(layerID: layerID) { $0.edits.setColor(kind) }
+        }
     }
 
     public func adjustmentValue(_ parameter: AdjustmentParameter) -> Double {
@@ -811,18 +936,18 @@ public final class PhotoEditorSession {
     }
 
     public func setLookIntensity(_ intensity: Double) {
-        guard let look = document.baseLayer?.edits.resolvedLook else { return }
-        var document = self.document
-        guard let layerID = document.activeImageLayerID else { return }
-        document.update(layerID: layerID) { layer in
-            if let last = layer.edits.operations.last, case .look = last.kind {
-                layer.edits.operations[layer.edits.operations.count - 1] = EditOperation(id: last.id, kind: .look(look.preset, intensity: intensity), createdAt: last.createdAt, label: last.label)
-            } else {
-                layer.edits.append(.look(look.preset, intensity: intensity))
+        guard let look = document.baseLayer?.edits.resolvedLook, let layerID = document.activeImageLayerID else { return }
+        // The looks dial starts its drag as an adjustment: it is the look's own dial.
+        if interaction != nil { setDial(parameter: nil, group: "look", value: intensity) }
+        interactiveEdit(label: "Look Intensity") { document in
+            document.update(layerID: layerID) { layer in
+                if let last = layer.edits.operations.last, case .look = last.kind {
+                    layer.edits.operations[layer.edits.operations.count - 1] = EditOperation(id: last.id, kind: .look(look.preset, intensity: intensity), createdAt: last.createdAt, label: last.label)
+                } else {
+                    layer.edits.append(.look(look.preset, intensity: intensity))
+                }
             }
         }
-        history.commit(document, label: "Look Intensity")
-        requestPreview(interactive: true)
     }
 
     // MARK: - Tool lifecycle
@@ -1194,41 +1319,65 @@ public final class PhotoEditorSession {
 
     // MARK: - Precise tools
 
-    /// Magic-wand selection at a point on the rendered base image.
+    /// Magic-wand selection at a point on the rendered base image. The picture is
+    /// rendered without expensive work and read back once per picture state; the
+    /// flood fill, the despeckle and the PNG write run off the main thread.
     public func magicWandSelect(at point: PSPoint) {
         guard let renderer else { return }
-        Task {
+        let key = lookThumbnailKey
+        let cached = wandAnalysis?.key == key ? wandAnalysis?.analysis : nil
+        let document = self.document
+        let tolerance = wandTolerance, contiguous = wandContiguous
+        let maskStore = MaskStore(store: app.store, projectID: projectID)
+        Task { [weak self] in
             do {
-                let image = try await renderer.renderBase(document, options: PhotoRenderer.Options(targetLongestSide: 1536))
-                guard let cg = ImageSupport.cgImage(from: image) else { return }
-                let maskStore = MaskStore(store: app.store, projectID: projectID)
-                let mask = try VisionGrounding.magicWandMask(in: cg, seed: point, tolerance: wandTolerance, contiguous: wandContiguous, maskStore: maskStore)
-                setSelection(mask)
+                let analysis: VisionGrounding.WandAnalysis
+                if let cached {
+                    analysis = cached
+                } else {
+                    let image = try await renderer.renderBase(document, options: PhotoRenderer.Options(targetLongestSide: 1536, allowExpensiveWork: false))
+                    guard let read = await Task.detached(priority: .userInitiated, operation: { () -> VisionGrounding.WandAnalysis? in
+                        ImageSupport.cgImage(from: image).map(VisionGrounding.wandAnalysis(of:))
+                    }).value else { return }
+                    analysis = read
+                    self?.wandAnalysis = (key, read)
+                }
+                let selection = try await Task.detached(priority: .userInitiated) {
+                    try VisionGrounding.magicWandSelection(in: analysis, seed: point, tolerance: tolerance, contiguous: contiguous, maskStore: maskStore)
+                }.value
+                self?.setSelection(selection)
                 Haptics.confirm()
             } catch {
-                showToast(error.localizedDescription, isError: true)
+                self?.showToast(error.localizedDescription, isError: true)
             }
         }
     }
 
     public func commitLasso() {
         guard lassoPoints.count >= 3 else { return }
+        let points = lassoPoints
+        let size = document.canvasSize
         let maskStore = MaskStore(store: app.store, projectID: projectID)
-        if let mask = try? VisionGrounding.lassoMask(imageSize: document.canvasSize, points: lassoPoints, maskStore: maskStore) {
-            setSelection(mask)
+        lassoPoints = []
+        Task { [weak self] in
+            let selection = try? await Task.detached(priority: .userInitiated) {
+                try VisionGrounding.lassoSelection(imageSize: size, points: points, maskStore: maskStore)
+            }.value
+            guard let selection else { return }
+            self?.setSelection(selection)
             Haptics.confirm()
         }
-        lassoPoints = []
     }
 
-    private func setSelection(_ mask: MaskReference) {
-        selectionMask = mask
-        let maskStore = MaskStore(store: app.store, projectID: projectID)
-        if let preview = preview, let image = maskStore.load(mask, fitting: preview.extent) {
-            // Tinted overlay for the canvas.
-            let tint = CIImage(color: CIColor(red: 0.36, green: 0.55, blue: 1.0, alpha: 0.45)).cropped(to: preview.extent)
-            selectionPreview = AdjustmentPipeline.applyingAlpha(mask: image, to: tint)
-        }
+    /// The selection, and its tint on the canvas built from the bytes in memory.
+    private func setSelection(_ selection: VisionGrounding.SelectionResult) {
+        selectionMask = selection.reference
+        guard let preview, let mask = ImageSupport.ciImage(gray: selection.bytes, width: selection.width, height: selection.height) else { return }
+        let extent = preview.extent
+        let fitted = mask.transformed(by: CGAffineTransform(scaleX: extent.width / CGFloat(selection.width), y: extent.height / CGFloat(selection.height)))
+            .transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
+        let tint = CIImage(color: CIColor(red: 0.36, green: 0.55, blue: 1.0, alpha: 0.45)).cropped(to: extent)
+        selectionPreview = AdjustmentPipeline.applyingAlpha(mask: fitted, to: tint)
     }
 
     public func clearSelection() {
@@ -1420,18 +1569,25 @@ public final class PhotoEditorSession {
         if plan.isEmpty {
             Haptics.warning()
             let reply = plan.reply ?? L("I didn't catch that.")
-            showToast(reply + "\n" + Replies.suggestions(for: .photo, language: language), isError: true)
-            VoiceFeedback.shared.speak(reply, language: plan.language)
+            lastPlan?.reply = reply
+            lastReplyIsProblem = true
+            if !isQuiet {
+                // Through Live's composer the reply capsule says it; the suggestions follow in a toast.
+                let suggestions = Replies.suggestions(for: .photo, language: language)
+                showToast(repliesInCapsule ? suggestions : reply + "\n" + suggestions, isError: true)
+            }
+            speak(reply, language: plan.language)
             return
         }
         if let clarification = plan.clarification, plan.intents.allSatisfy({ $0.action == .unknown }) {
-            showToast(clarification)
-            VoiceFeedback.shared.speak(clarification, language: plan.language)
+            lastPlan?.reply = clarification
+            if !isQuiet, !repliesInCapsule { showToast(clarification) }
+            speak(clarification, language: plan.language)
             return
         }
         // What has to be found in the picture is confirmed once it is found, never before.
         let mustFindFirst = plan.intents.contains { Self.findsBeforeActing.contains($0.action) }
-        if !mustFindFirst { VoiceFeedback.shared.speak(plan.reply ?? "", language: plan.language) }
+        if !mustFindFirst { speak(plan.reply ?? "", language: plan.language) }
         isRunningVoiceCommand = true
         defer { isRunningVoiceCommand = false }
         var told: String?
@@ -1447,31 +1603,46 @@ public final class PhotoEditorSession {
                 lastReplyIsProblem = true
                 lastReplyIsError = true
                 break steps
-            case .needsClarification:
+            case .needsClarification(let request):
+                // The question is the reply; the numbered choices show under it.
+                lastPlan?.reply = request.question
+                replyID = UUID()
                 return
             case .applied, .ignored:
                 continue
             }
         }
         if let told {
-            // The strip says what really happened, not what was hoped for, and shows it afresh.
+            // The reply says what really happened, not what was hoped for, and shows it afresh.
             lastPlan?.reply = told
             replyID = UUID()
-            VoiceFeedback.shared.speak(told, language: plan.language)
+            speak(told, language: plan.language)
         } else if mustFindFirst {
-            VoiceFeedback.shared.speak(plan.reply ?? "", language: plan.language)
+            speak(plan.reply ?? "", language: plan.language)
         }
     }
 
     /// The last command handed over to the finger (tap or lasso what was not found).
-    private var lastOutcomeNeedsHand = false
+    @ObservationIgnored private var lastOutcomeNeedsHand = false
 
-    /// Says what happened: in the voice strip during a spoken command, in a toast otherwise.
+    /// A command typed or dictated through Live's composer: its reply shows in Live's capsule.
+    @ObservationIgnored var repliesInCapsule = false
+
+    /// Live runs this step, or a Live conversation is on: Live says what happened, the editor stays quiet.
+    var isQuiet: Bool { liveRunDepth > 0 || liveSpeechSuppressed }
+
+    /// Spoken replies outside Live only.
+    private func speak(_ text: String, language: String?, force: Bool = false) {
+        guard !isQuiet, !text.isEmpty else { return }
+        VoiceFeedback.shared.speak(text, language: language, force: force)
+    }
+
+    /// Says what happened: in the reply during a command, in a toast otherwise, and nothing while Live tells it.
     private func tell(_ message: String) {
         if isRunningVoiceCommand {
             lastPlan?.reply = message
             replyID = UUID()
-        } else {
+        } else if !isQuiet {
             showToast(message)
         }
     }
@@ -1486,18 +1657,25 @@ public final class PhotoEditorSession {
     private static let findsBeforeActing: Set<IntentAction> = [.removeObject, .moveObject, .blurObject, .recolor, .generativeFill, .selectiveAdjust, .cleanUp, .chooseCandidate]
 
     /// Drops the heavy step that is running, if any: its result is discarded when it
-    /// arrives. True when something was running. Phase 0: nothing is cancellable yet.
+    /// arrives (the service may finish in the background), and the editor is free
+    /// at once. True when something was running.
     @discardableResult
     public func cancelProcessing() -> Bool {
-        false
+        guard isProcessing, processingTask != nil else { return false }
+        droppedGenerations.insert(processingGeneration)
+        processingTask = nil
+        isProcessing = false
+        Diagnostics.shared.note("processing cancelled")
+        return true
     }
 
     @discardableResult
     public func run(_ intent: EditIntent) async -> CommandOutcome {
+        lastEffects = []
         guard var executor else { return .failed(message: L("Still getting ready — try again in a moment.")) }
         executor.language = language
         func refuse(_ message: String) -> CommandOutcome {
-            if !isRunningVoiceCommand { showToast(message, isError: true) }
+            if !isRunningVoiceCommand, !isQuiet { showToast(message, isError: true) }
             return .failed(message: message)
         }
         if intent.action == .generativeFill, !hasGenerativeEngine {
@@ -1508,26 +1686,46 @@ public final class PhotoEditorSession {
         }
         let isHeavy = [.removeObject, .removeBackground, .blurBackground, .replaceBackground, .upscale, .selectiveAdjust, .chooseCandidate, .straighten, .generativeFill, .recolor,
                        .moveObject, .cleanUp, .expandCanvas, .textBehind, .autoCrop, .blurObject].contains(intent.action)
+        var generation: Int?
         if isHeavy {
             // One long step at a time (a tap during a spoken erase, a second chip…).
             guard !isProcessing else {
                 let message = L("One moment…")
-                if !isRunningVoiceCommand { showToast(message) }
+                if !isRunningVoiceCommand, !isQuiet { showToast(message) }
                 return .info(message: message)
             }
+            // A drag in progress is committed first: the step starts from what is on screen.
+            if interaction != nil { endInteraction() }
             isProcessing = true
             processingTitle = intent.action == .chooseCandidate ? L("Erasing…") : processingLabel(for: intent)
+            processingGeneration += 1
+            generation = processingGeneration
             Diagnostics.shared.note("run \(intent.action)")
             // Short of memory before a long step: previews go a size down until it recovers.
             if MemoryBudget.isLow { app.performance.constrainMemory() }
         }
-        // Only the step that raised the flag lowers it.
-        defer { if isHeavy { isProcessing = false } }
+        // Only the step that raised the flag lowers it, unless it was dropped and another began.
+        defer { if let generation, generation == processingGeneration, isProcessing { isProcessing = false } }
         let context = intentContext
         let base = document
-        let (updated, result) = await executor.execute(intent, on: base, context: context)
-        handle(result, updatedDocument: updated, intent: intent, base: base)
-        if case .applied = result.outcome, intent.action == .adjust || intent.action == .selectiveAdjust, let parameter = intent.parameter {
+        let updated: PhotoDocument
+        let result: ExecutionResult
+        if let generation {
+            // Held in a task so cancelProcessing() can let go of it.
+            let running = executor
+            let task = Task { await running.execute(intent, on: base, context: context) }
+            processingTask = task
+            (updated, result) = await task.value
+            if processingTask == task { processingTask = nil }
+            if droppedGenerations.remove(generation) != nil {
+                Diagnostics.shared.note("dropped result: \(intent.action)")
+                return .failed(message: L("Cancelled."))
+            }
+        } else {
+            (updated, result) = await executor.execute(intent, on: base, context: context)
+        }
+        let outcome = handle(result, updatedDocument: updated, intent: intent, base: base)
+        if case .applied = outcome, intent.action == .adjust || intent.action == .selectiveAdjust, let parameter = intent.parameter {
             let direction: Int
             if let amount = intent.amount {
                 switch amount.mode {
@@ -1540,7 +1738,7 @@ public final class PhotoEditorSession {
             }
             lastAdjustment = (parameter, direction)
         }
-        return result.outcome
+        return outcome
     }
 
     /// A command's result replayed onto what was committed while it ran. Only the
@@ -1596,8 +1794,12 @@ public final class PhotoEditorSession {
         }
     }
 
+    /// Lands an executor's result and returns what really happened: a result
+    /// dropped because the photo changed meanwhile comes back as failed.
     /// - Parameter base: the document the command started from.
-    private func handle(_ result: ExecutionResult, updatedDocument: PhotoDocument, intent: EditIntent, base: PhotoDocument) {
+    @discardableResult
+    private func handle(_ result: ExecutionResult, updatedDocument: PhotoDocument, intent: EditIntent, base: PhotoDocument) -> CommandOutcome {
+        lastEffects = result.effects
         switch result.outcome {
         case .applied(let label):
             pendingClarification = nil
@@ -1607,10 +1809,12 @@ public final class PhotoEditorSession {
                 // Something else was committed while this ran: carry its new steps over, or drop it.
                 guard let rebased = Self.rebase(updatedDocument, from: base, onto: document) else {
                     Diagnostics.shared.note("stale result dropped: \(label)")
+                    let message = L("The photo changed in the meantime. Try again.")
                     if isRunningVoiceCommand { lastReplyIsProblem = true }
-                    tell(L("The photo changed in the meantime. Try again."))
+                    tell(message)
                     Haptics.warning()
-                    return
+                    lastEffects = []
+                    return .failed(message: message)
                 }
                 resultDocument = rebased
             }
@@ -1618,32 +1822,27 @@ public final class PhotoEditorSession {
             if changed {
                 commit(resultDocument, label: label)
             }
-            if !label.isEmpty { showToast(toastText(for: label), undoable: changed) }
+            if !label.isEmpty, !isQuiet { showToast(toastText(for: label), undoable: changed) }
             // The new title is ready to be rewritten or moved.
             if intent.action == .textBehind, changed { activeTool = .text }
-            Haptics.success()
+            if !isQuiet { Haptics.success() }
         case .needsClarification(let request):
             pendingClarification = request
             candidateOverlays = request.candidates
-            showToast(request.question)
-            VoiceFeedback.shared.speak(request.question, language: language.rawValue)
-            Haptics.warning()
-            if app.settings.voiceMode != .pushToTalk, isVoiceReady {
-                // Listen for the answer right away.
-                Task {
-                    try? await Task.sleep(for: .milliseconds(600))
-                    // After the question has been spoken, so the microphone does not hear it.
-                    if app.voice.state == .idle { app.voice.start(waitingForSpeech: true) }
-                }
+            // Live asks the question itself (and shows the numbered choices).
+            if !isQuiet {
+                if !isRunningVoiceCommand { showToast(request.question) }
+                speak(request.question, language: language.rawValue)
+                Haptics.warning()
             }
         case .info(let message):
             lastOutcomeNeedsHand = result.effects.contains(.message("tapToErase")) || result.effects.contains(.message("selectRegion"))
-            if !isRunningVoiceCommand { showToast(message) }
+            if !isRunningVoiceCommand, !isQuiet { showToast(message) }
             if result.effects.contains(.message("tapToErase")) { activeTool = .erase }
             if result.effects.contains(.message("crop")) { activeTool = .crop }
         case .failed(let message):
-            if !isRunningVoiceCommand { showToast(message, isError: true) }
-            Haptics.error()
+            if !isRunningVoiceCommand, !isQuiet { showToast(message, isError: true) }
+            if !isQuiet { Haptics.error() }
         case .ignored:
             break
         }
@@ -1659,11 +1858,7 @@ public final class PhotoEditorSession {
             case .revert:
                 if !revert() { tell(L("This is already the original photo.")) }
             case .compare:
-                showsOriginal = true
-                Task {
-                    try? await Task.sleep(for: .seconds(1.5))
-                    showsOriginal = false
-                }
+                compareBeforeAfter(seconds: 1.5)
             case .export, .share: showsExport = true
             case .help: showsHelp = true
             case .selectLayer(let id):
@@ -1677,7 +1872,7 @@ public final class PhotoEditorSession {
                 showsColorReferencePicker = true
             case .cancel:
                 cancelClarification()
-                showToast(L("Cancelled."))
+                if !isQuiet { showToast(L("Cancelled.")) }
             case .zoom(let amount, let target):
                 zoomRequest = ZoomRequest(amount: amount, target: target)
             case .message(let message) where message.hasPrefix("version:"):
@@ -1687,10 +1882,11 @@ public final class PhotoEditorSession {
             case .message("summary"):
                 summarizeEdits(labels: history.past.map(\.label))
             case .message(let message) where message.hasPrefix("speak:"):
-                VoiceFeedback.shared.speak(String(message.dropFirst(6)), language: language == .french ? "fr" : "en", force: true)
+                speak(String(message.dropFirst(6)), language: language == .french ? "fr" : "en", force: true)
             default: break
             }
         }
+        return result.outcome
     }
 
     // MARK: - Named versions
@@ -1798,6 +1994,19 @@ public final class PhotoEditorSession {
 
     public var zoomRequest: ZoomRequest?
 
+    @ObservationIgnored private var compareTask: Task<Void, Never>?
+
+    /// Shows the original for a moment, then the edit again.
+    func compareBeforeAfter(seconds: Double) {
+        compareTask?.cancel()
+        showsOriginal = true
+        compareTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(0.3, min(seconds, 10))))
+            guard !Task.isCancelled else { return }
+            self?.showsOriginal = false
+        }
+    }
+
     // MARK: - Export
 
     public func export(options: ExportOptions) async {
@@ -1827,25 +2036,10 @@ public final class PhotoEditorSession {
         }
     }
 }
-/// Orders project writes from the main actor and background tasks, so an older
-/// snapshot never lands after a newer one.
-final class ProjectWriteGate: @unchecked Sendable {
-    private let lock = NSLock()
-    private var written = 0
-
-    func write(sequence: Int, _ body: () -> Void) {
-        lock.lock()
-        defer { lock.unlock() }
-        guard sequence > written else { return }
-        body()
-        written = sequence
-    }
-}
-
 extension PhotoEditorSession: EditorStatus {
     /// The photo tasks report completion rather than a fraction.
     var processingProgress: Double? { nil }
-    /// Work shimmers over the picture instead; export has its own HUD.
+    /// Work shimmers over the picture instead (and Live says it); export has its own HUD.
     var showsProcessingHUD: Bool { false }
 
     func performToastAction(_ action: Toast.Action) {

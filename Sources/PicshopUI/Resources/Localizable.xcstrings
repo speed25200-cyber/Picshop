@@ -1,6 +1,22 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ copy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ copy"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (copie)"
+          }
+        }
+      }
+    },
     "%@ · −%.1f s": {
       "localizations": {
         "en": {
@@ -81,22 +97,6 @@
         }
       }
     },
-    "9:16 that follows the subject": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "9:16 that follows the subject"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Du 9:16 qui suit le sujet"
-          }
-        }
-      }
-    },
     "A .cube look from Resolve, Premiere or a LUT pack.": {
       "localizations": {
         "en": {
@@ -113,18 +113,50 @@
         }
       }
     },
-    "A 30-second recap of the best moments": {
+    "A 20-minute session: cache read above 0 on every turn after the first; note the thermal state.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A 30-second recap of the best moments"
+            "value": "A 20-minute session: cache read above 0 on every turn after the first; note the thermal state."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un résumé de 30 s des meilleurs moments"
+            "value": "Une session de 20 minutes : lecture du cache supérieure à 0 à chaque tour après le premier ; note l'état thermique."
+          }
+        }
+      }
+    },
+    "A Claude key starts with sk-ant-": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A Claude key starts with sk-ant-"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une clé Claude commence par sk-ant-"
+          }
+        }
+      }
+    },
+    "A conversation, not menus.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A conversation, not menus."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une conversation, pas des menus."
           }
         }
       }
@@ -145,50 +177,66 @@
         }
       }
     },
-    "A soft background, like a big lens": {
+    "A more natural voice": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A soft background, like a big lens"
+            "value": "A more natural voice"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un fond doux, comme un grand objectif"
+            "value": "Une voix plus naturelle"
           }
         }
       }
     },
-    "AI brain": {
+    "A phone call in the middle of a reply.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "AI brain"
+            "value": "A phone call in the middle of a reply."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cerveau IA"
+            "value": "Un appel téléphonique au milieu d'une réponse."
           }
         }
       }
     },
-    "Activation": {
+    "A revoked key.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Activation"
+            "value": "A revoked key."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Activation"
+            "value": "Une clé révoquée."
+          }
+        }
+      }
+    },
+    "Accept and continue": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accept and continue"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accepter et continuer"
           }
         }
       }
@@ -253,6 +301,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ajouter du texte"
+          }
+        }
+      }
+    },
+    "Add a Claude key for the most natural conversation.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a Claude key for the most natural conversation."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajoute une clé Claude pour la conversation la plus naturelle."
           }
         }
       }
@@ -337,6 +401,22 @@
         }
       }
     },
+    "Advanced": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Advanced"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avancé"
+          }
+        }
+      }
+    },
     "After": {
       "localizations": {
         "en": {
@@ -353,6 +433,38 @@
         }
       }
     },
+    "AirPods: full barge-in by default. Check the voice quality.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AirPods: full barge-in by default. Check the voice quality."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AirPods : interruption par la voix active par défaut. Vérifie la qualité de la voix."
+          }
+        }
+      }
+    },
+    "Airplane mode in the middle of a turn.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Airplane mode in the middle of a turn."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le mode Avion au milieu d'un échange."
+          }
+        }
+      }
+    },
     "All": {
       "localizations": {
         "en": {
@@ -365,6 +477,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tous"
+          }
+        }
+      }
+    },
+    "Allow microphone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow microphone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autoriser le micro"
+          }
+        }
+      }
+    },
+    "Allow the microphone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow the microphone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autoriser le micro"
+          }
+        }
+      }
+    },
+    "Also send the picture": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also send the picture"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyer aussi l'image"
+          }
+        }
+      }
+    },
+    "Always on with headphones. On the loudspeaker, turn it on if PicShop doesn't cut itself off while it speaks.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always on with headphones. On the loudspeaker, turn it on if PicShop doesn't cut itself off while it speaks."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toujours actif avec des écouteurs. Sur le haut-parleur, active-le si PicShop ne se coupe pas tout seul quand il parle."
           }
         }
       }
@@ -417,6 +593,38 @@
         }
       }
     },
+    "Anthropic credit used up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anthropic credit used up"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crédit Anthropic épuisé"
+          }
+        }
+      }
+    },
+    "Anthropic isn't answering — try again": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anthropic isn't answering — try again"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anthropic ne répond pas — réessaie"
+          }
+        }
+      }
+    },
     "Aperture": {
       "localizations": {
         "en": {
@@ -433,18 +641,50 @@
         }
       }
     },
-    "Apple's on-device foundation model with guided generation.": {
+    "Apple Intelligence is ready": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Apple's on-device foundation model with guided generation."
+            "value": "Apple Intelligence is ready"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le modèle Apple embarqué, avec génération guidée."
+            "value": "Apple Intelligence est prêt"
+          }
+        }
+      }
+    },
+    "Apple Intelligence is unavailable.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence is unavailable."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence n'est pas disponible."
+          }
+        }
+      }
+    },
+    "Applies this idea.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applies this idea."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applique cette idée."
           }
         }
       }
@@ -529,6 +769,38 @@
         }
       }
     },
+    "Ask PicShop…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask PicShop…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demander à PicShop…"
+          }
+        }
+      }
+    },
+    "Ask…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demander…"
+          }
+        }
+      }
+    },
     "Audio": {
       "localizations": {
         "en": {
@@ -557,22 +829,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Auto"
-          }
-        }
-      }
-    },
-    "Auto captions": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Auto captions"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sous-titres auto"
           }
         }
       }
@@ -701,6 +957,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bandeau"
+          }
+        }
+      }
+    },
+    "Barge-in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barge-in"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interruption"
           }
         }
       }
@@ -977,6 +1249,22 @@
         }
       }
     },
+    "Blur the background": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blur the background"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flouter le fond"
+          }
+        }
+      }
+    },
     "Blurring the background…": {
       "localizations": {
         "en": {
@@ -1041,6 +1329,38 @@
         }
       }
     },
+    "Brain": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brain"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerveau"
+          }
+        }
+      }
+    },
+    "Brighten the sky": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brighten the sky"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raviver le ciel"
+          }
+        }
+      }
+    },
     "Brush size": {
       "localizations": {
         "en": {
@@ -1053,6 +1373,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "Taille du pinceau"
+          }
+        }
+      }
+    },
+    "Build": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Build"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compilation"
+          }
+        }
+      }
+    },
+    "Built-in grammar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Built-in grammar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grammaire intégrée"
+          }
+        }
+      }
+    },
+    "Cache read": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache read"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache lu"
+          }
+        }
+      }
+    },
+    "Cache write": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache write"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache écrit"
+          }
+        }
+      }
+    },
+    "Café noise: the end of your turn is detected in under 2 s.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Café noise: the end of your turn is detected in under 2 s."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bruit de café : la fin de ta phrase est détectée en moins de 2 s."
           }
         }
       }
@@ -1101,6 +1501,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Annulé."
+          }
+        }
+      }
+    },
+    "Caption a video": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caption a video"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sous-titrer une vidéo"
           }
         }
       }
@@ -1169,6 +1585,54 @@
         }
       }
     },
+    "Check again": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check again"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérifier à nouveau"
+          }
+        }
+      }
+    },
+    "Checking…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérification…"
+          }
+        }
+      }
+    },
+    "Choice %d: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choice %d: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choix %d : %@"
+          }
+        }
+      }
+    },
     "Choose clips and photos": {
       "localizations": {
         "en": {
@@ -1201,6 +1665,150 @@
         }
       }
     },
+    "Claude API key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude API key"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clé API Claude"
+          }
+        }
+      }
+    },
+    "Claude Opus 5 with your key, while Live runs.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Opus 5 with your key, while Live runs."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Opus 5 avec ta clé, pendant Live."
+          }
+        }
+      }
+    },
+    "Claude asks for your consent the first time Live starts.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude asks for your consent the first time Live starts."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude te demandera ton accord au premier lancement de Live."
+          }
+        }
+      }
+    },
+    "Claude can see this image": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude can see this image"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude voit l'image"
+          }
+        }
+      }
+    },
+    "Claude can see this photo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude can see this photo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude voit la photo"
+          }
+        }
+      }
+    },
+    "Claude is off: Live stays on the iPhone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude is off: Live stays on the iPhone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude est désactivé : Live reste sur l'iPhone."
+          }
+        }
+      }
+    },
+    "Claude usage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude usage"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilisation de Claude"
+          }
+        }
+      }
+    },
+    "Claude → Apple Intelligence → Pro Brain → built-in grammar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude → Apple Intelligence → Pro Brain → built-in grammar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude → Apple Intelligence → Pro Brain → grammaire intégrée"
+          }
+        }
+      }
+    },
+    "Claude → Apple Intelligence → built-in grammar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude → Apple Intelligence → built-in grammar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude → Apple Intelligence → grammaire intégrée"
+          }
+        }
+      }
+    },
     "Clean up": {
       "localizations": {
         "en": {
@@ -1213,6 +1821,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nettoyer"
+          }
+        }
+      }
+    },
+    "Clean up a photo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clean up a photo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nettoyer une photo"
           }
         }
       }
@@ -1297,22 +1921,6 @@
         }
       }
     },
-    "Clear the background of passers-by": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Clear the background of passers-by"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Plus de passants à l'arrière-plan"
-          }
-        }
-      }
-    },
     "Clip volume": {
       "localizations": {
         "en": {
@@ -1325,22 +1933,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Volume du clip"
-          }
-        }
-      }
-    },
-    "Clips + a song → an edit on the beat": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Clips + a song → an edit on the beat"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Des clips + une chanson → un montage en rythme"
           }
         }
       }
@@ -1441,6 +2033,22 @@
         }
       }
     },
+    "Commands": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commands"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commandes"
+          }
+        }
+      }
+    },
     "Compare with original": {
       "localizations": {
         "en": {
@@ -1469,6 +2077,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Contigu"
+          }
+        }
+      }
+    },
+    "Continue": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuer"
+          }
+        }
+      }
+    },
+    "Continue on the iPhone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue on the iPhone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuer sur l'iPhone"
           }
         }
       }
@@ -1517,6 +2157,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fraîcheur & batterie"
+          }
+        }
+      }
+    },
+    "Create a magic movie": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create a magic movie"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Créer un film magique"
           }
         }
       }
@@ -1697,6 +2353,22 @@
         }
       }
     },
+    "Decisions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decisions"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Décisions"
+          }
+        }
+      }
+    },
     "Delete": {
       "localizations": {
         "en": {
@@ -1729,6 +2401,38 @@
         }
       }
     },
+    "Delete the Claude key?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete the Claude key?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer la clé Claude ?"
+          }
+        }
+      }
+    },
+    "Delete the key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete the key"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer la clé"
+          }
+        }
+      }
+    },
     "Delete “%@”?": {
       "localizations": {
         "en": {
@@ -1741,22 +2445,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Supprimer « %@ » ?"
-          }
-        }
-      }
-    },
-    "Describe an edit…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Describe an edit…"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Décrivez une retouche…"
           }
         }
       }
@@ -1793,18 +2481,18 @@
         }
       }
     },
-    "Deterministic grammar, instant, offline. Always on.": {
+    "Device checklist": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Deterministic grammar, instant, offline. Always on."
+            "value": "Device checklist"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Grammaire déterministe, instantanée, hors ligne. Toujours active."
+            "value": "Tests sur l'appareil"
           }
         }
       }
@@ -1921,6 +2609,54 @@
         }
       }
     },
+    "Double-tap to talk live. Double-tap and hold to dictate one request.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Double-tap to talk live. Double-tap and hold to dictate one request."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touche deux fois pour discuter en direct. Touche deux fois et maintiens pour dicter une seule demande."
+          }
+        }
+      }
+    },
+    "Download a Premium voice: Settings › Accessibility › Spoken Content › Voices › English.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download a Premium voice: Settings › Accessibility › Spoken Content › Voices › English."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharge une voix Premium : Réglages › Accessibilité › Contenu énoncé › Voix › Anglais."
+          }
+        }
+      }
+    },
+    "Download a Premium voice: Settings › Accessibility › Spoken Content › Voices › French.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download a Premium voice: Settings › Accessibility › Spoken Content › Voices › French."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharge une voix Premium : Réglages › Accessibilité › Contenu énoncé › Voix › Français."
+          }
+        }
+      }
+    },
     "Download large models automatically": {
       "localizations": {
         "en": {
@@ -1933,6 +2669,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Télécharger les grands modèles automatiquement"
+          }
+        }
+      }
+    },
+    "Downloading the speech model…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading the speech model…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Téléchargement du modèle vocal…"
           }
         }
       }
@@ -2129,6 +2881,38 @@
         }
       }
     },
+    "Echo cancellation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Echo cancellation"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annulation d'écho"
+          }
+        }
+      }
+    },
+    "Echo risk": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Echo risk"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Risque d'écho"
+          }
+        }
+      }
+    },
     "Edit": {
       "localizations": {
         "en": {
@@ -2157,22 +2941,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Monter par le texte"
-          }
-        }
-      }
-    },
-    "Edit by the words, captions from the voice, every “euh” cut, cuts on the beat, titles that follow a face, a recap of the best moments.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Edit by the words, captions from the voice, every “euh” cut, cuts on the beat, titles that follow a face, a recap of the best moments."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Montez par le texte, sous-titres depuis la voix, chaque « euh » coupé, coupes sur le rythme, titres qui suivent un visage, un résumé des meilleurs moments."
           }
         }
       }
@@ -2209,6 +2977,22 @@
         }
       }
     },
+    "Edits shown": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edits shown"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifications affichées"
+          }
+        }
+      }
+    },
     "Ellipse": {
       "localizations": {
         "en": {
@@ -2225,6 +3009,22 @@
         }
       }
     },
+    "Enable Apple Intelligence in Settings to use this brain.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable Apple Intelligence in Settings to use this brain."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active Apple Intelligence dans Réglages pour utiliser ce cerveau."
+          }
+        }
+      }
+    },
     "End": {
       "localizations": {
         "en": {
@@ -2237,6 +3037,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fin"
+          }
+        }
+      }
+    },
+    "End Live": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "End Live"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminer Live"
           }
         }
       }
@@ -2289,6 +3105,22 @@
         }
       }
     },
+    "Enhanced": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enhanced"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Améliorée"
+          }
+        }
+      }
+    },
     "Erase": {
       "localizations": {
         "en": {
@@ -2333,22 +3165,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gomme & détourage"
-          }
-        }
-      }
-    },
-    "Erase or move anything, expand the frame, refocus after the shot, put the title behind a person, grade like a colourist. One tap or one sentence.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Erase or move anything, expand the frame, refocus after the shot, put the title behind a person, grade like a colourist. One tap or one sentence."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Effacez ou déplacez n'importe quoi, agrandissez le cadre, refaites la mise au point après coup, passez le titre derrière une personne, étalonnez comme un pro. Un geste ou une phrase."
           }
         }
       }
@@ -2449,6 +3265,38 @@
         }
       }
     },
+    "Estimated cost, in total": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estimated cost, in total"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Coût estimé, au total"
+          }
+        }
+      }
+    },
+    "Estimated cost, this session": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estimated cost, this session"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Coût estimé, cette session"
+          }
+        }
+      }
+    },
     "Estimated from the subject.": {
       "localizations": {
         "en": {
@@ -2481,22 +3329,6 @@
         }
       }
     },
-    "Every pause, gone": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Every pause, gone"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tous les blancs, partis"
-          }
-        }
-      }
-    },
     "Expand": {
       "localizations": {
         "en": {
@@ -2509,6 +3341,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Étendre"
+          }
+        }
+      }
+    },
+    "Expand the image": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expand the image"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Étendre l'image"
           }
         }
       }
@@ -2529,18 +3377,18 @@
         }
       }
     },
-    "Export defaults": {
+    "Export the Live log": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Export defaults"
+            "value": "Export the Live log"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Export par défaut"
+            "value": "Exporter le journal Live"
           }
         }
       }
@@ -3009,6 +3857,22 @@
         }
       }
     },
+    "Framing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Framing"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cadrer"
+          }
+        }
+      }
+    },
     "Framing the speaker…": {
       "localizations": {
         "en": {
@@ -3137,6 +4001,22 @@
         }
       }
     },
+    "General": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "General"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Général"
+          }
+        }
+      }
+    },
     "Generate": {
       "localizations": {
         "en": {
@@ -3233,6 +4113,38 @@
         }
       }
     },
+    "Get a key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Get a key"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obtenir une clé"
+          }
+        }
+      }
+    },
+    "Get started": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Get started"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commencer"
+          }
+        }
+      }
+    },
     "Goals": {
       "localizations": {
         "en": {
@@ -3297,18 +4209,18 @@
         }
       }
     },
-    "Hands-free": {
+    "HD voice in AirPods": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hands-free"
+            "value": "HD voice in AirPods"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mains libres"
+            "value": "Voix HD dans les AirPods"
           }
         }
       }
@@ -3345,22 +4257,6 @@
         }
       }
     },
-    "Hesitations and stutters, cut": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hesitations and stutters, cut"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hésitations et bégaiements coupés"
-          }
-        }
-      }
-    },
     "Hide Captions": {
       "localizations": {
         "en": {
@@ -3389,6 +4285,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Masquer les sous-titres"
+          }
+        }
+      }
+    },
+    "Hide the key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide the key"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquer la clé"
+          }
+        }
+      }
+    },
+    "Hide this idea": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide this idea"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquer cette idée"
           }
         }
       }
@@ -3489,22 +4417,6 @@
         }
       }
     },
-    "Hold to talk": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hold to talk"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Maintenir pour parler"
-          }
-        }
-      }
-    },
     "Horizontal": {
       "localizations": {
         "en": {
@@ -3585,6 +4497,22 @@
         }
       }
     },
+    "Ideas": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ideas"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Idées"
+          }
+        }
+      }
+    },
     "Image": {
       "localizations": {
         "en": {
@@ -3633,6 +4561,22 @@
         }
       }
     },
+    "Import a PDF": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import a PDF"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importer un PDF"
+          }
+        }
+      }
+    },
     "Importing…": {
       "localizations": {
         "en": {
@@ -3645,6 +4589,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importation…"
+          }
+        }
+      }
+    },
+    "Improve": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Improve"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Améliorer"
+          }
+        }
+      }
+    },
+    "In Live mode with Claude, the text of what you say and, when this is on, a reduced copy (1024 px) of the picture on screen are sent to Anthropic, with your key — never the audio. Outside Live mode, nothing is sent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Live mode with Claude, the text of what you say and, when this is on, a reduced copy (1024 px) of the picture on screen are sent to Anthropic, with your key — never the audio. Outside Live mode, nothing is sent."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En mode Live avec Claude, le texte de ce que tu dis et, si c'est activé, une copie réduite (1024 px) de l'image affichée sont envoyés à Anthropic, avec ta clé — jamais l'audio. Hors du mode Live, rien n'est envoyé."
+          }
+        }
+      }
+    },
+    "In Live mode with Claude, these are sent to Anthropic to answer you, with your own API key: what you say or type during Live (the text, never the audio); the list of your edits and their settings; what the iPhone recognised in the picture (for example “1 person in the centre, a dog on the left”); the text in your photo or video and a few sentences spoken in the video around the playhead; if you allow it, a reduced copy (1024 px) of the photo or video frame on screen, without location or camera data. Your voice is transcribed on the iPhone: the audio never leaves the device. Outside Live mode, nothing is sent. Anthropic keeps this data according to its privacy policy, and usage is billed to your Anthropic account. You can stop at any time with the End button or in Settings › Live.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Live mode with Claude, these are sent to Anthropic to answer you, with your own API key: what you say or type during Live (the text, never the audio); the list of your edits and their settings; what the iPhone recognised in the picture (for example “1 person in the centre, a dog on the left”); the text in your photo or video and a few sentences spoken in the video around the playhead; if you allow it, a reduced copy (1024 px) of the photo or video frame on screen, without location or camera data. Your voice is transcribed on the iPhone: the audio never leaves the device. Outside Live mode, nothing is sent. Anthropic keeps this data according to its privacy policy, and usage is billed to your Anthropic account. You can stop at any time with the End button or in Settings › Live."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En mode Live avec Claude, ces éléments sont envoyés à Anthropic pour te répondre, avec ta propre clé API : ce que tu dis ou écris pendant Live (le texte, jamais l'audio) ; la liste de tes retouches et leurs réglages ; ce que l'iPhone a reconnu dans l'image (par exemple « 1 personne au centre, un chien à gauche ») ; les textes présents dans ta photo ou ta vidéo et quelques phrases prononcées dans la vidéo autour de la tête de lecture ; si tu l'autorises, une copie réduite (1024 px) de la photo ou de l'image vidéo affichée, sans localisation ni données de l'appareil photo. Ta voix est transcrite sur l'iPhone : l'audio ne quitte jamais l'appareil. Hors du mode Live, rien n'est envoyé. Anthropic conserve ces données selon sa politique de confidentialité, et l'usage est facturé sur ton compte Anthropic. Tu peux arrêter à tout moment avec le bouton Fin ou dans Réglages › Live."
           }
         }
       }
@@ -3677,6 +4669,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Inclus dans l'app"
+          }
+        }
+      }
+    },
+    "Injected fault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Injected fault"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Panne simulée"
           }
         }
       }
@@ -3729,18 +4737,18 @@
         }
       }
     },
-    "Installing AI models": {
+    "Instant answers for simple commands": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Installing AI models"
+            "value": "Instant answers for simple commands"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Installation des modèles IA"
+            "value": "Réponses instantanées pour les commandes simples"
           }
         }
       }
@@ -3757,6 +4765,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Intensité"
+          }
+        }
+      }
+    },
+    "Interrupt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interrupt"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interrompre"
+          }
+        }
+      }
+    },
+    "Interrupt any time, it's listening. Manual tools stay one tap away in Tools.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interrupt any time, it's listening. Manual tools stay one tap away in Tools."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interromps-la quand tu veux, elle t'écoute. Les outils manuels restent à un geste, dans Outils."
           }
         }
       }
@@ -3793,18 +4833,34 @@
         }
       }
     },
-    "Just say it.": {
+    "Key refused by Anthropic": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Just say it."
+            "value": "Key refused by Anthropic"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dites-le, simplement."
+            "value": "Clé refusée par Anthropic"
+          }
+        }
+      }
+    },
+    "Keyboard": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyboard"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clavier"
           }
         }
       }
@@ -3953,6 +5009,70 @@
         }
       }
     },
+    "Last request": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last request"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dernière requête"
+          }
+        }
+      }
+    },
+    "Last turn, then p50 / p90, in milliseconds.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last turn, then p50 / p90, in milliseconds."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dernier échange, puis p50 / p90, en millisecondes."
+          }
+        }
+      }
+    },
+    "Latency from the end of speech": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Latency from the end of speech"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Latence depuis la fin de la parole"
+          }
+        }
+      }
+    },
+    "Later": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Later"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plus tard"
+          }
+        }
+      }
+    },
     "Lay a second video or a photo over yours: picture in picture, B-roll, green screen.": {
       "localizations": {
         "en": {
@@ -4001,6 +5121,38 @@
         }
       }
     },
+    "Let me interrupt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Let me interrupt"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Me laisser l'interrompre"
+          }
+        }
+      }
+    },
+    "Level above the noise floor, last 3 s": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Level above the noise floor, last 3 s"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niveau au-dessus du bruit de fond, 3 dernières secondes"
+          }
+        }
+      }
+    },
     "Levelling…": {
       "localizations": {
         "en": {
@@ -4044,23 +5196,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lumière & couleur"
-          }
-        }
-      }
-    },
-    "Light, colour and detail in one tap": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Light, colour and detail in one tap"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lumière, couleur et détail en un geste"
+            "value": "Lumière et couleur"
           }
         }
       }
@@ -4093,6 +5229,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ligne"
+          }
+        }
+      }
+    },
+    "Listen to %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listen to %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Écouter %@"
           }
         }
       }
@@ -4177,6 +5329,118 @@
         }
       }
     },
+    "Live": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live"
+          }
+        }
+      }
+    },
+    "Live answers here, on the iPhone: your words and the picture stay on the device.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live answers here, on the iPhone: your words and the picture stay on the device."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live répond ici, sur l'iPhone : tes paroles et l'image restent sur l'appareil."
+          }
+        }
+      }
+    },
+    "Live diagnostics": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live diagnostics"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnostic Live"
+          }
+        }
+      }
+    },
+    "Live on this iPhone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live on this iPhone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live sur cet iPhone"
+          }
+        }
+      }
+    },
+    "Live will answer from the iPhone until you add a key again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live will answer from the iPhone until you add a key again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live répondra depuis l'iPhone jusqu'à ce que tu ajoutes une clé."
+          }
+        }
+      }
+    },
+    "Live: Claude": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live: Claude"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live : Claude"
+          }
+        }
+      }
+    },
+    "Live: on the iPhone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live: on the iPhone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live : sur l'iPhone"
+          }
+        }
+      }
+    },
     "Look “%@” applied": {
       "localizations": {
         "en": {
@@ -4253,6 +5517,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sans perte"
+          }
+        }
+      }
+    },
+    "Loudspeaker at full volume in a quiet room: talk over the assistant in safe mode. It must not interrupt itself. Say “stop”: it stops within 0.3 s.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loudspeaker at full volume in a quiet room: talk over the assistant in safe mode. It must not interrupt itself. Say “stop”: it stops within 0.3 s."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haut-parleur à fond dans une pièce calme : parle par-dessus l'assistant en mode sûr. Il ne doit pas s'interrompre tout seul. Dis « stop » : il s'arrête en moins de 0,3 s."
+          }
+        }
+      }
+    },
+    "Lovely light! Shall we brighten the sky?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lovely light! Shall we brighten the sky?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jolie lumière ! On ravive le ciel ?"
           }
         }
       }
@@ -4401,18 +5697,18 @@
         }
       }
     },
-    "Match colours": {
+    "Match the colours": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Match colours"
+            "value": "Match the colours"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Copier les couleurs"
+            "value": "Assortir les couleurs"
           }
         }
       }
@@ -4429,6 +5725,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "J'harmonise les couleurs…"
+          }
+        }
+      }
+    },
+    "Measures latency, echo and end-of-turn decisions while Live runs. The log holds no transcript and no key.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Measures latency, echo and end-of-turn decisions while Live runs. The log holds no transcript and no key."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mesure la latence, l'écho et les décisions de fin de phrase pendant Live. Le journal ne contient ni transcription ni clé."
           }
         }
       }
@@ -4461,22 +5773,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fusionner un PDF"
-          }
-        }
-      }
-    },
-    "Microphone & speech": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Microphone & speech"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Micro et reconnaissance vocale"
           }
         }
       }
@@ -4573,22 +5869,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Plus"
-          }
-        }
-      }
-    },
-    "More picture around it, invented": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "More picture around it, invented"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Plus d'image autour, inventée"
           }
         }
       }
@@ -4769,6 +6049,22 @@
         }
       }
     },
+    "Mute microphone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mute microphone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couper le micro"
+          }
+        }
+      }
+    },
     "Name": {
       "localizations": {
         "en": {
@@ -4897,18 +6193,18 @@
         }
       }
     },
-    "No more “euh”": {
+    "No connection — the key will be checked later": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No more “euh”"
+            "value": "No connection — the key will be checked later"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fini les « euh »"
+            "value": "Pas de connexion — la clé sera vérifiée plus tard"
           }
         }
       }
@@ -4961,6 +6257,22 @@
         }
       }
     },
+    "No turn measured yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No turn measured yet."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun échange mesuré pour l'instant."
+          }
+        }
+      }
+    },
     "No version named “%@”": {
       "localizations": {
         "en": {
@@ -4973,6 +6285,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aucune version nommée « %@ »"
+          }
+        }
+      }
+    },
+    "No voice installed for this language.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No voice installed for this language."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune voix installée pour cette langue."
+          }
+        }
+      }
+    },
+    "Noise floor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noise floor"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bruit de fond"
           }
         }
       }
@@ -4993,6 +6337,38 @@
         }
       }
     },
+    "None installed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None installed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune installée"
+          }
+        }
+      }
+    },
+    "None yet: start Live in an editor.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None yet: start Live in an editor."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien pour l'instant : lance Live dans un éditeur."
+          }
+        }
+      }
+    },
     "Nordic": {
       "localizations": {
         "en": {
@@ -5005,6 +6381,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nordique"
+          }
+        }
+      }
+    },
+    "Not checked yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not checked yet"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas encore vérifiée"
           }
         }
       }
@@ -5041,6 +6433,54 @@
         }
       }
     },
+    "Objects": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Objects"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Objets"
+          }
+        }
+      }
+    },
+    "Off": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivé"
+          }
+        }
+      }
+    },
+    "On": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activé"
+          }
+        }
+      }
+    },
     "On the beat": {
       "localizations": {
         "en": {
@@ -5053,6 +6493,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "En rythme"
+          }
+        }
+      }
+    },
+    "On this iPhone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On this iPhone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur l'iPhone"
           }
         }
       }
@@ -5073,18 +6529,18 @@
         }
       }
     },
-    "On-device, private": {
+    "On-device models, performance, diagnostics and the build.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "On-device, private"
+            "value": "On-device models, performance, diagnostics and the build."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sur l'appareil, privé"
+            "value": "Modèles embarqués, performance, diagnostic et version de l'app."
           }
         }
       }
@@ -5121,6 +6577,70 @@
         }
       }
     },
+    "Open Live diagnostics": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Live diagnostics"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir le diagnostic Live"
+          }
+        }
+      }
+    },
+    "Open Settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir Réglages"
+          }
+        }
+      }
+    },
+    "Open a photo or a video": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open a photo or a video"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir une photo ou une vidéo"
+          }
+        }
+      }
+    },
+    "Open a photo, a video or a PDF, then talk to me: I'll take care of the rest.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open a photo, a video or a PDF, then talk to me: I'll take care of the rest."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvre une photo, une vidéo ou un PDF, puis parle-moi : je m'occupe du reste."
+          }
+        }
+      }
+    },
     "Original": {
       "localizations": {
         "en": {
@@ -5133,6 +6653,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Original"
+          }
+        }
+      }
+    },
+    "Original shown": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original shown"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original affiché"
           }
         }
       }
@@ -5165,6 +6701,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sortie"
+          }
+        }
+      }
+    },
+    "Output route": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Output route"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sortie audio"
           }
         }
       }
@@ -5245,22 +6797,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rythme"
-          }
-        }
-      }
-    },
-    "Page": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Page"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Page"
           }
         }
       }
@@ -5489,22 +7025,6 @@
         }
       }
     },
-    "Photo and video, magically.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Photo and video, magically."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "La photo et la vidéo, par magie."
-          }
-        }
-      }
-    },
     "Photo canvas": {
       "localizations": {
         "en": {
@@ -5537,22 +7057,6 @@
         }
       }
     },
-    "Photo, magically.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Photo, magically."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "La photo, par magie."
-          }
-        }
-      }
-    },
     "Photos": {
       "localizations": {
         "en": {
@@ -5569,38 +7073,6 @@
         }
       }
     },
-    "Photos, videos and voice never leave your device. PicShop has no servers, no accounts and no tracking.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Photos, videos and voice never leave your device. PicShop has no servers, no accounts and no tracking."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vos photos, vidéos et votre voix ne quittent jamais votre appareil. PicShop n'a ni serveur, ni compte, ni suivi."
-          }
-        }
-      }
-    },
-    "PicShop always uses the most capable brain available on this iPhone. The instant grammar answers first; the language model steps in for complex or ambiguous requests. Everything runs on device.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PicShop always uses the most capable brain available on this iPhone. The instant grammar answers first; the language model steps in for complex or ambiguous requests. Everything runs on device."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PicShop utilise toujours le cerveau le plus capable disponible sur cet iPhone. La grammaire instantanée répond en premier ; le modèle de langage intervient pour les demandes complexes ou ambiguës. Tout fonctionne sur l'appareil."
-          }
-        }
-      }
-    },
     "PicShop couldn't find a subject to focus on.": {
       "localizations": {
         "en": {
@@ -5613,22 +7085,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "PicShop n'a pas trouvé de sujet sur lequel faire la mise au point."
-          }
-        }
-      }
-    },
-    "PicShop is rendering lighter previews to keep your iPhone cool.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PicShop is rendering lighter previews to keep your iPhone cool."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PicShop affiche des aperçus allégés pour garder votre iPhone au frais."
           }
         }
       }
@@ -5681,6 +7137,22 @@
         }
       }
     },
+    "PicShop works entirely on your iPhone. If you add a Claude key in Settings › Live, Live mode sends Anthropic the text of what you say and, if you allow it, a reduced copy of the picture — never the audio. Outside Live mode, nothing is sent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop works entirely on your iPhone. If you add a Claude key in Settings › Live, Live mode sends Anthropic the text of what you say and, if you allow it, a reduced copy of the picture — never the audio. Outside Live mode, nothing is sent."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop fonctionne entièrement sur ton iPhone. Si tu ajoutes une clé Claude dans Réglages › Live, le mode Live envoie à Anthropic le texte de ce que tu dis et, si tu l'acceptes, une copie réduite de l'image — jamais l'audio. Hors du mode Live, rien n'est envoyé."
+          }
+        }
+      }
+    },
     "PicShop writes down what is said. Strike words and they leave the video.": {
       "localizations": {
         "en": {
@@ -5697,6 +7169,22 @@
         }
       }
     },
+    "PicShop: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PicShop : %@"
+          }
+        }
+      }
+    },
     "Pick a look, then tune its intensity.": {
       "localizations": {
         "en": {
@@ -5709,22 +7197,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choisissez un look, puis réglez son intensité."
-          }
-        }
-      }
-    },
-    "Pick a photo or a video, then just say what you want.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pick a photo or a video, then just say what you want."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Choisissez une photo ou une vidéo, puis dites simplement ce que vous voulez."
           }
         }
       }
@@ -5905,6 +7377,22 @@
         }
       }
     },
+    "Portrait retouch": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portrait retouch"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retouche portrait"
+          }
+        }
+      }
+    },
     "Precise": {
       "localizations": {
         "en": {
@@ -5921,6 +7409,22 @@
         }
       }
     },
+    "Premium": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Premium"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Premium"
+          }
+        }
+      }
+    },
     "Preparing the PDF…": {
       "localizations": {
         "en": {
@@ -5933,6 +7437,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Préparation du PDF…"
+          }
+        }
+      }
+    },
+    "Preparing the log…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing the log…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Préparation du journal…"
           }
         }
       }
@@ -5969,18 +7489,18 @@
         }
       }
     },
-    "Private by design.": {
+    "Private by default.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Private by design."
+            "value": "Private by default."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Confidentiel par nature."
+            "value": "Privée par défaut."
           }
         }
       }
@@ -5997,22 +7517,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pro Brain"
-          }
-        }
-      }
-    },
-    "Projects": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Projects"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Projets"
           }
         }
       }
@@ -6081,18 +7585,34 @@
         }
       }
     },
-    "Qwen3 4B through MLX — best for long multi-step commands.": {
+    "Read from cache": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qwen3 4B through MLX — best for long multi-step commands."
+            "value": "Read from cache"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qwen3 4B via MLX — idéal pour les commandes longues en plusieurs étapes."
+            "value": "Lus depuis le cache"
+          }
+        }
+      }
+    },
+    "Read out replies to dictated commands": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read out replies to dictated commands"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lire les réponses des commandes dictées"
           }
         }
       }
@@ -6145,18 +7665,18 @@
         }
       }
     },
-    "Recognition, language models and every pixel stay on your iPhone. Nothing is uploaded, ever.": {
+    "Recent": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recognition, language models and every pixel stay on your iPhone. Nothing is uploaded, ever."
+            "value": "Recent"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "La reconnaissance, les modèles de langage et chaque pixel restent sur votre iPhone. Rien n'est jamais envoyé."
+            "value": "Récents"
           }
         }
       }
@@ -6205,6 +7725,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rectangle"
+          }
+        }
+      }
+    },
+    "Redacted JSON: timings, sizes and decisions. No transcript, no key.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redacted JSON: timings, sizes and decisions. No transcript, no key."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JSON expurgé : durées, tailles et décisions. Ni transcription, ni clé."
           }
         }
       }
@@ -6401,6 +7937,22 @@
         }
       }
     },
+    "Remove passers-by": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove passers-by"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enlever les passants"
+          }
+        }
+      }
+    },
     "Remove the LUT": {
       "localizations": {
         "en": {
@@ -6513,6 +8065,54 @@
         }
       }
     },
+    "Request size": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request size"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taille de la requête"
+          }
+        }
+      }
+    },
+    "Requests": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requêtes"
+          }
+        }
+      }
+    },
+    "Requests: this session · in total. The cost is an estimate from public prices; your Anthropic console has the real bill.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests: this session · in total. The cost is an estimate from public prices; your Anthropic console has the real bill."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requêtes : cette session · au total. Le coût est une estimation d'après les tarifs publics ; la vraie facture est dans ta console Anthropic."
+          }
+        }
+      }
+    },
     "Reset": {
       "localizations": {
         "en": {
@@ -6557,22 +8157,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reprendre"
-          }
-        }
-      }
-    },
-    "Retouch": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Retouch"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Retouche"
           }
         }
       }
@@ -6833,18 +8417,18 @@
         }
       }
     },
-    "Say it": {
+    "Say what you want and PicShop does it — and suggests ideas as you talk, like a real conversation.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Say it"
+            "value": "Say what you want and PicShop does it — and suggests ideas as you talk, like a real conversation."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dites-le"
+            "value": "Dis ce que tu veux, PicShop le fait — et te propose des idées en direct, comme dans une vraie conversation."
           }
         }
       }
@@ -6861,22 +8445,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dites ce que vous voulez changer, par exemple : efface le chien."
-          }
-        }
-      }
-    },
-    "Say what you want to do": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Say what you want to do"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dites ce que vous voulez faire"
           }
         }
       }
@@ -6925,6 +8493,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sélection prête. Dites ou écrivez ce qui doit apparaître."
+          }
+        }
+      }
+    },
+    "Send": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyer"
           }
         }
       }
@@ -7089,6 +8673,150 @@
         }
       }
     },
+    "Show me a photo.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show me a photo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Montre-moi une photo."
+          }
+        }
+      }
+    },
+    "Show original": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show original"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voir l'original"
+          }
+        }
+      }
+    },
+    "Show the edits": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show the edits"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voir les retouches"
+          }
+        }
+      }
+    },
+    "Show the frame to Claude": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show the frame to Claude"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Montrer l'image à Claude"
+          }
+        }
+      }
+    },
+    "Show the key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show the key"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher la clé"
+          }
+        }
+      }
+    },
+    "Show the photo to Claude": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show the photo to Claude"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Montrer la photo à Claude"
+          }
+        }
+      }
+    },
+    "Show the picture to Claude": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show the picture to Claude"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Montrer l'image à Claude"
+          }
+        }
+      }
+    },
+    "Shows the pages.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shows the pages."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affiche les pages."
+          }
+        }
+      }
+    },
+    "Shows what is sent to Claude.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shows what is sent to Claude."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Montre ce qui est envoyé à Claude."
+          }
+        }
+      }
+    },
     "Sign": {
       "localizations": {
         "en": {
@@ -7149,6 +8877,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Taille"
+          }
+        }
+      }
+    },
+    "Sky at sunset": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sky at sunset"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ciel coucher de soleil"
           }
         }
       }
@@ -7249,6 +8993,22 @@
         }
       }
     },
+    "Soft portrait": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Soft portrait"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portrait doux"
+          }
+        }
+      }
+    },
     "Something went wrong": {
       "localizations": {
         "en": {
@@ -7261,6 +9021,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Un problème est survenu"
+          }
+        }
+      }
+    },
+    "Sound": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sound"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Son"
           }
         }
       }
@@ -7309,22 +9085,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Source définie. Peignez maintenant la destination."
-          }
-        }
-      }
-    },
-    "Speak replies": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Speak replies"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lire les réponses"
           }
         }
       }
@@ -7409,6 +9169,22 @@
         }
       }
     },
+    "Spoken replies": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spoken replies"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réponses parlées"
+          }
+        }
+      }
+    },
     "Square": {
       "localizations": {
         "en": {
@@ -7473,6 +9249,22 @@
         }
       }
     },
+    "Standard": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard"
+          }
+        }
+      }
+    },
     "Start": {
       "localizations": {
         "en": {
@@ -7489,18 +9281,34 @@
         }
       }
     },
-    "Start editing": {
+    "Start Live when an editor opens": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Start editing"
+            "value": "Start Live when an editor opens"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Commencer"
+            "value": "Démarrer Live à l'ouverture"
+          }
+        }
+      }
+    },
+    "Stay on the iPhone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stay on the iPhone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rester sur l'iPhone"
           }
         }
       }
@@ -7521,6 +9329,22 @@
         }
       }
     },
+    "Stop": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêter"
+          }
+        }
+      }
+    },
     "Stop listening": {
       "localizations": {
         "en": {
@@ -7533,6 +9357,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arrêter l'écoute"
+          }
+        }
+      }
+    },
+    "Stop reason": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop reason"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raison de l'arrêt"
           }
         }
       }
@@ -7601,38 +9441,6 @@
         }
       }
     },
-    "Subtitles from the voice, word by word": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Subtitles from the voice, word by word"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Des sous-titres tirés de la voix, mot à mot"
-          }
-        }
-      }
-    },
-    "Sunset sky": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sunset sky"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ciel couchant"
-          }
-        }
-      }
-    },
     "Super resolution ×4": {
       "localizations": {
         "en": {
@@ -7649,6 +9457,38 @@
         }
       }
     },
+    "Swipe up or down to move by a second. Double-tap to open the timeline.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Swipe up or down to move by a second. Double-tap to open the timeline."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Balaie vers le haut ou le bas pour avancer ou reculer d'une seconde. Touche deux fois pour ouvrir la timeline."
+          }
+        }
+      }
+    },
+    "System voice (test)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System voice (test)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voix système (test)"
+          }
+        }
+      }
+    },
     "TITLE": {
       "localizations": {
         "en": {
@@ -7661,6 +9501,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "TITRE"
+          }
+        }
+      }
+    },
+    "Talk to your photos.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Talk to your photos."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parle à tes photos."
+          }
+        }
+      }
+    },
+    "Talk with Claude": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Talk with Claude"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parler avec Claude"
+          }
+        }
+      }
+    },
+    "Talk with PicShop": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Talk with PicShop"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parler avec PicShop"
           }
         }
       }
@@ -7709,6 +9597,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Touchez ailleurs pour déplacer la mise au point."
+          }
+        }
+      }
+    },
+    "Tap an object on the photo to erase it, move it or blur it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap an object on the photo to erase it, move it or blur it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touche un objet sur la photo pour l'effacer, le déplacer ou le flouter."
           }
         }
       }
@@ -7793,6 +9697,22 @@
         }
       }
     },
+    "Tap the orb to talk live. Hold it to dictate.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the orb to talk live. Hold it to dictate."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touche l'orbe pour discuter en direct. Maintiens-la pour dicter."
+          }
+        }
+      }
+    },
     "Tap the source area, then paint the destination.": {
       "localizations": {
         "en": {
@@ -7821,22 +9741,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Touchez pour effacer · maintenez pour déplacer"
-          }
-        }
-      }
-    },
-    "Tap to talk": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tap to talk"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Toucher pour parler"
           }
         }
       }
@@ -7885,6 +9789,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sarcelle et orange"
+          }
+        }
+      }
+    },
+    "Tests": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tests"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tests"
           }
         }
       }
@@ -8001,6 +9921,102 @@
         }
       }
     },
+    "The AirPods play the voice in high quality; PicShop then listens through the iPhone's own microphone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The AirPods play the voice in high quality; PicShop then listens through the iPhone's own microphone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les AirPods jouent la voix en haute qualité ; PicShop écoute alors avec le micro de l'iPhone."
+          }
+        }
+      }
+    },
+    "The Apple Intelligence model is still downloading.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Apple Intelligence model is still downloading."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le modèle Apple Intelligence est encore en cours de téléchargement."
+          }
+        }
+      }
+    },
+    "The best installed voice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The best installed voice"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La meilleure voix installée"
+          }
+        }
+      }
+    },
+    "The best installed voice: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The best installed voice: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La meilleure voix installée : %@"
+          }
+        }
+      }
+    },
+    "The built-in grammar answers simple commands.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The built-in grammar answers simple commands."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La grammaire intégrée répond aux commandes simples."
+          }
+        }
+      }
+    },
+    "The document changed in the meantime. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The document changed in the meantime. Try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le document a changé entre-temps. Réessayez."
+          }
+        }
+      }
+    },
     "The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large: they download by themselves over Wi‑Fi the first time, and everything runs on your iPhone.": {
       "localizations": {
         "en": {
@@ -8033,18 +10049,34 @@
         }
       }
     },
-    "The large models download over Wi‑Fi. Everything else already works.": {
+    "The key could not be saved in the keychain.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The large models download over Wi‑Fi. Everything else already works."
+            "value": "The key could not be saved in the keychain."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les grands modèles se téléchargent en Wi‑Fi. Tout le reste fonctionne déjà."
+            "value": "La clé n'a pas pu être enregistrée dans le trousseau."
+          }
+        }
+      }
+    },
+    "The key stays in this iPhone's keychain and is not transferred to a new iPhone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The key stays in this iPhone's keychain and is not transferred to a new iPhone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La clé reste dans le trousseau de cet iPhone et n'est pas transférée sur un nouvel iPhone."
           }
         }
       }
@@ -8113,18 +10145,50 @@
         }
       }
     },
-    "The subject, on a clean background": {
+    "The system voice speaks through AVSpeechSynthesizer instead of the audio engine, to compare them.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The subject, on a clean background"
+            "value": "The system voice speaks through AVSpeechSynthesizer instead of the audio engine, to compare them."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le sujet, sur un fond net"
+            "value": "La voix système parle avec AVSpeechSynthesizer au lieu du moteur audio, pour les comparer."
+          }
+        }
+      }
+    },
+    "The text of your words and a 1024 px copy of the picture. Never the audio: your voice is transcribed on the iPhone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The text of your words and a 1024 px copy of the picture. Never the audio: your voice is transcribed on the iPhone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le texte de tes paroles et une copie de l'image en 1024 px. Jamais l'audio : ta voix est transcrite sur l'iPhone."
+          }
+        }
+      }
+    },
+    "The video changed in the meantime. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The video changed in the meantime. Try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La vidéo a changé entre-temps. Réessayez."
           }
         }
       }
@@ -8177,6 +10241,22 @@
         }
       }
     },
+    "This device doesn't support Apple Intelligence.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This device doesn't support Apple Intelligence."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet appareil n'est pas compatible avec Apple Intelligence."
+          }
+        }
+      }
+    },
     "This is already the original photo.": {
       "localizations": {
         "en": {
@@ -8189,6 +10269,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "C'est déjà la photo d'origine."
+          }
+        }
+      }
+    },
+    "This is already the original.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is already the original."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "C'est déjà l'original."
+          }
+        }
+      }
+    },
+    "This key has no access to Claude Opus 5": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This key has no access to Claude Opus 5"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette clé n'a pas accès à Claude Opus 5"
           }
         }
       }
@@ -8209,6 +10321,70 @@
         }
       }
     },
+    "This project can't be opened": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This project can't be opened"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d'ouvrir ce projet"
+          }
+        }
+      }
+    },
+    "Timecode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timecode"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code temporel"
+          }
+        }
+      }
+    },
+    "Timeline": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timeline"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timeline"
+          }
+        }
+      }
+    },
+    "Timeline & cut": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timeline & cut"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timeline & coupe"
+          }
+        }
+      }
+    },
     "Title Animation": {
       "localizations": {
         "en": {
@@ -8225,6 +10401,54 @@
         }
       }
     },
+    "To talk with Claude, add your key in Settings › Live.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To talk with Claude, add your key in Settings › Live."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pour parler avec Claude, ajoute ta clé dans Réglages › Live."
+          }
+        }
+      }
+    },
+    "Tokens received": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tokens received"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetons reçus"
+          }
+        }
+      }
+    },
+    "Tokens sent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tokens sent"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetons envoyés"
+          }
+        }
+      }
+    },
     "Tolerance": {
       "localizations": {
         "en": {
@@ -8237,6 +10461,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tolérance"
+          }
+        }
+      }
+    },
+    "Too many requests — try again in a moment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many requests — try again in a moment"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop de requêtes — réessaie dans un instant"
+          }
+        }
+      }
+    },
+    "Tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tools"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outils"
           }
         }
       }
@@ -8285,6 +10541,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "En haut à droite"
+          }
+        }
+      }
+    },
+    "Touch up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touch up"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retoucher"
           }
         }
       }
@@ -8417,6 +10689,22 @@
         }
       }
     },
+    "Turn on Let me interrupt and repeat step 1, noting false interruptions in the decisions list.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on Let me interrupt and repeat step 1, noting false interruptions in the decisions list."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active « Me laisser l'interrompre » et refais l'étape 1, en notant les fausses interruptions dans la liste des décisions."
+          }
+        }
+      }
+    },
     "Type or say “add text …”": {
       "localizations": {
         "en": {
@@ -8513,18 +10801,34 @@
         }
       }
     },
-    "Upscale": {
+    "Unmute microphone": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Upscale"
+            "value": "Unmute microphone"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Agrandir"
+            "value": "Réactiver le micro"
+          }
+        }
+      }
+    },
+    "Upscale ×2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscale ×2"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agrandir ×2"
           }
         }
       }
@@ -8541,6 +10845,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Agrandissement…"
+          }
+        }
+      }
+    },
+    "Use Claude": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use Claude"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utiliser Claude"
           }
         }
       }
@@ -8577,6 +10897,22 @@
         }
       }
     },
+    "Valid key · %@ available": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valid key · %@ available"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clé valide · %@ disponible"
+          }
+        }
+      }
+    },
     "Vehicles": {
       "localizations": {
         "en": {
@@ -8589,6 +10925,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Véhicules"
+          }
+        }
+      }
+    },
+    "Verify": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verify"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérifier"
           }
         }
       }
@@ -8657,22 +11009,6 @@
         }
       }
     },
-    "Vertical video": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vertical video"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vidéo verticale"
-          }
-        }
-      }
-    },
     "Very hot": {
       "localizations": {
         "en": {
@@ -8733,22 +11069,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qualité vidéo"
-          }
-        }
-      }
-    },
-    "Video, like a pro.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Video, like a pro."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "La vidéo, comme un pro."
           }
         }
       }
@@ -8817,6 +11137,38 @@
         }
       }
     },
+    "VoiceOver on: turn-taking.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VoiceOver on: turn-taking."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VoiceOver activé : chacun son tour de parole."
+          }
+        }
+      }
+    },
+    "Voices": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voices"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voix"
+          }
+        }
+      }
+    },
     "Volume": {
       "localizations": {
         "en": {
@@ -8861,6 +11213,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Je cherche les meilleurs moments…"
+          }
+        }
+      }
+    },
+    "What Claude receives": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What Claude receives"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce que Claude reçoit"
+          }
+        }
+      }
+    },
+    "What can I say?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What can I say?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Que puis-je dire ?"
           }
         }
       }
@@ -8913,6 +11297,38 @@
         }
       }
     },
+    "Without a Claude key, everything stays on the iPhone. With Claude, only Live mode sends text and, if you allow it, a reduced picture — never the audio. PicShop has no server, no account and no tracking.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Without a Claude key, everything stays on the iPhone. With Claude, only Live mode sends text and, if you allow it, a reduced picture — never the audio. PicShop has no server, no account and no tracking."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sans clé Claude, tout reste sur l'iPhone. Avec Claude, seul le mode Live envoie du texte et, si tu l'acceptes, une image réduite — jamais l'audio. PicShop n'a ni serveur, ni compte, ni pistage."
+          }
+        }
+      }
+    },
+    "Without a key or a network": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Without a key or a network"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sans clé ou sans réseau"
+          }
+        }
+      }
+    },
     "Working…": {
       "localizations": {
         "en": {
@@ -8925,6 +11341,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "En cours…"
+          }
+        }
+      }
+    },
+    "You chose to stay on the iPhone. Turn Use Claude off and on to be asked again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You chose to stay on the iPhone. Turn Use Claude off and on to be asked again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu as choisi de rester sur l'iPhone. Désactive puis réactive Utiliser Claude pour qu'on te redemande."
+          }
+        }
+      }
+    },
+    "You: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu : %@"
           }
         }
       }
@@ -8977,6 +11425,38 @@
         }
       }
     },
+    "applying": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "applying"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "applique"
+          }
+        }
+      }
+    },
+    "applying: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "applying: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "applique : %@"
+          }
+        }
+      }
+    },
     "clips": {
       "localizations": {
         "en": {
@@ -9009,6 +11489,38 @@
         }
       }
     },
+    "hearing you": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hearing you"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "je t'écoute"
+          }
+        }
+      }
+    },
+    "listening": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "listening"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "à l'écoute"
+          }
+        }
+      }
+    },
     "markups": {
       "localizations": {
         "en": {
@@ -9025,6 +11537,22 @@
         }
       }
     },
+    "muted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "muted"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "micro coupé"
+          }
+        }
+      }
+    },
     "object": {
       "localizations": {
         "en": {
@@ -9037,6 +11565,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "l'objet"
+          }
+        }
+      }
+    },
+    "off": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "off"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "désactivé"
           }
         }
       }
@@ -9073,6 +11617,38 @@
         }
       }
     },
+    "problem: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "problem: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "problème : %@"
+          }
+        }
+      }
+    },
+    "speaking": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "speaking"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "parle"
+          }
+        }
+      }
+    },
     "text": {
       "localizations": {
         "en": {
@@ -9105,6 +11681,22 @@
         }
       }
     },
+    "thinking": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "thinking"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "réfléchit"
+          }
+        }
+      }
+    },
     "vehicles": {
       "localizations": {
         "en": {
@@ -9117,22 +11709,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "les véhicules"
-          }
-        }
-      }
-    },
-    "“Efface le chien”, “make it warmer”, “ajoute des sous-titres”. PicShop understands French and English and edits instantly.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "“Efface le chien”, “make it warmer”, “ajoute des sous-titres”. PicShop understands French and English and edits instantly."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "« Efface le chien », « make it warmer », « ajoute des sous-titres ». PicShop comprend le français et l'anglais et retouche instantanément."
           }
         }
       }

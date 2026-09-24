@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 """Builds Sources/PicshopUI/Resources/Localizable.xcstrings from L("…") keys.
 
-English is the source language; French translations live in FR below. Keys
-without a translation fall back to English (and are listed so they can be added).
+English is the source language. French comes from three places, merged:
+- FR below: the translations that predate the per-owner files;
+- Scripts/strings/*.json: one flat {English: Français} file per owner;
+- FALLBACK_FR below: French filled in at integration for keys an owner had
+  not translated yet. An owner's own file always wins over it.
+
+A key translated two different ways (in FR or the owner files), or whose
+French drops or adds a format specifier, fails the run and nothing is
+written. Keys without French fall back to English and are listed.
 """
 import json, pathlib, re, sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 UI = ROOT / "Sources/PicshopUI"
 OUT = UI / "Resources/Localizable.xcstrings"
+STRINGS = ROOT / "Scripts/strings"
 
 FR = {
     "This is already the original photo.": "C'est déjà la photo d'origine.",
@@ -68,8 +76,6 @@ FR = {
     "Captions from the voice, pauses cut out, cuts on the beat, vertical video that follows you, a clean voice, a movie made from your clips.": "Des sous-titres tirés de la voix, les blancs coupés, des coupes en rythme, une vidéo verticale qui vous suit, une voix nette, un film créé à partir de vos clips.",
     "Just say it.": "Dites-le, simplement.",
     "“Efface le chien”, “make it warmer”, “ajoute des sous-titres”. PicShop understands French and English and edits instantly.": "« Efface le chien », « make it warmer », « ajoute des sous-titres ». PicShop comprend le français et l'anglais et retouche instantanément.",
-    "Private by design.": "Confidentiel par nature.",
-    "Recognition, language models and every pixel stay on your iPhone. Nothing is uploaded, ever.": "La reconnaissance, les modèles de langage et chaque pixel restent sur votre iPhone. Rien n'est jamais envoyé.",
     "Best for this photo: %@": "Idéal pour cette photo : %@",
     "Colours matched.": "Couleurs harmonisées.",
     "Double-tap the title to write your own.": "Touchez deux fois le titre pour écrire le vôtre.",
@@ -288,7 +294,6 @@ FR = {
     "Installing AI models": "Installation des modèles IA",
     "Line": "Ligne",
     "Perspective": "Perspective",
-    "PicShop always uses the most capable brain available on this iPhone. The instant grammar answers first; the language model steps in for complex or ambiguous requests. Everything runs on device.": "PicShop utilise toujours le cerveau le plus capable disponible sur cet iPhone. La grammaire instantanée répond en premier ; le modèle de langage intervient pour les demandes complexes ou ambiguës. Tout fonctionne sur l'appareil.",
     "Pick a shape, then tap the canvas to place it.": "Choisissez une forme, puis touchez l'image pour la placer.",
     "Rectangle": "Rectangle",
     "Rounded": "Arrondi",
@@ -326,7 +331,6 @@ FR = {
     "Page %d of %d": "Page %d sur %d", "Preparing the PDF…": "Préparation du PDF…",
     "Reset zoom": "Réinitialiser le zoom", "Double tap to zoom in or back out. Pinch to zoom.": "Touchez deux fois pour zoomer ou revenir. Pincez pour zoomer.",
     "Tap one, or say its number.": "Touchez-en un, ou dites son numéro.",
-    "On-device, private": "Sur l'appareil, privé",
     "Looks preview on the selected clip's frame.": "Aperçu des looks sur une image du clip sélectionné.",
     "Dissolve": "Fondu enchaîné", "Fade to Black": "Fondu au noir", "Fade to White": "Fondu au blanc", "Slide Left": "Glissement gauche", "Slide Right": "Glissement droite", "Wipe": "Volet", "Zoom": "Zoom", "Blur": "Flou",
     "Tap a clip on the timeline to change its speed.": "Touchez un clip sur la timeline pour changer sa vitesse.",
@@ -338,9 +342,8 @@ FR = {
     "Add music, a voice-over or a sound effect: each one gets its own lane. Say “ajoute un son à 10 secondes”.": "Ajoutez une musique, une voix off ou un bruitage : chacun a sa propre piste. Dites « ajoute un son à 10 secondes ».",
     "Balanced": "Équilibré", "Small": "Léger", "Output": "Sortie",
     "Opacity": "Opacité", "Original": "Original", "Overlay": "Élément", "Pause": "Pause", "Photo": "Photo", "Photo canvas": "Zone de la photo", "Photo format": "Format photo",
-    "Photos, videos and voice never leave your device. PicShop has no servers, no accounts and no tracking.": "Vos photos, vidéos et votre voix ne quittent jamais votre appareil. PicShop n'a ni serveur, ni compte, ni suivi.",
     "Pick a photo or video, then just say what you want.": "Choisissez une photo ou une vidéo, puis dites simplement ce que vous voulez.",
-    "Play": "Lecture", "Previous frame": "Image précédente", "Privacy": "Confidentialité", "Private by design": "Privé par conception",
+    "Play": "Lecture", "Previous frame": "Image précédente", "Privacy": "Confidentialité",
     "Pro tools, zero friction": "Outils pro, zéro friction", "Quality": "Qualité", "Qwen3 4B through MLX — best for long multi-step commands.": "Qwen3 4B via MLX — idéal pour les commandes longues en plusieurs étapes.",
     "Recent": "Récents", "Redo": "Rétablir", "Remove": "Retirer", "Remove background": "Supprimer le fond", "Remove music": "Retirer la musique",
     "Rendering portrait effect…": "Rendu de l'effet portrait…", "Replace music": "Remplacer la musique", "Replacing the background…": "Remplacement du fond…",
@@ -360,8 +363,7 @@ FR = {
     "Retouch, erase, restyle": "Retoucher, effacer, restyler", "“Efface le chien” · “Make it warmer” · “Coupe les 3 premières secondes”": "« Efface le chien » · « Plus chaud » · « Coupe les 3 premières secondes »",
     "Just say it": "Dites-le, c'est tout", "“Efface le chien”, “make it warmer”, “coupe les 3 premières secondes”. PicShop understands French and English and edits instantly.": "« Efface le chien », « plus chaud », « coupe les 3 premières secondes ». PicShop comprend le français et l'anglais et retouche instantanément.",
     "Non-destructive layers, looks, cutouts, object removal, and a full video timeline — all on your iPhone.": "Calques non destructifs, looks, détourage, suppression d'objets et une vraie timeline vidéo — le tout sur votre iPhone.",
-    "Recognition, language models and every pixel stay on device. Nothing is uploaded, ever.": "Reconnaissance, modèles de langage et chaque pixel restent sur l'appareil. Rien n'est jamais envoyé.",
-    "Light & colour": "Lumière & couleur", "Use signature": "Utiliser la signature", "markups": "annotations", "pages": "pages",
+    "Use signature": "Utiliser la signature", "markups": "annotations", "pages": "pages",
     "Pages": "Pages", "Draw": "Dessiner", "Highlight": "Surligner", "Sign": "Signer", "Image": "Image", "New PDF": "Nouveau PDF", "Sign, mark up, reorder": "Signer, annoter, réorganiser",
     "Precise": "Précis", "Magic wand": "Baguette magique", "Lasso": "Lasso", "Generate": "Générer", "Pixel brush": "Pinceau pixel", "Clone": "Tampon",
     "Tolerance": "Tolérance", "Contiguous": "Contigu", "Tap a colour to select it. Pinch in for the pixel grid.": "Touchez une couleur pour la sélectionner. Pincez pour afficher la grille de pixels.",
@@ -424,19 +426,84 @@ DYNAMIC_KEYS = {
     "Dissolve", "Fade to Black", "Fade to White", "Slide Left", "Slide Right", "Wipe", "Zoom", "Blur",
     # Executor labels shown in toasts and the History menu.
     "Right Way Up", "Rotate 180°", "Remove Mirror", "Play Forwards", "Flip Horizontal", "Flip Vertical", "Remove Background", "Remove Text",
+    # AppEnvironment.appleIntelligenceReason, shown in Settings › Live through LD().
+    "This device doesn't support Apple Intelligence.", "Enable Apple Intelligence in Settings to use this brain.",
+    "The Apple Intelligence model is still downloading.", "Apple Intelligence is unavailable.",
 }
+
+# French D filled in at integration for keys other owners had not translated.
+# Their own Scripts/strings/<owner>.json wins; an entry can go once it is there.
+FALLBACK_FR = {
+}
+
+SPECIFIER = re.compile(r"%(?:\d+\$)?[-+ #0]*\d*(?:\.\d+)?(?:ll|l|h|hh|q|z|t|j|L)?[@dDuUxXoOfeEgGcCsSpaAi%]")
+
+
+def specifiers(text):
+    """Format specifiers in order, positional ones by position; %% ignored."""
+    found = [m.group(0) for m in SPECIFIER.finditer(text) if m.group(0) != "%%"]
+    def kind(spec):
+        return spec[-1].lower().replace("i", "d").replace("u", "d")
+    return sorted(kind(s) for s in found)
+
+
+def load_owner_files():
+    """Every Scripts/strings/*.json, as {key: (French, file)}; conflicts listed."""
+    merged, conflicts = {}, []
+    for path in sorted(STRINGS.glob("*.json")):
+        try:
+            data = json.loads(path.read_text())
+        except json.JSONDecodeError as error:
+            conflicts.append(f"{path.name}: not valid JSON ({error})")
+            continue
+        if not isinstance(data, dict):
+            conflicts.append(f"{path.name}: must be a flat {{English: Français}} object")
+            continue
+        for key, value in data.items():
+            if not isinstance(value, str) or not value.strip():
+                conflicts.append(f"{path.name}: “{key}” has no French")
+            elif key in merged and merged[key][0] != value:
+                conflicts.append(f"“{key}”: “{merged[key][0]}” ({merged[key][1]}) vs “{value}” ({path.name})")
+            else:
+                merged.setdefault(key, (value, path.name))
+    return merged, conflicts
+
 
 def main():
     keys = set(DYNAMIC_KEYS)
     for f in UI.rglob("*.swift"):
         for m in re.finditer(r'L\("((?:[^"\\]|\\.)*)"\)', f.read_text()):
             keys.add(m.group(1).replace('\\"', '"'))
+
+    owners, problems = load_owner_files()
+    french = {key: (value, "generate_strings.py FR") for key, value in FR.items()}
+    for key, (value, source) in owners.items():
+        if key in french and french[key][0] != value:
+            problems.append(f"“{key}”: “{french[key][0]}” (generate_strings.py FR) vs “{value}” ({source})")
+        else:
+            french[key] = (value, source)
+    superseded = []
+    for key, value in FALLBACK_FR.items():
+        if key in french:
+            if french[key][0] != value:
+                superseded.append(key)
+        else:
+            french[key] = (value, "generate_strings.py FALLBACK_FR")
+    for key, (value, source) in french.items():
+        if key in keys and specifiers(key) != specifiers(value):
+            problems.append(f"“{key}” → “{value}” ({source}): format specifiers differ")
+
+    if problems:
+        print("French translations disagree; nothing written:")
+        for problem in problems: print("  -", problem)
+        return 1
+
     strings = {}
     missing = []
     for key in sorted(keys):
         entry = {"localizations": {"en": {"stringUnit": {"state": "translated", "value": key}}}}
-        if key in FR:
-            entry["localizations"]["fr"] = {"stringUnit": {"state": "translated", "value": FR[key]}}
+        if key in french:
+            entry["localizations"]["fr"] = {"stringUnit": {"state": "translated", "value": french[key][0]}}
         else:
             missing.append(key)
         strings[key] = entry
@@ -444,6 +511,9 @@ def main():
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(catalog, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     print(f"wrote {len(strings)} keys to {OUT.relative_to(ROOT)}")
+    if superseded:
+        print("FALLBACK_FR entries an owner now translates differently (the owner's wins; delete them):")
+        for key in superseded: print("  -", key)
     if missing:
         print("missing French translations:")
         for key in missing: print("  -", key)

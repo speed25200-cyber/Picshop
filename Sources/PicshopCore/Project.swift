@@ -6,9 +6,10 @@ import Foundation
 /// ```
 /// <uuid>.picshop/
 ///   project.json      ← this struct
+///   summary.json      ← what Home shows (`ProjectSummary`)
 ///   media/…           ← imported originals + AI-rendered derivatives
 ///   masks/…           ← rasterised masks
-///   thumbnail.jpg
+///   thumbnail-2.jpg
 /// ```
 public struct Project: Hashable, Codable, Sendable, Identifiable {
     public enum Content: Hashable, Codable, Sendable {
@@ -171,8 +172,8 @@ public struct ProjectStore: Sendable {
 
     public init(rootURL: URL) {
         self.rootURL = rootURL
+        // Compact: smaller and faster than pretty, sorted output. Both decode.
         encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -205,17 +206,39 @@ public struct ProjectStore: Sendable {
         try fm.createDirectory(at: masksURL(for: id), withIntermediateDirectories: true)
     }
 
+    /// Writes the manifest, then its summary (see `saveWithSummary(_:)`).
     public func save(_ project: Project) throws {
+        try saveWithSummary(project)
+    }
+
+    /// Writes the manifest with `modifiedAt` set to now, then `summary.json`
+    /// after it, and returns that summary. A summary that fails to write is
+    /// rebuilt by the next `listSummaries()`.
+    @discardableResult
+    public func saveWithSummary(_ project: Project) throws -> ProjectSummary {
         try createPackage(for: project.id)
         var copy = project
-        copy.modifiedAt = Date()
+        // Whole seconds, as ISO 8601 stores them: the summary returned here
+        // equals the one a later reload decodes.
+        copy.createdAt = Self.wholeSeconds(copy.createdAt)
+        copy.modifiedAt = Self.wholeSeconds(Date())
         let data = try encoder.encode(copy)
-        let manifest = packageURL(for: project.id).appendingPathComponent(Project.manifestName)
-        try data.write(to: manifest, options: .atomic)
+        try data.write(to: manifestURL(for: project.id), options: .atomic)
+        let summary = ProjectSummary(project: copy)
+        try? writeSummary(summary)
+        return summary
+    }
+
+    private static func wholeSeconds(_ date: Date) -> Date {
+        Date(timeIntervalSince1970: date.timeIntervalSince1970.rounded(.down))
+    }
+
+    public func manifestURL(for id: UUID) -> URL {
+        packageURL(for: id).appendingPathComponent(Project.manifestName)
     }
 
     public func load(id: UUID) throws -> Project {
-        let manifest = packageURL(for: id).appendingPathComponent(Project.manifestName)
+        let manifest = manifestURL(for: id)
         guard FileManager.default.fileExists(atPath: manifest.path) else { throw PicshopError.projectNotFound(id) }
         do {
             let data = try Data(contentsOf: manifest)
@@ -272,11 +295,46 @@ extension ProjectStore {
         try data.write(to: summaryURL(for: summary.id), options: .atomic)
     }
 
-    /// Every project's summary, newest first.
+    /// Every project's summary, newest first, without decoding a manifest
+    /// whose summary is current.
     ///
-    /// For now built from the manifests, as `listProjects()` does; reading
-    /// summary.json and backfilling missing or stale ones comes next.
+    /// A summary that is missing, unreadable or older than its manifest (a
+    /// build before summaries, an interrupted save, a manifest written by
+    /// another path) is rebuilt from project.json once and written back. A
+    /// package whose manifest cannot be read keeps its last summary, so the
+    /// card stays and opening it reports the damage; with neither, it is skipped.
     public func listSummaries() -> [ProjectSummary] {
-        listProjects().map(ProjectSummary.init(project:))
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(at: rootURL, includingPropertiesForKeys: nil) else { return [] }
+        var summaries: [ProjectSummary] = []
+        for entry in entries where entry.pathExtension == Project.packageExtension {
+            guard let id = UUID(uuidString: entry.deletingPathExtension().lastPathComponent) else { continue }
+            if let summary = summary(for: id) { summaries.append(summary) }
+        }
+        return summaries.sorted { lhs, rhs in
+            lhs.modifiedAt != rhs.modifiedAt ? lhs.modifiedAt > rhs.modifiedAt : lhs.id.uuidString < rhs.id.uuidString
+        }
+    }
+
+    /// One project's summary: summary.json when current, else rebuilt from the manifest.
+    public func summary(for id: UUID) -> ProjectSummary? {
+        let manifestDate = Self.modificationDate(of: manifestURL(for: id))
+        let summaryURL = summaryURL(for: id)
+        let stored = (try? Data(contentsOf: summaryURL)).flatMap { try? decoder.decode(ProjectSummary.self, from: $0) }
+        if let stored, stored.id == id, let summaryDate = Self.modificationDate(of: summaryURL),
+           manifestDate.map({ summaryDate >= $0 }) ?? true {
+            return stored
+        }
+        guard let manifestDate, let project = try? load(id: id) else { return stored }
+        let rebuilt = ProjectSummary(project: project)
+        if (try? writeSummary(rebuilt)) != nil, manifestDate > Date() {
+            // A manifest dated in the future (a clock change) must not force a rebuild on every launch.
+            try? FileManager.default.setAttributes([.modificationDate: manifestDate], ofItemAtPath: summaryURL.path)
+        }
+        return rebuilt
+    }
+
+    static func modificationDate(of url: URL) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
     }
 }

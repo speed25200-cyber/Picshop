@@ -6,6 +6,8 @@ import PicshopCore
 /// Pro colour: an eight-band HSL mixer and three colour wheels (shadows,
 /// midtones, highlights), shared by the photo and video editors. Values
 /// stream to the editor while a control moves; one undo step per gesture.
+/// While a control moves it shows its own value (the editor may keep the
+/// document still until the gesture ends), then follows the document again.
 struct ColorControls: View {
     var mixer: ColorMixer
     var grade: ColorGrade
@@ -43,6 +45,13 @@ struct ColorControls: View {
     @State private var mode: Mode? = .mixer
     @State private var band: ColorMixer.Band = .red
     @State private var importsLUT = false
+    /// The values under the finger, until the gesture ends.
+    @State private var liveMixer: ColorMixer?
+    @State private var liveGrade: ColorGrade?
+    @State private var liveLUTIntensity: Double?
+
+    private var shownMixer: ColorMixer { liveMixer ?? mixer }
+    private var shownGrade: ColorGrade { liveGrade ?? grade }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -74,8 +83,16 @@ struct ColorControls: View {
                     .buttonStyle(PSPressStyle(scale: 0.9)).foregroundStyle(PSTheme.textSecondary)
                     .accessibilityLabel(L("Remove the LUT"))
                 }
-                ParameterSlider(title: L("Intensity"), value: Binding(get: { lut.intensity }, set: { onLUTIntensity?($0) }), range: 0.05...1, bipolar: false) { editing in
-                    if editing { onBegin(L("LUT Intensity")) } else { onEnd() }
+                ParameterSlider(title: L("Intensity"), value: Binding(get: { liveLUTIntensity ?? lut.intensity }, set: { value in
+                    liveLUTIntensity = value
+                    onLUTIntensity?(value)
+                }), range: 0.05...1, bipolar: false) { editing in
+                    if editing {
+                        onBegin(L("LUT Intensity"))
+                    } else {
+                        onEnd()
+                        liveLUTIntensity = nil
+                    }
                 }
                 HStack(spacing: 8) {
                     PanelChip(title: L("Another LUT"), symbol: "square.and.arrow.down") { importsLUT = true }
@@ -109,7 +126,7 @@ struct ColorControls: View {
             HStack(spacing: 0) {
                 ForEach(ColorMixer.Band.allCases) { item in
                     let selected = item == band
-                    let touched = ColorMixer.Channel.allCases.contains { abs(mixer[item, $0]) > 0.0005 }
+                    let touched = ColorMixer.Channel.allCases.contains { abs(shownMixer[item, $0]) > 0.0005 }
                     Button {
                         Haptics.tick()
                         withAnimation(PSMotion.quick) { band = item }
@@ -133,7 +150,12 @@ struct ColorControls: View {
             .padding(.bottom, 4)
             ForEach(ColorMixer.Channel.allCases) { channel in
                 DialSlider(value: binding(channel), range: -1...1, neutral: 0, label: Self.name(channel), units: 100, onEditingChanged: { editing in
-                    if editing { onBegin("Colour Mixer") } else { onEnd() }
+                    if editing {
+                        onBegin("Colour Mixer")
+                    } else {
+                        onEnd()
+                        liveMixer = nil
+                    }
                 })
             }
         }
@@ -141,10 +163,11 @@ struct ColorControls: View {
 
     private func binding(_ channel: ColorMixer.Channel) -> Binding<Double> {
         Binding(
-            get: { mixer[band, channel] },
+            get: { shownMixer[band, channel] },
             set: { value in
-                var next = mixer
+                var next = shownMixer
                 next[band, channel] = value
+                liveMixer = next
                 onMixer(next)
             }
         )
@@ -170,23 +193,25 @@ struct ColorControls: View {
             HStack(alignment: .top, spacing: 10) {
                 ForEach(ColorGrade.Range.allCases) { range in
                     VStack(spacing: 8) {
-                        ColorWheelControl(wheel: grade[range]) { wheel in
-                            var next = grade
+                        ColorWheelControl(wheel: shownGrade[range]) { wheel in
+                            var next = shownGrade
                             next[range] = wheel
+                            liveGrade = next
                             onGrade(next)
                         } onEditing: { editing in
-                            if editing { onBegin("Colour Grading") } else { onEnd() }
+                            gradeEditing(editing)
                         }
                         Text(Self.name(range)).font(.caption2.weight(.medium)).textCase(.uppercase).tracking(0.4).foregroundStyle(PSTheme.textSecondary)
                             .lineLimit(1).minimumScaleFactor(0.8)
-                        LuminanceSlider(value: grade[range].luminance) { value in
-                            var next = grade
+                        LuminanceSlider(value: shownGrade[range].luminance) { value in
+                            var next = shownGrade
                             var wheel = next[range]
                             wheel.luminance = value
                             next[range] = wheel
+                            liveGrade = next
                             onGrade(next)
                         } onEditing: { editing in
-                            if editing { onBegin("Colour Grading") } else { onEnd() }
+                            gradeEditing(editing)
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -204,10 +229,19 @@ struct ColorControls: View {
                     PanelChip(title: L("Bleach"), symbol: "drop.halffull") {
                         apply(ColorGrade(shadows: ColorWheel(hue: 160, amount: 0.25, luminance: -0.1), midtones: ColorWheel(), highlights: ColorWheel(hue: 50, amount: 0.15, luminance: 0.1)))
                     }
-                    PanelChip(title: L("Reset"), symbol: "arrow.counterclockwise", isEnabled: !grade.isNeutral) { apply(.neutral) }
+                    PanelChip(title: L("Reset"), symbol: "arrow.counterclockwise", isEnabled: !shownGrade.isNeutral) { apply(.neutral) }
                 }
                 .padding(.horizontal, 2)
             }
+        }
+    }
+
+    private func gradeEditing(_ editing: Bool) {
+        if editing {
+            onBegin("Colour Grading")
+        } else {
+            onEnd()
+            liveGrade = nil
         }
     }
 

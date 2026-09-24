@@ -1,133 +1,97 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
+import PhotosUI
 import PicshopCore
 import PicshopIntent
 import PicshopImaging
 
-/// The photo editing screen.
+/// The photo editing screen: the picture edge to edge in the studio shell,
+/// Live at the bottom, every manual tool behind Outils.
+///
+/// The body reads only coarse mirrors (canUndo, canRedo, undoLabels, the open
+/// tool, whether work runs); the picture, the dial and Live's levels are read
+/// by leaves.
 public struct PhotoEditorView: View {
     @State var session: PhotoEditorSession
     @Environment(\.dismiss) private var dismiss
     @Environment(\.picshop) private var app
-    /// Height of the voice strip floating above the dock (0 when it is empty).
-    @State private var stripHeight: CGFloat = 0
+    /// The picture whose colours this photo should take (Magie › Assortir les couleurs).
+    @State private var referenceItem: PhotosPickerItem?
 
     public init(session: PhotoEditorSession) {
         _session = State(initialValue: session)
     }
 
     public var body: some View {
-        EditorChrome(edgeToEdge: true) {
-            PhotoCanvasView(session: session, floatingBottomInset: stripHeight > 0 ? stripHeight + 8 : 0)
+        #if DEBUG
+        let _ = ViewTrace.changes(Self.self)
+        #endif
+        StudioChrome(bar: bar, actions: actions, live: session.live,
+                     catalog: { PhotoToolCatalog.make(session: session) },
+                     isToolOpen: session.activeTool != nil,
+                     candidateThumbnail: { index in await candidateThumbnail(index) }) {
+            PhotoCanvasView(session: session)
                 // No blocking HUD while work runs: the picture itself is held still.
                 .allowsHitTesting(!session.isProcessing)
-        } top: {
-            EditorTopBar(
-                title: session.document.title.isEmpty ? L("Photo") : session.document.title,
-                // Pixel dimensions only mean something while framing.
-                subtitle: session.isCropping ? "\(Int(session.document.canvasSize.width)) × \(Int(session.document.canvasSize.height))" : nil,
-                // A step undone under a running erase would only make it drop its result.
-                canUndo: session.history.canUndo && !session.isProcessing, canRedo: session.history.canRedo && !session.isProcessing,
-                onClose: { session.teardown(); dismiss() },
-                onUndo: { session.undo() }, onRedo: { session.redo() },
-                onHelp: { session.showsHelp = true }, onExport: { session.showsExport = true },
-                history: session.isProcessing ? [] : session.history.past.map(\.label), onUndoSteps: { session.undo(steps: $0) },
-                onRevert: session.isProcessing ? nil : { _ = session.revert() })
-        } bottom: {
-            bottomArea
+        } panel: {
+            if let tool = session.activeTool {
+                PhotoToolPanel(session: session, tool: tool)
+            }
         }
         // Progress and toasts live in their own view, so a progress tick never
         // re-evaluates the canvas and the dock.
-        .overlay {
-            // Only while listening: running work already shimmers over the picture.
-            if let app { EditorIntelligenceGlow(voice: app.voice, isBusy: false) }
-        }
         .overlay { EditorStatusOverlay(session: session) }
-
-        .task { await session.configure() }
+        .task { await open() }
         .onDisappear { session.teardown() }
         .sheet(isPresented: $session.showsExport) { ExportSheet(session: session) }
-        .sheet(isPresented: $session.showsHelp) { HelpSheet(mode: .photo) { text in Task { await session.handleTranscript(text) } } }
+        .sheet(isPresented: $session.showsHelp) {
+            HelpSheet(mode: .photo) { text in session.live.send(text: text) }
+        }
+        .photosPicker(isPresented: $session.showsColorReferencePicker, selection: $referenceItem, matching: .images)
+        .onChange(of: referenceItem) { _, item in
+            guard let item else { return }
+            Task {
+                let data = try? await item.loadTransferable(type: Data.self)
+                if let data { await session.matchColors(to: data) }
+                referenceItem = nil
+            }
+        }
         .preferredColorScheme(.dark)
         .persistentSystemOverlays(.hidden)
     }
 
-    // MARK: Bottom
-
-    private var bottomArea: some View {
-        VStack(spacing: 8) {
-            if let tool = session.activeTool {
-                PhotoToolPanel(session: session, tool: tool)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-            // One glass group: the mic widens into its listening capsule and
-            // the dock gives way, as one material.
-            PSGlassContainer(spacing: 8) {
-                HStack(spacing: 10) {
-                    GroupedToolDock(groups: PhotoEditorSession.Tool.groups, selection: $session.activeTool, isModified: { isModified($0) })
-                    if let app {
-                        // A new command would only get "One moment…"; stopping a session still works.
-                        let holds = session.isProcessing && !app.voice.isListening
-                        MicButton(voice: app.voice, isBusy: session.isProcessing)
-                            .disabled(holds)
-                            .allowsHitTesting(!holds)
-                    }
-                }
-            }
-        }
-        // The strip floats above the panel instead of pushing it: a reply
-        // coming and going never moves the photo.
-        .overlay(alignment: .top) {
-            if let app {
-                VoiceStrip(voice: app.voice, isBusy: session.isProcessing, busyTitle: session.processingTitle,
-                           transcript: session.transcript, plan: session.lastPlan, replyIsProblem: session.lastReplyIsProblem, replyIsError: session.lastReplyIsError,
-                           replyID: session.replyID, clarification: session.pendingClarification,
-                           showsHint: session.activeTool == nil,
-                           candidateThumbnail: { await session.candidateThumbnail($0) },
-                           onChoose: { session.choose(candidateIndex: $0) }, onChooseAll: { session.chooseAllCandidates() }, onCancel: { session.cancelClarification() })
-                    .fixedSize(horizontal: false, vertical: true)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { stripHeight = $0 }
-                    .alignmentGuide(.top) { $0[.bottom] + 8 }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-        .padding(.bottom, 4)
-        .psDockBackground()
-        .animation(PSMotion.standard, value: session.activeTool)
+    private var bar: StudioBar {
+        StudioBar(canUndo: session.canUndo, canRedo: session.canRedo, undoLabels: session.undoLabels, isBusy: session.isProcessing)
     }
 
-    /// Whether a dock group's edits are in the picture (Photos' yellow dot).
-    private func isModified(_ group: ToolGroup<PhotoEditorSession.Tool>) -> Bool {
-        let document = session.document
-        let operations = document.baseLayer?.edits.operations ?? []
-        switch group.id {
-        case "magic":
-            return document.baseLayer?.edits.resolvedLensBlur != nil
-        case "adjust":
-            return !document.activeAdjustments.isNeutral || document.baseLayer?.edits.resolvedLook != nil
-                || !session.colorMixer.isNeutral || !session.colorGrade.isNeutral || session.lut != nil
-        case "retouch":
-            return operations.contains { operation in
-                switch operation.kind {
-                case .removeObject, .heal, .removeBackground, .replaceBackground, .blurBackground, .generativeFill,
-                     .recolor, .cloneStamp, .pixelPaint, .blurRegion, .moveObject:
-                    return true
-                default:
-                    return false
-                }
-            }
-        case "crop":
-            return document.baseLayer?.edits.hasGeometry ?? false
-        case "layers":
-            return document.layers.count > 1
-        default:
-            return false
-        }
+    private var actions: StudioActions {
+        let session = session
+        let dismiss = dismiss
+        // A step undone under a running erase would only make it drop its result.
+        return StudioActions(close: { dismiss() },
+                             undo: { guard !session.isProcessing else { return }; session.undo() },
+                             redo: { guard !session.isProcessing else { return }; session.redo() },
+                             undoSteps: { steps in guard !session.isProcessing else { return }; session.undo(steps: steps) },
+                             revert: { guard !session.isProcessing else { return }; _ = session.revert() },
+                             export: { session.showsExport = true })
+    }
+
+    /// Configures the session, then starts Live on its own when Settings asks for it.
+    private func open() async {
+        await session.configure()
+        guard app?.settings.liveAutoStart == true else { return }
+        try? await Task.sleep(for: .milliseconds(600))
+        guard !Task.isCancelled else { return }
+        session.live.start()
+    }
+
+    /// The picture of choice `index` (1-based, as spoken) for the choice chips.
+    private func candidateThumbnail(_ index: Int) async -> UIImage? {
+        guard let candidates = session.pendingClarification?.candidates, candidates.indices.contains(index - 1) else { return nil }
+        return await session.candidateThumbnail(candidates[index - 1])
     }
 }
 
-/// Press-and-hold "before" button floating over the canvas, like Photos.
 /// Live zoom factor in the corner of the canvas; tapping it snaps back to fit.
 struct ZoomBadge: View {
     let zoom: CGFloat
@@ -146,13 +110,16 @@ struct ZoomBadge: View {
             .padding(.horizontal, 12)
             .frame(minHeight: 32)
             .psGlass(interactive: true, variant: .clear)
-            .animation(PSMotion.numeric, value: zoom)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(PSPressStyle(scale: 0.94))
         .accessibilityLabel(L("Reset zoom"))
     }
 }
 
+/// Press-and-hold "before" button. The canvas compares on a hold of the
+/// picture itself now; this type goes when the old chrome does (phase 2).
 struct CompareButton: View {
     var isShowingOriginal: Bool
     var onChange: (Bool) -> Void

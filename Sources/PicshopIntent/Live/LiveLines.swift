@@ -41,10 +41,11 @@ public enum LiveLines {
         language == .french ? "« \(title) » appliqué." : "\(title) applied."
     }
 
-    /// A short line while the brain thinks. Never the same one twice in a row.
+    /// A short line while the brain thinks: the one after `last` in the list, so it never repeats twice in a row.
     public static func filler(_ language: NormalizedUtterance.Language, avoiding last: String?) -> String {
         let lines = language == .french ? frenchFillers : englishFillers
-        return lines.first { $0 != last } ?? lines[0]
+        guard let last, let index = lines.firstIndex(of: last) else { return lines[0] }
+        return lines[(index + 1) % lines.count]
     }
 
     private static let frenchFillers = ["Mmh, voyons…", "Je regarde…", "Bonne question…", "Attends, je regarde la photo…", "Voyons voir…", "D'accord…"]

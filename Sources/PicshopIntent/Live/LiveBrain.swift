@@ -19,9 +19,11 @@ public struct LiveUserTurn: Sendable, Equatable {
     /// "Contrast +15 (manual)"; "tapped idea 'Portrait doux' -> applied"; "offline: said X, applied Y"; "finished 'Remove dog'".
     public var sinceLastReply: [String]
     public var interruptedAfter: String?
+    /// Titles of the idea chips on screen, in order (additive to contract 6.4).
+    public var ideasOnScreen: [String]
 
     public init(id: Int, kind: Kind, text: String, language: NormalizedUtterance.Language, image: LiveImage?, editorState: LiveEditorState,
-                sinceLastReply: [String] = [], interruptedAfter: String? = nil) {
+                sinceLastReply: [String] = [], interruptedAfter: String? = nil, ideasOnScreen: [String] = []) {
         self.id = id
         self.kind = kind
         self.text = text
@@ -30,6 +32,7 @@ public struct LiveUserTurn: Sendable, Equatable {
         self.editorState = editorState
         self.sinceLastReply = sinceLastReply
         self.interruptedAfter = interruptedAfter
+        self.ideasOnScreen = ideasOnScreen
     }
 }
 

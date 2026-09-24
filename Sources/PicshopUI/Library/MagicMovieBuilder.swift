@@ -102,16 +102,17 @@ extension ProjectLibrary {
             timeline.id = id
             timeline.setAspect(format.aspect, sourceSize: base)
             timeline.beatGrid = beats
-            let project = Project(id: id, content: .video(timeline))
-            try store.save(project)
-            if let poster = await VideoThumbnailer(store: store, projectID: id).poster(for: timeline) {
-                ThumbnailGenerator.writeThumbnail(image: poster, projectID: id, store: store)
-            }
+            let projectStore = store
+            let finished = timeline
+            // Poster, manifest and summary off the main thread; the card appears with its picture.
+            let created = try await Task.detached(priority: .userInitiated) { () async throws -> CreatedProject in
+                let poster = await VideoThumbnailer(store: projectStore, projectID: id).poster(for: finished)
+                return try CreatedProject.finish(Project(id: id, content: .video(finished)), poster: poster, store: projectStore)
+            }.value
             progress(1, L("Ready"))
-            refresh()
-            return project
+            return adopt(created)
         } catch {
-            errorMessage = (error as? PicshopError)?.message ?? error.localizedDescription
+            errorMessage = Self.message(for: error)
             return nil
         }
     }

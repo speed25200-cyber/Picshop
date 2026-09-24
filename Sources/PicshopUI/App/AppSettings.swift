@@ -33,7 +33,13 @@ public final class AppSettings {
     /// 0 never asked, negative declined, `liveConsentCurrent` accepted.
     public var liveConsentVersion: Int { didSet { defaults.set(liveConsentVersion, forKey: "liveConsentVersion") } }
     public var hasLiveConsent: Bool { liveConsentVersion == Self.liveConsentCurrent }
-    public var liveUseClaude: Bool { didSet { defaults.set(liveUseClaude, forKey: "liveUseClaude") } }
+    /// Turning it back on asks for consent again when it was declined.
+    public var liveUseClaude: Bool {
+        didSet {
+            defaults.set(liveUseClaude, forKey: "liveUseClaude")
+            if liveUseClaude, !oldValue, liveConsentVersion < 0 { liveConsentVersion = 0 }
+        }
+    }
     /// Effective only with consent.
     public var liveSendsImages: Bool { didSet { defaults.set(liveSendsImages, forKey: "liveSendsImages") } }
     public var liveAutoStart: Bool { didSet { defaults.set(liveAutoStart, forKey: "liveAutoStart") } }

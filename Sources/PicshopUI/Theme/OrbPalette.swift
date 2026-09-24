@@ -21,13 +21,23 @@ public enum OrbPalette {
     /// - row 1: k3, k1 lightened 25 % (the centre), k2;
     /// - row 2: k2 darkened 30 %, k0, k3 darkened 30 %.
     static func mesh(for state: LiveState, isMuted: Bool = false) -> [Color] {
+        meshRGB(for: state, isMuted: isMuted).map(\.color)
+    }
+
+    /// `mesh(for:isMuted:)` as components, for cross-fading frame by frame.
+    static func meshRGB(for state: LiveState, isMuted: Bool = false) -> [OrbRGB] {
         let hex = isMuted ? mutedHex : hexKeys(for: state)
         let k = hex.map { OrbRGB($0) }
         return [
             k[0].darkened(0.30), k[1], k[2].darkened(0.30),
             k[3], k[1].lightened(0.25), k[2],
             k[2].darkened(0.30), k[0], k[3].darkened(0.30),
-        ].map(\.color)
+        ]
+    }
+
+    /// Identifies a palette: equal keys draw the same colours.
+    static func paletteKey(for state: LiveState, isMuted: Bool) -> String {
+        isMuted ? "muted" : hexKeys(for: state).map { String($0, radix: 16) }.joined(separator: ",")
     }
 
     static func hexKeys(for state: LiveState) -> [UInt32] {
@@ -45,7 +55,7 @@ public enum OrbPalette {
     static let mutedHex: [UInt32] = [0x5C5C66, 0x3A3A40, 0x77777F, 0x2A2A2E]
 }
 
-/// An sRGB colour as components, so the mesh can darken and lighten keys.
+/// An sRGB colour as components, so the mesh can darken, lighten and mix keys.
 struct OrbRGB: Equatable {
     var red: Double
     var green: Double
@@ -72,6 +82,12 @@ struct OrbRGB: Equatable {
     /// Towards white by `fraction`.
     func lightened(_ fraction: Double) -> OrbRGB {
         OrbRGB(red: red + (1 - red) * fraction, green: green + (1 - green) * fraction, blue: blue + (1 - blue) * fraction)
+    }
+
+    /// `fraction` of the way to `other`.
+    func mixed(with other: OrbRGB, _ fraction: Double) -> OrbRGB {
+        let f = min(max(fraction, 0), 1)
+        return OrbRGB(red: red + (other.red - red) * f, green: green + (other.green - green) * f, blue: blue + (other.blue - blue) * f)
     }
 
     var color: Color { Color(red: red, green: green, blue: blue) }

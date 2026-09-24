@@ -34,10 +34,38 @@ public final class AppEnvironment {
     /// How the previous session ended, when it ended badly (crash, memory kill), until
     /// dismissed. Offer to share it with `writeCrashReport()`.
     public private(set) var pendingCrashReport: Diagnostics.Report?
-    /// Set by EditorHost while an editor is on screen: model installs never start
-    /// or resume while it is true.
-    public var isEditorOpen = false
+    /// Set by EditorHost while an editor is on screen: model installs pause, and
+    /// never start or resume while it is true.
+    @ObservationIgnored public var isEditorOpen = false {
+        didSet {
+            guard isEditorOpen != oldValue else { return }
+            let models = self.models
+            let open = isEditorOpen
+            let previous = installGate
+            // In order: a quick close and reopen must end paused.
+            installGate = Task {
+                await previous?.value
+                if open { await models.pauseAll() } else { await models.resumeAll() }
+            }
+            if !open { startAutoInstallIfDue() }
+        }
+    }
     @ObservationIgnored private var memoryObserver: NSObjectProtocol?
+    @ObservationIgnored private var installGate: Task<Void, Never>?
+    /// The launch delay has passed but an editor was open: installs start when it closes.
+    @ObservationIgnored private var autoInstallDue = false
+    /// Registered at launch, prewarmed only when an editor appears.
+    @ObservationIgnored private var appleEngine: (any IntentEngine)?
+    @ObservationIgnored private var lastPrewarm: [EditorMode: Date] = [:]
+    @ObservationIgnored private var pendingModelStates: [String: ModelManager.State] = [:]
+    @ObservationIgnored private var modelStatesFlush: Task<Void, Never>?
+    @ObservationIgnored private var lastModelStatesFlush = Date.distantPast
+
+    /// Automatic model installs wait this long after launch, so the first
+    /// minutes run cool, at full quality.
+    static let autoInstallDelay: TimeInterval = 60
+    /// modelStates is written at most this often; terminal states go through at once.
+    static let modelStatesInterval: TimeInterval = 0.25
 
     public init(extraEngines: [any IntentEngine] = []) {
         let settings = AppSettings()
@@ -65,14 +93,16 @@ public final class AppEnvironment {
             if #available(iOS 26.0, *) {
                 let engine = FoundationModelsIntentEngine()
                 await router.register(engine)
+                appleEngine = engine
                 appleIntelligenceReason = engine.unavailabilityReason
-                if await engine.isAvailable() { engine.prewarm(context: .photo) }
             }
             #endif
             for engine in extraEngines { await router.register(engine) }
             await refreshEngines()
             await observeModels()
-            await autoInstallModels()
+            try? await Task.sleep(for: .seconds(Self.autoInstallDelay))
+            autoInstallDue = true
+            startAutoInstallIfDue()
         }
     }
 
@@ -88,16 +118,55 @@ public final class AppEnvironment {
     // MARK: Models
 
     private func observeModels() async {
+        var initial: [String: ModelManager.State] = [:]
         for model in ModelCatalog.all {
-            modelStates[model.id] = await models.state(of: model.id)
+            initial[model.id] = await models.state(of: model.id)
         }
+        modelStates = initial
         _ = await models.observe { [weak self] id, state in
-            Task { @MainActor in
-                guard let self else { return }
-                self.modelStates[id] = state
-                if case .installed = state { await self.refreshEngines() }
-            }
+            Task { @MainActor in self?.receive(state, for: id) }
         }
+    }
+
+    /// Coalesces download progress to `modelStatesInterval`, so Home and Settings
+    /// redraw a few times a second rather than once per network chunk. Progress
+    /// never runs backwards and never follows a finished install.
+    private func receive(_ state: ModelManager.State, for id: String) {
+        let last = pendingModelStates[id] ?? modelStates[id]
+        if case .downloading(let progress) = state {
+            switch last {
+            case .installed?, .compiling?: return
+            case .downloading(let previous)? where progress < previous: return
+            default: break
+            }
+            pendingModelStates[id] = state
+            guard modelStatesFlush == nil else { return }
+            let wait = max(0, Self.modelStatesInterval - Date().timeIntervalSince(lastModelStatesFlush))
+            modelStatesFlush = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(wait))
+                guard !Task.isCancelled else { return }
+                self?.flushModelStates()
+            }
+        } else {
+            pendingModelStates[id] = state
+            flushModelStates()
+        }
+    }
+
+    private func flushModelStates() {
+        modelStatesFlush?.cancel()
+        modelStatesFlush = nil
+        lastModelStatesFlush = Date()
+        guard !pendingModelStates.isEmpty else { return }
+        var states = modelStates
+        var installed = false
+        for (id, state) in pendingModelStates {
+            states[id] = state
+            if case .installed = state { installed = true }
+        }
+        pendingModelStates.removeAll()
+        if states != modelStates { modelStates = states }
+        if installed { Task { await refreshEngines() } }
     }
 
     /// Whether the runtime needed by a model is linked into this build.
@@ -133,6 +202,10 @@ public final class AppEnvironment {
     /// app download by themselves over Wi‑Fi, with progress shown on the Home screen.
     public func autoInstallModels() async {
         guard settings.autoInstallsModels else { return }
+        guard !isEditorOpen else {
+            autoInstallDue = true
+            return
+        }
         let pending = ModelCatalog.all.filter { model in
             !ModelManager.isBundled(model.id) && canInstall(model) && !settings.isAutoInstallSkipped(model.id)
         }
@@ -185,9 +258,26 @@ public final class AppEnvironment {
         RenderContext.export.clearCaches()
     }
 
-    /// Warms the on-device planner for the editor about to open. EditorHost calls
-    /// it on appear, so launch does not pay for it.
-    public func prewarmIntentEngine(mode: EditorMode) {}
+    private func startAutoInstallIfDue() {
+        guard autoInstallDue, !isEditorOpen else { return }
+        autoInstallDue = false
+        Task { await autoInstallModels() }
+    }
+
+    /// Warms the on-device planner for the editor about to open, off the main
+    /// thread. EditorHost calls it on appear, so launch does not pay for it.
+    public func prewarmIntentEngine(mode: EditorMode) {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *), let engine = appleEngine as? FoundationModelsIntentEngine {
+            let now = Date()
+            if let last = lastPrewarm[mode], now.timeIntervalSince(last) < 60 { return }
+            lastPrewarm[mode] = now
+            Task.detached(priority: .utility) {
+                if await engine.isAvailable() { engine.prewarm(context: IntentContext(mode: mode)) }
+            }
+        }
+        #endif
+    }
 
     public func applyPerformanceSettings() {
         performance.preference = settings.performancePreference

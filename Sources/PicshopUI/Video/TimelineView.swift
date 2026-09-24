@@ -3,13 +3,18 @@ import SwiftUI
 import PicshopCore
 import PicshopVideo
 
-/// Scrubbable filmstrip timeline with clip selection and trim handles.
+/// Scrubbable multi-lane timeline with clip selection and trim handles (in
+/// Montage › Timeline & coupe). The scroll offset scrubs the player only while
+/// the finger moves it (or it glides after), through the player's chase-seek;
+/// when it comes to rest, one exact seek.
 struct TimelineView: View {
     @Bindable var session: VideoEditorSession
     @State private var pixelsPerSecond: CGFloat = 60
     @State private var steadyScale: CGFloat = 60
     @State private var trimDrag: TrimDrag?
     @State private var position = ScrollPosition(edge: .leading)
+    /// The finger moves the timeline, or it glides after a flick.
+    @State private var isUserScrolling = false
 
     enum Edge { case leading, trailing }
 
@@ -37,16 +42,19 @@ struct TimelineView: View {
                         overlaysLane(width: width)
                     }
                     .frame(width: contentWidth + width, alignment: .leading)
-                    .background(GeometryReader { inner in
-                        Color.clear.preference(key: ScrollOffsetKey.self, value: -inner.frame(in: .named("timeline")).minX)
-                    })
                 }
-                .coordinateSpace(name: "timeline")
                 .scrollPosition($position)
-                .onPreferenceChange(ScrollOffsetKey.self) { offset in
-                    guard !session.player.isPlaying, trimDrag == nil else { return }
-                    let time = Double(offset / pixelsPerSecond)
-                    if abs(time - session.player.currentTime) > 0.02 { session.player.scrub(to: time) }
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.contentOffset.x
+                } action: { _, offset in
+                    guard isUserScrolling, trimDrag == nil else { return }
+                    session.player.scrub(to: Double(max(0, offset) / pixelsPerSecond))
+                }
+                .onScrollPhaseChange { oldPhase, newPhase in
+                    let moving = newPhase == .interacting || newPhase == .decelerating
+                    if moving, !isUserScrolling, session.player.isPlaying { session.player.pause() }
+                    if isUserScrolling != moving { isUserScrolling = moving }
+                    if !moving, oldPhase == .interacting || oldPhase == .decelerating { session.player.endScrub() }
                 }
             }
             .overlay(alignment: .top) {
@@ -70,7 +78,9 @@ struct TimelineView: View {
                 PlayheadFollower(player: session.player, pixelsPerSecond: pixelsPerSecond, position: $position)
             }
         }
-        .psCard(cornerRadius: 18, shadow: false)
+        // Flat: the timeline sits on the panel's glass.
+        .background(PSTheme.fill, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     static let rulerHeight: CGFloat = 16
@@ -311,11 +321,6 @@ private struct PlayheadFollower: View {
     }
 }
 
-struct ScrollOffsetKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
-}
-
 struct ClipView: View {
     @Bindable var session: VideoEditorSession
     let clip: VideoClip
@@ -325,7 +330,8 @@ struct ClipView: View {
     @State private var thumbnails: [UIImage] = []
     @State private var peaks: [Float] = []
 
-    private var isSelected: Bool { session.selectedClip?.id == clip.id }
+    /// The stored selection only: resolving the clip under the playhead here would re-evaluate every clip on each tick.
+    private var isSelected: Bool { session.selectedClipID == clip.id }
     private var width: CGFloat { max(24, CGFloat(clip.timelineDuration) * pixelsPerSecond) }
 
     var body: some View {
@@ -371,14 +377,16 @@ struct ClipView: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(isSelected ? PSTheme.accent : PSTheme.hairline, lineWidth: isSelected ? 2.5 : 1))
-            .shadow(color: PSTheme.accent.opacity(isSelected ? 0.45 : 0), radius: 8)
-            .opacity(session.selectedClip == nil || isSelected ? 1 : 0.7)
+            .opacity(session.selectedClipID == nil || isSelected ? 1 : 0.7)
             .animation(PSMotion.quick, value: isSelected)
             .contentShape(Rectangle())
             .onTapGesture {
                 Haptics.tick()
                 session.selectedClipID = clip.id
-                if let span = session.timeline.span(of: clip.id) { session.player.scrub(to: span.start + 0.01) }
+                if let span = session.timeline.span(of: clip.id) {
+                    let player = session.player
+                    Task { await player.seek(to: span.start + 0.01) }
+                }
             }
             if isSelected {
                 trimHandle(edge: .leading).frame(width: 16, height: 84)

@@ -3,14 +3,13 @@ import SwiftUI
 import PicshopCore
 import PicshopIntent
 
-/// The Magic tab of the video editor: the automatic tools a pro editor
-/// would spend an afternoon on — captions, jump cuts, cuts on the beat,
-/// vertical reframing that follows the subject, clean dialogue, matched
-/// colour — each one tap, plus a prompt that takes any request.
+/// The video's Magic: the automatic tools a pro editor would spend an
+/// afternoon on — captions, jump cuts, cuts on the beat, vertical reframing
+/// that follows the subject, clean dialogue, matched colour — each one tap.
+/// They are tiles in Outils › Magie; once there are captions, this panel sets
+/// their style (and shows the tiles again when there are none).
 struct VideoMagicPanel: View {
     @Bindable var session: VideoEditorSession
-    @State private var prompt = ""
-    @FocusState private var focused: Bool
 
     struct Action: Identifiable {
         let id: String
@@ -19,7 +18,8 @@ struct VideoMagicPanel: View {
         let intent: EditIntent
     }
 
-    private var actions: [Action] {
+    /// The twelve actions, in the order the timeline suggests: long footage leads with a recap, a song with the beat.
+    static func actions(for timeline: VideoTimeline) -> [Action] {
         var reframe = EditIntent(action: .smartReframe)
         reframe.aspect = .ratio9x16
         let tiles: [Action] = [
@@ -36,8 +36,6 @@ struct VideoMagicPanel: View {
             Action(id: "faces", title: L("Blur faces"), symbol: "person.crop.circle.badge.xmark", intent: EditIntent(action: .blurFaces, scope: .all)),
             Action(id: "enhance", title: L("Enhance"), symbol: "wand.and.stars", intent: EditIntent(action: .autoEnhance)),
         ]
-        // The timeline decides the order: long footage leads with a recap, a song with the beat.
-        let timeline = session.timeline
         let order = VideoMagicSuggestions.ranked(duration: timeline.duration, clipCount: timeline.clips.count, hasMusic: !timeline.audioTracks.isEmpty,
                                                  hasCaptions: timeline.captions?.isEmpty == false, isVertical: timeline.renderSize.height > timeline.renderSize.width)
         return tiles.sorted { (order.firstIndex(of: $0.id) ?? 99) < (order.firstIndex(of: $1.id) ?? 99) }
@@ -45,33 +43,37 @@ struct VideoMagicPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            promptField
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
-                ForEach(actions) { action in
-                    Button {
-                        Haptics.magic()
-                        let intent = action.intent
-                        Task { await session.run(intent) }
-                    } label: {
-                        VStack(spacing: 6) {
-                            MagicGlyph(size: 18, symbol: action.symbol).frame(height: 22)
-                            Text(action.title).font(PSFont.label(10)).foregroundStyle(PSTheme.textPrimary)
-                                .lineLimit(1).minimumScaleFactor(0.7)
-                        }
-                        .frame(maxWidth: .infinity).frame(height: 62)
-                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    }
-                    .buttonStyle(PSPressStyle(scale: 0.94))
-                    .disabled(session.isProcessing)
-                    .accessibilityLabel(action.title)
-                }
-            }
             if let captions = session.timeline.captions, !captions.isEmpty {
                 captionStyles(captions)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
+            } else {
+                grid
             }
         }
         .animation(PSMotion.standard, value: session.timeline.captions?.style)
+    }
+
+    private var grid: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+            ForEach(Self.actions(for: session.timeline)) { action in
+                Button {
+                    Haptics.magic()
+                    let intent = action.intent
+                    Task { await session.run(intent) }
+                } label: {
+                    VStack(spacing: 6) {
+                        MagicGlyph(size: 18, symbol: action.symbol).frame(height: 22)
+                        Text(action.title).font(PSFont.label(10)).foregroundStyle(PSTheme.textPrimary)
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                    }
+                    .frame(maxWidth: .infinity).frame(height: 62)
+                    .background(PSTheme.fill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(PSPressStyle(scale: 0.94))
+                .disabled(session.isProcessing)
+                .accessibilityLabel(action.title)
+            }
+        }
     }
 
     /// Languages offered for translated captions, named in the interface language.
@@ -130,43 +132,6 @@ struct VideoMagicPanel: View {
                 .padding(.horizontal, 2)
             }
         }
-    }
-
-    private var promptField: some View {
-        HStack(spacing: 10) {
-            MagicGlyph(size: 15)
-            TextField(L("Describe an edit…"), text: $prompt)
-                .font(PSFont.body(15))
-                .foregroundStyle(PSTheme.textPrimary)
-                .submitLabel(.go)
-                .focused($focused)
-                .onSubmit(run)
-            if !prompt.trimmingCharacters(in: .whitespaces).isEmpty {
-                Button(action: run) {
-                    Image(systemName: "arrow.up").font(.system(size: 14, weight: .bold)).foregroundStyle(.black)
-                        .frame(width: 30, height: 30)
-                        .background(Circle().fill(Color.white))
-                }
-                .buttonStyle(PSPressStyle(scale: 0.9))
-                .transition(.scale.combined(with: .opacity))
-                .accessibilityLabel(L("Apply"))
-            }
-        }
-        .padding(.leading, 14).padding(.trailing, 7)
-        .frame(height: 46)
-        .background(Capsule().fill(Color.white.opacity(0.07)))
-        .overlay(Capsule().strokeBorder(PSTheme.intelligenceAngular, lineWidth: focused ? 1.5 : 0.8).opacity(focused ? 1 : 0.55))
-        .animation(PSMotion.quick, value: prompt.isEmpty)
-        .animation(PSMotion.quick, value: focused)
-    }
-
-    private func run() {
-        let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        prompt = ""
-        focused = false
-        Haptics.magic()
-        Task { await session.handleTranscript(text) }
     }
 }
 

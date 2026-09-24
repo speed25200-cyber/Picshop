@@ -54,7 +54,7 @@ struct EditorStatusOverlay<Session: EditorStatus>: View {
             if let toast = session.toast {
                 ToastView(text: toast.text,
                           systemImage: toast.isError ? "exclamationmark.triangle.fill" : toast.action != nil ? "arrow.uturn.up.circle.fill" : "checkmark.circle.fill",
-                          tint: toast.isError ? PSTheme.danger : toast.action != nil ? PSTheme.accent : PSTheme.success,
+                          tint: toast.isError ? PSTheme.danger : toast.action != nil ? PSTheme.textPrimary : PSTheme.success,
                           action: button(for: toast))
                     .padding(.top, toastTopInset)
                     .padding(.horizontal, toastHorizontalInset)

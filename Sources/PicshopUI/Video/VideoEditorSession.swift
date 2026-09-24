@@ -9,6 +9,10 @@ import PicshopVideo
 import PicshopSpeech
 
 /// State and behaviour of the video editor screen.
+///
+/// Views never read `history`: `timeline`, `canUndo`, `canRedo`, `undoLabels`
+/// and `revision` are stored mirrors, brought up to date by didChangeHistory()
+/// after every history write.
 @MainActor
 @Observable
 public final class VideoEditorSession {
@@ -53,10 +57,11 @@ public final class VideoEditorSession {
 
     public let projectID: UUID
     public let app: AppEnvironment
-    public private(set) var history: EditHistory<VideoTimeline> {
+    @ObservationIgnored public private(set) var history: EditHistory<VideoTimeline> {
         didSet { didChangeHistory() }
     }
-    public var timeline: VideoTimeline { history.present }
+    /// Stored mirror of `history.present`, updated by didChangeHistory() only.
+    public private(set) var timeline: VideoTimeline
     public private(set) var canUndo = false
     public private(set) var canRedo = false
     /// Past labels, oldest first.
@@ -69,15 +74,33 @@ public final class VideoEditorSession {
     public let live: LiveSession
     /// True for the whole of a Live session: no toast for Live steps, no spoken reply, no recogniser start.
     @ObservationIgnored public var liveSpeechSuppressed = false
-    /// The timeline the mirrors were last brought up to date with.
-    @ObservationIgnored private var mirroredTimeline: VideoTimeline
     @ObservationIgnored private var isTornDown = false
+    /// > 0 while Live runs a step (liveRun, a chip, a choice, an undo): no toast, no speech.
+    @ObservationIgnored var liveRunDepth = 0
+    /// The effects the last executed step reported.
+    @ObservationIgnored var lastEffects: [EditorEffect] = []
+    /// The heavy step running now; cancelProcessing() drops its result.
+    @ObservationIgnored private var processingTask: Task<(VideoTimeline, ExecutionResult), Never>?
+    @ObservationIgnored private var processingGeneration = 0
+    @ObservationIgnored private var droppedGenerations: Set<Int> = []
+    @ObservationIgnored private var isStepping = false
+    /// Live's frame: one per clip and revision.
+    @ObservationIgnored var snapshotCache: (key: String, image: LiveImage)?
+    /// The clip under the playhead as Live last heard of it (checked once a second).
+    @ObservationIgnored private var playheadClip: Int?
+    @ObservationIgnored private var playheadWatch: Task<Void, Never>?
+    @ObservationIgnored private var compareTask: Task<Void, Never>?
+    /// Revision at the last thumbnail handed to the library.
+    @ObservationIgnored private var thumbnailRevision = 0
+    @ObservationIgnored private var lastSavedTimeline: VideoTimeline?
 
     private var services: AVVideoServices?
     private var executor: VideoCommandExecutor?
 
     public var activeTool: Tool?
-    public var selectedClipID: UUID?
+    public var selectedClipID: UUID? {
+        didSet { if selectedClipID != oldValue { live.noteContextChanged() } }
+    }
     public var selectedParameter: AdjustmentParameter = .exposure
     public var isProcessing = false
     public var processingTitle = ""
@@ -85,9 +108,14 @@ public final class VideoEditorSession {
     public var toast: PhotoEditorSession.Toast?
     public var transcript = ""
     public var lastPlan: EditPlan?
-    public var pendingClarification: ClarificationRequest?
+    /// The last reply says the command could not be done as said (or failed).
+    public private(set) var lastReplyIsProblem = false
+    public private(set) var lastReplyIsError = false
+    public var pendingClarification: ClarificationRequest? {
+        didSet { if pendingClarification != oldValue { live.noteContextChanged() } }
+    }
     public var candidateOverlays: [ObjectCandidate] = []
-    public var lastTapPoint: PSPoint?
+    @ObservationIgnored public var lastTapPoint: PSPoint?
     public var showsExport = false
     /// A command to run as soon as the editor is ready (Magic shortcuts on Home).
     public var pendingCommand: String?
@@ -104,14 +132,14 @@ public final class VideoEditorSession {
     public var lookThumbnails: (clipID: UUID, images: [FilterPreset: UIImage])?
     public var showsOriginal = false
 
-    private var toastTask: Task<Void, Never>?
-    private var isConfigured = false
+    @ObservationIgnored private var toastTask: Task<Void, Never>?
+    @ObservationIgnored private var isConfigured = false
 
     public init(timeline: VideoTimeline, projectID: UUID, app: AppEnvironment) {
         self.projectID = projectID
         self.app = app
         history = EditHistory(initial: timeline)
-        mirroredTimeline = timeline
+        self.timeline = timeline
         player = TimelinePlayer(store: app.store, projectID: projectID)
         thumbnailer = VideoThumbnailer(store: app.store, projectID: projectID)
         selectedClipID = timeline.clips.first?.id
@@ -128,12 +156,14 @@ public final class VideoEditorSession {
         services.captionLocale = Locale(identifier: language == .french ? "fr-FR" : "en-US")
         self.services = services
         executor = VideoCommandExecutor(services: services, language: language) { [weak self] progress in
-            Task { @MainActor [weak self] in self?.processingProgress = progress }
+            Task { @MainActor [weak self] in
+                guard let self, self.isProcessing, self.processingProgress != progress else { return }
+                self.processingProgress = progress
+            }
         }
-        app.voice.onFinalTranscript = { [weak self] text in
-            Task { await self?.handleTranscript(text) }
-        }
+        lastSavedTimeline = timeline
         player.load(timeline)
+        watchPlayhead()
         let load = Task { [weak self] in
             guard let self else { return }
             await app.attachEngines(to: pipeline)
@@ -149,16 +179,55 @@ public final class VideoEditorSession {
     public func teardown() {
         guard !isTornDown else { return }
         isTornDown = true
+        Diagnostics.shared.note("video editor teardown")
         live.teardown()
+        playheadWatch?.cancel()
         player.pause()
         app.voice.cancel()
-        app.voice.onFinalTranscript = nil
         save()
     }
 
+    /// Saves off the main thread (the library orders the writes) and hands the
+    /// library a thumbnail from the first frame, decoded off the main thread.
     public func save() {
-        let project = Project(id: projectID, content: .video(timeline), createdAt: timeline.createdAt, modifiedAt: Date())
-        app.library.save(project)
+        let modifiedAt = Date()
+        let library = app.library
+        if timeline != lastSavedTimeline {
+            let project = Project(id: projectID, content: .video(timeline), createdAt: timeline.createdAt, modifiedAt: modifiedAt)
+            lastSavedTimeline = timeline
+            Task { await library.persist(project) }
+        }
+        guard revision != thumbnailRevision else { return }
+        thumbnailRevision = revision
+        let saved = timeline
+        let thumbnailer = self.thumbnailer
+        let id = projectID
+        Task {
+            guard let poster = await thumbnailer.poster(for: saved) else { return }
+            library.setThumbnail(UIImage(cgImage: poster), for: id, modifiedAt: modifiedAt)
+        }
+    }
+
+    /// Live hears of a new clip under the playhead, at most once a second.
+    private func watchPlayhead() {
+        playheadWatch?.cancel()
+        playheadWatch = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self, !Task.isCancelled else { return }
+                let clip = self.clipIndex(at: self.player.currentTime)
+                if clip != self.playheadClip {
+                    self.playheadClip = clip
+                    self.live.noteContextChanged()
+                }
+            }
+        }
+    }
+
+    /// 1-based index of the clip at a timeline second, as spoken ("clip 2").
+    func clipIndex(at seconds: Double) -> Int? {
+        guard let clip = timeline.clip(at: seconds), let index = timeline.index(of: clip.id) else { return nil }
+        return index + 1
     }
 
     var language: NormalizedUtterance.Language {
@@ -188,20 +257,22 @@ public final class VideoEditorSession {
     /// assigned only when its value changes, then tells Live.
     private func didChangeHistory() {
         let present = history.present
-        let timelineChanged = present != mirroredTimeline
-        let grew = history.past.count > undoLabels.count
+        let timelineChanged = present != timeline
+        let labels = history.past.map(\.label)
+        // A new step (not an undo or a redo): the list grew, or at the limit its oldest entry went.
+        let isNewStep = !isStepping && !history.canRedo && labels != undoLabels
+            && (labels.count > undoLabels.count || labels.count == history.limit)
         var changed = timelineChanged
         if timelineChanged {
-            mirroredTimeline = present
+            timeline = present
             revision += 1
         }
         if canUndo != history.canUndo { canUndo = history.canUndo; changed = true }
         if canRedo != history.canRedo { canRedo = history.canRedo; changed = true }
-        let labels = history.past.map(\.label)
         if labels != undoLabels { undoLabels = labels; changed = true }
         // A dial drag is one change, told when it ends.
         guard changed, !history.isInTransaction else { return }
-        live.noteDocumentChanged(label: grew ? history.undoLabel : nil)
+        live.noteDocumentChanged(label: isNewStep ? history.undoLabel : nil)
     }
 
     private func commit(_ timeline: VideoTimeline, label: String) {
@@ -216,20 +287,29 @@ public final class VideoEditorSession {
 
     public func undo() {
         guard history.canUndo else { return }
+        isStepping = true
         let label = history.undo()
+        isStepping = false
         Haptics.tick()
-        showToast(label.map { "\(L("Undo")) · \($0)" } ?? L("Undo"))
+        if liveRunDepth == 0 { showToast(label.map { "\(L("Undo")) · \($0)" } ?? L("Undo")) }
         player.load(timeline)
     }
 
     /// Goes back several steps at once (the History list): one refresh, one toast.
-    public func undo(steps: Int) {
-        guard steps > 0, history.canUndo else { return }
-        var last: String?
-        for _ in 0..<steps where history.canUndo { last = history.undo() }
+    /// Returns the labels undone, newest first.
+    @discardableResult
+    public func undo(steps: Int) -> [String] {
+        guard steps > 0, history.canUndo else { return [] }
+        var labels: [String] = []
+        isStepping = true
+        for _ in 0..<steps where history.canUndo {
+            if let label = history.undo() { labels.append(label) }
+        }
+        isStepping = false
         Haptics.tick()
-        showToast(last.map { "\(L("Undo")) · \($0)" } ?? L("Undo"))
+        if liveRunDepth == 0 { showToast(labels.last.map { "\(L("Undo")) · \($0)" } ?? L("Undo")) }
         player.load(timeline)
+        return labels
     }
 
     // MARK: - Named versions
@@ -265,7 +345,7 @@ public final class VideoEditorSession {
         guard !meaningful.isEmpty else {
             let text = french ? "Tu n'as encore rien modifié." : "You haven't changed anything yet."
             showToast(text)
-            VoiceFeedback.shared.speak(text, language: french ? "fr" : "en", force: true)
+            speak(text, language: french ? "fr" : "en", force: true)
             return
         }
         var counts: [(String, Int)] = []
@@ -276,7 +356,7 @@ public final class VideoEditorSession {
         let list = parts.joined(separator: ", ")
         let text = french ? "\(meaningful.count) modification\(meaningful.count > 1 ? "s" : "") : \(list)." : "\(meaningful.count) edit\(meaningful.count > 1 ? "s" : ""): \(list)."
         showToast(text)
-        VoiceFeedback.shared.speak(text, language: french ? "fr" : "en", force: true)
+        speak(text, language: french ? "fr" : "en", force: true)
     }
 
     private func restoreVersion(_ state: VideoTimeline, label: String) {
@@ -286,17 +366,26 @@ public final class VideoEditorSession {
         Haptics.success()
     }
 
-    public func redo() {
-        guard history.canRedo else { return }
+    /// Returns the label redone, nil when there was nothing to redo.
+    @discardableResult
+    public func redo() -> String? {
+        guard history.canRedo else { return nil }
+        isStepping = true
         let label = history.redo()
+        isStepping = false
         Haptics.tick()
-        showToast(label.map { "\(L("Redo")) · \($0)" } ?? L("Redo"))
+        if liveRunDepth == 0 { showToast(label.map { "\(L("Redo")) · \($0)" } ?? L("Redo")) }
         player.load(timeline)
+        return label
     }
 
-    public func revert() {
+    /// Back to the timeline as this session opened it, as one undoable step. False when there was nothing to revert.
+    @discardableResult
+    public func revert() -> Bool {
+        guard let original = history.past.first?.state, original != timeline else { return false }
         history.revertToOriginal()
         player.load(timeline)
+        return true
     }
 
     // MARK: - Direct edits
@@ -396,50 +485,125 @@ public final class VideoEditorSession {
 
     // MARK: - Voice pipeline
 
+    /// Runs a spoken or typed command, one step after another; the reply says what really happened.
     public func handleTranscript(_ text: String) async {
         transcript = text
+        lastReplyIsProblem = false
+        lastReplyIsError = false
         let plan = await app.router.plan(text, context: intentContext)
         lastPlan = plan
         if plan.isEmpty {
             Haptics.warning()
             let reply = plan.reply ?? L("I didn't catch that.")
-            showToast(reply + "\n" + Replies.suggestions(for: .video, language: language), isError: true)
-            VoiceFeedback.shared.speak(reply, language: plan.language)
+            lastPlan?.reply = reply
+            lastReplyIsProblem = true
+            if !isQuiet {
+                let suggestions = Replies.suggestions(for: .video, language: language)
+                showToast(repliesInCapsule ? suggestions : reply + "\n" + suggestions, isError: true)
+            }
+            speak(reply, language: plan.language)
             return
         }
-        VoiceFeedback.shared.speak(plan.reply ?? "", language: plan.language)
-        for intent in plan.intents where intent.action != .unknown {
-            let outcome = await run(intent)
-            if case .needsClarification = outcome { break }
-            if case .failed = outcome { break }
+        speak(plan.reply ?? "", language: plan.language)
+        isRunningVoiceCommand = true
+        defer { isRunningVoiceCommand = false }
+        var told: String?
+        steps: for intent in plan.intents where intent.action != .unknown {
+            switch await run(intent) {
+            case .needsClarification(let request):
+                lastPlan?.reply = request.question
+                return
+            case .failed(let message):
+                told = message
+                lastReplyIsProblem = true
+                lastReplyIsError = true
+                break steps
+            case .info(let message):
+                told = message
+            case .applied, .ignored:
+                continue
+            }
         }
+        if let told { lastPlan?.reply = told }
+    }
+
+    /// A command typed or dictated through Live's composer: its reply shows in Live's capsule.
+    @ObservationIgnored var repliesInCapsule = false
+    @ObservationIgnored private var isRunningVoiceCommand = false
+
+    /// Live runs this step, or a Live conversation is on: Live says what happened, the editor stays quiet.
+    var isQuiet: Bool { liveRunDepth > 0 || liveSpeechSuppressed }
+
+    /// Spoken replies outside Live only.
+    private func speak(_ text: String, language: String?, force: Bool = false) {
+        guard !isQuiet, !text.isEmpty else { return }
+        VoiceFeedback.shared.speak(text, language: language, force: force)
     }
 
     /// Drops the heavy step that is running, if any: its result is discarded when it
-    /// arrives. True when something was running. Phase 0: nothing is cancellable yet.
+    /// arrives (the service may finish in the background), and the editor is free
+    /// at once. True when something was running.
     @discardableResult
     public func cancelProcessing() -> Bool {
-        false
+        guard isProcessing, processingTask != nil else { return false }
+        droppedGenerations.insert(processingGeneration)
+        processingTask = nil
+        isProcessing = false
+        processingProgress = nil
+        Diagnostics.shared.note("processing cancelled")
+        return true
     }
 
     @discardableResult
     public func run(_ intent: EditIntent) async -> CommandOutcome {
-        guard var executor else { return .failed(message: "not ready") }
+        lastEffects = []
+        guard var executor else { return .failed(message: L("Still getting ready — try again in a moment.")) }
         executor.language = language
         let heavy: Set<IntentAction> = [.removeObject, .chooseCandidate, .stabilize, .reverse, .blurBackground, .removeBackground, .replaceBackground, .freezeFrame, .extractFrame,
                                         .autoCaptions, .translateCaptions, .removeSilences, .removeFillers, .cutWords, .autoDuck, .trackSubject, .splitScenes, .highlights, .punchIns, .syncToBeat, .fitMusic, .blurFaces, .smartReframe, .enhanceVoice, .matchColor, .kenBurns]
         // Analyses that finish without reporting a fraction show the pulsing glyph instead of 0 %.
         let indeterminate: Set<IntentAction> = [.removeSilences, .autoDuck, .syncToBeat, .fitMusic, .matchColor, .kenBurns]
+        var generation: Int?
         if heavy.contains(intent.action) {
+            // One long step at a time.
+            guard !isProcessing else {
+                let message = L("One moment…")
+                if !isRunningVoiceCommand, !isQuiet { showToast(message) }
+                return .info(message: message)
+            }
             isProcessing = true
             processingProgress = indeterminate.contains(intent.action) ? nil : 0
             processingTitle = processingLabel(for: intent)
+            processingGeneration += 1
+            generation = processingGeneration
             player.pause()
         }
-        defer { isProcessing = false; processingProgress = nil }
-        let (updated, result) = await executor.execute(intent, on: timeline, context: intentContext)
-        handle(result, updated: updated, intent: intent)
-        return result.outcome
+        // Only the step that raised the flag lowers it, unless it was dropped and another began.
+        defer {
+            if let generation, generation == processingGeneration, isProcessing {
+                isProcessing = false
+                processingProgress = nil
+            }
+        }
+        let base = timeline
+        let context = intentContext
+        let updated: VideoTimeline
+        let result: ExecutionResult
+        if let generation {
+            // Held in a task so cancelProcessing() can let go of it.
+            let running = executor
+            let task = Task { await running.execute(intent, on: base, context: context) }
+            processingTask = task
+            (updated, result) = await task.value
+            if processingTask == task { processingTask = nil }
+            if droppedGenerations.remove(generation) != nil {
+                Diagnostics.shared.note("dropped result: \(intent.action)")
+                return .failed(message: L("Cancelled."))
+            }
+        } else {
+            (updated, result) = await executor.execute(intent, on: base, context: context)
+        }
+        return handle(result, updated: updated, intent: intent, base: base)
     }
 
     // MARK: - Edit by text
@@ -512,31 +676,41 @@ public final class VideoEditorSession {
         }
     }
 
-    private func handle(_ result: ExecutionResult, updated: VideoTimeline, intent: EditIntent) {
+    /// Lands an executor's result and returns what really happened: a long step whose
+    /// timeline was changed meanwhile (an undo, a trim) is dropped rather than undoing that change.
+    /// - Parameter base: the timeline the command started from.
+    @discardableResult
+    private func handle(_ result: ExecutionResult, updated: VideoTimeline, intent: EditIntent, base: VideoTimeline) -> CommandOutcome {
+        lastEffects = result.effects
         switch result.outcome {
         case .applied(let label):
             pendingClarification = nil
             candidateOverlays = []
+            if base != timeline, updated != base {
+                Diagnostics.shared.note("stale result dropped: \(label)")
+                let message = L("The video changed in the meantime. Try again.")
+                if !isRunningVoiceCommand, !isQuiet { showToast(message, isError: true) }
+                Haptics.warning()
+                lastEffects = []
+                return .failed(message: message)
+            }
             if updated != timeline { commit(updated, label: label) }
-            if !label.isEmpty { showToast(LD(label), undoable: history.canUndo) }
-            Haptics.success()
+            if !label.isEmpty, !isQuiet { showToast(LD(label), undoable: history.canUndo) }
+            if !isQuiet { Haptics.success() }
         case .needsClarification(let request):
             pendingClarification = request
             candidateOverlays = request.candidates
-            showToast(request.question)
-            VoiceFeedback.shared.speak(request.question, language: language.rawValue)
-            Haptics.warning()
-            if app.settings.voiceMode != .pushToTalk {
-                Task {
-                    try? await Task.sleep(for: .milliseconds(600))
-                    if app.voice.state == .idle { app.voice.start() }
-                }
+            // Live asks the question itself (and shows the numbered choices).
+            if !isQuiet {
+                if !isRunningVoiceCommand { showToast(request.question) }
+                speak(request.question, language: language.rawValue)
+                Haptics.warning()
             }
         case .info(let message):
-            showToast(message)
+            if !isRunningVoiceCommand, !isQuiet { showToast(message) }
         case .failed(let message):
-            showToast(message, isError: true)
-            Haptics.error()
+            if !isRunningVoiceCommand, !isQuiet { showToast(message, isError: true) }
+            if !isQuiet { Haptics.error() }
         case .ignored:
             break
         }
@@ -557,13 +731,24 @@ public final class VideoEditorSession {
                 showsMusicPicker = true
             case .selectClip(let id): selectedClipID = id
             case .compare:
-                showsOriginal = true
-                Task { try? await Task.sleep(for: .seconds(1.5)); showsOriginal = false }
+                compareBeforeAfter(seconds: 1.5)
             case .cancel:
                 pendingClarification = nil
                 candidateOverlays = []
             default: break
             }
+        }
+        return result.outcome
+    }
+
+    /// Shows the untouched video for a moment, then the edit again.
+    func compareBeforeAfter(seconds: Double) {
+        compareTask?.cancel()
+        showsOriginal = true
+        compareTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(0.3, min(seconds, 10))))
+            guard !Task.isCancelled else { return }
+            self?.showsOriginal = false
         }
     }
 
@@ -640,5 +825,8 @@ public final class VideoEditorSession {
         }
     }
 }
-extension VideoEditorSession: EditorStatus {}
+extension VideoEditorSession: EditorStatus {
+    /// Live says what is running while it converses: no blocking HUD then.
+    var showsProcessingHUD: Bool { !live.isLive }
+}
 #endif

@@ -5,12 +5,11 @@ import PicshopIntent
 /// One open tool, inline at the bottom of the studio: a glass card with the
 /// mini orb (so Live keeps going), the tool's title, its own action and Done,
 /// then the tool's controls. A swipe down on the header, or the accessibility
-/// escape, closes it.
+/// escape, closes it. At most 46 % of the screen tall; the controls scroll
+/// beyond that.
 ///
-/// Controls inside use `PSTheme.fill` / `psChipFill`: never glass on glass.
-///
-/// Phase 0: the card, the header and the swipe. The 46 % height cap with
-/// scrolling follows.
+/// Controls inside use `PSTheme.fill` / `psChipFill`, and the white actions
+/// are flat: never glass on glass.
 struct ToolPanel<Accessory: View, Content: View>: View {
     let title: String
     let live: LiveSession?
@@ -19,6 +18,7 @@ struct ToolPanel<Accessory: View, Content: View>: View {
     let content: Content
 
     @State private var dragOffset: CGFloat = 0
+    @Environment(\.studioPanelMaxHeight) private var maxHeight
 
     init(title: String, live: LiveSession?, onDone: @escaping () -> Void, @ViewBuilder accessory: () -> Accessory, @ViewBuilder content: () -> Content) {
         self.title = title
@@ -28,15 +28,24 @@ struct ToolPanel<Accessory: View, Content: View>: View {
         self.content = content()
     }
 
+    /// Room left for the controls: the cap less the header, the gap and the padding.
+    private var contentCap: CGFloat { max(120, maxHeight - PSMetrics.barButton - 12 - 32) }
+
     var body: some View {
         VStack(spacing: 12) {
             header
-            content
+            ViewThatFits(in: .vertical) {
+                content
+                ScrollView(.vertical, showsIndicators: false) { content }
+                    .scrollBounceBehavior(.basedOnSize)
+            }
+            .frame(maxHeight: contentCap)
         }
         .padding(16)
         .frame(maxWidth: .infinity)
         .psCard(cornerRadius: PSRadius.toolPanel)
         .padding(.horizontal, 10)
+        .frame(maxWidth: 620)
         .offset(y: dragOffset * 0.5)
         .opacity(1 - Double(min(dragOffset, 120)) / 300)
         .accessibilityElement(children: .contain)
@@ -47,20 +56,19 @@ struct ToolPanel<Accessory: View, Content: View>: View {
     private var header: some View {
         HStack(spacing: 10) {
             if let live {
-                ToolPanelOrb(live: live)
+                LiveMiniOrb(live: live)
             }
             Text(title)
                 .font(.headline)
                 .foregroundStyle(PSTheme.textPrimary)
                 .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             accessory
-            PSCircleButton(systemImage: "checkmark", size: 36, kind: .prominent, accessibilityLabel: L("Done")) {
-                Haptics.confirm()
-                onDone()
-            }
+            PSPanelPrimaryButton(systemImage: "checkmark", size: PSMetrics.barButton, accessibilityLabel: L("Done"), action: onDone)
         }
-        .frame(minHeight: 44)
+        .frame(minHeight: PSMetrics.barButton)
         .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 12)
@@ -87,14 +95,44 @@ extension ToolPanel where Accessory == EmptyView {
     }
 }
 
-/// The mini orb in a panel header: a leaf, so Live's state changes never
-/// re-evaluate the panel's content.
-private struct ToolPanelOrb: View {
+/// The 36-point orb in a panel header: a leaf, so Live's state changes never
+/// re-evaluate the panel's content. A tap does what the orb does; outside
+/// Live a hold dictates. With Differentiate Without Colour it also shows a
+/// symbol for the phase.
+struct LiveMiniOrb: View {
     let live: LiveSession
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiate
 
     var body: some View {
-        LiveOrbButton(size: PSMetrics.orbMini, state: live.state, meter: live.meter, isMuted: live.isMuted,
-                      onTap: { live.orbTapped() })
+        let state = live.state
+        let isLive = live.isLive
+        let activity = state == .acting ? live.activity : nil
+        LiveOrbButton(size: PSMetrics.orbMini, state: state, meter: live.meter, isMuted: live.isMuted,
+                      onTap: { live.orbTapped() },
+                      onHoldStart: isLive ? nil : { live.beginDictation() },
+                      onHoldEnd: isLive ? nil : { live.endDictation() })
+            .actingProgress(activity?.progress)
+            .liveAccessibility(activity: activity?.title, actions: nil)
+            .overlay {
+                if differentiate, let symbol = Self.phaseSymbol(state) {
+                    Image(systemName: symbol)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .shadow(color: .black.opacity(0.5), radius: 2)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+    }
+
+    static func phaseSymbol(_ state: LiveState) -> String? {
+        switch state {
+        case .hearing, .dictating: return "waveform"
+        case .thinking: return "ellipsis"
+        case .speaking: return "speaker.wave.2"
+        case .acting: return "wand.and.stars"
+        default: return nil
+        }
     }
 }
 
@@ -103,20 +141,25 @@ private struct ToolPanelPreview: View {
     @State private var live: LiveSession?
 
     var body: some View {
-        VStack {
+        VStack(spacing: 12) {
             Spacer()
             ToolPanel(title: "Recadrer", live: live, onDone: {}) {
-                PSCapsuleButton("Annuler", height: 36, kind: .glass) {}
+                PSPanelPrimaryButton("OK") {}
             } content: {
                 Text(verbatim: "Contenu du panneau").foregroundStyle(PSTheme.textSecondary).frame(height: 120)
             }
             ToolPanel(title: "Réglages", live: nil, onDone: {}) {
-                Text(verbatim: "Sans Live").foregroundStyle(PSTheme.textSecondary).frame(height: 60)
+                VStack(spacing: 12) {
+                    ForEach(0..<12, id: \.self) { index in
+                        Text(verbatim: "Ligne \(index + 1)").foregroundStyle(PSTheme.textSecondary).frame(maxWidth: .infinity, minHeight: 32)
+                    }
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(PSTheme.canvas)
-        .onAppear { if live == nil { live = LiveSession.preview(.listening) } }
+        .environment(\.studioPanelMaxHeight, 360)
+        .onAppear { if live == nil { live = LiveSession.preview(.acting) } }
         .onDisappear { live?.teardown() }
     }
 }

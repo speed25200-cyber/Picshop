@@ -31,6 +31,8 @@ struct LivePreviewFrame: Equatable {
     var undoOffer: LiveUndoOffer?
     var reply: LiveReply?
     var notice: LiveNotice?
+    var needsConsent = false
+    var showsVoiceHint = false
     var input: Double = 0
     var output: Double = 0
 }
@@ -167,8 +169,10 @@ struct LivePreviewScript: Sendable {
         case ..<3:
             frame.state = .connecting
             frame.isRunning = true
+            frame.notice = LiveNotice(id: 3, text: "Téléchargement du modèle vocal…", isProblem: false)
         case ..<5:
             live(&frame, .listening, t)
+            frame.showsVoiceHint = true
         case ..<8:
             live(&frame, .hearing, t)
             frame.transcript = userTranscript(turn: 1, words: (t - 5) / 2.2, final: false, pausedAfter: 2.4 / 2.2)

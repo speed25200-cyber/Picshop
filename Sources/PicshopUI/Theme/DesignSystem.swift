@@ -160,6 +160,16 @@ public enum PSSpacing {
     public static let editorInset: CGFloat = 12
     /// Inner padding of a floating panel.
     public static let panel: CGFloat = 16
+
+    // Studio.
+    /// The dock's and the top bar's distance from the screen sides.
+    public static let editorSide: CGFloat = 16
+    /// Between the idea row and the composer.
+    public static let dockGap: CGFloat = 10
+    /// Between the idea row and the Live console.
+    public static let consoleGap: CGFloat = 12
+    /// Between the captions and the idea row.
+    public static let captionGap: CGFloat = 10
 }
 
 /// Control heights.
@@ -362,6 +372,19 @@ public enum Haptics {
         }
     }
 }
+
+#if DEBUG
+/// Launch with `-PSPrintChanges` to log why the studio's main views re-evaluate
+/// (`_printChanges`): a dial drag should list only the dragged ring and the dial.
+enum ViewTrace {
+    static let isOn = ProcessInfo.processInfo.arguments.contains("-PSPrintChanges")
+
+    /// Call as `let _ = ViewTrace.changes(Self.self)` first in a body.
+    @MainActor static func changes<V: View>(_ view: V.Type) {
+        if isOn { V._printChanges() }
+    }
+}
+#endif
 
 /// Localised string lookup for the UI package's catalogue.
 public func L(_ key: String.LocalizationValue) -> String {

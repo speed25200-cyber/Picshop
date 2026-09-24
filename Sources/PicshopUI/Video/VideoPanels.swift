@@ -17,7 +17,13 @@ struct VideoToolPanel: View {
         case .overlay: VideoOverlayPanel(session: session)
         case .motion: MotionPanel(session: session)
         case .color: VideoColorPanel(session: session)
-        case .cut: CutPanel(session: session)
+        case .cut:
+            VStack(spacing: 10) {
+                TimelineView(session: session)
+                    .frame(height: TimelineView.height(for: session.timeline))
+                    .animation(PSMotion.standard, value: session.timeline.audioTracks.count)
+                CutPanel(session: session)
+            }
         case .speed: SpeedPanel(session: session)
         case .audio: AudioPanel(session: session)
         case .looks: VideoLooksPanel(session: session)

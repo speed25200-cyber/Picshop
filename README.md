@@ -4,7 +4,9 @@
 A Photoshop-grade photo editor and a Vegas-grade video editor in one app, designed like Apple's own:
 system Liquid Glass, one edit-yellow accent, and an iridescent glow that appears only when the AI works.
 Tap a Magic tool, type what you want, or just say it — *« efface le chien »*, *"add captions"*,
-*« coupe sur le rythme »*. Everything runs on the device.
+*« coupe sur le rythme »*. Editing runs on the device. **Picshop Live** turns the editor into a spoken
+conversation that proposes ideas and edits as you talk: with your own Claude key it talks with Claude
+(the words and, if you allow it, a reduced picture go to Anthropic), otherwise it stays on the iPhone.
 
 <p align="center">
   <img src="App/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="120" alt="PicShop icon">
@@ -50,13 +52,19 @@ mic ─▶ SpeechAnalyzer (iOS 26, on-device) ─▶ transcript
       ─▶ EditOperation on the document ─▶ Core Image render ─▶ Metal canvas
 ```
 
-Three "brains" are available in Settings, all on device:
+Outside Picshop Live, commands are understood by three brains, all on the device:
 
 1. **Instant** — a deterministic grammar covering hundreds of phrasings in French and English. It always runs first.
 2. **Apple Intelligence** — the system foundation model with guided generation (`@Generable`), constrained to the app's action schema.
 3. **Pro Brain** — Qwen3 4B (4-bit) through MLX for long, multi-step requests. Optional download.
 
 Model output is validated against the app vocabulary before execution; hallucinated actions or values are dropped.
+
+**Picshop Live** (the orb in each editor) is a real-time conversation: on-device speech recognition with active
+listening and barge-in, a natural system voice, and ideas proposed as chips. Each turn goes to the best brain
+available — Claude (`claude-opus-5`, with your own API key, kept in this iPhone's Keychain), then Apple Intelligence,
+then the grammar — so Live never goes silent. Claude acts only through four validated tools (apply edits, undo,
+compare, propose ideas).
 
 The grammar reads intent, not only words: everyday goals (*photo de profil*, *product photo for Vinted*, *restore this old
 photo*), follow-ups on the last adjustment (*encore un peu*, *too much*), contrast clauses (*brighter but less saturated*),
@@ -113,8 +121,12 @@ docs/                    ARCHITECTURE · VOICE_COMMANDS · MODELS
 
 ## Privacy
 
-No servers, no accounts, no analytics. Speech recognition, language models, segmentation and rendering
-run on the device. The privacy manifest (`App/PrivacyInfo.xcprivacy`) declares no tracking and no data collection.
+No servers, no accounts, no analytics. Speech recognition, segmentation and rendering always run on the device,
+and so does everything else without a Claude key. With a key, only Picshop Live sends data — to Anthropic, after a
+one-time consent: the text of what you say or type during Live, a description of your edits and of the picture, and,
+if you allow it, a reduced copy (1024 px) of the photo or video frame without location or camera data. Audio never
+leaves the device; outside Live mode, nothing is sent. The privacy manifest (`App/PrivacyInfo.xcprivacy`) declares
+photos or videos and other user content, used for app functionality only, not linked to you and never for tracking.
 
 ## License
 

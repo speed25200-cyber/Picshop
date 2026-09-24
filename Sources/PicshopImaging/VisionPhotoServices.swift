@@ -311,17 +311,49 @@ public enum VisionGrounding {
 
     /// Magic-wand selection saved as a mask reference.
     public static func magicWandMask(in image: CGImage, seed: PSPoint, tolerance: Double, contiguous: Bool, maskStore: MaskStore) throws -> MaskReference {
+        try magicWandSelection(in: wandAnalysis(of: image), seed: seed, tolerance: tolerance, contiguous: contiguous, maskStore: maskStore).reference
+    }
+
+    /// The pixels the wand reads: RGBA, at most 1536 px on the longest side. Read once
+    /// per picture state and kept, so later taps skip the render and the readback.
+    public struct WandAnalysis: Sendable {
+        public let rgba: [UInt8]
+        public let width: Int
+        public let height: Int
+    }
+
+    /// A saved selection and its bytes (top-down, 255 = selected), so the canvas
+    /// tint is built from memory rather than from the file just written.
+    public struct SelectionResult: Sendable {
+        public let reference: MaskReference
+        public let bytes: [UInt8]
+        public let width: Int
+        public let height: Int
+    }
+
+    public static func wandAnalysis(of image: CGImage) -> WandAnalysis {
         let analysis = ImageSupport.resized(image, to: PSSize(width: Double(image.width), height: Double(image.height)).limited(toLongestSide: 1536).cgSize) ?? image
-        let bytes = Selection.magicWand(rgba: ImageSupport.rgbaBytes(from: analysis), width: analysis.width, height: analysis.height, seed: (seed.x, seed.y), tolerance: tolerance, contiguous: contiguous)
+        return WandAnalysis(rgba: ImageSupport.rgbaBytes(from: analysis), width: analysis.width, height: analysis.height)
+    }
+
+    public static func magicWandSelection(in analysis: WandAnalysis, seed: PSPoint, tolerance: Double, contiguous: Bool, maskStore: MaskStore) throws -> SelectionResult {
+        let bytes = Selection.magicWand(rgba: analysis.rgba, width: analysis.width, height: analysis.height, seed: (seed.x, seed.y), tolerance: tolerance, contiguous: contiguous)
         let cleaned = Selection.despeckled(bytes, width: analysis.width, height: analysis.height, minimumPixels: max(4, analysis.width * analysis.height / 20000))
-        return try maskStore.save(bytes: cleaned, width: analysis.width, height: analysis.height, source: .magicWand(seed, tolerance: tolerance), feather: 0.003)
+        let reference = try maskStore.save(bytes: cleaned, width: analysis.width, height: analysis.height, source: .magicWand(seed, tolerance: tolerance), feather: 0.003)
+        return SelectionResult(reference: reference, bytes: cleaned, width: analysis.width, height: analysis.height)
     }
 
     /// Lasso polygon saved as a mask reference.
     public static func lassoMask(imageSize: PSSize, points: [PSPoint], maskStore: MaskStore) throws -> MaskReference {
+        try lassoSelection(imageSize: imageSize, points: points, maskStore: maskStore).reference
+    }
+
+    public static func lassoSelection(imageSize: PSSize, points: [PSPoint], maskStore: MaskStore) throws -> SelectionResult {
         let size = imageSize.limited(toLongestSide: 1536)
-        let bytes = Selection.lasso(points: points.map { ($0.x, $0.y) }, width: Int(size.width), height: Int(size.height))
-        return try maskStore.save(bytes: bytes, width: Int(size.width), height: Int(size.height), source: .lasso(points), feather: 0.004)
+        let width = max(1, Int(size.width)), height = max(1, Int(size.height))
+        let bytes = Selection.lasso(points: points.map { ($0.x, $0.y) }, width: width, height: height)
+        let reference = try maskStore.save(bytes: bytes, width: width, height: height, source: .lasso(points), feather: 0.004)
+        return SelectionResult(reference: reference, bytes: bytes, width: width, height: height)
     }
 
     /// Person/subject mask bytes for a frame (video portrait effects).

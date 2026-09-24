@@ -336,10 +336,22 @@ public struct LiveExecution: Sendable, Equatable {
 
     public var anyApplied: Bool { steps.contains { $0.status == .applied } }
 
-    /// What to say or show after a local run.
+    /// What to say or show after a local run: the question or the problem a step
+    /// reported, else "running" for a long job, else a short done.
     public func outcomeText(language: NormalizedUtterance.Language) -> String {
-        // Phase 0 stub.
-        ""
+        let fr = language == .french
+        if let step = steps.first(where: { $0.status == .needsClarification || $0.status == .failed }), let message = step.message, !message.isEmpty {
+            return message
+        }
+        if let step = steps.first(where: { $0.status == .info || $0.status == .needsUser }), let message = step.message, !message.isEmpty {
+            return message
+        }
+        if steps.contains(where: { $0.status == .running || $0.status == .queued }) { return LiveLines.line(.running, language) }
+        if anyApplied {
+            if let spoken = steps.first(where: { $0.status == .applied })?.message, !spoken.isEmpty { return spoken }
+            return fr ? "C'est fait." : "Done."
+        }
+        return ""
     }
 }
 

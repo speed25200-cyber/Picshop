@@ -36,7 +36,49 @@ extension LiveEditingHost {
 
     /// Runs the intents in order through liveRun; stops after failed or needsClarification; later steps are skipped.
     public func execute(steps: [EditIntent]) async -> LiveExecution {
-        // Phase 0 stub.
-        LiveExecution(steps: [], version: liveVersion, canUndo: false)
+        var results: [LiveStepResult] = []
+        for (index, intent) in steps.enumerated() {
+            let result = LiveStepResult(index: index, intent: intent, run: await liveRun(intent))
+            results.append(result)
+            if result.stopsTheRun {
+                results += steps.indices.dropFirst(index + 1).map { LiveStepResult(index: $0, action: steps[$0].action, status: .skipped) }
+                break
+            }
+        }
+        return LiveExecution(steps: results, version: liveVersion, canUndo: liveIntentContext().canUndo)
     }
+}
+
+extension LiveStepResult {
+    /// What one executor run means to Live: the outcome, plus the needs_user hint and
+    /// the spoken sentence the effects carry.
+    public init(index: Int, intent: EditIntent, run: LiveRunResult) {
+        var needsUser: String?
+        var spoken: String?
+        for effect in run.effects {
+            guard case .message(let message) = effect else { continue }
+            switch message {
+            case "selectRegion": needsUser = "select_region"
+            case "tapToErase": needsUser = "tap_to_erase"
+            case "crop": needsUser = "crop_handles"
+            default: if message.hasPrefix("speak:") { spoken = String(message.dropFirst("speak:".count)) }
+            }
+        }
+        switch run.outcome {
+        case .applied(let label):
+            self.init(index: index, action: intent.action, status: .applied, label: label.isEmpty ? intent.summary : label, message: spoken)
+        case .info(let message):
+            self.init(index: index, action: intent.action, status: needsUser == nil ? .info : .needsUser, message: spoken ?? message, needsUser: needsUser)
+        case .needsClarification(let request):
+            self.init(index: index, action: intent.action, status: .needsClarification, message: request.question,
+                      candidates: request.candidates.map(\.spokenDescription))
+        case .failed(let message):
+            self.init(index: index, action: intent.action, status: .failed, message: message)
+        case .ignored:
+            self.init(index: index, action: intent.action, status: .ignored)
+        }
+    }
+
+    /// failed and needs_clarification end a run: later steps are skipped.
+    public var stopsTheRun: Bool { status == .failed || status == .needsClarification }
 }

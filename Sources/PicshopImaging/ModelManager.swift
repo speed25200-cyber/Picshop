@@ -98,6 +98,19 @@ public actor ModelManager {
     private var states: [String: State] = [:]
     private var observers: [UUID: @Sendable (String, State) -> Void] = [:]
     private var activeTasks: [String: Task<Void, Never>] = [:]
+    /// The downloads in flight, so an open editor can pause them.
+    private var downloads: [String: DownloadHandle] = [:]
+    /// True between pauseAll() and resumeAll(): new downloads wait too.
+    private var isPaused = false
+    /// Every state change from a download, in order, through one stream rather than a task per chunk.
+    private nonisolated let updates: AsyncStream<StateUpdate>.Continuation
+    private let updateStream: AsyncStream<StateUpdate>
+    private var updatePump: Task<Void, Never>?
+
+    private struct StateUpdate: Sendable {
+        var id: String
+        var state: State
+    }
 
     public let rootURL: URL
 
@@ -105,6 +118,33 @@ public actor ModelManager {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
         self.rootURL = rootURL ?? support.appendingPathComponent("Models", isDirectory: true)
         try? FileManager.default.createDirectory(at: self.rootURL, withIntermediateDirectories: true)
+        let (stream, continuation) = AsyncStream.makeStream(of: StateUpdate.self, bufferingPolicy: .unbounded)
+        updateStream = stream
+        updates = continuation
+    }
+
+    /// Queues a state change behind the ones already sent: the progress ring never jumps back.
+    private nonisolated func post(_ state: State, for id: String) {
+        updates.yield(StateUpdate(id: id, state: state))
+    }
+
+    /// Starts the one consumer of the update stream (installs call it first).
+    private func startUpdatePump() {
+        guard updatePump == nil else { return }
+        let stream = updateStream
+        updatePump = Task { [weak self] in
+            for await update in stream {
+                await self?.set(update.state, for: update.id)
+            }
+        }
+    }
+
+    /// A download handle for a model, paused already when the editor holds installs.
+    private func downloadHandle(for id: String) -> DownloadHandle {
+        let handle = DownloadHandle()
+        if isPaused { handle.pause() }
+        downloads[id] = handle
+        return handle
     }
 
     public func directory(for id: String) -> URL {
@@ -195,8 +235,11 @@ public actor ModelManager {
     }
 
     /// Downloads and compiles a Core ML model archive, or fetches a Hugging Face folder.
+    /// Unpacking and moving files run off the actor, so a call to the manager never
+    /// waits behind an install.
     public func install(_ descriptor: ModelDescriptor) {
         guard activeTasks[descriptor.id] == nil, !isInstalled(descriptor.id) else { return }
+        startUpdatePump()
         if descriptor.remoteURL == nil, let folder = descriptor.huggingFaceFolder {
             installHuggingFaceFolder(descriptor, folder: folder)
             return
@@ -206,53 +249,63 @@ public actor ModelManager {
             return
         }
         set(.downloading(progress: 0), for: descriptor.id)
+        let id = descriptor.id
+        let kind = descriptor.kind
+        let directory = directory(for: id)
+        let handle = downloadHandle(for: id)
         let task = Task { [weak self] in
             guard let self else { return }
             do {
-                let archive = try await ModelDownloader.download(remote) { progress in
-                    Task { await self.set(.downloading(progress: progress), for: descriptor.id) }
+                let archive = try await ModelDownloader.download(remote, handle: handle) { progress in
+                    self.post(.downloading(progress: progress), for: id)
                 }
                 try Task.checkCancellation()
-                await self.set(.compiling, for: descriptor.id)
-                let directory = await self.directory(for: descriptor.id)
-                try? FileManager.default.removeItem(at: directory)
-                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                let unpacked = try ModelDownloader.unzip(archive, into: directory.appendingPathComponent("unpacked", isDirectory: true))
-                if descriptor.kind == .generative {
-                    // Keep the compiled resources folder as-is (Unet.mlmodelc, TextEncoder.mlmodelc, …).
-                    let resources = try ModelDownloader.findResourcesFolder(in: unpacked)
-                    let destination = directory.appendingPathComponent("resources", isDirectory: true)
-                    try? FileManager.default.removeItem(at: destination)
-                    try FileManager.default.moveItem(at: resources, to: destination)
-                    try? FileManager.default.removeItem(at: unpacked)
-                    try? FileManager.default.removeItem(at: archive)
-                    await self.set(.installed, for: descriptor.id)
-                    await self.clearTask(descriptor.id)
-                    return
+                self.post(.compiling, for: id)
+                let installed: URL? = try await Task.detached(priority: .utility) { () throws -> URL? in
+                    try? FileManager.default.removeItem(at: directory)
+                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    let unpacked = try ModelDownloader.unzip(archive, into: directory.appendingPathComponent("unpacked", isDirectory: true))
+                    guard kind != .generative else {
+                        // Keep the compiled resources folder as-is (Unet.mlmodelc, TextEncoder.mlmodelc, …).
+                        let resources = try ModelDownloader.findResourcesFolder(in: unpacked)
+                        let destination = directory.appendingPathComponent("resources", isDirectory: true)
+                        try? FileManager.default.removeItem(at: destination)
+                        try FileManager.default.moveItem(at: resources, to: destination)
+                        try? FileManager.default.removeItem(at: unpacked)
+                        try? FileManager.default.removeItem(at: archive)
+                        return nil
+                    }
+                    return try ModelDownloader.findModelPackage(in: unpacked)
+                }.value
+                if let package = installed {
+                    let compiled = try await MLModel.compileModel(at: package)
+                    try await Task.detached(priority: .utility) {
+                        let destination = directory.appendingPathComponent("\(id).mlmodelc")
+                        try? FileManager.default.removeItem(at: destination)
+                        try FileManager.default.moveItem(at: compiled, to: destination)
+                        try? FileManager.default.removeItem(at: directory.appendingPathComponent("unpacked", isDirectory: true))
+                        try? FileManager.default.removeItem(at: archive)
+                    }.value
                 }
-                let package = try ModelDownloader.findModelPackage(in: unpacked)
-                let compiled = try await MLModel.compileModel(at: package)
-                let destination = directory.appendingPathComponent("\(descriptor.id).mlmodelc")
-                try? FileManager.default.removeItem(at: destination)
-                try FileManager.default.moveItem(at: compiled, to: destination)
-                try? FileManager.default.removeItem(at: unpacked)
-                try? FileManager.default.removeItem(at: archive)
-                await self.set(.installed, for: descriptor.id)
+                self.post(.installed, for: id)
             } catch is CancellationError {
-                await self.set(.notInstalled, for: descriptor.id)
+                self.post(.notInstalled, for: id)
             } catch {
                 PSLog.error("model install failed: \(error)", category: .models)
-                await self.set(.failed(error.localizedDescription), for: descriptor.id)
+                self.post(.failed(error.localizedDescription), for: id)
             }
-            await self.clearTask(descriptor.id)
+            await self.clearTask(id)
         }
-        activeTasks[descriptor.id] = task
+        activeTasks[id] = task
     }
 
     /// Downloads every file of a Hugging Face folder (compiled Stable Diffusion resources)
     /// into `<id>/resources`, with byte-accurate progress.
     private func installHuggingFaceFolder(_ descriptor: ModelDescriptor, folder: ModelDescriptor.HuggingFaceFolder) {
         set(.downloading(progress: 0), for: descriptor.id)
+        let id = descriptor.id
+        let directory = directory(for: id)
+        let handle = downloadHandle(for: id)
         let task = Task { [weak self] in
             guard let self else { return }
             do {
@@ -260,73 +313,187 @@ public actor ModelManager {
                 guard !entries.isEmpty else { throw PicshopError.modelUnavailable("empty folder on Hugging Face") }
                 let total = max(1, entries.reduce(0) { $0 + $1.size })
                 var done: Int64 = 0
-                let directory = await self.directory(for: descriptor.id)
                 let staging = directory.appendingPathComponent("staging", isDirectory: true)
-                try? FileManager.default.removeItem(at: staging)
-                try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+                try await Task.detached(priority: .utility) {
+                    try? FileManager.default.removeItem(at: staging)
+                    try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+                }.value
                 for entry in entries {
                     try Task.checkCancellation()
                     let relative = String(entry.path.dropFirst(folder.path.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                     let destination = staging.appendingPathComponent(relative)
-                    try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
                     let url = HuggingFaceHub.fileURL(repository: folder.repository, path: entry.path, revision: folder.revision)
                     let base = done
-                    let temporary = try await ModelDownloader.download(url) { fraction in
-                        let bytes = base + Int64(fraction * Double(entry.size))
-                        Task { await self.set(.downloading(progress: Double(bytes) / Double(total)), for: descriptor.id) }
+                    let size = entry.size
+                    let temporary = try await ModelDownloader.download(url, handle: handle) { fraction in
+                        let bytes = base + Int64(fraction * Double(size))
+                        self.post(.downloading(progress: Double(bytes) / Double(total)), for: id)
                     }
-                    try? FileManager.default.removeItem(at: destination)
-                    try FileManager.default.moveItem(at: temporary, to: destination)
+                    try await Task.detached(priority: .utility) {
+                        try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                        try? FileManager.default.removeItem(at: destination)
+                        try FileManager.default.moveItem(at: temporary, to: destination)
+                    }.value
                     done += entry.size
                 }
-                await self.set(.compiling, for: descriptor.id)
+                self.post(.compiling, for: id)
                 let resources = directory.appendingPathComponent("resources", isDirectory: true)
-                try? FileManager.default.removeItem(at: resources)
-                try FileManager.default.moveItem(at: staging, to: resources)
-                guard await self.resourcesURL(for: descriptor.id) != nil else {
+                try await Task.detached(priority: .utility) {
+                    try? FileManager.default.removeItem(at: resources)
+                    try FileManager.default.moveItem(at: staging, to: resources)
+                }.value
+                guard await self.resourcesURL(for: id) != nil else {
                     throw PicshopError.modelUnavailable("Unet.mlmodelc missing after download")
                 }
-                await self.set(.installed, for: descriptor.id)
+                self.post(.installed, for: id)
             } catch is CancellationError {
-                await self.set(.notInstalled, for: descriptor.id)
+                self.post(.notInstalled, for: id)
             } catch {
                 PSLog.error("model install failed: \(error)", category: .models)
-                await self.set(.failed(error.localizedDescription), for: descriptor.id)
+                self.post(.failed(error.localizedDescription), for: id)
             }
-            await self.clearTask(descriptor.id)
+            await self.clearTask(id)
         }
-        activeTasks[descriptor.id] = task
+        activeTasks[id] = task
     }
 
     private func clearTask(_ id: String) {
         activeTasks[id] = nil
+        downloads[id] = nil
     }
 
     public func cancelInstall(_ id: String) {
         activeTasks[id]?.cancel()
     }
 
-    /// Pauses every install in flight while an editor is open, keeping what was
-    /// already downloaded. Phase 0: nothing is paused yet.
-    public func pauseAll() async {}
+    /// Pauses every download in flight while an editor is open, keeping what was
+    /// already downloaded (`cancel(byProducingResumeData:)`); downloads that start
+    /// meanwhile wait. Unpacking or compiling already under way finishes.
+    public func pauseAll() async {
+        guard !isPaused else { return }
+        isPaused = true
+        for handle in downloads.values { handle.pause() }
+    }
 
-    /// Resumes the installs pauseAll() stopped. Phase 0: nothing to resume.
-    public func resumeAll() async {}
+    /// Resumes the downloads pauseAll() stopped, from where they were.
+    public func resumeAll() async {
+        guard isPaused else { return }
+        isPaused = false
+        for handle in downloads.values { handle.resume() }
+    }
+}
+
+/// Pause and resume for one model's downloads (thread-safe). While paused, the
+/// running transfer is cancelled with its resume data, and the next one waits.
+final class DownloadHandle: @unchecked Sendable {
+    private let lock = NSLock()
+    private var paused = false
+    private var task: URLSessionDownloadTask?
+    /// Transfers cancelled by a pause, told apart from a real cancellation.
+    private var pausedTasks: Set<ObjectIdentifier> = []
+    private var waiters: [UUID: CheckedContinuation<Void, Error>] = [:]
+
+    /// Starts a transfer, or stops it at once (keeping what there is) when paused meanwhile.
+    func start(_ task: URLSessionDownloadTask) {
+        let stop: Bool = lock.withLock {
+            self.task = task
+            if paused { pausedTasks.insert(ObjectIdentifier(task)) }
+            return paused
+        }
+        if stop { task.cancel() } else { task.resume() }
+    }
+
+    func finished() {
+        lock.withLock { task = nil }
+    }
+
+    /// Whether this transfer ended because of a pause (asked once, by the delegate).
+    func consumePause(of task: URLSessionTask) -> Bool {
+        lock.withLock { pausedTasks.remove(ObjectIdentifier(task)) != nil }
+    }
+
+    func pause() {
+        let running: URLSessionDownloadTask? = lock.withLock {
+            paused = true
+            guard let task else { return nil }
+            pausedTasks.insert(ObjectIdentifier(task))
+            return task
+        }
+        // The delegate hears a cancellation carrying the resume data and hands it back.
+        running?.cancel(byProducingResumeData: { _ in })
+    }
+
+    func resume() {
+        let resumed: [CheckedContinuation<Void, Error>] = lock.withLock {
+            paused = false
+            defer { waiters.removeAll() }
+            return Array(waiters.values)
+        }
+        for waiter in resumed { waiter.resume() }
+    }
+
+    private enum Wait { case go, wait, cancelled }
+
+    /// Returns at once when not paused; else when resume() is called. Throws when the install is cancelled.
+    func waitUntilResumed() async throws {
+        let token = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                let wait: Wait = lock.withLock {
+                    if Task.isCancelled { return .cancelled }
+                    guard paused else { return .go }
+                    waiters[token] = continuation
+                    return .wait
+                }
+                switch wait {
+                case .go: continuation.resume()
+                case .cancelled: continuation.resume(throwing: CancellationError())
+                case .wait: break
+                }
+            }
+        } onCancel: {
+            let waiter = self.lock.withLock { self.waiters.removeValue(forKey: token) }
+            waiter?.resume(throwing: CancellationError())
+        }
+    }
+}
+
+/// A transfer stopped by pauseAll(), with what it needs to continue.
+struct DownloadPaused: Error {
+    var resumeData: Data?
 }
 
 enum ModelDownloader {
     /// Downloads to a temporary file with progress, using a download task so large
-    /// archives never pass through memory.
-    static func download(_ url: URL, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
-        let delegate = DownloadDelegate(progress: progress)
+    /// archives never pass through memory. A pause through `handle` keeps the
+    /// resume data and continues from there once resumed.
+    static func download(_ url: URL, handle: DownloadHandle? = nil, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
+        var resumeData: Data?
+        while true {
+            if let handle { try await handle.waitUntilResumed() }
+            do {
+                return try await transfer(url, resumeData: resumeData, handle: handle, progress: progress)
+            } catch let paused as DownloadPaused {
+                // Stopped before it started: the earlier resume data still holds.
+                resumeData = paused.resumeData ?? resumeData
+                try Task.checkCancellation()
+            }
+        }
+    }
+
+    private static func transfer(_ url: URL, resumeData: Data?, handle: DownloadHandle?, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
+        let delegate = DownloadDelegate(progress: progress, handle: handle)
         let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
-        defer { session.finishTasksAndInvalidate() }
+        defer {
+            handle?.finished()
+            session.finishTasksAndInvalidate()
+        }
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 delegate.continuation = continuation
-                let task = session.downloadTask(with: url)
+                let task = resumeData.map { session.downloadTask(withResumeData: $0) } ?? session.downloadTask(with: url)
                 delegate.task = task
-                task.resume()
+                if let handle { handle.start(task) } else { task.resume() }
             }
         } onCancel: {
             delegate.task?.cancel()
@@ -335,12 +502,17 @@ enum ModelDownloader {
 
     final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
         let progress: @Sendable (Double) -> Void
+        let handle: DownloadHandle?
         var continuation: CheckedContinuation<URL, Error>?
         var task: URLSessionDownloadTask?
         private let lock = NSLock()
+        /// Progress goes out on a 1 % change or every 250 ms, never per chunk.
+        private var lastReported: Double = -1
+        private var lastReportTime: TimeInterval = 0
 
-        init(progress: @escaping @Sendable (Double) -> Void) {
+        init(progress: @escaping @Sendable (Double) -> Void, handle: DownloadHandle?) {
             self.progress = progress
+            self.handle = handle
         }
 
         private func finish(_ result: Result<URL, Error>) {
@@ -353,7 +525,15 @@ enum ModelDownloader {
 
         func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
             guard totalBytesExpectedToWrite > 0 else { return }
-            progress(min(0.99, Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)))
+            let fraction = min(0.99, Double(totalBytesWritten) / Double(totalBytesExpectedToWrite))
+            let now = ProcessInfo.processInfo.systemUptime
+            let shouldReport: Bool = lock.withLock {
+                guard fraction - lastReported >= 0.01 || now - lastReportTime >= 0.25 else { return false }
+                lastReported = fraction
+                lastReportTime = now
+                return true
+            }
+            if shouldReport { progress(fraction) }
         }
 
         func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
@@ -365,6 +545,7 @@ enum ModelDownloader {
             do {
                 try? FileManager.default.removeItem(at: destination)
                 try FileManager.default.moveItem(at: location, to: destination)
+                // The end always goes out.
                 progress(1)
                 finish(.success(destination))
             } catch {
@@ -373,7 +554,13 @@ enum ModelDownloader {
         }
 
         func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-            if let error { finish(.failure(error)) }
+            guard let error else { return }
+            let nsError = error as NSError
+            if let handle, handle.consumePause(of: task), nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled {
+                finish(.failure(DownloadPaused(resumeData: nsError.userInfo[NSURLSessionDownloadTaskResumeData] as? Data)))
+                return
+            }
+            finish(.failure(error))
         }
     }
 

@@ -87,8 +87,16 @@ public actor PhotoRenderer {
     private let store: ProjectStore
     private let projectID: UUID
     private let inpainting: InpaintingPipeline
-    private let upscaler: Upscaler
+    /// Set again once the model is located: the first frame never waits for it.
+    private var upscaler: Upscaler
+    /// Decoded sources, least recently used first in `sourceOrder`.
     private var sourceCache: [String: CIImage] = [:]
+    private var sourceOrder: [String] = []
+    private static let sourceCacheLimit = 6
+    /// Feathered masks rendered once per size ("path|WxH|feather|inverted"), least recently used first.
+    private var maskCache: [String: CIImage] = [:]
+    private var maskOrder: [String] = []
+    private static let maskCacheLimit = 12
     private var operationCache: [String: CIImage] = [:]
     /// Least recently used first: a hit moves its key to the end.
     private var operationOrder: [String] = []
@@ -113,6 +121,11 @@ public actor PhotoRenderer {
         self.store = store
         self.projectID = projectID
         self.inpainting = inpainting
+        self.upscaler = upscaler
+    }
+
+    /// The upscaler with its model, once the model manager has located it.
+    public func setUpscaler(_ upscaler: Upscaler) {
         self.upscaler = upscaler
     }
 
@@ -152,6 +165,9 @@ public actor PhotoRenderer {
     /// Jobs still running finish for the renders awaiting them.
     public func purgeCaches() {
         sourceCache.removeAll()
+        sourceOrder.removeAll()
+        maskCache.removeAll()
+        maskOrder.removeAll()
         operationCache.removeAll()
         operationOrder.removeAll()
         displayedKeys.removeAll()
@@ -164,6 +180,9 @@ public actor PhotoRenderer {
     /// picture on screen uses always stay, so its erases are not redone.
     public func trimForMemoryPressure(keepingRecent keep: Int = 4) {
         sourceCache.removeAll()
+        sourceOrder.removeAll()
+        maskCache.removeAll()
+        maskOrder.removeAll()
         overlayCache.removeAll()
         disparityCache.removeAll()
         let displayedSizes = Set(displayedKeys.compactMap(Self.sizeSuffix(ofKey:)))
@@ -242,6 +261,9 @@ public actor PhotoRenderer {
             }
         }
         if let log, generation == displayGeneration { displayedKeys = log.keys }
+        // A settled picture on screen is drawn again for every zoom, pan and glide:
+        // Core Image keeps the finished bitmap instead of replaying the edit graph.
+        if log != nil { return canvas.cropped(to: canvasRect).insertingIntermediate(cache: true) }
         return canvas.cropped(to: canvasRect)
     }
 
@@ -265,7 +287,7 @@ public actor PhotoRenderer {
             entry = cached
         } else {
             let url = store.url(for: asset.relativePath, in: projectID)
-            entry = CIImage(contentsOf: url, options: [.auxiliaryDisparity: true, .applyOrientationProperty: true])
+            entry = CIImage(contentsOf: url, options: [.auxiliaryDisparity: true, .applyOrientationProperty: true]).map(Self.materialized)
             disparityCache[asset.relativePath] = entry
         }
         guard let disparity = entry, disparity.extent.width > 1 else { return nil }
@@ -273,26 +295,76 @@ public actor PhotoRenderer {
         return scaled.transformed(by: CGAffineTransform(translationX: extent.minX - scaled.extent.minX, y: extent.minY - scaled.extent.minY))
     }
 
-    private func source(for asset: MediaAsset, scale: Double) throws -> CIImage {
+    /// The disparity map decoded once, here, rather than lazily inside a draw on the main thread.
+    /// Half-float in a linear space, so the depth values come back as they were.
+    private static func materialized(_ disparity: CIImage) -> CIImage {
+        let extent = disparity.extent.integral
+        guard !extent.isEmpty, !extent.isInfinite, let space = CGColorSpace(name: CGColorSpace.extendedLinearSRGB),
+              let cg = RenderContext.shared.createCGImage(disparity, from: extent, format: .RGBAh, colorSpace: space, deferred: false) else { return disparity }
+        return CIImage(cgImage: cg).transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
+    }
+
+    /// A preview decodes its source eagerly, here, at the size it needs, never
+    /// inside a draw on the main thread; only a full-resolution render that is
+    /// not displayed (export) keeps the lazy full decode, for HDR and RAW.
+    private func source(for asset: MediaAsset, scale: Double, isFullResolution: Bool) throws -> CIImage {
         let longest = max(asset.pixelSize.width, asset.pixelSize.height)
-        let targetSide = Int((longest * scale).rounded())
-        let key = "\(asset.relativePath)@\(targetSide)"
-        if let cached = sourceCache[key] { return cached }
+        let targetSide = max(1, Int((longest * scale).rounded()))
+        let key = "\(asset.relativePath)@\(isFullResolution ? "full" : String(targetSide))"
+        if let cached = sourceCache[key] {
+            if let index = sourceOrder.lastIndex(of: key) { sourceOrder.remove(at: index) }
+            sourceOrder.append(key)
+            return cached
+        }
         let url = store.url(for: asset.relativePath, in: projectID)
         let image: CIImage
-        if scale >= 0.999 {
+        if isFullResolution {
             image = try ImageSupport.loadCIImage(at: url)
         } else {
             let cg = try ImageSupport.loadCGImage(at: url, maxPixelSize: targetSide)
             image = CIImage(cgImage: cg)
         }
-        if sourceCache.count > 8 { sourceCache.removeAll() }
         sourceCache[key] = image
+        sourceOrder.append(key)
+        while sourceOrder.count > Self.sourceCacheLimit {
+            sourceCache[sourceOrder.removeFirst()] = nil
+        }
         return image
     }
 
+    /// A mask at `extent`, feathered and inverted as stored. Rendered once per size
+    /// and kept (least recently used out first), so a dial drag over a masked edit
+    /// never decodes a PNG or re-runs the feather blur. Fractional frames (placed
+    /// layers) and very large ones (export) are loaded as they are.
+    private func loadMask(_ mask: MaskReference, fitting extent: CGRect) -> CIImage? {
+        guard extent == extent.integral, extent.width * extent.height <= 4096 * 4096, !extent.isEmpty else {
+            return maskStore.load(mask, fitting: extent)
+        }
+        let key = "\(mask.relativePath)|\(Int(extent.width))x\(Int(extent.height))|\(mask.feather)|\(mask.isInverted)"
+        let origin = CGAffineTransform(translationX: extent.minX, y: extent.minY)
+        if let cached = maskCache[key] {
+            if let index = maskOrder.lastIndex(of: key) { maskOrder.remove(at: index) }
+            maskOrder.append(key)
+            return cached.transformed(by: origin)
+        }
+        let size = CGRect(origin: .zero, size: extent.size)
+        guard let loaded = maskStore.load(mask, fitting: size) else { return nil }
+        let gray = CGColorSpaceCreateDeviceGray()
+        guard let cg = RenderContext.shared.createCGImage(loaded, from: size, format: .L8, colorSpace: gray, deferred: false) else {
+            return loaded.transformed(by: origin)
+        }
+        let flat = CIImage(cgImage: cg)
+        maskCache[key] = flat
+        maskOrder.append(key)
+        while maskOrder.count > Self.maskCacheLimit {
+            maskCache[maskOrder.removeFirst()] = nil
+        }
+        return flat.transformed(by: origin)
+    }
+
     private func renderImageLayer(_ layer: Layer, asset: MediaAsset, scale: Double, options: Options, log: KeyLog? = nil) async throws -> CIImage {
-        var image = try source(for: asset, scale: scale)
+        // Only an off-screen full-size render (export) keeps the lazy decode; what is drawn is decoded here.
+        var image = try source(for: asset, scale: scale, isFullResolution: scale >= 0.999 && !options.isDisplayed)
         // Actual ratio between this render and the original (thumbnail loader rounds).
         let effectiveScale = image.extent.width / max(1, asset.pixelSize.width)
         if options.showOriginal { return image }
@@ -489,7 +561,7 @@ public actor PhotoRenderer {
             // Done with the depth map at the source when there is one; the subject mask is the fallback.
             guard layer.edits.resolvedLensBlur?.focus == focus else { return input }
             if !layer.edits.hasGeometry, let asset = layer.imageAsset, disparityMap(for: asset, fitting: extent) != nil { return input }
-            guard let mask, let maskImage = maskStore.load(mask, fitting: extent) else { return input }
+            guard let mask, let maskImage = loadMask(mask, fitting: extent) else { return input }
             return LensBlur.apply(to: input, subjectMask: maskImage, focus: focus, aperture: aperture)
 
         case .crop(let rect):
@@ -535,7 +607,7 @@ public actor PhotoRenderer {
             }
 
         case .blurRegion(let mask, let amount):
-            guard let maskImage = maskStore.load(mask, fitting: extent) else { return input }
+            guard let maskImage = loadMask(mask, fitting: extent) else { return input }
             let sigma = max(4, 0.025 * max(extent.width, extent.height) * amount)
             let blurred = input.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: extent)
             let soft = maskImage.clampedToExtent().applyingGaussianBlur(sigma: max(1, 2 * scale)).cropped(to: extent)
@@ -544,7 +616,7 @@ public actor PhotoRenderer {
         case .moveObject(let mask, let offset):
             let reused = try await reusedResult(key: cacheKey, operationID: operation.id, extent: extent, options: options, log: log)
             if let reused { return reused }
-            guard let maskImage = maskStore.load(mask, fitting: extent) else { return input }
+            guard let maskImage = loadMask(mask, fitting: extent) else { return input }
             // The object lifted with a soft edge, carried to its new place.
             let edge = maskImage.clampedToExtent().applyingGaussianBlur(sigma: max(0.8, 1.4 * scale)).cropped(to: extent)
             let lifted = AdjustmentPipeline.applyingAlpha(mask: edge, to: input)
@@ -560,7 +632,7 @@ public actor PhotoRenderer {
         case .removeObject(let mask):
             let reused = try await reusedResult(key: cacheKey, operationID: operation.id, extent: extent, options: options, log: log)
             if let reused { return reused }
-            guard options.allowExpensiveWork, let maskImage = maskStore.load(mask, fitting: extent) else { return input }
+            guard options.allowExpensiveWork, let maskImage = loadMask(mask, fitting: extent) else { return input }
             let inpainting = self.inpainting
             return try await runExpensive(key: cacheKey, step: "erase", log: log) {
                 try await inpainting.fill(image: input, mask: maskImage, boundingBox: mask.boundingBox, feather: mask.feather)
@@ -582,20 +654,20 @@ public actor PhotoRenderer {
             }
 
         case .removeBackground(let mask):
-            guard let mask, let maskImage = maskStore.load(mask, fitting: extent) else { return input }
+            guard let mask, let maskImage = loadMask(mask, fitting: extent) else { return input }
             return AdjustmentPipeline.applyingAlpha(mask: maskImage, to: input)
 
         case .replaceBackground(let background, let mask):
-            guard let mask, let maskImage = maskStore.load(mask, fitting: extent) else { return input }
+            guard let mask, let maskImage = loadMask(mask, fitting: extent) else { return input }
             let backdrop = BackgroundEffects.backdrop(for: background, original: input, scale: scale, store: store, projectID: projectID)
             return AdjustmentPipeline.blendWithMask(foreground: input, background: backdrop, mask: maskImage)
 
         case .blurBackground(let amount, let mask):
-            guard let mask, let maskImage = maskStore.load(mask, fitting: extent) else { return input }
+            guard let mask, let maskImage = loadMask(mask, fitting: extent) else { return input }
             return BackgroundEffects.portraitBlur(input, subjectMask: maskImage, amount: amount, scale: scale)
 
         case .selectiveAdjust(let mask, let adjustments):
-            guard let maskImage = maskStore.load(mask, fitting: extent) else { return input }
+            guard let maskImage = loadMask(mask, fitting: extent) else { return input }
             let adjusted = AdjustmentPipeline.apply(adjustments, toneCurve: .identity, to: input, scale: scale)
             return AdjustmentPipeline.blendWithMask(foreground: adjusted, background: input, mask: maskImage)
 
@@ -628,14 +700,14 @@ public actor PhotoRenderer {
         case .generativeFill(let mask, let prompt):
             let reused = try await reusedResult(key: cacheKey, operationID: operation.id, extent: extent, options: options, log: log)
             if let reused { return reused }
-            guard options.allowExpensiveWork, let maskImage = maskStore.load(mask, fitting: extent) else { return input }
+            guard options.allowExpensiveWork, let maskImage = loadMask(mask, fitting: extent) else { return input }
             let inpainting = self.inpainting
             return try await runExpensive(key: cacheKey, step: "generate", log: log) {
                 try await inpainting.generate(image: input, mask: maskImage, boundingBox: mask.boundingBox, prompt: prompt)
             }
 
         case .recolor(let mask, let color, let strength):
-            guard let maskImage = maskStore.load(mask, fitting: extent) else { return input }
+            guard let maskImage = loadMask(mask, fitting: extent) else { return input }
             return BackgroundEffects.recolor(input, mask: maskImage, color: color, strength: strength)
 
         case .cloneStamp(let strokes, let offset):
@@ -731,7 +803,7 @@ public actor PhotoRenderer {
             transform = transform.translatedBy(x: -image.extent.midX, y: -image.extent.midY)
             placed = image.transformed(by: transform)
         }
-        if let mask = layer.mask, let maskImage = maskStore.load(mask, fitting: placed.extent) {
+        if let mask = layer.mask, let maskImage = loadMask(mask, fitting: placed.extent) {
             placed = AdjustmentPipeline.applyingAlpha(mask: maskImage, to: placed)
         }
         if layer.opacity < 1 {

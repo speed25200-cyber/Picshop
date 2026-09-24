@@ -6,9 +6,12 @@ import PicshopIntent
 /// Adjustments the way Photos does them: one row of round controls that
 /// snaps the chosen one to the centre, each ring showing its value in
 /// yellow, and the ruler dial underneath. Scroll to choose, drag to set.
+///
+/// A drag re-evaluates only the dial and the ring being dragged: the dial's
+/// value lives in its own leaf, and the dragged ring reads `session.dial`
+/// while the document stays as it was until the drag ends.
 struct AdjustPanel: View {
     @Bindable var session: PhotoEditorSession
-    @State private var value: Double = 0
     @State private var centered: AdjustmentParameter?
 
     /// Photos' order: light first, then colour, then detail and effects.
@@ -22,21 +25,21 @@ struct AdjustPanel: View {
     private let spacing: CGFloat = 14
 
     var body: some View {
+        #if DEBUG
+        let _ = ViewTrace.changes(Self.self)
+        #endif
+        let selected = session.selectedParameter
         VStack(spacing: 12) {
             GeometryReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: spacing) {
                         ForEach(Self.order) { parameter in
-                            ValueRing(parameter: parameter, value: session.adjustmentValue(parameter), isSelected: session.selectedParameter == parameter)
+                            AdjustRing(session: session, parameter: parameter, isSelected: selected == parameter)
                                 .id(parameter)
                                 .onTapGesture {
                                     Haptics.tick()
                                     withAnimation(PSMotion.standard) { centered = parameter }
                                 }
-                                .accessibilityElement(children: .ignore)
-                                .accessibilityLabel(Self.name(parameter))
-                                .accessibilityValue(String(Int((session.adjustmentValue(parameter) * 100).rounded())))
-                                .accessibilityAddTraits(.isButton)
                         }
                     }
                     .scrollTargetLayout()
@@ -51,23 +54,15 @@ struct AdjustPanel: View {
             }
             .frame(height: itemSize + 12)
 
-            DialSlider(value: $value, range: session.selectedParameter.range, neutral: 0, label: Self.name(session.selectedParameter), onEditingChanged: { editing in
-                if editing { session.beginSliderInteraction(session.selectedParameter) } else { session.endSliderInteraction() }
-            })
+            AdjustDial(session: session, parameter: selected)
 
             HStack(spacing: 8) {
                 PanelChip(title: L("Auto"), symbol: "wand.and.stars", tint: PSTheme.voice) { session.perform(EditIntent(action: .autoEnhance)) }
                 PanelChip(title: L("Portrait light"), symbol: "lightbulb.max") { session.perform(EditIntent(action: .relight)) }
                 Spacer()
-                PanelChip(title: L("Reset"), symbol: "arrow.counterclockwise", isEnabled: !session.document.activeAdjustments.isNeutral) {
+                PanelChip(title: L("Reset"), symbol: "arrow.counterclockwise", isEnabled: session.modifiedTools.contains(.adjust)) {
                     session.apply(.adjustments(.neutral), label: L("Reset"))
-                    value = 0
                 }
-            }
-        }
-        .onChange(of: value) { _, newValue in
-            if abs(newValue - session.adjustmentValue(session.selectedParameter)) > 0.0005 {
-                session.setAdjustment(session.selectedParameter, value: newValue)
             }
         }
         .onChange(of: centered) { _, parameter in
@@ -76,21 +71,66 @@ struct AdjustPanel: View {
             session.selectedParameter = parameter
         }
         .onChange(of: session.selectedParameter) { _, parameter in
-            value = session.adjustmentValue(parameter)
             if centered != parameter { withAnimation(PSMotion.standard) { centered = parameter } }
         }
-        .onChange(of: session.history.present.modifiedAt) { _, _ in
-            let current = session.adjustmentValue(session.selectedParameter)
-            if abs(current - value) > 0.0005 { value = current }
-        }
-        .onAppear {
-            value = session.adjustmentValue(session.selectedParameter)
-            centered = session.selectedParameter
-        }
+        .onAppear { centered = session.selectedParameter }
     }
 
     static func name(_ parameter: AdjustmentParameter) -> String {
         psPrefersFrench ? parameter.frenchName : parameter.englishName
+    }
+}
+
+/// The ruler dial for one parameter. Owns the dragged value, so a drag
+/// re-evaluates this leaf and the dial, not the panel. It reloads from the
+/// document when the parameter or the document changes.
+private struct AdjustDial: View {
+    let session: PhotoEditorSession
+    let parameter: AdjustmentParameter
+    @State private var value: Double = 0
+
+    var body: some View {
+        #if DEBUG
+        let _ = ViewTrace.changes(Self.self)
+        #endif
+        DialSlider(value: $value, range: parameter.range, neutral: 0, label: AdjustPanel.name(parameter), onEditingChanged: { editing in
+            if editing { session.beginSliderInteraction(parameter) } else { session.endSliderInteraction() }
+        })
+        .onChange(of: value) { _, newValue in
+            if abs(newValue - session.adjustmentValue(parameter)) > 0.0005 {
+                session.setAdjustment(parameter, value: newValue)
+            }
+        }
+        .onChange(of: parameter) { _, parameter in value = session.adjustmentValue(parameter) }
+        .onChange(of: session.revision) { _, _ in
+            // Undo, a voice edit or Reset: follow the document unless a drag is under way.
+            guard session.dial.parameter == nil else { return }
+            let current = session.adjustmentValue(parameter)
+            if abs(current - value) > 0.0005 { value = current }
+        }
+        .onAppear { value = session.adjustmentValue(parameter) }
+    }
+}
+
+/// One ring in the carousel. The ring under the dial reads the dial's live
+/// value while it is dragged; the others read the document.
+private struct AdjustRing: View {
+    let session: PhotoEditorSession
+    let parameter: AdjustmentParameter
+    let isSelected: Bool
+
+    var body: some View {
+        #if DEBUG
+        let _ = ViewTrace.changes(Self.self)
+        #endif
+        let dial = session.dial
+        let isDragged = dial.parameter == parameter
+        let value = isDragged ? dial.value : session.adjustmentValue(parameter)
+        ValueRing(parameter: parameter, value: value, isSelected: isSelected, isDragging: isDragged)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(AdjustPanel.name(parameter))
+            .accessibilityValue(ValueRing.formatted(value))
+            .accessibilityAddTraits(.isButton)
     }
 }
 
@@ -101,6 +141,8 @@ struct ValueRing: View {
     let parameter: AdjustmentParameter
     let value: Double
     let isSelected: Bool
+    /// Under the finger: no numeric animation, each tick would start one.
+    var isDragging = false
 
     private var isSet: Bool { abs(value) > 0.0005 }
 
@@ -128,7 +170,7 @@ struct ValueRing: View {
         .frame(width: 46, height: 46)
         .overlay(Circle().strokeBorder(isSelected ? Color.white.opacity(0.9) : .clear, lineWidth: 1.5).padding(-4))
         .animation(PSMotion.quick, value: isSelected)
-        .animation(PSMotion.numeric, value: value)
+        .animation(isDragging ? nil : PSMotion.numeric, value: value)
         .padding(.vertical, 6)
         .contentShape(Circle())
     }

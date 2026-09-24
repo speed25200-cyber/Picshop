@@ -43,33 +43,61 @@ public enum IntentPrompt {
         {"steps":[{...}, ...],"reply":"<one short sentence in the user's language>","clarification":null|"<question if the request is truly ambiguous>","language":"fr"|"en"}
 
         Each step has "action" (one of: \(actionList)) plus only the fields it needs:
-        - removeObject: target (canonical English noun such as dog, person, car, sign, pole, wire, text, blemish, object), spatialHint (\(spatialList)), ordinal, all (bool)
-        - adjust: parameter (\(parameterList)), amountMode ("relative" for more/less, "absolute" for "set to"), amount (-100…100 percent). Brighter → brightness +20; darker → -20; a bit → ±10; a lot → ±40; too X → opposite direction.
-        - selectiveAdjust: same as adjust plus target (the region: sky, face, background, eyes, teeth, grass…) when the change applies to one thing only ("make the sky bluer", "éclaircis le visage", "lisse la peau" → face + noiseReduction +50)
-        - applyLook: look (\(lookList)), amount (0–100 intensity). "noir et blanc"/"black and white" → mono.
-        - autoEnhance, removeBackground, blurBackground (amount 0–100), replaceBackground (background: colour name or "transparent")
-        - crop/setAspect: aspect (\(aspectList)); rotate: degrees (negative = counter-clockwise); straighten: degrees optional; flip: flipAxis (horizontal|vertical); resetOrientation (undo turns and flips: "remets-la à l'endroit"; degrees 180 when it is said to show upside down now: "c'est à l'envers", "it's upside down"; flipAxis horizontal to undo only the mirror: "annule le miroir"). "C'est à l'endroit maintenant" changes nothing: confirm
-        - addText: text (verbatim, keep the user's language and casing), placement (\(placementList)), color; editText/removeText
-        - upscale (amount 2|3|4), denoise, sharpen, relight
-        - blurObject (PHOTO: privacy blur on target — face, licence plate, screen; "floute les visages")
-        - autoCrop (PHOTO: the best framing, chosen by an aesthetics model: "recadre au mieux", "improve the framing")
-        - cleanUp (PHOTO: erase the passers-by and photobombers, keep the people the photo is of)
-        - textBehind (PHOTO: a title behind the person, the Lock Screen depth effect; text = the words, verbatim)
-        - moveObject (PHOTO: target = the object; degrees = direction, 0 right, 90 up, 180 left, 270 down; amount = distance 0.05–0.5 of the frame; placement "center" to centre it): "déplace le chien vers la gauche"
-        - generativeFill: target (region to replace, optional) + text (what to generate, in English); recolor: target + color ("make the car red")
-        - PDF ONLY: deletePage/rotatePage(degrees)/movePage(choiceIndex = destination)/duplicatePage/insertBlankPage/goToPage (clipNumber = page number, -1 = last), highlightText/underlineText/redactText/findText (text), replaceText (text = words to replace, replacement = new words, or "" to erase the words; "remplace monsieur par madame", "efface le mot brouillon"), addSignature, extractPage, addPageNumbers, mergeDocument
-        - undo, redo, revert, compare, zoom, export, share, help, confirm, cancel
-        - saveVersion / restoreVersion (text = the version name; "enregistre cette version sous brouillon", "go back to version v1"); describe (PHOTO: what is in the picture); readPage (PDF: read the page aloud, clipNumber optional); saveStyle / applyStyle (PHOTO: text = style name, or "last" for the previous photo's look: "applique le même style que la dernière photo"); summarizeEdits (spoken recap of the edits)
-        - VIDEO ONLY: split (seconds), trim (startSeconds,endSeconds = part to KEEP), deleteRange (startSeconds,endSeconds = part to REMOVE), deleteClip (clipNumber 1-based), setSpeed (speed multiplier: 0.5 slow motion, 2 fast), reverse, mute, unmute, setVolume (amount), addTransition (transition: \(transitionList), scope "all" for every cut), removeTransition, addMusic (adds ANOTHER sound track — music, voice-over, sound effect; text: what kind, seconds: where it starts, scope "selection" to REPLACE the existing music instead), removeMusic (clipNumber = track number, -1 last, omit for all), moveAudio (clipNumber, seconds), fadeAudio (clipNumber, amount = fade length in seconds, text "in"|"out" or omit for both), mute/unmute with scope "selection" for a sound track (clipNumber) instead of a clip, setVolume with scope "selection" for a sound track (clipNumber, amountMode absolute for "à 50 %"), extractFrame (seconds), seek (seconds), play, pause, duplicateClip, moveClip (clipNumber, choiceIndex = destination 1-based), stabilize, freezeFrame
-        - VIDEO MAGIC: translateCaptions (text = target language code en|fr|es|de|it|pt|ja|zh|ko: "traduis les sous-titres en anglais"), autoCaptions (subtitles from the speech; text = style: classic|karaoke|reveal|boxed|minimal, also to restyle existing captions), removeCaptions, removeSilences (jump cuts: remove pauses in speech; amount 0.2 gentle … 0.45 tight), removeFillers (cut the "euh"/"um" hesitations and stutters), autoDuck (music dips under the voice, back up between sentences; amount = depth 0.3…0.9, 0 = off), animateText (how the latest title comes on: text = pop|rise|wipe|focus|drift, or "none"), punchIns (zoom cuts: after jump cuts every other segment framed tighter; amount = zoom like 1.2, 0 removes), speedRamp (ease into slow motion around the playhead or seconds, then back; amount = slowest speed, default 0.3), highlights (a recap made of the best moments; seconds = its length, default 30), splitScenes (split the clips at every shot change; scope "all" or the selected clip), trackSubject (a text/sticker/picture overlay follows the moving subject under it; target "text"|"image"|"video"|"shape"; amount 0 = stop following), cutWords (edit by text: text = the exact words to cut where they are spoken; scope "all" = every time; target "sentence" = the whole sentence around them), syncToBeat (move every cut onto the music's beat), fitMusic (the song ends with the video, cut on a bar with a fade), blurFaces (anonymise: every face blurred through the clips; scope "all"; amount 0 shows them again), smartReframe (aspect + follow the subject: "passe en vertical en suivant la personne"), kenBurns (slow camera move; scope "all"; amount 0 removes it), enhanceVoice (remove background noise from speech; scope "all"), matchColor (give every clip the colours of clipNumber)
+        \(fieldGuide)
         Several requests in one sentence become several steps, in order; "but"/"mais" separates two requests ("brighter but less saturated"). \
         Negations and corrections apply to the last thing said ("not the dog, the cat" → the cat). \
         If the request is not an editing command, output {"steps":[{"action":"unknown"}],"reply":"…"}.\(photoGuide)
         """
     }
 
+    /// The per-action field guide, one bullet per action family, in the order
+    /// the planners have always read it.
+    static let fieldGuide: String = """
+    - removeObject: target (canonical English noun such as dog, person, car, sign, pole, wire, text, blemish, object), spatialHint (\(spatialList)), ordinal, all (bool)
+    - adjust: parameter (\(parameterList)), amountMode ("relative" for more/less, "absolute" for "set to"), amount (-100…100 percent). Brighter → brightness +20; darker → -20; a bit → ±10; a lot → ±40; too X → opposite direction.
+    - selectiveAdjust: same as adjust plus target (the region: sky, face, background, eyes, teeth, grass…) when the change applies to one thing only ("make the sky bluer", "éclaircis le visage", "lisse la peau" → face + noiseReduction +50)
+    - applyLook: look (\(lookList)), amount (0–100 intensity). "noir et blanc"/"black and white" → mono.
+    - autoEnhance, removeBackground, blurBackground (amount 0–100), replaceBackground (background: colour name or "transparent")
+    - crop/setAspect: aspect (\(aspectList)); rotate: degrees (negative = counter-clockwise); straighten: degrees optional; flip: flipAxis (horizontal|vertical); resetOrientation (undo turns and flips: "remets-la à l'endroit"; degrees 180 when it is said to show upside down now: "c'est à l'envers", "it's upside down"; flipAxis horizontal to undo only the mirror: "annule le miroir"). "C'est à l'endroit maintenant" changes nothing: confirm
+    - addText: text (verbatim, keep the user's language and casing), placement (\(placementList)), color; editText/removeText
+    - upscale (amount 2|3|4), denoise, sharpen, relight
+    - blurObject (PHOTO: privacy blur on target — face, licence plate, screen; "floute les visages")
+    - autoCrop (PHOTO: the best framing, chosen by an aesthetics model: "recadre au mieux", "improve the framing")
+    - cleanUp (PHOTO: erase the passers-by and photobombers, keep the people the photo is of)
+    - textBehind (PHOTO: a title behind the person, the Lock Screen depth effect; text = the words, verbatim)
+    - moveObject (PHOTO: target = the object; degrees = direction, 0 right, 90 up, 180 left, 270 down; amount = distance 0.05–0.5 of the frame; placement "center" to centre it): "déplace le chien vers la gauche"
+    - generativeFill: target (region to replace, optional) + text (what to generate, in English); recolor: target + color ("make the car red")
+    - PDF ONLY: deletePage/rotatePage(degrees)/movePage(choiceIndex = destination)/duplicatePage/insertBlankPage/goToPage (clipNumber = page number, -1 = last), highlightText/underlineText/redactText/findText (text), replaceText (text = words to replace, replacement = new words, or "" to erase the words; "remplace monsieur par madame", "efface le mot brouillon"), addSignature, extractPage, addPageNumbers, mergeDocument
+    - undo, redo, revert, compare, zoom, export, share, help, confirm, cancel
+    - saveVersion / restoreVersion (text = the version name; "enregistre cette version sous brouillon", "go back to version v1"); describe (PHOTO: what is in the picture); readPage (PDF: read the page aloud, clipNumber optional); saveStyle / applyStyle (PHOTO: text = style name, or "last" for the previous photo's look: "applique le même style que la dernière photo"); summarizeEdits (spoken recap of the edits)
+    - VIDEO ONLY: split (seconds), trim (startSeconds,endSeconds = part to KEEP), deleteRange (startSeconds,endSeconds = part to REMOVE), deleteClip (clipNumber 1-based), setSpeed (speed multiplier: 0.5 slow motion, 2 fast), reverse, mute, unmute, setVolume (amount), addTransition (transition: \(transitionList), scope "all" for every cut), removeTransition, addMusic (adds ANOTHER sound track — music, voice-over, sound effect; text: what kind, seconds: where it starts, scope "selection" to REPLACE the existing music instead), removeMusic (clipNumber = track number, -1 last, omit for all), moveAudio (clipNumber, seconds), fadeAudio (clipNumber, amount = fade length in seconds, text "in"|"out" or omit for both), mute/unmute with scope "selection" for a sound track (clipNumber) instead of a clip, setVolume with scope "selection" for a sound track (clipNumber, amountMode absolute for "à 50 %"), extractFrame (seconds), seek (seconds), play, pause, duplicateClip, moveClip (clipNumber, choiceIndex = destination 1-based), stabilize, freezeFrame
+    - VIDEO MAGIC: translateCaptions (text = target language code en|fr|es|de|it|pt|ja|zh|ko: "traduis les sous-titres en anglais"), autoCaptions (subtitles from the speech; text = style: classic|karaoke|reveal|boxed|minimal, also to restyle existing captions), removeCaptions, removeSilences (jump cuts: remove pauses in speech; amount 0.2 gentle … 0.45 tight), removeFillers (cut the "euh"/"um" hesitations and stutters), autoDuck (music dips under the voice, back up between sentences; amount = depth 0.3…0.9, 0 = off), animateText (how the latest title comes on: text = pop|rise|wipe|focus|drift, or "none"), punchIns (zoom cuts: after jump cuts every other segment framed tighter; amount = zoom like 1.2, 0 removes), speedRamp (ease into slow motion around the playhead or seconds, then back; amount = slowest speed, default 0.3), highlights (a recap made of the best moments; seconds = its length, default 30), splitScenes (split the clips at every shot change; scope "all" or the selected clip), trackSubject (a text/sticker/picture overlay follows the moving subject under it; target "text"|"image"|"video"|"shape"; amount 0 = stop following), cutWords (edit by text: text = the exact words to cut where they are spoken; scope "all" = every time; target "sentence" = the whole sentence around them), syncToBeat (move every cut onto the music's beat), fitMusic (the song ends with the video, cut on a bar with a fade), blurFaces (anonymise: every face blurred through the clips; scope "all"; amount 0 shows them again), smartReframe (aspect + follow the subject: "passe en vertical en suivant la personne"), kenBurns (slow camera move; scope "all"; amount 0 removes it), enhanceVoice (remove background noise from speech; scope "all"), matchColor (give every clip the colours of clipNumber)
+    """
+
+    /// The field guide for the editing actions of one editor: the bullets of
+    /// the other editors and the meta/dialogue actions (undo, versions,
+    /// help...) are left out. Claude Live and the on-device Live brain read it.
+    public static func actionGuide(mode: EditorMode) -> String {
+        fieldGuide.split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { line in
+                guard let modes = guideModes(String(line)) else { return false }
+                return modes.contains(mode)
+            }
+            .joined(separator: "\n")
+    }
+
+    /// Which editors a bullet of the field guide is about; nil for meta actions.
+    private static func guideModes(_ line: String) -> Set<EditorMode>? {
+        if line.hasPrefix("- undo, redo") || line.hasPrefix("- saveVersion") { return nil }
+        if line.contains("PDF ONLY") { return [.pdf] }
+        if line.contains("VIDEO ONLY") || line.contains("VIDEO MAGIC") { return [.video] }
+        if line.contains("(PHOTO") || line.hasPrefix("- upscale") || line.hasPrefix("- generativeFill") { return [.photo] }
+        if line.hasPrefix("- addText") { return [.photo, .video, .pdf] }
+        return [.photo, .video]
+    }
+
     /// How a retoucher reads everyday photo requests. Only sent in photo mode.
-    static let photoInterpretationGuide: String = """
+    public static let photoInterpretationGuide: String = """
 
 
     How to read photo requests:

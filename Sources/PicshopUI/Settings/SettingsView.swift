@@ -6,13 +6,11 @@ import PicshopImaging
 import PicshopVideo
 import PicshopSpeech
 
-/// Preferences: AI brain, models, performance, voice, feedback, export,
-/// diagnostics.
+/// Preferences, calm and short: PicShop Live, the voice, general choices,
+/// then Advanced and what stays private.
 public struct SettingsView: View {
     @Environment(\.picshop) private var app
     @Environment(\.dismiss) private var dismiss
-    /// The diagnostics text file, written when the screen opens.
-    @State private var reportURL: URL?
 
     public init() {}
 
@@ -20,14 +18,22 @@ public struct SettingsView: View {
         NavigationStack {
             Form {
                 if let app {
-                    identityHeader
-                    brainSection(app)
-                    modelsSection(app)
-                    performanceSection(app)
+                    SettingsHeader(app: app)
+                    LiveSettingsSection(app: app)
                     voiceSection(app)
-                    exportSection(app)
-                    diagnosticsSection(app)
-                    aboutSection
+                    generalSection(app)
+                    Section {
+                        NavigationLink {
+                            AdvancedSettingsView()
+                        } label: {
+                            SettingsRow(systemName: "gearshape.2.fill", tint: PSTheme.textPrimary) {
+                                Text(L("Advanced"))
+                            }
+                        }
+                    } footer: {
+                        Text(L("On-device models, performance, diagnostics and the build."))
+                    }
+                    privacySection
                 }
             }
             .scrollContentBackground(.hidden)
@@ -38,9 +44,110 @@ public struct SettingsView: View {
         .preferredColorScheme(.dark)
     }
 
-    /// App identity at the top, like the Apple ID card in Settings: the icon
-    /// tile, the version and the one promise that matters (nothing leaves).
-    private var identityHeader: some View {
+    // MARK: Voice
+
+    @ViewBuilder
+    private func voiceSection(_ app: AppEnvironment) -> some View {
+        @Bindable var settings = app.settings
+        Section {
+            NavigationLink {
+                VoicePickerView()
+            } label: {
+                VoiceSummaryRow(settings: app.settings)
+            }
+            SettingsRow(systemName: "speaker.wave.2.fill", tint: PSTheme.voice) {
+                Toggle(L("Spoken replies"), isOn: $settings.liveSpeaks)
+            }
+            SettingsRow(systemName: "hand.raised.fill", tint: PSTheme.textPrimary) {
+                Toggle(isOn: $settings.liveBargeIn) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(L("Let me interrupt"))
+                        Text(L("Always on with headphones. On the loudspeaker, turn it on if PicShop doesn't cut itself off while it speaks."))
+                            .font(PSFont.footnote())
+                            .foregroundStyle(PSTheme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            SettingsRow(systemName: "captions.bubble.fill", tint: PSTheme.textPrimary) {
+                Toggle(L("Captions"), isOn: $settings.liveCaptions)
+            }
+            VoiceRateSlider(settings: app.settings)
+            SettingsRow(systemName: "globe", tint: PSTheme.success) {
+                Picker(L("Language"), selection: Binding(get: { app.settings.voiceLanguage }, set: { app.settings.voiceLanguage = $0; app.applyVoiceSettings() })) {
+                    Text(L("Automatic")).tag("auto")
+                    Text(verbatim: "Français").tag("fr")
+                    Text(verbatim: "English").tag("en")
+                }
+            }
+            SettingsRow(systemName: "airpods", tint: PSTheme.textPrimary) {
+                Toggle(isOn: $settings.liveHDBluetooth) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(L("HD voice in AirPods"))
+                        Text(L("The AirPods play the voice in high quality; PicShop then listens through the iPhone's own microphone."))
+                            .font(PSFont.footnote())
+                            .foregroundStyle(PSTheme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            SettingsRow(systemName: "text.bubble.fill", tint: PSTheme.textPrimary) {
+                Toggle(L("Read out replies to dictated commands"), isOn: $settings.speaksReplies)
+            }
+        } header: {
+            Text(L("Voice"))
+        }
+    }
+
+    // MARK: General
+
+    @ViewBuilder
+    private func generalSection(_ app: AppEnvironment) -> some View {
+        Section(L("General")) {
+            SettingsRow(systemName: "hand.tap.fill", tint: PSTheme.textPrimary) {
+                Toggle(L("Haptics"), isOn: Binding(get: { app.settings.hapticsEnabled }, set: { app.settings.hapticsEnabled = $0 }))
+            }
+            SettingsRow(systemName: "photo.fill", tint: PSTheme.textPrimary) {
+                Picker(L("Photo format"), selection: Binding(get: { app.settings.photoExportFormat }, set: { app.settings.photoExportFormat = $0 })) {
+                    ForEach(ExportOptions.Format.allCases) { Text($0.displayName).tag($0) }
+                }
+            }
+            SettingsRow(systemName: "film.fill", tint: PSTheme.textPrimary) {
+                Picker(L("Video quality"), selection: Binding(get: { app.settings.videoExportQuality }, set: { app.settings.videoExportQuality = $0 })) {
+                    ForEach(VideoExportOptions.Quality.allCases) { Text($0.displayName).tag($0) }
+                }
+            }
+        }
+    }
+
+    // MARK: Privacy
+
+    private var privacySection: some View {
+        Section {
+            HStack(alignment: .top, spacing: 12) {
+                SettingsRowIcon(systemName: "hand.raised.fill", tint: PSTheme.success)
+                Text(L("Without a Claude key, everything stays on the iPhone. With Claude, only Live mode sends text and, if you allow it, a reduced picture — never the audio. PicShop has no server, no account and no tracking."))
+                    .font(PSFont.footnote())
+                    .foregroundStyle(PSTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+        } header: {
+            Text(L("Privacy"))
+        }
+    }
+}
+
+/// App identity at the top, like the Apple ID card in Settings: the tile,
+/// the version, and where Live answers from.
+private struct SettingsHeader: View {
+    let app: AppEnvironment
+
+    private var usesClaude: Bool {
+        LiveServices.shared.keyStore.hasKey && app.settings.liveUseClaude && app.settings.hasLiveConsent
+    }
+
+    var body: some View {
         Section {
             HStack(spacing: 14) {
                 let shape = RoundedRectangle(cornerRadius: PSRadius.tile, style: .continuous)
@@ -49,293 +156,92 @@ public struct SettingsView: View {
                     .foregroundStyle(.white)
                     .frame(width: 58, height: 58)
                     .background { HeroMesh().clipShape(shape) }
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("PicShop").font(.title2.weight(.bold)).foregroundStyle(PSTheme.textPrimary)
+                    Text(verbatim: "PicShop").font(.title2.weight(.bold)).foregroundStyle(PSTheme.textPrimary)
                     HStack(spacing: 6) {
                         Text(L("Version")).foregroundStyle(PSTheme.textTertiary)
-                        Text("\(BuildInfo.version) (\(BuildInfo.buildNumber))")
-                        Text("·").foregroundStyle(PSTheme.textTertiary)
-                        Label(L("On-device, private"), systemImage: "lock.shield.fill").foregroundStyle(PSTheme.success)
+                        Text(verbatim: "\(BuildInfo.version) (\(BuildInfo.buildNumber))")
                     }
                     .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
-                    HStack(spacing: 6) {
-                        Image(systemName: "number").font(.system(size: 9, weight: .medium))
-                        Text(BuildInfo.commit).font(PSFont.mono(11))
-                        if !BuildInfo.branch.isEmpty { Text(BuildInfo.branch).lineLimit(1).truncationMode(.middle) }
-                        if !BuildInfo.date.isEmpty { Text(BuildInfo.date) }
-                    }
-                    .font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary)
-                    .textSelection(.enabled)
+                    Label(usesClaude ? L("Live: Claude") : L("Live: on the iPhone"), systemImage: usesClaude ? "cloud.fill" : "iphone")
+                        .font(PSFont.caption(12))
+                        .foregroundStyle(usesClaude ? PSTheme.textPrimary : PSTheme.success)
                 }
                 Spacer(minLength: 0)
             }
             .padding(.vertical, 6)
+            .accessibilityElement(children: .combine)
         }
         .listRowBackground(Color.clear)
         .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
     }
+}
 
-    /// The brain is chosen automatically; this row only shows which one is answering.
-    @ViewBuilder
-    private func brainSection(_ app: AppEnvironment) -> some View {
-        Section {
-            HStack(spacing: 12) {
-                Image(systemName: app.activeEngine == .rules ? "bolt" : "brain.head.profile")
-                    .font(.system(size: 17, weight: .medium))
-                    .symbolRenderingMode(.hierarchical)
-                    .psIntelligenceForeground()
-                    .frame(width: 36, height: 36)
-                    .background(PSTheme.fill, in: RoundedRectangle(cornerRadius: PSRadius.thumb, style: .continuous))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(app.activeEngine.displayName).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
-                    Text(description(for: app.activeEngine, app: app)).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
-                }
+/// The voice row: Live's voice for each language, with its quality.
+private struct VoiceSummaryRow: View {
+    let settings: AppSettings
+    @State private var french: VoiceCandidate?
+    @State private var english: VoiceCandidate?
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            SettingsRowIcon(systemName: "person.wave.2.fill", tint: PSTheme.voice)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L("Voices")).foregroundStyle(PSTheme.textPrimary)
+                line("FR", french)
+                line("EN", english)
+            }
+        }
+        .task(id: "\(settings.liveVoiceFR ?? "")|\(settings.liveVoiceEN ?? "")") { refresh() }
+        .task {
+            for await _ in SystemVoices.voicesDidChange() { refresh() }
+        }
+    }
+
+    private func refresh() {
+        french = SystemVoices.best(for: "fr-FR", preferredIdentifier: settings.liveVoiceFR)
+        english = SystemVoices.best(for: "en-US", preferredIdentifier: settings.liveVoiceEN)
+    }
+
+    private func line(_ code: String, _ voice: VoiceCandidate?) -> some View {
+        HStack(spacing: 6) {
+            Text(verbatim: code).font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary)
+            Text(voice?.name ?? L("None installed")).font(PSFont.footnote()).foregroundStyle(PSTheme.textSecondary)
+            if let voice { VoiceQualityBadge(quality: voice.quality) }
+        }
+    }
+}
+
+/// Live's speaking rate, 0.85 to 1.25; releasing the slider plays a sample.
+private struct VoiceRateSlider: View {
+    let settings: AppSettings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(L("Speed"))
                 Spacer()
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(PSTheme.success)
+                Text(settings.liveRate, format: .number.precision(.fractionLength(2)))
+                    .font(PSFont.mono(13))
+                    .foregroundStyle(PSTheme.textSecondary)
+                    .accessibilityHidden(true)
             }
-        } header: {
-            Text(L("AI brain"))
-        } footer: {
-            Text(L("PicShop always uses the most capable brain available on this iPhone. The instant grammar answers first; the language model steps in for complex or ambiguous requests. Everything runs on device."))
-        }
-    }
-
-    private func description(for kind: IntentEngineKind, app: AppEnvironment) -> String {
-        switch kind {
-        case .rules: return app.appleIntelligenceReason ?? L("Deterministic grammar, instant, offline. Always on.")
-        case .appleIntelligence: return L("Apple's on-device foundation model with guided generation.")
-        case .proLocal: return L("Qwen3 4B through MLX — best for long multi-step commands.")
-        }
-    }
-
-    @ViewBuilder
-    private func modelsSection(_ app: AppEnvironment) -> some View {
-        Section {
-            ForEach(ModelCatalog.all) { model in
-                let state = app.modelStates[model.id] ?? .notInstalled
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(localizedName(model)).font(PSFont.headline(15))
-                        Text(localizedSummary(model)).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
-                        Text(ModelManager.isBundled(model.id) ? L("Included in the app") : "\(model.sizeMB) MB").font(PSFont.mono(11)).foregroundStyle(PSTheme.textSecondary)
-                    }
-                    Spacer()
-                    if ModelManager.isBundled(model.id) {
-                        Label(L("Ready"), systemImage: "checkmark.seal.fill").font(PSFont.caption(13)).foregroundStyle(PSTheme.success)
-                    } else {
-                        modelControl(model, state: state, app: app)
-                    }
-                }
-            }
-            SettingsRow(systemName: "arrow.down.circle.fill", tint: PSTheme.voice) {
-                Toggle(L("Download large models automatically"), isOn: Binding(get: { app.settings.autoInstallsModels }, set: { value in
-                    app.settings.autoInstallsModels = value
-                    if value { Task { await app.autoInstallModels() } }
-                }))
-            }
-        } header: {
-            Text(L("On-device models"))
-        } footer: {
-            Text(L("The eraser and the upscaler ship with the app. Generative Fill and the Pro Brain are large: they download by themselves over Wi‑Fi the first time, and everything runs on your iPhone."))
-        }
-    }
-
-    private func localizedName(_ model: ModelDescriptor) -> String {
-        switch model.id {
-        case "lama-inpainting": return L("Neural eraser")
-        case "realesrgan-x4": return L("Super resolution ×4")
-        case "sd-generative-fill": return L("Generative Fill")
-        case "qwen3-4b-4bit": return L("Pro Brain")
-        default: return model.displayName
-        }
-    }
-
-    private func localizedSummary(_ model: ModelDescriptor) -> String {
-        switch model.id {
-        case "lama-inpainting": return L("LaMa network for clean object removal on complex backgrounds.")
-        case "realesrgan-x4": return L("Real-ESRGAN upscaler for sharp enlargements.")
-        case "sd-generative-fill": return L("Stable Diffusion: “replace the sky with a sunset”, “add a hat”.")
-        case "qwen3-4b-4bit": return L("Qwen3 4B language model for long, multi-step voice commands.")
-        default: return model.summary
-        }
-    }
-
-    @ViewBuilder
-    private func modelControl(_ model: ModelDescriptor, state: ModelManager.State, app: AppEnvironment) -> some View {
-        switch state {
-        case .installed:
-            Menu {
-                Button(role: .destructive) { Task { await app.delete(model) } } label: { Label(L("Delete"), systemImage: "trash") }
-            } label: {
-                Label(L("Installed"), systemImage: "checkmark.circle.fill").font(PSFont.caption(13)).foregroundStyle(PSTheme.success)
-            }
-        case .downloading(let progress):
-            VStack(alignment: .trailing, spacing: 4) {
-                ProgressView(value: progress).frame(width: 80)
-                Button(L("Cancel")) { Task { await app.models.cancelInstall(model.id) } }.font(PSFont.caption(12))
-            }
-        case .compiling:
-            ProgressView()
-        case .failed(let message):
-            VStack(alignment: .trailing, spacing: 4) {
-                Button(L("Retry")) { install(model, app: app) }.font(PSFont.caption(13))
-                Text(message).font(PSFont.caption(10)).foregroundStyle(PSTheme.danger).lineLimit(2).frame(maxWidth: 160, alignment: .trailing)
-            }
-        case .notInstalled:
-            Button(L("Get")) { install(model, app: app) }
-                .font(.subheadline.weight(.semibold)).buttonStyle(.glass).controlSize(.small)
-        }
-    }
-
-    private func install(_ model: ModelDescriptor, app: AppEnvironment) {
-        Haptics.tap()
-        guard app.install(model) else {
-            app.library.errorMessage = model.kind == .generative
-                ? L("This build was compiled without the Stable Diffusion runtime.")
-                : L("This build was compiled without the MLX runtime.")
-            return
-        }
-    }
-
-    /// Thermal / battery budget: what the phone is doing right now and how PicShop should react.
-    @ViewBuilder
-    private func performanceSection(_ app: AppEnvironment) -> some View {
-        Section {
-            HStack(spacing: 12) {
-                Image(systemName: app.performance.statusSymbol)
-                    .font(.system(size: 17, weight: .medium))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(app.performance.statusTint)
-                    .frame(width: 36, height: 36)
-                    .background(PSTheme.fill, in: RoundedRectangle(cornerRadius: PSRadius.thumb, style: .continuous))
-                    .contentTransition(.symbolEffect(.replace))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(app.performance.statusTitle).font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
-                    Text(tierDescription(app.performance.tier)).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    TierDots(tier: app.performance.tier, tint: app.performance.statusTint)
-                    Text("\(Int(app.performance.previewLongestSide)) px").font(PSFont.mono(11)).foregroundStyle(PSTheme.textTertiary).contentTransition(.numericText())
-                }
-            }
-            .animation(PSMotion.quick, value: app.performance.tier)
-            SegmentedChoice(selection: Binding(get: { app.settings.performancePreference }, set: { value in
-                Haptics.tick()
-                app.settings.performancePreference = value
-                app.applyPerformanceSettings()
-            }), options: [
-                .init(value: PerformanceGovernor.Preference.automatic, title: L("Automatic"), symbol: "wand.and.sparkles"),
-                .init(value: .quality, title: L("Best quality"), symbol: "sparkles.rectangle.stack"),
-                .init(value: .efficiency, title: L("Cool & battery"), symbol: "leaf.fill"),
-            ])
-            .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-        } header: {
-            Text(L("Performance"))
-        } footer: {
-            Text(L("Automatic follows the iPhone's temperature: previews shrink and glow effects pause before the frame rate drops, and heavy AI work waits until the phone cools down. Exports are always full quality."))
-        }
-    }
-
-    private func tierDescription(_ tier: PerformanceGovernor.Tier) -> String {
-        switch tier {
-        case .full: return L("Full quality previews at the display's refresh rate.")
-        case .balanced: return L("Slightly lighter previews; effects unchanged.")
-        case .conserve: return L("Lighter previews and no glow, to cool down.")
-        case .critical: return L("Minimal rendering until the iPhone cools down.")
-        }
-    }
-
-    @ViewBuilder
-    private func voiceSection(_ app: AppEnvironment) -> some View {
-        Section(L("Voice")) {
-            SettingsRow(systemName: "mic.fill", tint: PSTheme.voice) {
-                Picker(L("Activation"), selection: Binding(get: { app.settings.voiceMode }, set: { app.settings.voiceMode = $0; app.applyVoiceSettings() })) {
-                    Text(L("Tap to talk")).tag(VoiceController.Mode.tapToTalk)
-                    Text(L("Hold to talk")).tag(VoiceController.Mode.pushToTalk)
-                    Text(L("Hands-free")).tag(VoiceController.Mode.handsFree)
-                }
-            }
-            SettingsRow(systemName: "globe", tint: PSTheme.success) {
-                Picker(L("Language"), selection: Binding(get: { app.settings.voiceLanguage }, set: { app.settings.voiceLanguage = $0; app.applyVoiceSettings() })) {
-                    Text(L("Automatic")).tag("auto")
-                    Text("Français").tag("fr")
-                    Text("English").tag("en")
-                }
-            }
-            SettingsRow(systemName: "speaker.wave.2.fill", tint: PSTheme.voice) {
-                Toggle(L("Speak replies"), isOn: Binding(get: { app.settings.speaksReplies }, set: { app.settings.speaksReplies = $0 }))
-            }
-            SettingsRow(systemName: "hand.tap.fill", tint: PSTheme.danger) {
-                Toggle(L("Haptics"), isOn: Binding(get: { app.settings.hapticsEnabled }, set: { app.settings.hapticsEnabled = $0 }))
+            Slider(value: Binding(get: { settings.liveRate }, set: { settings.liveRate = $0 }), in: AppSettings.liveRateRange, step: 0.05) {
+                Text(L("Speed"))
+            } minimumValueLabel: {
+                Image(systemName: "tortoise.fill").foregroundStyle(PSTheme.textSecondary).accessibilityHidden(true)
+            } maximumValueLabel: {
+                Image(systemName: "hare.fill").foregroundStyle(PSTheme.textSecondary).accessibilityHidden(true)
+            } onEditingChanged: { editing in
+                guard !editing else { return }
+                let french = settings.voiceLocale.language.languageCode?.identifier == "fr"
+                SystemVoices.playSample(language: french ? "fr-FR" : "en-US",
+                                        voiceIdentifier: french ? settings.liveVoiceFR : settings.liveVoiceEN,
+                                        rate: settings.liveRate)
             }
         }
-    }
-
-    @ViewBuilder
-    private func exportSection(_ app: AppEnvironment) -> some View {
-        Section(L("Export defaults")) {
-            SettingsRow(systemName: "photo.fill", tint: Color(red: 1.0, green: 0.62, blue: 0.1)) {
-                Picker(L("Photo format"), selection: Binding(get: { app.settings.photoExportFormat }, set: { app.settings.photoExportFormat = $0 })) {
-                    ForEach(ExportOptions.Format.allCases) { Text($0.displayName).tag($0) }
-                }
-            }
-            SettingsRow(systemName: "film.fill", tint: PSTheme.voice) {
-                Picker(L("Video quality"), selection: Binding(get: { app.settings.videoExportQuality }, set: { app.settings.videoExportQuality = $0 })) {
-                    ForEach(VideoExportOptions.Quality.allCases) { Text($0.displayName).tag($0) }
-                }
-            }
-        }
-    }
-
-    /// A session that ended badly offers its report; the current breadcrumbs
-    /// can always be shared when asking for help.
-    @ViewBuilder
-    private func diagnosticsSection(_ app: AppEnvironment) -> some View {
-        Section {
-            if let report = app.pendingCrashReport {
-                HStack(spacing: 12) {
-                    SettingsRowIcon(systemName: "exclamationmark.triangle.fill", tint: PSTheme.warning)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(report.kind == .crash ? L("PicShop quit unexpectedly") : L("PicShop was closed unexpectedly"))
-                            .font(PSFont.headline(15)).foregroundStyle(PSTheme.textPrimary)
-                        Text(report.date, format: .relative(presentation: .named))
-                            .font(PSFont.footnote()).foregroundStyle(PSTheme.textSecondary)
-                    }
-                }
-            }
-            if let reportURL {
-                ShareLink(item: reportURL, subject: Text(verbatim: "PicShop diagnostics")) {
-                    Label(app.pendingCrashReport == nil ? L("Share diagnostics") : L("Share the report"), systemImage: "square.and.arrow.up")
-                }
-            }
-            if app.pendingCrashReport != nil {
-                Button(L("Dismiss")) {
-                    Haptics.tap()
-                    app.dismissCrashReport()
-                }
-                .foregroundStyle(PSTheme.textSecondary)
-            }
-        } header: {
-            Text(L("Diagnostics"))
-        } footer: {
-            Text(L("The report says what PicShop was doing, including your last commands, with the device model and free memory. No photos, videos or recordings. It leaves your iPhone only if you share it."))
-        }
-        .task(id: app.pendingCrashReport?.id) {
-            reportURL = app.writeCrashReport()
-        }
-    }
-
-    private var aboutSection: some View {
-        Section {
-            HStack(spacing: 12) {
-                SettingsRowIcon(systemName: "hand.raised.fill", tint: PSTheme.success)
-                Text(L("Photos, videos and voice never leave your device. PicShop has no servers, no accounts and no tracking."))
-                    .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
-            }
-        } header: {
-            Text(L("Privacy"))
-        }
+        .padding(.vertical, 2)
     }
 }
 

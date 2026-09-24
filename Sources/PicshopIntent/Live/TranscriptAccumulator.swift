@@ -45,26 +45,45 @@ public struct TranscriptSnapshot: Sendable, Equatable {
 }
 
 /// Finalized and volatile recognizer segments, per user turn.
+///
+/// Keeps the segments that end after the turn start; a final segment replaces
+/// the volatile text it covers. Recent segments are remembered, so a turn that
+/// begins in the past (0.3 s before a barge-in) still gets its first words.
 public struct TranscriptAccumulator: Sendable {
     public private(set) var snapshot = TranscriptSnapshot()
-    private var turnStart: Double = 0
+    private var turnStart: Double = -.infinity
+    private var finals: [TranscriptSegment] = []
+    private var volatile: TranscriptSegment?
+    /// Segments older than this before the newest one are forgotten.
+    private static let memory: Double = 30
 
     public init() {}
 
     public mutating func beginTurn(at time: Double) {
-        // Phase 0 stub: no filtering by time yet.
         turnStart = time
-        snapshot = TranscriptSnapshot()
+        rebuild()
     }
 
     public mutating func apply(_ segment: TranscriptSegment) -> TranscriptSnapshot {
-        // Phase 0 stub.
         if segment.isFinal {
-            snapshot.finalized = TranscriptSnapshot(finalized: snapshot.finalized, volatile: segment.text).text
-            snapshot.volatile = ""
+            finals.removeAll { $0.start < segment.end && $0.end > segment.start }
+            finals.append(segment)
+            finals.sort { $0.start < $1.start }
+            if let current = volatile, current.start < segment.end { volatile = nil }
+            let horizon = segment.end - Self.memory
+            finals.removeAll { $0.end < horizon }
         } else {
-            snapshot.volatile = segment.text
+            volatile = segment
         }
+        rebuild()
         return snapshot
+    }
+
+    private mutating func rebuild() {
+        let kept = finals.filter { $0.end > turnStart }
+        let finalized = kept.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: " ")
+        var tail = ""
+        if let volatile, volatile.end > turnStart { tail = volatile.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+        snapshot = TranscriptSnapshot(finalized: finalized, volatile: tail)
     }
 }

@@ -3,6 +3,7 @@ import Foundation
 import UIKit
 import PicshopCore
 import PicshopImaging
+import PicshopIntent
 #if canImport(MetricKit)
 import MetricKit
 #endif
@@ -54,6 +55,7 @@ public final class Diagnostics: NSObject, @unchecked Sendable {
     private var previousCrumbs: [String] = []
     private var pending: Report?
     private var started = false
+    private var commandsRedacted = false
     private var observers: [NSObjectProtocol] = []
     private var reportHandler: (@MainActor @Sendable (Report?) -> Void)?
 
@@ -131,10 +133,17 @@ public final class Diagnostics: NSObject, @unchecked Sendable {
 
     // MARK: - Breadcrumbs
 
+    /// True while Picshop Live runs: commands are noted by length only, never their words.
+    public var redactsCommands: Bool {
+        get { lock.withLock { commandsRedacted } }
+        set { lock.withLock { commandsRedacted = newValue } }
+    }
+
     /// Records what the app is doing, with the free memory, in the persisted ring.
+    /// Anything shaped like an Anthropic key is redacted first.
     public func note(_ message: String) {
         let time = Self.timeFormatter.string(from: Date())
-        let line = "\(time) \(message) [\(MemoryBudget.availableDescription) free]"
+        let line = "\(time) \(APIKeyFormat.redact(message)) [\(MemoryBudget.availableDescription) free]"
         let text: String = lock.withLock {
             crumbs.append(line)
             if crumbs.count > Self.breadcrumbLimit { crumbs.removeFirst(crumbs.count - Self.breadcrumbLimit) }
@@ -146,9 +155,13 @@ public final class Diagnostics: NSObject, @unchecked Sendable {
         }
     }
 
-    /// The command about to run (spoken or tapped).
+    /// The command about to run (spoken or tapped). During Live only its length.
     public func noteCommand(_ text: String) {
-        note("command “\(text.prefix(120))”")
+        if redactsCommands {
+            note("command (\(text.count) characters)")
+        } else {
+            note("command “\(text.prefix(120))”")
+        }
     }
 
     public var breadcrumbs: [String] { lock.withLock { crumbs } }

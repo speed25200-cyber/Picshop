@@ -40,7 +40,9 @@ extension VideoEditorSession {
     /// Shows the frame being framed.
     func seekToKeyframe(_ end: MotionKeyframeEnd) {
         guard let clip = selectedClip, let span = timeline.span(of: clip.id) else { return }
-        player.scrub(to: end == .start ? span.start + 0.02 : max(span.start, span.end - 0.04))
+        let target = end == .start ? span.start + 0.02 : max(span.start, span.end - 0.04)
+        let player = self.player
+        Task { await player.seek(to: target) }
     }
 }
 

@@ -1,130 +1,182 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
+import TipKit
 import PicshopSpeech
 import PicshopImaging
 
-/// First launch: a slow spectrum behind the name (the one AI moment of the
-/// screen), four short pages — photo, video, voice, privacy — then the two
-/// permissions and one button.
+/// First launch, three pages: talk to your photos, a conversation rather than
+/// menus (and the microphone), private by default. A slow spectrum at the
+/// top, custom dots, one white button.
 public struct OnboardingView: View {
     @Environment(\.picshop) private var app
     @State private var page = 0
     @State private var micGranted = VoiceController.permissionsGranted
-    @State private var photosGranted = false
+    @State private var permissionsAsked = false
+    @State private var isAsking = false
+
+    static let pageCount = 3
 
     public init() {}
-
-    private struct Page {
-        let symbols: [String]
-        let title: String
-        let text: String
-    }
-
-    private var pages: [Page] {
-        [
-            Page(symbols: ["wand.and.stars", "person.crop.rectangle", "eraser"], title: L("Photo, magically."),
-                 text: L("Erase or move anything, expand the frame, refocus after the shot, put the title behind a person, grade like a colourist. One tap or one sentence.")),
-            Page(symbols: ["captions.bubble", "metronome", "rectangle.portrait"], title: L("Video, like a pro."),
-                 text: L("Edit by the words, captions from the voice, every “euh” cut, cuts on the beat, titles that follow a face, a recap of the best moments.")),
-            Page(symbols: ["waveform"], title: L("Just say it."),
-                 text: L("“Efface le chien”, “make it warmer”, “ajoute des sous-titres”. PicShop understands French and English and edits instantly.")),
-            Page(symbols: ["lock.shield"], title: L("Private by design."),
-                 text: L("Recognition, language models and every pixel stay on your iPhone. Nothing is uploaded, ever.")),
-        ]
-    }
 
     public var body: some View {
         ZStack {
             PSTheme.ink.ignoresSafeArea()
-            IntelligenceField(animated: true)
-                .frame(height: 520)
-                .blur(radius: 60)
-                .opacity(0.5)
-                .frame(maxHeight: .infinity, alignment: .top)
-                .ignoresSafeArea()
-            LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: PSTheme.ink.opacity(0.4), location: 0.35), .init(color: PSTheme.ink, location: 0.62)],
-                           startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
-            VStack(spacing: PSSpacing.xLarge) {
-                VStack(spacing: PSSpacing.xSmall) {
-                    Text("PicShop").font(PSFont.largeTitle()).foregroundStyle(PSTheme.textPrimary)
-                    Text(L("Photo and video, magically.")).font(PSFont.callout()).foregroundStyle(PSTheme.textSecondary)
-                }
-                .padding(.top, PSSpacing.xLarge)
+            // The spectrum over the top 55 %, animated and never blurred.
+            GeometryReader { proxy in
+                IntelligenceField(animated: true)
+                    .frame(height: proxy.size.height * 0.55)
+                    .overlay {
+                        LinearGradient(stops: [
+                            .init(color: PSTheme.ink.opacity(0), location: 0.35),
+                            .init(color: PSTheme.ink, location: 1),
+                        ], startPoint: .top, endPoint: .bottom)
+                    }
+                    .opacity(0.45)
+            }
+            .ignoresSafeArea()
+            .accessibilityHidden(true)
+            VStack(spacing: 0) {
                 TabView(selection: $page) {
-                    ForEach(Array(pages.enumerated()), id: \.offset) { index, item in
-                        VStack(spacing: PSSpacing.large) {
-                            PSGlassContainer(spacing: PSSpacing.medium) {
-                                HStack(spacing: -10) {
-                                    ForEach(Array(item.symbols.enumerated()), id: \.offset) { position, symbol in
-                                        Image(systemName: symbol)
-                                            .font(.system(size: item.symbols.count == 1 ? 40 : 26, weight: .regular))
-                                            .symbolRenderingMode(.hierarchical)
-                                            .foregroundStyle(PSTheme.textPrimary)
-                                            .frame(width: item.symbols.count == 1 ? 104 : 72, height: item.symbols.count == 1 ? 104 : 72)
-                                            .psGlass(shape: AnyShape(Circle()))
-                                            .offset(y: position == 1 ? -10 : 0)
-                                            .zIndex(position == 1 ? 1 : 0)
-                                    }
-                                }
-                            }
-                            .symbolEffect(.bounce, value: page == index)
-                            .padding(.bottom, PSSpacing.small)
-                            Text(item.title).font(.title.weight(.bold)).foregroundStyle(PSTheme.textPrimary).multilineTextAlignment(.center)
-                            Text(item.text).font(PSFont.callout()).foregroundStyle(PSTheme.textSecondary).multilineTextAlignment(.center).padding(.horizontal, PSSpacing.xxLarge)
-                        }
-                        .tag(index)
-                    }
+                    OnboardingTalkPage(isActive: page == 0).tag(0)
+                    OnboardingConversationPage(isActive: page == 1).tag(1)
+                    OnboardingPrivacyPage().tag(2)
                 }
-                .tabViewStyle(.page)
-                .indexViewStyle(.page(backgroundDisplayMode: .always))
-
-                VStack(spacing: PSSpacing.small) {
-                    permissionRow(title: L("Microphone & speech"), granted: micGranted, symbol: "mic.fill") {
-                        micGranted = await VoiceController.requestPermissions()
-                    }
-                    permissionRow(title: L("Save to Photos"), granted: photosGranted, symbol: "photo.on.rectangle") {
-                        photosGranted = await PhotoLibrary.requestAddAccess()
-                    }
-                    Button {
-                        Haptics.magic()
-                        app?.settings.hasCompletedOnboarding = true
-                    } label: { Text(L("Start editing")) }
-                        .buttonStyle(PrimaryButtonStyle())
-                        .padding(.top, PSSpacing.small)
-                }
-                .padding(.horizontal, PSSpacing.xLarge)
-                .padding(.bottom, PSSpacing.mediumLarge)
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                OnboardingDots(count: Self.pageCount, current: page)
+                    .padding(.vertical, PSSpacing.large)
+                buttons
+                    .padding(.horizontal, PSSpacing.xLarge)
+                    .padding(.bottom, PSSpacing.mediumLarge)
             }
         }
         .preferredColorScheme(.dark)
     }
 
-    private func permissionRow(title: String, granted: Bool, symbol: String, request: @escaping () async -> Void) -> some View {
-        Button {
-            Haptics.tap()
-            Task { await request() }
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: symbol)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(granted ? PSTheme.success : PSTheme.textPrimary)
-                    .frame(width: 32, height: 32)
-                    .background(PSTheme.fill, in: Circle())
-                Text(title).font(PSFont.control(selected: true))
-                Spacer()
-                Image(systemName: granted ? "checkmark.circle.fill" : "chevron.right")
-                    .font(.system(size: granted ? 20 : 13, weight: .medium))
-                    .foregroundStyle(granted ? PSTheme.success : PSTheme.textTertiary)
-                    .contentTransition(.symbolEffect(.replace))
-                    .symbolEffect(.bounce, value: granted)
+    /// Pinned at the bottom: the page's primary action, then its secondary one
+    /// (a fixed 44 pt slot, so the primary never moves between pages).
+    @ViewBuilder
+    private var buttons: some View {
+        VStack(spacing: 0) {
+            switch page {
+            case 0:
+                OnboardingPrimaryButton(title: L("Continue")) { advance() }
+                secondarySlot(nil)
+            case 1:
+                if permissionsAsked {
+                    OnboardingPrimaryButton(title: L("Continue"), systemImage: micGranted ? "checkmark.circle.fill" : nil) { advance() }
+                    secondarySlot(nil)
+                } else {
+                    OnboardingPrimaryButton(title: L("Allow microphone"), isBusy: isAsking) { askPermissions() }
+                    secondarySlot(L("Later")) { advance() }
+                }
+            default:
+                OnboardingPrimaryButton(title: L("Get started")) {
+                    Haptics.magic()
+                    app?.settings.hasCompletedOnboarding = true
+                }
+                secondarySlot(nil)
             }
-            .foregroundStyle(PSTheme.textPrimary)
-            .padding(.horizontal, PSSpacing.medium).padding(.vertical, 10)
-            .psGlass(interactive: true)
         }
-        .buttonStyle(PSPressStyle(scale: 0.98))
-        .animation(PSMotion.quick, value: granted)
+        .animation(PSMotion.standard, value: page)
+        .animation(PSMotion.standard, value: permissionsAsked)
+    }
+
+    @ViewBuilder
+    private func secondarySlot(_ title: String?, action: @escaping () -> Void = {}) -> some View {
+        if let title {
+            Button(action: action) {
+                Text(title)
+                    .font(.subheadline)
+                    .foregroundStyle(PSTheme.textSecondary)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, PSSpacing.small)
+        } else {
+            Color.clear.frame(height: 44 + PSSpacing.small).accessibilityHidden(true)
+        }
+    }
+
+    private func advance() {
+        Haptics.tap()
+        withAnimation(PSMotion.standard) { page = min(page + 1, Self.pageCount - 1) }
+    }
+
+    /// The microphone and speech recognition, then adding to Photos; the
+    /// button then reads Continue, with a check when the microphone is allowed.
+    private func askPermissions() {
+        guard !isAsking else { return }
+        Haptics.tap()
+        isAsking = true
+        Task {
+            let granted = await VoiceController.requestPermissions()
+            _ = await PhotoLibrary.requestAddAccess()
+            micGranted = granted
+            isAsking = false
+            permissionsAsked = true
+            if granted { Haptics.success() }
+        }
+    }
+}
+
+/// The white 52 pt primary button of onboarding.
+struct OnboardingPrimaryButton: View {
+    let title: String
+    var systemImage: String?
+    var isBusy = false
+    let action: () -> Void
+
+    init(title: String, systemImage: String? = nil, isBusy: Bool = false, action: @escaping () -> Void) {
+        self.title = title
+        self.systemImage = systemImage
+        self.isBusy = isBusy
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: PSSpacing.small) {
+                if isBusy {
+                    ProgressView().tint(PSTheme.onPrimary)
+                } else if let systemImage {
+                    Image(systemName: systemImage)
+                        .foregroundStyle(PSTheme.success)
+                        .transition(.scale.combined(with: .opacity))
+                }
+                Text(title)
+            }
+            .font(.headline)
+            .foregroundStyle(PSTheme.onPrimary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.capsule)
+        .tint(PSTheme.primary)
+        .frame(height: PSMetrics.largeButton)
+        .disabled(isBusy)
+    }
+}
+
+/// Three 6 pt dots, the current one a 16 × 6 white capsule.
+struct OnboardingDots: View {
+    let count: Int
+    let current: Int
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<count, id: \.self) { index in
+                Capsule()
+                    .fill(index == current ? Color.white : Color.white.opacity(0.3))
+                    .frame(width: index == current ? 16 : 6, height: 6)
+            }
+        }
+        .animation(PSMotion.quick, value: current)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(format: L("Page %d of %d"), current + 1, count))
     }
 }
 
@@ -149,6 +201,10 @@ public struct RootView: View {
         .environment(\.psEffects, environment.performance.effectsLevel)
         .environment(\.psReducedMotion, environment.performance.reduceMotion)
         .animation(.easeInOut, value: environment.settings.hasCompletedOnboarding)
+        .task {
+            // The Live orb's tip; configuring twice throws, which is harmless.
+            try? Tips.configure()
+        }
     }
 }
 #endif

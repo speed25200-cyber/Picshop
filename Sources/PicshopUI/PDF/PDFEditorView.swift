@@ -7,11 +7,13 @@ import PicshopCore
 import PicshopIntent
 import PicshopPDF
 
-/// The PDF editing screen: PDFKit viewer, page strip, markup tools, voice orb.
+/// The PDF editing screen in the studio shell: the pages edge to edge between
+/// the bars, a page pill, Live at the bottom (its orb dictates here, and typed
+/// text runs on the iPhone), every tool behind Outils.
 public struct PDFEditorView: View {
     @State var session: PDFEditorSession
+    @State private var activity = PDFViewerActivity()
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.picshop) private var app
     @State private var pickedImage: PhotosPickerItem?
 
     public init(session: PDFEditorSession) {
@@ -19,29 +21,29 @@ public struct PDFEditorView: View {
     }
 
     public var body: some View {
-        EditorChrome {
-            PDFViewerRepresentable(session: session)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-        } top: {
-            EditorTopBar(
-                title: L("PDF"),
-                subtitle: String(format: L("Page %d of %d"), session.document.currentPageIndex + 1, session.document.pageCount),
-                canUndo: session.history.canUndo, canRedo: session.history.canRedo,
-                onClose: { session.teardown(); dismiss() },
-                onUndo: { session.undo() }, onRedo: { session.redo() },
-                onHelp: { session.showsHelp = true }, onExport: { session.export(); session.showsExport = true })
-        } bottom: {
-            bottomArea
-        }
-        .overlay {
-            if let app { EditorIntelligenceGlow(voice: app.voice, isBusy: session.isProcessing) }
+        #if DEBUG
+        let _ = ViewTrace.changes(Self.self)
+        #endif
+        StudioChrome(bar: bar, actions: actions, live: session.live,
+                     catalog: { PDFToolCatalog.make(session: session) },
+                     isToolOpen: session.activeTool != nil) {
+            PDFCanvas(session: session, activity: activity)
+        } panel: {
+            if let tool = session.activeTool {
+                PDFToolCard(session: session, tool: tool)
+            }
         }
         .overlay { EditorStatusOverlay(session: session) }
         .onAppear { session.configure() }
         .onDisappear { session.teardown() }
-        .sheet(isPresented: $session.showsHelp) { HelpSheet(mode: .pdf) { text in Task { await session.handleTranscript(text) } } }
+        .onChange(of: session.activeTool) { _, tool in
+            // The signature and image tools open their sheet with the panel.
+            if tool == .signature, SignatureStore.currentAsset() == nil { session.showsSignatureSheet = true }
+            if tool == .image { session.showsImagePicker = true }
+        }
+        .sheet(isPresented: $session.showsHelp) {
+            HelpSheet(mode: .pdf) { text in session.live.send(text: text) }
+        }
         .sheet(isPresented: $session.showsSignatureSheet) { SignatureSheet { strokes in session.saveSignature(strokes: strokes) } }
         .sheet(isPresented: $session.showsExport) { PDFExportSheet(session: session) }
         .sheet(item: $session.textEdit) { edit in
@@ -66,42 +68,110 @@ public struct PDFEditorView: View {
         .persistentSystemOverlays(.hidden)
     }
 
-    private var bottomArea: some View {
-        VStack(spacing: 8) {
-            if let tool = session.activeTool {
-                let group = PDFEditorSession.Tool.groups.first { $0.contains(tool) }
-                let grouped = (group?.tools.count ?? 1) > 1
-                ToolPanelContainer(title: grouped ? group?.title ?? tool.title : tool.title, symbol: grouped ? group?.symbol ?? tool.symbol : tool.symbol,
-                                   onClose: { session.activeTool = nil },
-                                   modes: grouped ? AnyView(ModeSegments(modes: group?.tools ?? [], selection: $session.activeTool, title: { $0.title }, symbol: { $0.symbol })) : nil) {
-                    toolPanel(tool)
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.98, anchor: .bottom)))
-            }
-            if let app {
-                VoiceStrip(voice: app.voice, isBusy: session.isProcessing, busyTitle: session.processingTitle,
-                           transcript: session.transcript, plan: session.lastPlan, clarification: session.pendingClarification,
-                           showsHint: session.activeTool == nil,
-                           onChoose: { _ in }, onChooseAll: {}, onCancel: { session.pendingClarification = nil })
-            }
-            HStack(spacing: 8) {
-                GroupedToolDock(groups: PDFEditorSession.Tool.groups, selection: $session.activeTool)
-                if let app { MicButton(voice: app.voice, isBusy: session.isProcessing) }
-            }
-        }
-        .onChange(of: session.activeTool) { _, tool in
-            if tool == .signature, SignatureStore.currentAsset() == nil { session.showsSignatureSheet = true }
-            if tool == .image { session.showsImagePicker = true }
-        }
-        .padding(.horizontal, 10)
-        .padding(.top, 8)
-        .padding(.bottom, 4)
-        .psDockBackground()
-        .animation(PSMotion.standard, value: session.activeTool)
+    private var bar: StudioBar {
+        StudioBar(canUndo: session.canUndo, canRedo: session.canRedo, undoLabels: session.undoLabels, isBusy: session.isProcessing)
     }
 
-    @ViewBuilder
-    private func toolPanel(_ tool: PDFEditorSession.Tool) -> some View {
+    private var actions: StudioActions {
+        let session = session
+        let dismiss = dismiss
+        return StudioActions(close: { dismiss() },
+                             undo: { session.undo() },
+                             redo: { session.redo() },
+                             undoSteps: { steps in session.undo(steps: steps) },
+                             revert: { session.revert() },
+                             export: { session.showsExport = true })
+    }
+}
+
+// MARK: - Canvas
+
+/// The pages under the studio's bars: the viewer fitted between them, edge to
+/// edge across, and the page pill 8 points above the dock.
+struct PDFCanvas: View {
+    let session: PDFEditorSession
+    let activity: PDFViewerActivity
+    @Environment(\.studioEdges) private var studioEdges
+
+    var body: some View {
+        GeometryReader { proxy in
+            let chrome = studioEdges.insets(over: proxy.frame(in: .global))
+            VStack(spacing: 0) {
+                Color.clear.frame(height: chrome.top)
+                PDFViewerRepresentable(session: session, activity: activity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(alignment: .bottom) {
+                        PagePill(session: session, activity: activity)
+                            .padding(.bottom, 8)
+                    }
+                Color.clear.frame(height: chrome.bottom)
+            }
+        }
+        .background(PSTheme.canvas)
+    }
+}
+
+/// '3 / 12' at the bottom centre: shown while the pages move, gone 1.5 s after
+/// they stop; a tap opens Pages. A leaf: the page and the activity are read here only.
+private struct PagePill: View {
+    let session: PDFEditorSession
+    let activity: PDFViewerActivity
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let shows = activity.showsPagePill && session.document.pageCount > 1
+        Button {
+            Haptics.tap()
+            session.activeTool = .pages
+        } label: {
+            Text(verbatim: "\(session.document.currentPageIndex + 1) / \(session.document.pageCount)")
+                .font(PSFont.timecode(12))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .frame(height: 28)
+                .psGlass(interactive: true, variant: .clear)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PSPressStyle(scale: 0.94))
+        .opacity(shows ? 1 : 0)
+        .allowsHitTesting(shows)
+        .animation(reduceMotion ? nil : PSMotion.standard, value: shows)
+        .accessibilityLabel(String(format: L("Page %d of %d"), session.document.currentPageIndex + 1, session.document.pageCount))
+        .accessibilityHint(L("Shows the pages."))
+        .accessibilityHidden(!shows)
+    }
+}
+
+// MARK: - Tools
+
+/// The open tool, inline at the bottom of the studio, with the category's
+/// other tools as segments.
+struct PDFToolCard: View {
+    @Bindable var session: PDFEditorSession
+    let tool: PDFEditorSession.Tool
+
+    var body: some View {
+        let siblings = PDFToolCatalog.siblings(of: tool)
+        ToolPanel(title: siblings.count > 1 ? PDFToolCatalog.categoryTitle(of: tool) : PDFToolCatalog.title(for: tool),
+                  live: session.live, onDone: { session.activeTool = nil }) {
+            VStack(spacing: 12) {
+                if siblings.count > 1 {
+                    ModeSegments(modes: siblings, selection: $session.activeTool,
+                                 title: { PDFToolCatalog.title(for: $0) }, symbol: { $0.symbol })
+                }
+                PDFToolContent(session: session, tool: tool)
+            }
+        }
+    }
+}
+
+/// The controls of one tool.
+private struct PDFToolContent: View {
+    @Bindable var session: PDFEditorSession
+    let tool: PDFEditorSession.Tool
+
+    var body: some View {
         switch tool {
         case .pages:
             PagesStrip(session: session)
@@ -143,6 +213,8 @@ public struct PDFEditorView: View {
                         session.textDraft = ""
                     } label: { Image(systemName: "plus").font(.system(size: 15, weight: .bold)).frame(width: 38, height: 38) }
                         .buttonStyle(.plain).foregroundStyle(PSTheme.onAccent).psAccentFill(Circle())
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityLabel(L("Add Text"))
                 }
                 Text(L("Tap any word on the page to change or erase it — scans included."))
                     .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
@@ -300,39 +372,57 @@ struct TextEditSheet: View {
     }
 }
 
-/// Thumbnail strip with delete/rotate/duplicate actions.
+/// The pages, with rotate, duplicate, save as photo and delete. A tap goes to
+/// the page (no recompose, no history entry); the thumbnails are rendered off
+/// the main thread and cached by page; only the current page casts a shadow.
 struct PagesStrip: View {
     @Bindable var session: PDFEditorSession
 
     var body: some View {
         VStack(spacing: 10) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(Array(session.document.pages.enumerated()), id: \.element.id) { index, page in
-                        let selected = index == session.document.currentPageIndex
-                        VStack(spacing: 5) {
-                            PageThumbnail(session: session, index: index)
-                                .frame(height: 96)
-                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(selected ? PSTheme.accent : PSTheme.hairline, lineWidth: selected ? 2.5 : 1))
-                                .shadow(color: selected ? PSTheme.accent.opacity(0.35) : .clear, radius: 10, y: 4)
-                                .scaleEffect(selected ? 1 : 0.94)
-                                .opacity(selected ? 1 : 0.8)
-                            Text("\(index + 1)")
-                                .font(PSFont.caption(10)).foregroundStyle(selected ? Color.white : PSTheme.textSecondary)
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Capsule().fill(selected ? PSTheme.accent : Color.clear))
+            ScrollViewReader { reader in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(Array(session.document.pages.enumerated()), id: \.element.id) { index, page in
+                            let selected = index == session.document.currentPageIndex
+                            VStack(spacing: 5) {
+                                PageThumbnail(session: session, index: index, page: page)
+                                    .frame(height: 96)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(selected ? PSTheme.accent : PSTheme.hairline, lineWidth: selected ? 2.5 : 1))
+                                    .background {
+                                        if selected {
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black)
+                                                .shadow(color: PSTheme.accent.opacity(0.35), radius: 10, y: 4)
+                                        }
+                                    }
+                                    .scaleEffect(selected ? 1 : 0.94)
+                                    .opacity(selected ? 1 : 0.8)
+                                Text(verbatim: "\(index + 1)")
+                                    .font(PSFont.caption(10)).foregroundStyle(selected ? Color.white : PSTheme.textSecondary)
+                                    .padding(.horizontal, 6).padding(.vertical, 2)
+                                    .background(Capsule().fill(selected ? PSTheme.accent : Color.clear))
+                            }
+                            .animation(PSMotion.quick, value: selected)
+                            .contentShape(Rectangle())
+                            .onTapGesture { Haptics.tick(); session.showPage(index) }
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(String(format: L("Page %d of %d"), index + 1, session.document.pageCount))
+                            .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+                            .contextMenu {
+                                Button { Task { await session.run(EditIntent(action: .rotatePage, degrees: 90, index: index + 1)) } } label: { Label(L("Rotate"), systemImage: "rotate.right") }
+                                Button { Task { await session.run(EditIntent(action: .duplicatePage, index: index + 1)) } } label: { Label(L("Duplicate"), systemImage: "plus.square.on.square") }
+                                Button { Task { await session.run(EditIntent(action: .extractPage, index: index + 1)) } } label: { Label(L("Save as photo"), systemImage: "photo") }
+                                Button(role: .destructive) { Task { await session.run(EditIntent(action: .deletePage, index: index + 1)) } } label: { Label(L("Delete"), systemImage: "trash") }
+                            }
+                            .id(page.id)
                         }
-                        .animation(PSMotion.quick, value: selected)
-                        .onTapGesture { Haptics.tick(); session.update(L("Page")) { $0.goToPage(index) } }
-                        .contextMenu {
-                            Button { Task { await session.run(EditIntent(action: .rotatePage, degrees: 90, index: index + 1)) } } label: { Label(L("Rotate"), systemImage: "rotate.right") }
-                            Button { Task { await session.run(EditIntent(action: .duplicatePage, index: index + 1)) } } label: { Label(L("Duplicate"), systemImage: "plus.square.on.square") }
-                            Button { Task { await session.run(EditIntent(action: .extractPage, index: index + 1)) } } label: { Label(L("Save as photo"), systemImage: "photo") }
-                            Button(role: .destructive) { Task { await session.run(EditIntent(action: .deletePage, index: index + 1)) } } label: { Label(L("Delete"), systemImage: "trash") }
-                        }
-                        .id(page.id)
                     }
+                    .padding(.vertical, 6)
+                }
+                .onAppear {
+                    let pages = session.document.pages
+                    if pages.indices.contains(session.document.currentPageIndex) { reader.scrollTo(pages[session.document.currentPageIndex].id, anchor: .center) }
                 }
             }
             HStack(spacing: 8) {
@@ -345,31 +435,43 @@ struct PagesStrip: View {
     }
 }
 
+/// One page as it looks with its markups, rendered by the session's worker
+/// (off the main thread), again only when that page changes.
 struct PageThumbnail: View {
     let session: PDFEditorSession
     let index: Int
+    let page: PDFPageModel
     @State private var image: UIImage?
 
     var body: some View {
         Group {
-            if let image { Image(uiImage: image).resizable().scaledToFit() } else { PSTheme.surfaceElevated }
+            if let image { Image(uiImage: image).resizable().scaledToFit() } else { PSTheme.surfaceElevated.aspectRatio(0.75, contentMode: .fit) }
         }
-        .task(id: session.document.pages[index].hashValue) {
-            if let page = session.composed?.page(at: index) { image = session.services.thumbnail(page: page, height: 96) }
+        .task(id: "\(index)|\(page.hashValue)") {
+            let worker = session.worker
+            let document = session.document
+            let rendered = await worker.pageThumbnail(index, in: document, height: 96)
+            guard !Task.isCancelled else { return }
+            image = rendered
         }
     }
 }
 
-/// PDFKit viewer that forwards taps and pen strokes to the session.
+/// PDFKit viewer that forwards taps and pen strokes to the session. Edge to
+/// edge: 12 points between pages, each with its own shadow; scrolling shows
+/// the page pill.
 struct PDFViewerRepresentable: UIViewRepresentable {
     let session: PDFEditorSession
+    var activity: PDFViewerActivity?
 
     func makeUIView(context: Context) -> PDFView {
         let view = PDFView()
         view.autoScales = true
         view.displayMode = .singlePageContinuous
         view.displayDirection = .vertical
-        view.backgroundColor = UIColor(red: 0.05, green: 0.05, blue: 0.07, alpha: 1)
+        view.displaysPageBreaks = true
+        view.pageBreakMargins = UIEdgeInsets(top: 6, left: 0, bottom: 6, right: 0)
+        view.backgroundColor = .black
         view.pageShadowsEnabled = true
         view.isUserInteractionEnabled = true
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
@@ -412,6 +514,8 @@ struct PDFViewerRepresentable: UIViewRepresentable {
         // Pan is only for drawing; otherwise let the scroll view scroll.
         context.coordinator.pan?.isEnabled = session.activeTool == .draw
         context.coordinator.session = session
+        context.coordinator.activity = activity
+        context.coordinator.observeScrolling(in: view)
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(session: session) }
@@ -419,9 +523,27 @@ struct PDFViewerRepresentable: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var session: PDFEditorSession
+        var activity: PDFViewerActivity?
         var pan: UIPanGestureRecognizer?
         var isSyncing = false
         var appliedQuery: String?
+        private var scrollObservation: NSKeyValueObservation?
+
+        /// Watches PDFKit's own scroll view (found once the document is shown) for the page pill.
+        func observeScrolling(in view: PDFView) {
+            guard scrollObservation == nil, let scrollView = Self.firstScrollView(in: view) else { return }
+            scrollObservation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.activity?.noteScroll() }
+            }
+        }
+
+        private static func firstScrollView(in view: UIView) -> UIScrollView? {
+            for subview in view.subviews {
+                if let scrollView = subview as? UIScrollView { return scrollView }
+                if let found = firstScrollView(in: subview) { return found }
+            }
+            return nil
+        }
         private var currentPoints: [PSPoint] = []
         private var drawingPage: PDFPage?
 
@@ -635,7 +757,7 @@ struct PDFExportSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("Done")) { dismiss() } } }
             // Always re-export on open, so the shared file carries the latest edits.
-            .onAppear { session.export() }
+            .task { await session.export() }
         }
         .preferredColorScheme(.dark)
         .presentationDetents([.large])
@@ -665,23 +787,12 @@ struct PDFExportSheet: View {
                 .padding(12)
         }
         .task {
-            guard preview == nil, let page = session.composed?.page(at: session.document.currentPageIndex) else { return }
-            preview = session.services.thumbnail(page: page, height: 360)
+            guard preview == nil else { return }
+            preview = await session.worker.pageThumbnail(session.document.currentPageIndex, in: session.document, height: 360)
         }
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(PSTheme.strokeGradient, lineWidth: 1))
         .shadow(color: .black.opacity(0.4), radius: 18, y: 10)
-    }
-}
-
-extension PDFEditorSession.Tool {
-    /// Dock entries, grouped by purpose. Sub-modes appear as segments in the panel.
-    static var groups: [ToolGroup<PDFEditorSession.Tool>] {
-        [
-            ToolGroup(id: "pages", title: L("Pages"), symbol: "doc.on.doc", tools: [.pages]),
-            ToolGroup(id: "markup", title: L("Mark up"), symbol: "highlighter", tools: [.highlight, .draw]),
-            ToolGroup(id: "add", title: L("Add"), symbol: "plus.square.on.square", tools: [.text, .signature, .image]),
-        ]
     }
 }
 #endif

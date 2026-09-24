@@ -4,14 +4,30 @@ import AVFoundation
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import CoreVideo
+import Metal
 import PicshopCore
 import PicshopImaging
 
 /// Draws every frame of the composition: per-clip geometry and colour,
 /// transitions between the A/B tracks, and text overlays. All work runs on
-/// the GPU through the shared Core Image context.
+/// the GPU through the compositor's own Core Image context.
 public final class PicshopCompositor: NSObject, AVVideoCompositing {
-    private let context = RenderContext.shared
+    /// Every video frame is new, so nothing is worth caching between them; its
+    /// own context keeps the frames out of the photo canvas's cache.
+    static let frameContext: CIContext = {
+        let options: [CIContextOption: Any] = [
+            .workingColorSpace: RenderContext.workingColorSpace,
+            .outputColorSpace: RenderContext.colorSpace,
+            .cacheIntermediates: false,
+            .name: "compositor",
+        ]
+        if let device = MTLCreateSystemDefaultDevice() {
+            return CIContext(mtlDevice: device, options: options)
+        }
+        return CIContext(options: options)
+    }()
+
+    private let context = PicshopCompositor.frameContext
     private let queue = DispatchQueue(label: "com.picshop.compositor", qos: .userInteractive)
     private var overlayCache: [String: CIImage] = [:]
     private var captionCache: [String: CIImage] = [:]

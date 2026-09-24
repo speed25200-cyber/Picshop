@@ -11,6 +11,28 @@ enum ToolItem: Identifiable {
         case .panel(let id, _, _, _, _), .action(let id, _, _, _, _): return id
         }
     }
+
+    var title: String {
+        switch self {
+        case .panel(_, let title, _, _, _), .action(_, let title, _, _, _): return title
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .panel(_, _, let symbol, _, _), .action(_, _, let symbol, _, _): return symbol
+        }
+    }
+
+    var isMagic: Bool {
+        if case .action(_, _, _, let isMagic, _) = self { return isMagic }
+        return false
+    }
+
+    var isModified: Bool {
+        if case .panel(_, _, _, let isModified, _) = self { return isModified }
+        return false
+    }
 }
 
 /// A segment of the Outils sheet (at most 5 per editor).
@@ -41,38 +63,48 @@ struct ToolCatalog {
     var footer: [ToolFooterItem]
 }
 
+/// What a tap in the sheet asks StudioChrome to do once it closes the sheet.
+enum ToolsSheetPick {
+    /// Open a panel 0.15 s after the sheet starts leaving, so the panel rises as it goes.
+    case panel(() -> Void)
+    /// Run once the sheet has gone (it may present something itself).
+    case action(() -> Void)
+}
+
 /// The Outils sheet: a category bar, a grid of tiles and footer rows. A panel
-/// tile closes the sheet and opens its panel 0.15 s later, so the panel rises
-/// as the sheet leaves; an action tile closes the sheet, then runs.
-///
-/// Phase 0: the bar, the grid and the footer. The zoom transition from the
-/// Outils button and the tile polish follow.
+/// tile closes the sheet and opens its panel as the sheet leaves; an action
+/// tile or a footer button closes the sheet, then runs. A category holding a
+/// single panel opens it straight away. At accessibility text sizes the tiles
+/// become a two-column list.
 struct ToolsSheet: View {
     let catalog: ToolCatalog
-    let onDismiss: () -> Void
+    let onPick: (ToolsSheetPick) -> Void
     @AppStorage private var lastCategory: String
+    @Environment(\.dynamicTypeSize) private var typeSize
 
-    init(catalog: ToolCatalog, onDismiss: @escaping () -> Void) {
+    init(catalog: ToolCatalog, onPick: @escaping (ToolsSheetPick) -> Void) {
         self.catalog = catalog
-        self.onDismiss = onDismiss
+        self.onPick = onPick
         _lastCategory = AppStorage(wrappedValue: "", "tools.lastCategory.\(catalog.editorKind)")
     }
 
+    private var categories: [ToolCategory] { Array(catalog.categories.prefix(5)) }
+
     private var selected: ToolCategory? {
-        catalog.categories.first { $0.id == lastCategory } ?? catalog.categories.first
+        categories.first { $0.id == lastCategory && $0.items.count > 1 } ?? categories.first { $0.items.count > 1 } ?? categories.first
     }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                if catalog.categories.count > 1 {
+                if categories.count > 1 {
                     categoryBar
                 }
                 if let selected {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: PSMetrics.toolTile), spacing: 12)], spacing: 12) {
-                        ForEach(selected.items) { item in
-                            tile(item)
-                        }
+                    if typeSize.isAccessibilitySize {
+                        list(selected.items)
+                    } else {
+                        grid(selected.items)
                     }
                 }
                 if !catalog.footer.isEmpty {
@@ -82,22 +114,30 @@ struct ToolsSheet: View {
             .padding(.horizontal, 20)
             .padding(.top, 8)
             .padding(.bottom, 20)
+            .animation(PSMotion.quick, value: selected?.id)
         }
+        .scrollBounceBehavior(.basedOnSize)
         .presentationDetents([.height(360), .large])
         .presentationDragIndicator(.visible)
+        .preferredColorScheme(.dark)
     }
+
+    // MARK: Categories
 
     private var categoryBar: some View {
         HStack(spacing: 4) {
-            ForEach(catalog.categories.prefix(5)) { category in
+            ForEach(categories) { category in
                 let isSelected = category.id == selected?.id
                 Button {
-                    Haptics.tick()
-                    lastCategory = category.id
+                    choose(category)
                 } label: {
                     VStack(spacing: 4) {
-                        Image(systemName: category.symbol).font(.system(size: 20, weight: .medium))
-                        Text(category.title).font(.caption.weight(.medium)).lineLimit(1).minimumScaleFactor(0.8)
+                        Image(systemName: category.symbol)
+                            .font(.system(size: 20, weight: .medium))
+                        Text(category.title)
+                            .font(.caption.weight(.medium))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                     }
                     .foregroundStyle(isSelected ? PSTheme.onPrimary : PSTheme.textSecondary)
                     .frame(maxWidth: .infinity, minHeight: 60)
@@ -105,93 +145,171 @@ struct ToolsSheet: View {
                     .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(PSPressStyle(scale: 0.96))
+                .accessibilityLabel(category.title)
                 .accessibilityAddTraits(isSelected ? [.isSelected] : [])
             }
         }
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
     }
 
-    private func tile(_ item: ToolItem) -> some View {
-        let shape = RoundedRectangle(cornerRadius: PSRadius.toolTile, style: .continuous)
-        let title: String
-        let symbol: String
-        let isMagic: Bool
-        let isModified: Bool
-        switch item {
-        case .panel(_, let panelTitle, let panelSymbol, let modified, _):
-            title = panelTitle; symbol = panelSymbol; isMagic = false; isModified = modified
-        case .action(_, let actionTitle, let actionSymbol, let magic, _):
-            title = actionTitle; symbol = actionSymbol; isMagic = magic; isModified = false
-        }
-        return Button {
+    /// A single-panel category opens its panel; the others show their tiles.
+    private func choose(_ category: ToolCategory) {
+        if category.items.count == 1, let only = category.items.first {
             Haptics.tap()
-            choose(item)
-        } label: {
-            VStack(spacing: 6) {
-                Group {
-                    if isMagic {
-                        MagicGlyph(size: 22, symbol: symbol)
-                    } else {
-                        Image(systemName: symbol).font(.system(size: 22, weight: .medium)).foregroundStyle(PSTheme.textPrimary)
-                    }
-                }
-                .frame(maxWidth: .infinity, minHeight: 60)
-                .background(shape.fill(PSTheme.fill))
-                .overlay(alignment: .topTrailing) {
-                    Circle().fill(PSTheme.accent).frame(width: 5, height: 5)
-                        .padding(8)
-                        .opacity(isModified ? 1 : 0)
-                }
-                Text(title)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(PSTheme.textSecondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(minHeight: 84, alignment: .top)
-            .contentShape(Rectangle())
+            pick(only)
+            return
         }
-        .buttonStyle(PSPressStyle(scale: 0.96))
-        .accessibilityLabel(title)
-        .accessibilityValue(isModified ? L("Edited") : "")
+        Haptics.tick()
+        lastCategory = category.id
     }
+
+    // MARK: Tiles
+
+    private func grid(_ items: [ToolItem]) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: PSMetrics.toolTile), spacing: 12)], spacing: 12) {
+            ForEach(items) { item in
+                Button {
+                    Haptics.tap()
+                    pick(item)
+                } label: {
+                    ToolTile(item: item)
+                }
+                .buttonStyle(PSPressStyle(scale: 0.96))
+                .accessibilityLabel(item.title)
+                .accessibilityValue(item.isModified ? L("Edited") : "")
+            }
+        }
+    }
+
+    private func list(_ items: [ToolItem]) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            ForEach(items) { item in
+                Button {
+                    Haptics.tap()
+                    pick(item)
+                } label: {
+                    HStack(spacing: 10) {
+                        ToolGlyph(item: item, size: 20)
+                        Text(item.title)
+                            .font(.body)
+                            .foregroundStyle(PSTheme.textPrimary)
+                            .multilineTextAlignment(.leading)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: PSRadius.toolTile, style: .continuous).fill(PSTheme.fill))
+                    .overlay(alignment: .topTrailing) { ModifiedDot(isOn: item.isModified) }
+                    .contentShape(RoundedRectangle(cornerRadius: PSRadius.toolTile, style: .continuous))
+                }
+                .buttonStyle(PSPressStyle(scale: 0.97))
+                .accessibilityValue(item.isModified ? L("Edited") : "")
+            }
+        }
+    }
+
+    private func pick(_ item: ToolItem) {
+        switch item {
+        case .panel(_, _, _, _, let open): onPick(.panel(open))
+        case .action(_, _, _, _, let run): onPick(.action(run))
+        }
+    }
+
+    // MARK: Footer
 
     private var footer: some View {
         VStack(spacing: 0) {
-            ForEach(catalog.footer) { item in
+            ForEach(Array(catalog.footer.enumerated()), id: \.element.id) { index, item in
+                if index > 0 {
+                    Rectangle().fill(PSTheme.hairline).frame(height: 1)
+                }
                 switch item {
                 case .toggle(_, let title, let isOn):
-                    Toggle(title, isOn: isOn)
-                        .font(.body)
-                        .foregroundStyle(PSTheme.textPrimary)
-                        .frame(minHeight: 44)
+                    Toggle(isOn: isOn) {
+                        Text(title).font(.body).foregroundStyle(PSTheme.textPrimary)
+                    }
+                    .tint(PSTheme.success)
+                    .frame(minHeight: 44)
+                    .sensoryFeedback(.selection, trigger: isOn.wrappedValue)
                 case .button(_, let title, let systemImage, let action):
                     Button {
                         Haptics.tap()
-                        action()
+                        onPick(.action(action))
                     } label: {
-                        Label(title, systemImage: systemImage)
-                            .font(.body)
-                            .foregroundStyle(PSTheme.textPrimary)
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                            .contentShape(Rectangle())
+                        HStack(spacing: 12) {
+                            Image(systemName: systemImage)
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundStyle(PSTheme.textSecondary)
+                                .frame(width: 24)
+                            Text(title).font(.body).foregroundStyle(PSTheme.textPrimary)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(PSTheme.textTertiary)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(PSPressStyle(scale: 0.98))
                 }
             }
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 2)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(PSTheme.fill.opacity(0.6)))
     }
+}
 
-    private func choose(_ item: ToolItem) {
-        onDismiss()
-        switch item {
-        case .panel(_, _, _, _, let open):
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(150))
-                open()
-            }
-        case .action(_, _, _, _, let run):
-            run()
+/// A 76 × 84 tile: the symbol on a 76 × 60 plate, the name under it.
+private struct ToolTile: View {
+    let item: ToolItem
+
+    var body: some View {
+        let plate = RoundedRectangle(cornerRadius: PSRadius.toolTile, style: .continuous)
+        VStack(spacing: 6) {
+            ToolGlyph(item: item, size: 22)
+                .frame(maxWidth: .infinity, minHeight: 60)
+                .background(plate.fill(PSTheme.fill))
+                .overlay(alignment: .topTrailing) { ModifiedDot(isOn: item.isModified) }
+            Text(item.title)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(PSTheme.textSecondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.85)
         }
+        .frame(minWidth: PSMetrics.toolTile, minHeight: 84, alignment: .top)
+        .contentShape(Rectangle())
+    }
+}
+
+/// A MagicGlyph for AI actions, a white symbol for manual tools.
+private struct ToolGlyph: View {
+    let item: ToolItem
+    let size: CGFloat
+
+    var body: some View {
+        if item.isMagic {
+            MagicGlyph(size: size, symbol: item.symbol)
+        } else {
+            Image(systemName: item.symbol)
+                .font(.system(size: size, weight: .medium))
+                .foregroundStyle(PSTheme.textPrimary)
+        }
+    }
+}
+
+/// Photos' 5-point yellow dot: this tool's edits are in the picture.
+private struct ModifiedDot: View {
+    let isOn: Bool
+
+    var body: some View {
+        Circle()
+            .fill(PSTheme.accent)
+            .frame(width: 5, height: 5)
+            .padding(8)
+            .opacity(isOn ? 1 : 0)
+            .accessibilityHidden(true)
     }
 }
 
@@ -202,14 +320,21 @@ extension ToolCatalog {
         ToolCatalog(editorKind: "preview", categories: [
             ToolCategory(id: "magic", title: "Magie", symbol: "sparkles", items: [
                 .action(id: "enhance", title: "Améliorer", symbol: "wand.and.stars", isMagic: true, run: {}),
-                .action(id: "cleanup", title: "Nettoyer", symbol: "eraser", isMagic: true, run: {}),
+                .action(id: "cleanup", title: "Nettoyer", symbol: "person.2.slash", isMagic: true, run: {}),
+                .action(id: "expand", title: "Étendre", symbol: "arrow.up.left.and.arrow.down.right", isMagic: true, run: {}),
+                .action(id: "sky", title: "Ciel coucher de soleil", symbol: "sun.horizon", isMagic: true, run: {}),
                 .panel(id: "focus", title: "Flou portrait", symbol: "camera.aperture", isModified: true, open: open),
             ]),
             ToolCategory(id: "light", title: "Lumière et couleur", symbol: "dial.medium", items: [
                 .panel(id: "adjust", title: "Réglages", symbol: "slider.horizontal.3", isModified: true, open: open),
+                .panel(id: "color", title: "Couleur", symbol: "paintpalette", isModified: false, open: open),
                 .panel(id: "looks", title: "Filtres", symbol: "camera.filters", isModified: false, open: open),
             ]),
+            ToolCategory(id: "crop", title: "Cadrer", symbol: "crop.rotate", items: [
+                .panel(id: "crop", title: "Recadrer", symbol: "crop.rotate", isModified: false, open: open),
+            ]),
         ], footer: [
+            .toggle(id: "split", title: "Avant/après côte à côte", isOn: .constant(false)),
             .button(id: "help", title: "Que puis-je dire ?", systemImage: "questionmark.circle", action: {}),
         ])
     }
@@ -219,13 +344,17 @@ private struct ToolsSheetPreview: View {
     var body: some View {
         PSTheme.canvas
             .sheet(isPresented: .constant(true)) {
-                ToolsSheet(catalog: .preview(open: {}), onDismiss: {})
+                ToolsSheet(catalog: .preview(open: {}), onPick: { _ in })
             }
     }
 }
 
 #Preview("ToolsSheet") {
     ToolsSheetPreview()
+}
+
+#Preview("ToolsSheet, accessibility size") {
+    ToolsSheetPreview().dynamicTypeSize(.accessibility2)
 }
 #endif
 #endif

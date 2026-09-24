@@ -32,12 +32,16 @@ public struct RawIntentStep: Codable, Sendable, Equatable {
     public var scope: String?
     /// For replaceText: the new words.
     public var replacement: String?
+    /// Where the object is in the last image the model saw (0...1, top-left origin).
+    public var point: PSPoint?
+    /// Words that tell the object apart: a colour, clothing ("red", "blue shirt").
+    public var attributes: [String]?
 
     public init(action: String, target: String? = nil, spatialHint: String? = nil, ordinal: Int? = nil, all: Bool? = nil, parameter: String? = nil,
                 amountMode: String? = nil, amount: Double? = nil, look: String? = nil, aspect: String? = nil, degrees: Double? = nil, flipAxis: String? = nil,
                 text: String? = nil, placement: String? = nil, color: String? = nil, background: String? = nil, startSeconds: Double? = nil,
                 endSeconds: Double? = nil, seconds: Double? = nil, clipNumber: Int? = nil, transition: String? = nil, speed: Double? = nil,
-                choiceIndex: Int? = nil, scope: String? = nil, replacement: String? = nil) {
+                choiceIndex: Int? = nil, scope: String? = nil, replacement: String? = nil, point: PSPoint? = nil, attributes: [String]? = nil) {
         self.action = action
         self.target = target
         self.spatialHint = spatialHint
@@ -63,6 +67,78 @@ public struct RawIntentStep: Codable, Sendable, Equatable {
         self.choiceIndex = choiceIndex
         self.scope = scope
         self.replacement = replacement
+        self.point = point
+        self.attributes = attributes
+    }
+}
+
+/// What a step's `amount` counts, per action. Models say amounts the way the
+/// prompt documents them (percent, seconds, a multiplier); the executors read
+/// normalised values, so each unit converts differently.
+public enum AmountUnit: Sendable, Equatable {
+    /// -100...100 style: divided by 100.
+    case percent(ClosedRange<Double>)
+    /// Already a fraction; a value above 1 is read as a percentage.
+    case fraction(ClosedRange<Double>)
+    case seconds(ClosedRange<Double>)
+    case multiplier(ClosedRange<Double>)
+
+    /// The range the model may use, in the unit's own terms.
+    public var range: ClosedRange<Double> {
+        switch self {
+        case .percent(let range), .fraction(let range), .seconds(let range), .multiplier(let range): return range
+        }
+    }
+
+    /// The unit table; nil for actions whose amount keeps the historical reading.
+    public static func `for`(_ action: IntentAction) -> AmountUnit? {
+        switch action {
+        case .adjust, .selectiveAdjust: return .percent(-100...100)
+        case .applyLook, .blurBackground, .autoEnhance, .denoise, .sharpen: return .percent(0...100)
+        case .setVolume: return .percent(0...200)
+        case .moveObject: return .fraction(0.05...0.5)
+        case .removeSilences: return .fraction(0.2...0.45)
+        case .autoDuck: return .fraction(0...0.9)
+        case .recolor, .splitScenes: return .fraction(0...1)
+        case .fadeAudio: return .seconds(0...10)
+        case .highlights: return .seconds(5...300)
+        case .upscale: return .multiplier(2...4)
+        case .punchIns: return .multiplier(1...1.5)
+        case .speedRamp: return .multiplier(0.1...1)
+        case .setSpeed: return .multiplier(0.1...8)
+        default: return nil
+        }
+    }
+
+    /// The range a validated amount must fall in. Relative percentages may go both ways.
+    public func acceptedRange(mode: AmountSpec.Mode) -> ClosedRange<Double> {
+        switch self {
+        case .percent(let range):
+            if mode == .multiplier { return 0...4 }
+            return mode == .relative ? -range.upperBound...range.upperBound : range
+        default:
+            return range
+        }
+    }
+
+    /// Converts a model amount into the executor's AmountSpec, clamped to the table.
+    public func spec(_ amount: Double, mode: AmountSpec.Mode) -> AmountSpec {
+        switch self {
+        case .percent(let range):
+            if mode == .multiplier { return .multiplier(amount.clamped(to: 0...4)) }
+            let accepted = mode == .relative ? -range.upperBound...range.upperBound : range
+            return AmountSpec(mode: mode, value: amount.clamped(to: accepted) / 100)
+        case .fraction(let range):
+            let value = abs(amount) > 1 ? amount / 100 : amount
+            return .absolute(value.clamped(to: range))
+        case .seconds(let range), .multiplier(let range):
+            return .absolute(amount.clamped(to: range))
+        }
+    }
+
+    /// Actions whose amount 0 means "take it off" even though 0 is outside their range.
+    public static func removesAtZero(_ action: IntentAction) -> Bool {
+        action == .punchIns
     }
 }
 
@@ -107,20 +183,36 @@ public enum IntentNormalizer {
             if step.all == true { object.matchesAll = true }
             intent.target = object
         }
-        if let parameter = step.parameter { intent.parameter = ParameterVocabulary.parameter(named: parameter) }
-        if let amount = step.amount {
+        // Exact names first: the fuzzy lookups lower-case camelCase names (noiseReduction) and mix up neighbours (slideRight).
+        if let parameter = step.parameter { intent.parameter = AdjustmentParameter(rawValue: parameter) ?? ParameterVocabulary.parameter(named: parameter) }
+        if let point = step.point {
+            // A point alone still names something: whatever is there.
+            if intent.target == nil { intent.target = ObjectTarget(label: "object", originalPhrase: "object") }
+            intent.target?.point = PSPoint(x: point.x.clamped(to: 0...1), y: point.y.clamped(to: 0...1))
+        }
+        if let attributes = step.attributes?.map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) }).filter({ !$0.isEmpty }), !attributes.isEmpty, intent.target != nil {
+            intent.target?.attributes = attributes
+        }
+        if let amount = step.amount, amount.isFinite {
             let mode: AmountSpec.Mode
             switch step.amountMode?.lowercased() {
             case "absolute", "set", "to": mode = .absolute
             case "multiplier", "multiply", "times": mode = .multiplier
             default: mode = .relative
             }
-            var value = amount
-            if mode != .multiplier, abs(value) > 1 { value /= 100 }
-            intent.amount = AmountSpec(mode: mode, value: mode == .multiplier ? value : value.clamped(to: -1...1))
+            if AmountUnit.removesAtZero(action), amount <= 0.01 {
+                intent.amount = .absolute(0)
+            } else if let unit = AmountUnit.for(action) {
+                intent.amount = unit.spec(amount, mode: mode)
+            } else {
+                // Actions outside the unit table keep the historical reading.
+                var value = amount
+                if mode != .multiplier, abs(value) > 1 { value /= 100 }
+                intent.amount = AmountSpec(mode: mode, value: mode == .multiplier ? value : value.clamped(to: -1...1))
+            }
         }
-        if let look = step.look { intent.look = FilterPreset.matching(look) }
-        if let aspect = step.aspect { intent.aspect = AspectPreset.matching(aspect) ?? AspectPreset(rawValue: aspect) }
+        if let look = step.look { intent.look = FilterPreset(rawValue: look) ?? FilterPreset.matching(look) }
+        if let aspect = step.aspect { intent.aspect = AspectPreset(rawValue: aspect) ?? AspectPreset.matching(aspect) }
         if let degrees = step.degrees { intent.degrees = degrees }
         if let axis = step.flipAxis?.lowercased() { intent.flipAxis = axis.hasPrefix("v") ? .vertical : .horizontal }
         if let text = step.text, !text.isEmpty { intent.text = text }
@@ -136,8 +228,8 @@ public enum IntentNormalizer {
         else if let start = step.startSeconds, step.endSeconds == nil, action == .deleteRange { intent.timeRange = TimeSpan(start: start, end: context.timelineDuration) }
         if let seconds = step.seconds { intent.time = seconds }
         if let clip = step.clipNumber, clip != 0 { intent.clipIndex = clip }
-        if let transition = step.transition { intent.transition = TransitionKind.matching(transition) ?? TransitionKind(rawValue: transition) }
-        if let speed = step.speed, speed > 0 { intent.amount = .absolute(speed) }
+        if let transition = step.transition { intent.transition = TransitionKind(rawValue: transition) ?? TransitionKind.matching(transition) }
+        if let speed = step.speed, speed > 0 { intent.amount = .absolute(speed.clamped(to: 0.1...8)) }
         if let choice = step.choiceIndex, choice > 0 { intent.index = choice }
         if let scope = step.scope, let resolved = TargetScope(rawValue: scope.lowercased()) { intent.scope = resolved }
 
@@ -156,7 +248,7 @@ public enum IntentNormalizer {
         case .highlights:
             // The recap's length is in seconds, never a percentage.
             let length = step.seconds ?? step.amount.map { abs($0) }
-            intent.amount = length.flatMap { $0 >= 5 ? .absolute($0) : nil }
+            intent.amount = length.flatMap { $0 >= 5 ? .absolute(min($0, 300)) : nil }
             intent.time = nil
         default: break
         }

@@ -1,0 +1,12 @@
+{
+  "A 20-minute session: cache read above 0 on every turn after the first; note the thermal state.": "Une session de 20 minutes : lecture du cache supérieure à 0 à chaque tour après le premier ; note l'état thermique.",
+  "A phone call in the middle of a reply.": "Un appel téléphonique au milieu d'une réponse.",
+  "A revoked key.": "Une clé révoquée.",
+  "AirPods: full barge-in by default. Check the voice quality.": "AirPods : interruption par la voix active par défaut. Vérifie la qualité de la voix.",
+  "Airplane mode in the middle of a turn.": "Le mode Avion au milieu d'un échange.",
+  "Café noise: the end of your turn is detected in under 2 s.": "Bruit de café : la fin de ta phrase est détectée en moins de 2 s.",
+  "Downloading the speech model…": "Téléchargement du modèle vocal…",
+  "Loudspeaker at full volume in a quiet room: talk over the assistant in safe mode. It must not interrupt itself. Say “stop”: it stops within 0.3 s.": "Haut-parleur à fond dans une pièce calme : parle par-dessus l'assistant en mode sûr. Il ne doit pas s'interrompre tout seul. Dis « stop » : il s'arrête en moins de 0,3 s.",
+  "Turn on Let me interrupt and repeat step 1, noting false interruptions in the decisions list.": "Active « Me laisser l'interrompre » et refais l'étape 1, en notant les fausses interruptions dans la liste des décisions.",
+  "VoiceOver on: turn-taking.": "VoiceOver activé : chacun son tour de parole."
+}

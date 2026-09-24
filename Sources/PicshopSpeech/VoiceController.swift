@@ -91,8 +91,7 @@ public final class VoiceController {
 
     /// True while Picshop Live owns the audio session: `start()` then sets `.unavailable`.
     public var isBlockedByLive: Bool {
-        // Phase 0 stub: Live never owns the audio session yet.
-        false
+        AudioSessionArbiter.shared.owner == .live
     }
 
     /// False while a session is still starting or being released.
@@ -111,6 +110,11 @@ public final class VoiceController {
     ///   lets a spoken reply finish first; a tap cuts it so the microphone does not hear it.
     public func start(waitingForSpeech: Bool = false) {
         guard canStart else { return }
+        guard !isBlockedByLive else {
+            // Live's engine owns the microphone; a second recognizer would fight it.
+            state = .unavailable(PicshopError.speechUnavailable("Picshop Live is using the microphone").message)
+            return
+        }
         generation += 1
         let current = generation
         state = .preparing
@@ -158,7 +162,7 @@ public final class VoiceController {
         var tapInstalled = false
         let engine = audioEngine
         do {
-            try configureAudioSession()
+            try await AudioSessionArbiter.shared.acquire(.pushToTalk)
             let session = try await makeSession()
             created = session
             guard current == generation else { throw CancellationError() }
@@ -220,6 +224,7 @@ public final class VoiceController {
         isEnding = false
         level = 0
         levelSmoother = 0
+        AudioSessionArbiter.shared.release(.pushToTalk)
         guard current == generation else { return }
         state = .idle
         let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -298,6 +303,7 @@ public final class VoiceController {
 
     private func handleResult(_ text: String, isFinal: Bool, generation current: Int) {
         guard current == generation else { return }
+        if text != partialTranscript { onPartialTranscript?(text) }
         partialTranscript = text
         if !text.isEmpty {
             heardSpeech = true
@@ -344,14 +350,6 @@ public final class VoiceController {
         }
     }
 
-    private func configureAudioSession() throws {
-        #if os(iOS) || os(tvOS) || os(visionOS)
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker, .duckOthers])
-        try session.setActive(true, options: [])
-        #endif
-    }
-
     /// A fresh recogniser per utterance; its converter is built later from the tap's format.
     private func makeSession() async throws -> any TranscriptionSession {
         if #available(iOS 26.0, macOS 26.0, *) {
@@ -389,9 +387,9 @@ protocol TranscriptionSession: AnyObject, Sendable {
 final class AnalyzerTranscriptionSession: TranscriptionSession, @unchecked Sendable {
     private let transcriber: SpeechTranscriber
     private let analyzer: SpeechAnalyzer
-    private let analyzerFormat: AVAudioFormat?
+    /// Converts the tap's buffers to the analyzer's format (shared with Live).
+    private let converter: AnalyzerInputConverter
     /// Guarded by `lock`: `append` runs on the audio thread while `finish` runs elsewhere.
-    private var converter: AVAudioConverter?
     private var continuation: AsyncStream<AnalyzerInput>.Continuation?
     private var resultsTask: Task<Void, Never>?
     private let lock = NSLock()
@@ -411,17 +409,12 @@ final class AnalyzerTranscriptionSession: TranscriptionSession, @unchecked Senda
         if let installation {
             try await installation.downloadAndInstall()
         }
-        analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
+        let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
+        converter = AnalyzerInputConverter(outputFormat: format)
     }
 
     func prepare(inputFormat: AVAudioFormat) {
-        let converter = Self.converter(from: inputFormat, to: analyzerFormat)
-        lock.withLock { self.converter = converter }
-    }
-
-    private static func converter(from input: AVAudioFormat, to output: AVAudioFormat?) -> AVAudioConverter? {
-        guard let output, input.sampleRate > 0, input.channelCount > 0, input != output else { return nil }
-        return AVAudioConverter(from: input, to: output)
+        converter.prepare(inputFormat: inputFormat)
     }
 
     func start(onResult: @escaping @Sendable (String, Bool) -> Void) async throws {
@@ -451,40 +444,10 @@ final class AnalyzerTranscriptionSession: TranscriptionSession, @unchecked Senda
     }
 
     func append(_ buffer: AVAudioPCMBuffer) {
-        let inputFormat = buffer.format
-        guard buffer.frameLength > 0, inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else { return }
-        // One snapshot per buffer; a buffer in a new format (route change) gets a new converter.
-        let (continuation, converter): (AsyncStream<AnalyzerInput>.Continuation?, AVAudioConverter?) = lock.withLock {
-            if let current = self.converter, current.inputFormat != inputFormat {
-                self.converter = Self.converter(from: inputFormat, to: analyzerFormat)
-            } else if self.converter == nil, let analyzerFormat, analyzerFormat != inputFormat {
-                self.converter = Self.converter(from: inputFormat, to: analyzerFormat)
-            }
-            return (self.continuation, self.converter)
-        }
-        guard let continuation else { return }
-        if let converter, let analyzerFormat {
-            let ratio = analyzerFormat.sampleRate / inputFormat.sampleRate
-            guard ratio.isFinite, ratio > 0 else { return }
-            let capacity = AVAudioFrameCount(min(Double(UInt32.max / 2), (Double(buffer.frameLength) * ratio).rounded(.up))) + 32
-            guard let converted = AVAudioPCMBuffer(pcmFormat: analyzerFormat, frameCapacity: capacity) else { return }
-            var consumed = false
-            var error: NSError?
-            converter.convert(to: converted, error: &error) { _, status in
-                if consumed {
-                    status.pointee = .noDataNow
-                    return nil
-                }
-                consumed = true
-                status.pointee = .haveData
-                return buffer
-            }
-            if error == nil, converted.frameLength > 0 {
-                continuation.yield(AnalyzerInput(buffer: converted))
-            }
-        } else if analyzerFormat == nil || analyzerFormat == inputFormat {
-            continuation.yield(AnalyzerInput(buffer: buffer))
-        }
+        guard let continuation = lock.withLock({ self.continuation }) else { return }
+        // A buffer in a new format (route change) gets a new converter inside.
+        guard let converted = converter.convert(buffer) else { return }
+        continuation.yield(AnalyzerInput(buffer: converted))
     }
 
     func finish() async throws -> String {

@@ -2,6 +2,7 @@
 import SwiftUI
 import UIKit
 import CoreImage
+import Observation
 import PicshopCore
 import PicshopImaging
 
@@ -32,6 +33,115 @@ struct MetalCanvasRepresentable: UIViewRepresentable {
     }
 }
 
+// MARK: - Viewport and stroke (leaf state)
+
+/// Zoom and pan of the canvas. Only the stage (the frame driver's content)
+/// and its overlay leaves read it, so a pinch never re-evaluates the canvas's
+/// own body, the editor or the dock. Gestures write it and read it at event time.
+@MainActor
+@Observable
+final class CanvasViewport {
+    var zoom: CGFloat = 1
+    var offset: CGSize = .zero
+    /// The values a gesture started from.
+    @ObservationIgnored var steadyZoom: CGFloat = 1
+    @ObservationIgnored var steadyOffset: CGSize = .zero
+
+    /// The picture's frame on `stage`: fitted, then zoomed about the stage's centre and panned.
+    func imageFrame(in stage: CGRect, aspect: Double) -> CGRect {
+        let fitted = CanvasGeometry.fitted(in: stage, aspect: aspect)
+        let size = CGSize(width: fitted.width * zoom, height: fitted.height * zoom)
+        return CGRect(origin: CGPoint(x: stage.midX - size.width / 2 + offset.width, y: stage.midY - size.height / 2 + offset.height), size: size)
+    }
+
+    func reset() {
+        zoom = 1
+        steadyZoom = 1
+        offset = .zero
+        steadyOffset = .zero
+    }
+}
+
+/// The brush or lasso stroke under the finger. The path grows point by point
+/// in view coordinates (points closer than 1.5 pt are skipped); only the leaf
+/// that draws it reads it. The session gets the whole stroke once, at the end.
+@MainActor
+@Observable
+final class StrokeInProgress {
+    private(set) var path = Path()
+    /// Under the finger while painting.
+    var cursor: CGPoint?
+    @ObservationIgnored private(set) var points: [PSPoint] = []
+    @ObservationIgnored private(set) var id = UUID()
+    @ObservationIgnored private(set) var isLasso = false
+    /// Radius in view points, fixed for the stroke.
+    @ObservationIgnored private(set) var radius: CGFloat = 0
+    @ObservationIgnored private var lastViewPoint: CGPoint?
+
+    var isEmpty: Bool { points.isEmpty }
+
+    func begin(lasso: Bool, radius: CGFloat) {
+        id = UUID()
+        isLasso = lasso
+        self.radius = radius
+        points = []
+        lastViewPoint = nil
+        path = Path()
+    }
+
+    /// Adds a point unless it is within 1.5 pt of the previous one.
+    func append(_ point: PSPoint, at location: CGPoint) {
+        if let last = lastViewPoint {
+            let dx = location.x - last.x, dy = location.y - last.y
+            guard dx * dx + dy * dy >= 1.5 * 1.5 else { return }
+            path.addLine(to: location)
+        } else {
+            path.move(to: location)
+        }
+        lastViewPoint = location
+        points.append(point)
+    }
+
+    func reset() {
+        points = []
+        lastViewPoint = nil
+        if !path.isEmpty { path = Path() }
+        if cursor != nil { cursor = nil }
+    }
+}
+
+/// Layout arithmetic shared by the canvas's body, its stage and its gestures.
+enum CanvasGeometry {
+    /// Where the picture may go: the canvas less the chrome and the margins.
+    static func stage(in container: CGSize, layout: CanvasLayout) -> CGRect {
+        let top = layout.top + layout.vertical
+        let height = container.height - layout.top - layout.bottom - layout.vertical * 2
+        return CGRect(x: layout.side, y: top, width: max(1, container.width - layout.side * 2), height: max(1, height))
+    }
+
+    /// The picture at zoom 1, fitted and centred on `stage`.
+    static func fitted(in stage: CGRect, aspect: Double) -> CGRect {
+        let ratio = CGFloat(max(0.05, aspect))
+        var size = CGSize(width: stage.width, height: stage.width / ratio)
+        if size.height > stage.height {
+            size = CGSize(width: stage.height * ratio, height: stage.height)
+        }
+        return CGRect(x: stage.midX - size.width / 2, y: stage.midY - size.height / 2, width: size.width, height: size.height)
+    }
+
+    /// The four bands of `bounds` around `hole` (the picture), for the ambient wash.
+    static func bands(around hole: CGRect, in bounds: CGRect) -> [CGRect] {
+        let cut = hole.intersection(bounds)
+        guard !cut.isNull, cut.width > 0.5, cut.height > 0.5 else { return [bounds] }
+        return [
+            CGRect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: cut.minY - bounds.minY),
+            CGRect(x: bounds.minX, y: cut.maxY, width: bounds.width, height: bounds.maxY - cut.maxY),
+            CGRect(x: bounds.minX, y: cut.minY, width: cut.minX - bounds.minX, height: cut.height),
+            CGRect(x: cut.maxX, y: cut.minY, width: bounds.maxX - cut.maxX, height: cut.height),
+        ].filter { $0.width > 0.5 && $0.height > 0.5 }
+    }
+}
+
 /// The picture itself. Its own view because a new frame arrives up to sixty
 /// times a second while a dial is dragged: read in the canvas's body, every
 /// one of those would rebuild the crop frame, the handles and the gestures.
@@ -41,7 +151,7 @@ private struct CanvasSurface: View {
 
     /// The edited picture, or — during a split compare — the original on the left of the line.
     private var displayed: CIImage? {
-        guard let split = session.compareSplit, session.canSplitCompare, !session.isCropping, !session.showsOriginal,
+        guard let split = session.compareSplit, PhotoCanvasView.canSplitCompare(session), !session.isCropping, !session.showsOriginal,
               let edited = session.preview, let original = session.originalPreview,
               original.extent.width > 0, original.extent.height > 0 else { return session.preview }
         let extent = edited.extent
@@ -59,36 +169,36 @@ private struct CanvasSurface: View {
     }
 }
 
+// MARK: - Canvas
+
 /// Zoomable, pannable canvas. Hosts the crop frame, text handles, brush
 /// strokes, selection outlines and candidate highlights.
 ///
-/// In an edge-to-edge editor the canvas runs under the bars: the picture is
-/// fitted between them (`editorChromeEdges`), with no margin at the sides, and
-/// glides when a panel opens or closes. Around it, a blurred wash of the photo
-/// fills the dead space, except while colour is being judged.
+/// The canvas runs under the studio's bars, full screen: the picture is fitted
+/// between them (`studioEdges`), with no margin at the sides, and glides when
+/// a panel opens or closes. Its body reads only coarse state; zoom and pan live
+/// in `CanvasViewport`, the stroke under the finger in `StrokeInProgress`, and
+/// everything that follows the frame is drawn by `CanvasStage`, the one view
+/// the layout animation rebuilds. Around the picture, a blurred wash of the
+/// photo fills the dead space, except while colour is being judged.
+///
+/// Press and hold the picture (0.25 s) to see the original.
 struct PhotoCanvasView: View {
     @Bindable var session: PhotoEditorSession
-    /// What floats above the bottom chrome (the voice strip). The picture
-    /// makes room for it only while a question needs the photo in view.
-    var floatingBottomInset: CGFloat = 0
-    @State private var zoom: CGFloat = 1
-    @State private var steadyZoom: CGFloat = 1
-    @State private var offset: CGSize = .zero
-    @State private var steadyOffset: CGSize = .zero
-    @State private var currentStroke: [PSPoint] = []
-    @State private var currentStrokeID: UUID?
-    @State private var cursor: CGPoint?
+    @State private var viewport = CanvasViewport()
+    @State private var stroke = StrokeInProgress()
     @State private var textDragStart: PSPoint?
     @State private var textRotationStart: Double = 0
     @State private var textSizeStart: Double = 0
-    /// A tiny, blurred copy of the photo for the ambient fill.
+    /// A tiny, blurred, darkened copy of the photo for the ambient fill.
     @State private var ambient: UIImage?
-    /// The area being worked on, while work runs (from the selection).
+    /// The area being worked on, while work runs (from the selection), blurred once.
     @State private var workingMask: UIImage?
+    /// The hold on the picture set `showsOriginal`, so its release clears it.
+    @State private var holdShowsOriginal = false
     @GestureState private var isPressing = false
     @Environment(\.psEffects) private var effects
-    @Environment(\.psReducedMotion) private var reducedMotion
-    @Environment(\.editorChromeEdges) private var chromeEdges
+    @Environment(\.studioEdges) private var studioEdges
 
     /// Room above and below the picture. None at the sides, so a photo that
     /// fills the width runs edge to edge, as in Photos. While cropping, the
@@ -97,33 +207,361 @@ struct PhotoCanvasView: View {
     /// Side room while cropping, so the corner handles stay clear of the display edges.
     private var horizontalMargin: CGFloat { session.isCropping ? 20 : 0 }
 
+    /// The split compare lines pixels up, so it is offered only while the frame is the original one.
+    /// Read from the mirrors, never from the history.
+    static func canSplitCompare(_ session: PhotoEditorSession) -> Bool {
+        session.canUndo && !session.modifiedTools.contains(.crop)
+    }
+
     var body: some View {
+        #if DEBUG
+        let _ = ViewTrace.changes(Self.self)
+        #endif
         GeometryReader { proxy in
-            let chrome = chromeEdges?.insets(over: proxy.frame(in: .global)) ?? EdgeInsets()
-            let asks = session.pendingClarification != nil
-            let target = CanvasLayout(top: chrome.top, bottom: chrome.bottom + (asks ? floatingBottomInset : 0), side: horizontalMargin, vertical: verticalMargin)
-            // The whole canvas is rebuilt along the animation, so the picture,
+            let chrome = studioEdges.insets(over: proxy.frame(in: .global))
+            let target = CanvasLayout(top: chrome.top, bottom: chrome.bottom, side: horizontalMargin, vertical: verticalMargin)
+            let container = proxy.size
+            // Only the stage is rebuilt along the animation, so the picture,
             // its overlays and the crop frame glide together.
             Color.clear
                 .modifier(CanvasLayoutAnimation(layout: target) { layout in
-                    canvas(container: proxy.size, layout: layout)
+                    CanvasStage(session: session, viewport: viewport, stroke: stroke, layout: layout, container: container,
+                                ambient: ambient, workingMask: workingMask, onResetZoom: resetZoom)
                 })
                 .animation(session.hasRenderedPreview ? PSMotion.standard : nil, value: target)
+                .contentShape(Rectangle())
+                .gesture(canvasGesture(container: container, layout: target), including: session.isCropping ? .subviews : .all)
+                .simultaneousGesture(compareGesture)
+                .simultaneousGesture(textRotationGesture, including: session.manipulatesOverlays ? .all : .none)
+                .onChange(of: session.zoomRequest) { _, request in
+                    guard let request else { return }
+                    applyZoomRequest(request, container: container, layout: target)
+                    session.zoomRequest = nil
+                }
         }
         .clipped()
+        .onChange(of: isPressing) { _, pressing in
+            if pressing {
+                guard comparesOnHold else { return }
+                Haptics.soft(0.6)
+                holdShowsOriginal = true
+                session.showsOriginal = true
+            } else if holdShowsOriginal {
+                holdShowsOriginal = false
+                session.showsOriginal = false
+            }
+        }
+        .onChange(of: session.previewAspectRatio) { _, _ in resetZoom() }
+        .onChange(of: session.activeTool) { _, tool in if tool == .crop { resetZoom() } }
         .task(id: "\(session.lookThumbnailKey)|\(session.hasRenderedPreview)") { await renderAmbient() }
-        .task(id: session.isProcessing) { renderWorkingMask() }
+        .task(id: session.isProcessing) { await renderWorkingMask() }
     }
 
-    private func canvas(container: CGSize, layout: CanvasLayout) -> some View {
-        let stage = stageRect(in: container, layout: layout)
-        let frame = imageFrame(in: stage)
-        return ZStack {
+    /// Before/after works everywhere but while framing, painting or moving text and shapes.
+    private var comparesOnHold: Bool {
+        guard !session.isCropping else { return false }
+        switch session.activeTool {
+        case .erase, .precise, .text, .shapes: return false
+        default: return true
+        }
+    }
+
+    // MARK: Ambient
+
+    /// Rasterises the photo at 64 points whenever its pixels change: blurred,
+    /// a touch more saturated, darkened towards the edges and dimmed to 24 %
+    /// over black, all in Core Image, so the view draws a plain image.
+    private func renderAmbient() async {
+        guard effects != .minimal, session.hasRenderedPreview else { return }
+        // Let the render for this state land first.
+        try? await Task.sleep(for: .milliseconds(400))
+        guard !Task.isCancelled, let preview = session.preview, preview.extent.width > 1, preview.extent.height > 1 else { return }
+        let image = await Task.detached(priority: .utility) { () -> CGImage? in
+            let scale = 64 / max(preview.extent.width, preview.extent.height)
+            let small = preview.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            let extent = small.extent
+            var wash = small.clampedToExtent().applyingGaussianBlur(sigma: 3).cropped(to: extent)
+            wash = wash.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 1.1])
+            let radius = max(extent.width, extent.height)
+            if let vignette = CIFilter(name: "CIRadialGradient", parameters: [
+                "inputCenter": CIVector(x: extent.midX, y: extent.midY),
+                "inputRadius0": radius * 0.23,
+                "inputRadius1": radius,
+                "inputColor0": CIColor(red: 1, green: 1, blue: 1),
+                "inputColor1": CIColor(red: 0.4, green: 0.4, blue: 0.4),
+            ])?.outputImage?.cropped(to: extent) {
+                wash = wash.applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: vignette])
+            }
+            // 24 % over black is the colour times 0.24: no blending at draw time.
+            wash = wash.applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": CIVector(x: 0.24, y: 0, z: 0, w: 0),
+                "inputGVector": CIVector(x: 0, y: 0.24, z: 0, w: 0),
+                "inputBVector": CIVector(x: 0, y: 0, z: 0.24, w: 0),
+                "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
+            ])
+            return ImageSupport.cgImage(from: wash.cropped(to: extent))
+        }.value
+        guard !Task.isCancelled, let image else { return }
+        withAnimation(PSMotion.standard) { ambient = UIImage(cgImage: image) }
+    }
+
+    /// The selection as a small, pre-blurred image, to shape the working shimmer. Off the main thread.
+    private func renderWorkingMask() async {
+        guard session.isProcessing, let selection = session.selectionPreview,
+              selection.extent.width > 1, selection.extent.height > 1 else {
+            if workingMask != nil { workingMask = nil }
+            return
+        }
+        let image = await Task.detached(priority: .userInitiated) { () -> CGImage? in
+            let scale = min(1, 256 / max(selection.extent.width, selection.extent.height))
+            let small = selection.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            let blurred = small.clampedToExtent().applyingGaussianBlur(sigma: 2).cropped(to: small.extent)
+            return ImageSupport.cgImage(from: blurred)
+        }.value
+        guard !Task.isCancelled else { return }
+        workingMask = image.map { UIImage(cgImage: $0) }
+    }
+
+    // MARK: Zoom
+
+    /// The picture's frame now, for a gesture: read at event time, never in the body.
+    private func currentFrame(container: CGSize, layout: CanvasLayout) -> CGRect {
+        viewport.imageFrame(in: CanvasGeometry.stage(in: container, layout: layout), aspect: session.previewAspectRatio)
+    }
+
+    private func normalized(_ location: CGPoint, in frame: CGRect) -> PSPoint? {
+        guard frame.contains(location) else { return nil }
+        return PSPoint(x: Double((location.x - frame.minX) / frame.width), y: Double((location.y - frame.minY) / frame.height))
+    }
+
+    private func resetZoom() {
+        withAnimation(.spring(duration: 0.35)) { viewport.reset() }
+    }
+
+    /// Double-tap zoom: 2.5× with the tapped point held under the finger,
+    /// the way Photos does it. The image is centred on the stage at
+    /// zoom 1, so the tap's vector from the centre scales by (1 − z).
+    private func zoomIn(at location: CGPoint, stage: CGRect) {
+        let scale: CGFloat = 2.5
+        let vector = CGSize(width: location.x - stage.midX, height: location.y - stage.midY)
+        Haptics.soft()
+        withAnimation(.spring(duration: 0.35)) {
+            viewport.zoom = scale
+            viewport.steadyZoom = scale
+            viewport.offset = CGSize(width: vector.width * (1 - scale), height: vector.height * (1 - scale))
+            viewport.steadyOffset = viewport.offset
+        }
+    }
+
+    private func applyZoomRequest(_ request: PhotoEditorSession.ZoomRequest, container: CGSize, layout: CanvasLayout) {
+        let stage = CanvasGeometry.stage(in: container, layout: layout)
+        withAnimation(.spring(duration: 0.4)) {
+            if let target = request.target, let candidate = session.candidateOverlays.first(where: { $0.label == target.label }) ?? session.candidateOverlays.first {
+                let box = candidate.boundingBox
+                let scale = min(6, 0.8 / max(box.width, box.height))
+                viewport.zoom = scale
+                viewport.steadyZoom = scale
+                let base = CanvasGeometry.fitted(in: stage, aspect: session.previewAspectRatio)
+                let center = CGPoint(x: base.minX + box.midX * base.width, y: base.minY + box.midY * base.height)
+                viewport.offset = CGSize(width: (stage.midX - center.x) * scale, height: (stage.midY - center.y) * scale)
+                viewport.steadyOffset = viewport.offset
+            } else if let amount = request.amount {
+                switch amount.mode {
+                case .absolute: viewport.zoom = 1; viewport.offset = .zero
+                case .multiplier: viewport.zoom = min(8, max(1, viewport.zoom * amount.value))
+                case .relative: viewport.zoom = min(8, max(1, viewport.zoom + amount.value))
+                }
+                viewport.steadyZoom = viewport.zoom
+                if viewport.zoom == 1 { viewport.offset = .zero }
+                viewport.steadyOffset = viewport.offset
+            }
+        }
+    }
+
+    // MARK: Gestures
+
+    private var paintsWithBrush: Bool {
+        session.activeTool == .erase || (session.activeTool == .precise && (session.preciseMode == .pixelBrush || session.preciseMode == .clone))
+    }
+
+    private var drawsLasso: Bool {
+        session.activeTool == .precise && session.preciseMode == .lasso
+    }
+
+    private func canvasGesture(container: CGSize, layout: CanvasLayout) -> some Gesture {
+        let magnify = MagnifyGesture()
+            .onChanged { value in
+                if session.manipulatesOverlays, let id = session.manipulatedTextLayerID ?? session.selectedOverlayLayerID {
+                    if session.manipulatedTextLayerID == nil {
+                        session.beginTextInteraction(id)
+                        textSizeStart = session.document.layers.first(where: { $0.id == id }).flatMap { session.overlayGeometry(for: $0)?.size } ?? 0.06
+                    }
+                    if let layer = session.document.layers.first(where: { $0.id == id }), let geometry = session.overlayGeometry(for: layer) {
+                        let target = textSizeStart * Double(value.magnification)
+                        session.updateManipulatedText(scale: target / max(0.001, geometry.size))
+                    }
+                } else {
+                    viewport.zoom = min(8, max(0.5, viewport.steadyZoom * value.magnification))
+                }
+            }
+            .onEnded { _ in
+                if session.manipulatedTextLayerID != nil {
+                    session.endTextInteraction()
+                } else if viewport.zoom < 1 {
+                    resetZoom()
+                } else {
+                    viewport.steadyZoom = viewport.zoom
+                }
+            }
+        let drag = DragGesture(minimumDistance: 2)
+            .onChanged { value in
+                let frame = currentFrame(container: container, layout: layout)
+                let point = normalized(value.location, in: frame)
+                if session.manipulatesOverlays, session.pendingClarification == nil {
+                    if textDragStart == nil {
+                        guard let start = normalized(value.startLocation, in: frame), let layer = session.overlayLayer(at: start) else {
+                            if viewport.zoom > 1 { pan(by: value.translation) }
+                            return
+                        }
+                        textDragStart = session.overlayGeometry(for: layer)?.center
+                        session.beginTextInteraction(layer.id)
+                    }
+                    guard let origin = textDragStart else { return }
+                    let dx = Double(value.translation.width / frame.width), dy = Double(value.translation.height / frame.height)
+                    session.updateManipulatedText(center: PSPoint(x: origin.x + dx, y: origin.y + dy))
+                } else if paintsWithBrush, session.pendingClarification == nil {
+                    stroke.cursor = value.location
+                    guard let point else { return }
+                    if stroke.isEmpty {
+                        session.beginPreciseStroke(at: point)
+                        stroke.begin(lasso: false, radius: CGFloat(brushRadius) * max(frame.width, frame.height))
+                    }
+                    stroke.append(point, at: value.location)
+                } else if drawsLasso, session.pendingClarification == nil {
+                    guard let point else { return }
+                    if stroke.isEmpty { stroke.begin(lasso: true, radius: 0) }
+                    stroke.append(point, at: value.location)
+                } else if viewport.zoom > 1 {
+                    pan(by: value.translation)
+                }
+            }
+            .onEnded { _ in
+                if textDragStart != nil {
+                    textDragStart = nil
+                    if session.manipulatedTextLayerID != nil { session.endTextInteraction() }
+                } else if !stroke.isEmpty {
+                    finishStroke()
+                } else {
+                    stroke.cursor = nil
+                    viewport.steadyOffset = viewport.offset
+                }
+            }
+        let tap = SpatialTapGesture()
+            .onEnded { value in
+                let frame = currentFrame(container: container, layout: layout)
+                if let point = normalized(value.location, in: frame) {
+                    Haptics.tap()
+                    if session.manipulatesOverlays, let layer = session.overlayLayer(at: point) {
+                        session.selectLayer(layer.id)
+                    } else if session.activeTool == .shapes {
+                        session.addShape(session.shapeKindToAdd, at: point)
+                    } else {
+                        session.tapCanvas(at: point)
+                    }
+                }
+            }
+        let doubleTap = SpatialTapGesture(count: 2).onEnded { value in
+            if viewport.zoom > 1.01 || session.isCropping {
+                resetZoom()
+            } else {
+                zoomIn(at: value.location, stage: CanvasGeometry.stage(in: container, layout: layout))
+            }
+        }
+        return doubleTap.exclusively(before: tap).simultaneously(with: magnify).simultaneously(with: drag)
+    }
+
+    /// The brush radius as a fraction of the picture's longest side (the pixel brush follows the zoom).
+    private var brushRadius: Double {
+        session.activeTool == .precise ? session.pixelBrushRadius / Double(viewport.zoom) : session.brushRadius
+    }
+
+    private func pan(by translation: CGSize) {
+        viewport.offset = CGSize(width: viewport.steadyOffset.width + translation.width, height: viewport.steadyOffset.height + translation.height)
+    }
+
+    /// Hands the finished stroke to the session: a brush stroke, or the lasso's points.
+    private func finishStroke() {
+        let points = stroke.points
+        if stroke.isLasso {
+            session.lassoPoints.append(contentsOf: points)
+            stroke.reset()
+            if session.lassoPoints.count >= 3 { session.commitLasso() }
+        } else {
+            let hardness = session.activeTool == .precise ? 1.0 : 0.6
+            session.brushStrokes.append(BrushStroke(id: stroke.id, points: points, radius: brushRadius, hardness: hardness))
+            stroke.reset()
+            Haptics.tick()
+        }
+    }
+
+    private var textRotationGesture: some Gesture {
+        RotateGesture(minimumAngleDelta: .degrees(2))
+            .onChanged { value in
+                guard session.manipulatesOverlays, let id = session.manipulatedTextLayerID ?? session.selectedOverlayLayerID else { return }
+                if session.manipulatedTextLayerID == nil {
+                    session.beginTextInteraction(id)
+                    textRotationStart = session.document.layers.first(where: { $0.id == id }).flatMap { session.overlayGeometry(for: $0)?.rotation } ?? 0
+                }
+                session.updateManipulatedText(rotation: textRotationStart + value.rotation.degrees)
+            }
+            .onEnded { _ in
+                if session.manipulatedTextLayerID != nil { session.endTextInteraction() }
+            }
+    }
+
+    /// Press and hold the picture for a quarter second: the original.
+    private var compareGesture: some Gesture {
+        LongPressGesture(minimumDuration: 0.25)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .updating($isPressing) { value, state, _ in
+                if case .second = value { state = true }
+            }
+    }
+}
+
+// MARK: - Stage
+
+/// Everything that follows the picture's frame: the Metal surface, the
+/// ambient bands, the working shimmer, the overlays, the crop frame, the
+/// badges. Rebuilt along a layout animation and on every zoom or pan step;
+/// the canvas's own body is not.
+private struct CanvasStage: View {
+    let session: PhotoEditorSession
+    let viewport: CanvasViewport
+    let stroke: StrokeInProgress
+    let layout: CanvasLayout
+    let container: CGSize
+    let ambient: UIImage?
+    let workingMask: UIImage?
+    let onResetZoom: () -> Void
+
+    @Environment(\.psEffects) private var effects
+    @Environment(\.psReducedMotion) private var reducedMotion
+
+    var body: some View {
+        #if DEBUG
+        let _ = ViewTrace.changes(Self.self)
+        #endif
+        let stage = CanvasGeometry.stage(in: container, layout: layout)
+        let frame = viewport.imageFrame(in: stage, aspect: session.previewAspectRatio)
+        let zoomed = viewport.zoom > 1.01
+        ZStack {
             PSTheme.canvas
             // The Metal surface is opaque edge to edge: the wash and the
-            // placeholder go above it, the wash with the picture cut out.
+            // placeholder go above it, the wash in four bands around the picture.
             CanvasSurface(session: session, frame: frame)
-            ambientFill(container: container, frame: frame)
+            AmbientBands(image: ambient, frame: frame, container: container, isVisible: showsAmbient)
+            PictureAccessibility(session: session, frame: frame)
             if !session.hasRenderedPreview {
                 // A slow first render must read as loading, never as a black screen.
                 ZStack {
@@ -149,9 +587,10 @@ struct PhotoCanvasView: View {
                     .frame(maxHeight: .infinity, alignment: .top)
                     .allowsHitTesting(false)
             }
-            overlays(frame: frame, container: container, stage: stage, top: layout.top)
-                .allowsHitTesting(false)
-            if let split = session.compareSplit, session.canSplitCompare, !session.isCropping {
+            CommittedStrokes(session: session, frame: frame)
+            CanvasOverlays(session: session, frame: frame, stage: stage, container: container, zoom: viewport.zoom)
+            LiveStroke(session: session, stroke: stroke, frame: frame, stage: stage)
+            if let split = session.compareSplit, PhotoCanvasView.canSplitCompare(session), !session.isCropping {
                 SplitCompareLine(frame: frame, split: split) { session.compareSplit = $0 }
                     .transition(.opacity)
             }
@@ -164,63 +603,25 @@ struct PhotoCanvasView: View {
                 .padding(.top, layout.top + 12)
                 .padding(.horizontal, 24)
                 .allowsHitTesting(false)
-            if zoom > 1.01, !session.isCropping {
-                ZoomBadge(zoom: zoom) { resetZoom() }
+            if zoomed, !session.isCropping {
+                ZoomBadge(zoom: viewport.zoom, onReset: onResetZoom)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .padding(.top, layout.top + 12)
                     .padding(.leading, 12)
                     .transition(.opacity)
             }
-            // Comparing matters most while an adjustment panel is open, so the
-            // button is offered whenever there is something to compare. Only
-            // the crop overlay, which owns the canvas, hides it.
-            if session.history.canUndo, !session.isCropping, !session.isProcessing, session.pendingClarification == nil {
-                HStack(spacing: 8) {
-                    if session.canSplitCompare {
-                        Button {
-                            Haptics.tap()
-                            session.compareSplit = session.compareSplit == nil ? 0.5 : nil
-                        } label: {
-                            Image(systemName: "square.split.2x1").font(.system(size: 15, weight: .medium))
-                                .foregroundStyle(session.compareSplit == nil ? PSTheme.textPrimary : Color.black)
-                                .frame(width: 38, height: 38)
-                                .background(Circle().fill(Color.white).opacity(session.compareSplit == nil ? 0 : 1))
-                                .psGlass(interactive: true, shape: AnyShape(Circle()), variant: .clear)
-                        }
-                        .buttonStyle(PSPressStyle(scale: 0.9))
-                        .accessibilityLabel(L("Before and after, side by side"))
-                    }
-                    CompareButton(isShowingOriginal: session.showsOriginal) { session.showsOriginal = $0 }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .padding(.bottom, layout.bottom + 12 + floatingBottomInset)
-                .padding(.trailing, 12)
-                .transition(.opacity)
+            if session.showsOriginal {
+                GlassChip(L("Original"), systemImage: "eye.fill", variant: .clear)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .padding(.top, layout.top + 12)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
             }
         }
         .animation(PSMotion.standard, value: session.hasRenderedPreview)
-        .animation(PSMotion.standard, value: session.history.canUndo && !session.isCropping && !session.isProcessing)
         .animation(.easeOut(duration: 0.35), value: session.isProcessing)
-        .animation(PSMotion.quick, value: zoom > 1.01)
-        .animation(PSMotion.standard, value: floatingBottomInset)
-        .contentShape(Rectangle())
-        .gesture(canvasGesture(frame: frame, container: container, stage: stage), including: session.isCropping ? .subviews : .all)
-        .simultaneousGesture(compareGesture)
-        .simultaneousGesture(textRotationGesture, including: session.manipulatesOverlays ? .all : .none)
-        .onChange(of: isPressing) { _, pressing in
-            if session.activeTool != .erase, session.activeTool != .precise, session.activeTool != .text, !session.isCropping {
-                session.showsOriginal = pressing
-            }
-        }
-        .onChange(of: session.zoomRequest) { _, request in
-            guard let request else { return }
-            applyZoomRequest(request, stage: stage)
-            session.zoomRequest = nil
-        }
-        .onChange(of: session.document.canvasSize) { _, _ in resetZoom() }
-        .onChange(of: session.activeTool) { _, tool in if tool == .crop { resetZoom() } }
-        .accessibilityLabel(L("Photo canvas"))
-        .accessibilityHint(L("Double tap to zoom in or back out. Pinch to zoom."))
+        .animation(PSMotion.quick, value: zoomed)
+        .animation(.easeOut(duration: 0.2), value: session.showsOriginal)
     }
 
     private var cropAspectValue: Double? {
@@ -231,8 +632,6 @@ struct PhotoCanvasView: View {
         }
     }
 
-    // MARK: Ambient
-
     /// Colour is judged against neutral black: the wash leaves while adjusting,
     /// grading or picking a look, and while cropping.
     private var showsAmbient: Bool {
@@ -242,273 +641,148 @@ struct PhotoCanvasView: View {
         default: return true
         }
     }
+}
 
-    private func ambientFill(container: CGSize, frame: CGRect) -> some View {
-        ZStack {
-            if let ambient {
-                Image(uiImage: ambient)
-                    .resizable()
-                    .interpolation(.high)
-                    .scaledToFill()
-                    .frame(width: container.width, height: container.height)
-                    .clipped()
-                    .saturation(1.1)
-                    .opacity(0.24)
-                RadialGradient(colors: [.clear, Color.black.opacity(0.6)], center: .center, startRadius: 120, endRadius: 520)
+/// The picture for VoiceOver: what it is, and its two actions (the original, Undo).
+private struct PictureAccessibility: View {
+    let session: PhotoEditorSession
+    let frame: CGRect
+
+    var body: some View {
+        Color.clear
+            .frame(width: max(1, frame.width), height: max(1, frame.height))
+            .position(x: frame.midX, y: frame.midY)
+            .allowsHitTesting(false)
+            .accessibilityElement()
+            .accessibilityLabel(L("Photo canvas"))
+            .accessibilityAddTraits(.isImage)
+            .accessibilityHint(L("Double tap to zoom in or back out. Pinch to zoom."))
+            .accessibilityAction(named: Text(session.showsOriginal ? L("Show the edits") : L("Show original"))) {
+                session.showsOriginal.toggle()
+                UIAccessibility.post(notification: .announcement, argument: session.showsOriginal ? L("Original shown") : L("Edits shown"))
+            }
+            .accessibilityAction(named: Text(L("Undo"))) {
+                session.undo()
+            }
+    }
+}
+
+/// The dead space around the picture: the ambient image in up to four
+/// rectangular bands, each a clipped layer (no mask, no offscreen pass).
+private struct AmbientBands: View {
+    let image: UIImage?
+    let frame: CGRect
+    let container: CGSize
+    let isVisible: Bool
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            if let image {
+                let bounds = CGRect(origin: .zero, size: container)
+                ForEach(Array(CanvasGeometry.bands(around: frame, in: bounds).enumerated()), id: \.offset) { _, band in
+                    Image(uiImage: image)
+                        .resizable()
+                        .interpolation(.medium)
+                        .scaledToFill()
+                        .frame(width: container.width, height: container.height)
+                        .offset(x: -band.minX, y: -band.minY)
+                        .frame(width: band.width, height: band.height, alignment: .topLeading)
+                        .clipped()
+                        .offset(x: band.minX, y: band.minY)
+                }
             }
         }
-        .frame(width: container.width, height: container.height)
-        .mask {
-            // Everything but the picture (even-odd: the frame is a hole).
-            Path { path in
-                path.addRect(CGRect(origin: .zero, size: container))
-                path.addRect(frame)
-            }
-            .fill(style: FillStyle(eoFill: true))
-        }
-        .opacity(showsAmbient ? 1 : 0)
-        .animation(PSMotion.standard, value: showsAmbient)
+        .frame(width: container.width, height: container.height, alignment: .topLeading)
+        .opacity(isVisible ? 1 : 0)
+        .animation(PSMotion.standard, value: isVisible)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
+}
 
-    /// Rasterises the photo at 64 points, already blurred, whenever its pixels change.
-    private func renderAmbient() async {
-        guard effects != .minimal, session.hasRenderedPreview else { return }
-        // Let the render for this state land first.
-        try? await Task.sleep(for: .milliseconds(400))
-        guard !Task.isCancelled, let preview = session.preview, preview.extent.width > 1, preview.extent.height > 1 else { return }
-        let image = await Task.detached(priority: .utility) { () -> CGImage? in
-            let scale = 64 / max(preview.extent.width, preview.extent.height)
-            let small = preview.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-            let blurred = small.clampedToExtent().applyingGaussianBlur(sigma: 3).cropped(to: small.extent)
-            return ImageSupport.cgImage(from: blurred)
-        }.value
-        guard !Task.isCancelled, let image else { return }
-        withAnimation(PSMotion.standard) { ambient = UIImage(cgImage: image) }
-    }
+/// Strokes already handed to the session, in their own Canvas: it redraws
+/// only when the strokes (or the frame) change.
+private struct CommittedStrokes: View {
+    let session: PhotoEditorSession
+    let frame: CGRect
 
-    /// The selection, as a small image, to shape the working shimmer.
-    private func renderWorkingMask() {
-        guard session.isProcessing, let selection = session.selectionPreview,
-              selection.extent.width > 1, selection.extent.height > 1 else { workingMask = nil; return }
-        let scale = min(1, 256 / max(selection.extent.width, selection.extent.height))
-        let small = selection.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        workingMask = ImageSupport.cgImage(from: small).map { UIImage(cgImage: $0) }
-    }
-
-    // MARK: Layout
-
-    /// Where the picture may go: the canvas less the chrome and the margins.
-    private func stageRect(in container: CGSize, layout: CanvasLayout) -> CGRect {
-        let top = layout.top + layout.vertical
-        let height = container.height - layout.top - layout.bottom - layout.vertical * 2
-        return CGRect(x: layout.side, y: top, width: max(1, container.width - layout.side * 2), height: max(1, height))
-    }
-
-    private func imageFrame(in stage: CGRect) -> CGRect {
-        let aspect = CGFloat(max(0.05, session.previewAspectRatio))
-        var size = CGSize(width: stage.width, height: stage.width / aspect)
-        if size.height > stage.height {
-            size = CGSize(width: stage.height * aspect, height: stage.height)
-        }
-        size = CGSize(width: size.width * zoom, height: size.height * zoom)
-        let origin = CGPoint(x: stage.midX - size.width / 2 + offset.width, y: stage.midY - size.height / 2 + offset.height)
-        return CGRect(origin: origin, size: size)
-    }
-
-    private func normalized(_ location: CGPoint, in frame: CGRect) -> PSPoint? {
-        guard frame.contains(location) else { return nil }
-        return PSPoint(x: Double((location.x - frame.minX) / frame.width), y: Double((location.y - frame.minY) / frame.height))
-    }
-
-    private func viewPoint(_ point: PSPoint, in frame: CGRect) -> CGPoint {
-        CGPoint(x: frame.minX + point.x * frame.width, y: frame.minY + point.y * frame.height)
-    }
-
-    private func viewRect(_ rect: PSRect, in frame: CGRect) -> CGRect {
-        CGRect(x: frame.minX + rect.minX * frame.width, y: frame.minY + rect.minY * frame.height, width: rect.width * frame.width, height: rect.height * frame.height)
-    }
-
-    private func resetZoom() {
-        withAnimation(.spring(duration: 0.35)) {
-            zoom = 1; steadyZoom = 1; offset = .zero; steadyOffset = .zero
-        }
-    }
-
-    /// Double-tap zoom: 2.5× with the tapped point held under the finger,
-    /// the way Photos does it. The image is centred on the stage at
-    /// zoom 1, so the tap's vector from the centre scales by (1 − z).
-    private func zoomIn(at location: CGPoint, stage: CGRect) {
-        let scale: CGFloat = 2.5
-        let center = CGPoint(x: stage.midX, y: stage.midY)
-        let vector = CGSize(width: location.x - center.x, height: location.y - center.y)
-        Haptics.soft()
-        withAnimation(.spring(duration: 0.35)) {
-            zoom = scale; steadyZoom = scale
-            offset = CGSize(width: vector.width * (1 - scale), height: vector.height * (1 - scale))
-            steadyOffset = offset
-        }
-    }
-
-    private func applyZoomRequest(_ request: PhotoEditorSession.ZoomRequest, stage: CGRect) {
-        withAnimation(.spring(duration: 0.4)) {
-            if let target = request.target, let candidate = session.candidateOverlays.first(where: { $0.label == target.label }) ?? session.candidateOverlays.first {
-                let box = candidate.boundingBox
-                let scale = min(6, 0.8 / max(box.width, box.height))
-                zoom = scale
-                steadyZoom = scale
-                let base = imageFrame(in: stage)
-                let center = CGPoint(x: base.minX + box.midX * base.width, y: base.minY + box.midY * base.height)
-                offset = CGSize(width: stage.midX - center.x, height: stage.midY - center.y)
-                steadyOffset = offset
-            } else if let amount = request.amount {
-                switch amount.mode {
-                case .absolute: zoom = 1; offset = .zero
-                case .multiplier: zoom = min(8, max(1, zoom * amount.value))
-                case .relative: zoom = min(8, max(1, zoom + amount.value))
-                }
-                steadyZoom = zoom
-                if zoom == 1 { offset = .zero }
-                steadyOffset = offset
-            }
-        }
-    }
-
-    // MARK: Gestures
-
-    private var paintsWithBrush: Bool {
-        session.activeTool == .erase || (session.activeTool == .precise && (session.preciseMode == .pixelBrush || session.preciseMode == .clone))
-    }
-
-    private func canvasGesture(frame: CGRect, container: CGSize, stage: CGRect) -> some Gesture {
-        let magnify = MagnifyGesture()
-            .onChanged { value in
-                if session.manipulatesOverlays, let id = session.manipulatedTextLayerID ?? session.selectedOverlayLayerID {
-                    if session.manipulatedTextLayerID == nil {
-                        session.beginTextInteraction(id)
-                        textSizeStart = session.document.layers.first(where: { $0.id == id }).flatMap { session.overlayGeometry(for: $0)?.size } ?? 0.06
-                    }
-                    if let layer = session.document.layers.first(where: { $0.id == id }), let geometry = session.overlayGeometry(for: layer) {
-                        let target = textSizeStart * Double(value.magnification)
-                        session.updateManipulatedText(scale: target / max(0.001, geometry.size))
-                    }
-                } else {
-                    zoom = min(8, max(0.5, steadyZoom * value.magnification))
-                }
-            }
-            .onEnded { _ in
-                if session.manipulatedTextLayerID != nil {
-                    session.endTextInteraction()
-                } else if zoom < 1 {
-                    resetZoom()
-                } else {
-                    steadyZoom = zoom
-                }
-            }
-        let drag = DragGesture(minimumDistance: 2)
-            .onChanged { value in
-                let point = normalized(value.location, in: frame)
-                cursor = value.location
-                if session.manipulatesOverlays, session.pendingClarification == nil {
-                    if textDragStart == nil {
-                        guard let start = normalized(value.startLocation, in: frame), let layer = session.overlayLayer(at: start) else {
-                            if zoom > 1 { offset = CGSize(width: steadyOffset.width + value.translation.width, height: steadyOffset.height + value.translation.height) }
-                            return
-                        }
-                        textDragStart = session.overlayGeometry(for: layer)?.center
-                        session.beginTextInteraction(layer.id)
-                    }
-                    guard let origin = textDragStart else { return }
-                    let dx = Double(value.translation.width / frame.width), dy = Double(value.translation.height / frame.height)
-                    session.updateManipulatedText(center: PSPoint(x: origin.x + dx, y: origin.y + dy))
-                } else if paintsWithBrush, session.pendingClarification == nil {
-                    if let point {
-                        if currentStroke.isEmpty { session.beginPreciseStroke(at: point) }
-                        let id = currentStrokeID ?? UUID()
-                        currentStrokeID = id
-                        currentStroke.append(point)
-                        let radius = session.activeTool == .precise ? session.pixelBrushRadius / zoom : session.brushRadius
-                        session.brushStrokes = session.brushStrokes.filter { $0.id != id } + [BrushStroke(id: id, points: currentStroke, radius: radius, hardness: session.activeTool == .precise ? 1 : 0.6)]
-                    }
-                } else if session.activeTool == .precise, session.preciseMode == .lasso, session.pendingClarification == nil {
-                    if let point { session.lassoPoints.append(point) }
-                } else if zoom > 1 {
-                    offset = CGSize(width: steadyOffset.width + value.translation.width, height: steadyOffset.height + value.translation.height)
-                }
-            }
-            .onEnded { _ in
-                cursor = nil
-                if textDragStart != nil {
-                    textDragStart = nil
-                    if session.manipulatedTextLayerID != nil { session.endTextInteraction() }
-                } else if !currentStroke.isEmpty {
-                    currentStroke = []
-                    currentStrokeID = nil
-                    Haptics.tick()
-                } else if session.activeTool == .precise, session.preciseMode == .lasso, session.lassoPoints.count >= 3 {
-                    session.commitLasso()
-                } else {
-                    steadyOffset = offset
-                }
-            }
-        let tap = SpatialTapGesture()
-            .onEnded { value in
-                if let point = normalized(value.location, in: frame) {
-                    Haptics.tap()
-                    if session.manipulatesOverlays, let layer = session.overlayLayer(at: point) {
-                        session.selectLayer(layer.id)
-                    } else if session.activeTool == .shapes {
-                        session.addShape(session.shapeKindToAdd, at: point)
-                    } else {
-                        session.tapCanvas(at: point)
-                    }
-                }
-            }
-        let doubleTap = SpatialTapGesture(count: 2).onEnded { value in
-            if zoom > 1.01 || session.isCropping {
-                resetZoom()
-            } else {
-                zoomIn(at: value.location, stage: stage)
-            }
-        }
-        return doubleTap.exclusively(before: tap).simultaneously(with: magnify).simultaneously(with: drag)
-    }
-
-    private var textRotationGesture: some Gesture {
-        RotateGesture(minimumAngleDelta: .degrees(2))
-            .onChanged { value in
-                guard session.manipulatesOverlays, let id = session.manipulatedTextLayerID ?? session.selectedOverlayLayerID else { return }
-                if session.manipulatedTextLayerID == nil {
-                    session.beginTextInteraction(id)
-                    textRotationStart = session.document.layers.first(where: { $0.id == id }).flatMap { session.overlayGeometry(for: $0)?.rotation } ?? 0
-                }
-                session.updateManipulatedText(rotation: textRotationStart + value.rotation.degrees)
-            }
-            .onEnded { _ in
-                if session.manipulatedTextLayerID != nil { session.endTextInteraction() }
-            }
-    }
-
-    private var compareGesture: some Gesture {
-        LongPressGesture(minimumDuration: 0.3)
-            .sequenced(before: DragGesture(minimumDistance: 0))
-            .updating($isPressing) { value, state, _ in
-                if case .second = value { state = true }
-            }
-    }
-
-    // MARK: Overlays
-
-    @ViewBuilder
-    private func overlays(frame: CGRect, container: CGSize, stage: CGRect, top: CGFloat) -> some View {
+    var body: some View {
         let strokes = session.brushStrokes
+        let color = CanvasOverlays.paintColor(session)
+        Canvas { context, _ in
+            for stroke in strokes {
+                let radius = CGFloat(stroke.radius) * max(frame.width, frame.height)
+                let points = stroke.points.map { CGPoint(x: frame.minX + $0.x * frame.width, y: frame.minY + $0.y * frame.height) }
+                if points.count == 1, let first = points.first {
+                    context.fill(Path(ellipseIn: CGRect(x: first.x - radius, y: first.y - radius, width: radius * 2, height: radius * 2)), with: .color(color))
+                } else if let first = points.first {
+                    var path = Path()
+                    path.move(to: first)
+                    for point in points.dropFirst() { path.addLine(to: point) }
+                    context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: max(1, radius * 2), lineCap: .round, lineJoin: .round))
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The stroke under the finger and the brush cursor: the only view that
+/// reads `StrokeInProgress`, so painting redraws this layer and nothing else.
+private struct LiveStroke: View {
+    let session: PhotoEditorSession
+    let stroke: StrokeInProgress
+    let frame: CGRect
+    let stage: CGRect
+
+    var body: some View {
+        let path = stroke.path
+        let cursor = stroke.cursor
+        let brushes = session.activeTool == .erase || (session.activeTool == .precise && (session.preciseMode == .pixelBrush || session.preciseMode == .clone))
+        let preview = session.showsBrushPreview
+        let brushRadius = CGFloat(session.activeTool == .precise ? session.pixelBrushRadius : session.brushRadius) * max(frame.width, frame.height)
+        let color = CanvasOverlays.paintColor(session)
+        Canvas { context, _ in
+            if !path.isEmpty {
+                if stroke.isLasso {
+                    context.stroke(path, with: .color(PSTheme.accent), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                } else {
+                    context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: max(1, stroke.radius * 2), lineCap: .round, lineJoin: .round))
+                }
+            }
+            // Brush cursor: under the finger while painting, or centred while the size dial is dragged.
+            if brushes, let point = cursor ?? (preview ? CGPoint(x: stage.midX, y: stage.midY) : nil) {
+                let r = max(3, brushRadius)
+                let circle = Path(ellipseIn: CGRect(x: point.x - r, y: point.y - r, width: r * 2, height: r * 2))
+                context.stroke(circle, with: .color(.white), lineWidth: 1.5)
+                context.stroke(circle, with: .color(.black.opacity(0.5)), style: StrokeStyle(lineWidth: 0.75, dash: [3, 3]))
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Grid, lasso, clone source, focus reticle, text and shape handles, the
+/// picked object and the numbered candidates.
+private struct CanvasOverlays: View {
+    let session: PhotoEditorSession
+    let frame: CGRect
+    let stage: CGRect
+    let container: CGSize
+    let zoom: CGFloat
+
+    static func paintColor(_ session: PhotoEditorSession) -> Color {
+        session.activeTool == .precise && session.preciseMode == .pixelBrush ? Color(cgColor: session.paintColor.cgColor).opacity(0.9) : PSTheme.danger.opacity(0.45)
+    }
+
+    var body: some View {
         let candidates = session.candidateOverlays
         let lasso = session.lassoPoints
-        let paintColor = session.activeTool == .precise && session.preciseMode == .pixelBrush ? Color(cgColor: session.paintColor.cgColor).opacity(0.9) : PSTheme.danger.opacity(0.45)
         let showsGrid = zoom >= 6 && session.activeTool == .precise
+        let pixelsWide = max(1, session.document.canvasSize.width)
         let cloneSource = session.activeTool == .precise && session.preciseMode == .clone ? session.cloneSource : nil
-        let brushRadiusPoints = CGFloat(session.activeTool == .precise ? session.pixelBrushRadius : session.brushRadius) * max(frame.width, frame.height)
         let focusReticle = session.activeTool == .focus ? session.focusPoint : nil
         let selection = session.activeTool == .magic ? session.magicSelection : nil
         let overlayLayers = session.activeTool == .text ? session.document.textLayers : (session.activeTool == .shapes ? session.document.shapeLayers : [])
@@ -519,7 +793,6 @@ struct PhotoCanvasView: View {
         Canvas { context, _ in
             // Pixel grid (loupe) when zoomed far in.
             if showsGrid {
-                let pixelsWide = max(1, session.document.canvasSize.width)
                 let step = frame.width / pixelsWide
                 if step >= 8 {
                     var grid = Path()
@@ -530,36 +803,22 @@ struct PhotoCanvasView: View {
                     context.stroke(grid, with: .color(.white.opacity(0.18)), lineWidth: 0.5)
                 }
             }
-            // Lasso outline.
+            // Lasso corners placed by taps.
             if lasso.count > 1 {
                 var path = Path()
-                let points = lasso.map { viewPoint($0, in: frame) }
+                let points = lasso.map { viewPoint($0) }
                 path.move(to: points[0])
                 for point in points.dropFirst() { path.addLine(to: point) }
                 context.stroke(path, with: .color(PSTheme.accent), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
             }
             if let cloneSource {
-                let center = viewPoint(cloneSource, in: frame)
+                let center = viewPoint(cloneSource)
                 context.stroke(Path(ellipseIn: CGRect(x: center.x - 10, y: center.y - 10, width: 20, height: 20)), with: .color(PSTheme.warning), lineWidth: 2)
                 context.stroke(Path { $0.move(to: CGPoint(x: center.x - 14, y: center.y)); $0.addLine(to: CGPoint(x: center.x + 14, y: center.y)); $0.move(to: CGPoint(x: center.x, y: center.y - 14)); $0.addLine(to: CGPoint(x: center.x, y: center.y + 14)) }, with: .color(PSTheme.warning), lineWidth: 1.5)
             }
-            // Brush strokes.
-            for stroke in strokes {
-                let radius = CGFloat(stroke.radius) * max(frame.width, frame.height)
-                var path = Path()
-                let points = stroke.points.map { viewPoint($0, in: frame) }
-                if points.count == 1, let first = points.first {
-                    path.addEllipse(in: CGRect(x: first.x - radius, y: first.y - radius, width: radius * 2, height: radius * 2))
-                    context.fill(path, with: .color(paintColor))
-                } else if let first = points.first {
-                    path.move(to: first)
-                    for point in points.dropFirst() { path.addLine(to: point) }
-                    context.stroke(path, with: .color(paintColor), style: StrokeStyle(lineWidth: max(1, radius * 2), lineCap: .round, lineJoin: .round))
-                }
-            }
             // Focus reticle, like the Camera app's.
             if let focusReticle {
-                let center = viewPoint(focusReticle, in: frame)
+                let center = viewPoint(focusReticle)
                 let side: CGFloat = 64
                 let rect = CGRect(x: center.x - side / 2, y: center.y - side / 2, width: side, height: side)
                 context.stroke(Path(rect), with: .color(PSTheme.accent), lineWidth: 1.5)
@@ -568,16 +827,9 @@ struct PhotoCanvasView: View {
                     context.stroke(Path { $0.move(to: from); $0.addLine(to: to) }, with: .color(PSTheme.accent), lineWidth: 1.5)
                 }
             }
-            // Brush cursor: under the finger while painting, or centred while the size dial is dragged.
-            if paintsWithBrush, let cursorPoint = cursor ?? (session.showsBrushPreview ? CGPoint(x: stage.midX, y: stage.midY) : nil) {
-                let r = max(3, brushRadiusPoints)
-                let circle = Path(ellipseIn: CGRect(x: cursorPoint.x - r, y: cursorPoint.y - r, width: r * 2, height: r * 2))
-                context.stroke(circle, with: .color(.white), lineWidth: 1.5)
-                context.stroke(circle, with: .color(.black.opacity(0.5)), style: StrokeStyle(lineWidth: 0.75, dash: [3, 3]))
-            }
             // Text layer handles.
             for (_, bounds, rotation, selected) in textBoxes {
-                let rect = viewRect(bounds, in: frame)
+                let rect = viewRect(bounds)
                 var path = Path(roundedRect: rect, cornerRadius: 6)
                 if rotation != 0 {
                     let transform = CGAffineTransform(translationX: rect.midX, y: rect.midY).rotated(by: CGFloat(rotation * .pi / 180)).translatedBy(x: -rect.midX, y: -rect.midY)
@@ -597,25 +849,27 @@ struct PhotoCanvasView: View {
             }
             // The object picked in the Magic tool, ringed in the intelligence colours.
             if let selection {
-                let rect = viewRect(selection.boundingBox, in: frame).insetBy(dx: -4, dy: -4)
+                let rect = viewRect(selection.boundingBox).insetBy(dx: -4, dy: -4)
                 let path = Path(roundedRect: rect, cornerRadius: 14)
                 context.fill(path, with: .color(.white.opacity(0.06)))
                 context.stroke(path, with: .linearGradient(Gradient(colors: PSTheme.intelligence), startPoint: CGPoint(x: rect.minX, y: rect.minY), endPoint: CGPoint(x: rect.maxX, y: rect.maxY)), lineWidth: 2.5)
             }
-            // Candidate boxes.
+            // Candidate boxes, numbered like the choice chips.
             for (index, candidate) in candidates.enumerated() {
-                let rect = viewRect(candidate.boundingBox, in: frame)
+                let rect = viewRect(candidate.boundingBox)
                 let path = Path(roundedRect: rect, cornerRadius: 10)
-                context.stroke(path, with: .color(PSTheme.accent), lineWidth: 2.5)
-                context.fill(path, with: .color(PSTheme.accent.opacity(0.12)))
+                context.stroke(path, with: .color(.white), lineWidth: 2.5)
+                context.fill(path, with: .color(.white.opacity(0.10)))
                 let badge = CGRect(x: rect.minX + 6, y: rect.minY + 6, width: 26, height: 26)
-                context.fill(Path(ellipseIn: badge), with: .color(PSTheme.accent))
-                context.draw(Text("\(index + 1)").font(.system(size: 14, weight: .bold, design: .rounded)).foregroundStyle(.black), at: CGPoint(x: badge.midX, y: badge.midY))
+                context.fill(Path(ellipseIn: badge), with: .color(.white))
+                context.draw(Text(verbatim: "\(index + 1)").font(.system(size: 14, weight: .bold, design: .rounded)).foregroundStyle(.black), at: CGPoint(x: badge.midX, y: badge.midY))
             }
         }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
         .overlay {
             if let selection {
-                let rect = viewRect(selection.boundingBox, in: frame)
+                let rect = viewRect(selection.boundingBox)
                 // Above the object when there is room, else below it.
                 let y = rect.minY > stage.minY + 44 ? rect.minY - 34 : min(stage.maxY - 22, rect.maxY + 34)
                 MagicSelectionBar(session: session, candidate: selection)
@@ -624,17 +878,17 @@ struct PhotoCanvasView: View {
             }
         }
         .animation(PSMotion.quick, value: selection?.id)
-        .overlay(alignment: .top) {
-            // The zoom factor has its own badge; only the original needs saying.
-            if session.showsOriginal {
-                GlassChip(L("Original"), systemImage: "eye")
-                    .padding(.top, top + 12)
-                    .transition(.opacity)
-            }
-        }
-        .animation(.easeOut(duration: 0.2), value: session.showsOriginal)
+    }
+
+    private func viewPoint(_ point: PSPoint) -> CGPoint {
+        CGPoint(x: frame.minX + point.x * frame.width, y: frame.minY + point.y * frame.height)
+    }
+
+    private func viewRect(_ rect: PSRect) -> CGRect {
+        CGRect(x: frame.minX + rect.minX * frame.width, y: frame.minY + rect.minY * frame.height, width: rect.width * frame.width, height: rect.height * frame.height)
     }
 }
+
 
 /// Crop frame with draggable corners and edges, thirds grid and dimmed
 /// surroundings. Coordinates are normalised to the image frame.
@@ -912,8 +1166,9 @@ struct CanvasLayout: Equatable {
     var vertical: CGFloat = 8
 }
 
-/// Rebuilds the canvas at every step of a layout change, so the Metal
-/// picture (which cannot animate its own frame) moves with its overlays.
+/// The frame driver: rebuilds only the stage at every step of a layout
+/// change, so the Metal picture (which cannot animate its own frame) moves
+/// with its overlays while the canvas's body, gestures included, stays put.
 private struct CanvasLayoutAnimation<Result: View>: ViewModifier, Animatable {
     var layout: CanvasLayout
     let build: (CanvasLayout) -> Result
@@ -933,7 +1188,8 @@ private struct CanvasLayoutAnimation<Result: View>: ViewModifier, Animatable {
 
 /// Work in progress drawn on the picture itself instead of a blocking HUD:
 /// the intelligence spectrum turning slowly over the area being changed —
-/// the selection, the picked object, or a soft band sweeping the whole photo.
+/// the selection (its mask pre-blurred off the main thread), the picked
+/// object, or a soft band sweeping the whole photo.
 struct WorkingShimmer: View {
     /// The selection as an image; its alpha shapes the shimmer.
     var mask: UIImage?
@@ -953,10 +1209,11 @@ struct WorkingShimmer: View {
 
     private func layer(time: Double) -> some View {
         GeometryReader { proxy in
+            // The spectrum wraps round without a seam, so it needs no blur; the
+            // mask arrives already blurred from Core Image.
             AngularGradient(colors: PSTheme.intelligence + [PSTheme.intelligence[0]], center: .center,
                             angle: .degrees(time.truncatingRemainder(dividingBy: 4) * 90))
                 .opacity(mask == nil && region == nil ? 0.5 : 0.85)
-                .blur(radius: 6)
                 .mask { shape(size: proxy.size, time: time) }
         }
         .accessibilityHidden(true)
@@ -965,7 +1222,7 @@ struct WorkingShimmer: View {
     @ViewBuilder
     private func shape(size: CGSize, time: Double) -> some View {
         if let mask {
-            Image(uiImage: mask).resizable().blur(radius: 3)
+            Image(uiImage: mask).resizable()
         } else if let region {
             let rect = CGRect(x: region.minX * size.width, y: region.minY * size.height,
                               width: region.width * size.width, height: region.height * size.height)

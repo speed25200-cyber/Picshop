@@ -5,99 +5,92 @@ import PicshopCore
 import PicshopIntent
 import PicshopImaging
 
-/// Contextual panel for the active tool.
-extension PhotoEditorSession.Tool {
-    /// Dock entries, grouped by purpose. Sub-modes appear as segments in the panel.
-    static var groups: [ToolGroup<PhotoEditorSession.Tool>] {
-        [
-            ToolGroup(id: "magic", title: L("Magic"), symbol: "sparkles", tools: [.magic, .focus], isMagic: true),
-            ToolGroup(id: "adjust", title: L("Adjust"), symbol: "dial.medium", tools: [.adjust, .color, .looks]),
-            ToolGroup(id: "retouch", title: L("Retouch"), symbol: "wand.and.rays", tools: [.erase, .cutout, .precise]),
-            ToolGroup(id: "crop", title: L("Crop"), symbol: "crop.rotate", tools: [.crop]),
-            ToolGroup(id: "layers", title: L("Layers"), symbol: "square.3.layers.3d", tools: [.text, .shapes, .layers]),
-        ]
-    }
-}
-
+/// The open tool's panel: the controls inside a ToolPanel, with the
+/// category's other panels as segments, the tool's own action in the header
+/// (Annuler for Recadrer, Appliquer for painted strokes) and Done.
 struct PhotoToolPanel: View {
     @Bindable var session: PhotoEditorSession
     let tool: PhotoEditorSession.Tool
 
-    private var group: ToolGroup<PhotoEditorSession.Tool>? {
-        PhotoEditorSession.Tool.groups.first { $0.contains(tool) }
-    }
-
-    private var modes: AnyView? {
-        guard let group, group.tools.count > 1 else { return nil }
-        return AnyView(ModeSegments(modes: group.tools, selection: $session.activeTool, title: { $0.title }, symbol: { $0.symbol }))
-    }
-
     var body: some View {
-        ToolPanelContainer(title: group.map { $0.tools.count > 1 ? $0.title : tool.title } ?? tool.title,
-                           symbol: group.map { $0.tools.count > 1 ? $0.symbol : tool.symbol } ?? tool.symbol,
-                           onClose: { session.activeTool = nil }, trailing: trailing, modes: modes) {
-            switch tool {
-            case .magic: MagicPanel(session: session)
-            case .focus: FocusPanel(session: session)
-            case .adjust: AdjustPanel(session: session)
-            case .color:
-                ColorControls(mixer: session.colorMixer, grade: session.colorGrade,
-                              onMixer: { session.setColorMixer($0) }, onGrade: { session.setColorGrade($0) },
-                              onBegin: { session.beginColorInteraction($0) }, onEnd: { session.endColorInteraction() },
-                              lut: session.lut, onImportLUT: { session.importLUT(from: $0) },
-                              onLUTIntensity: { session.setLUTIntensity($0) }, onRemoveLUT: { session.removeLUT() })
-            case .looks: LooksPanel(session: session)
-            case .erase: ErasePanel(session: session)
-            case .precise: PrecisePanel(session: session)
-            case .cutout: CutoutPanel(session: session)
-            case .crop: CropPanel(session: session)
-            case .text: TextPanel(session: session)
-            case .shapes: ShapesPanel(session: session)
-            case .layers: LayersPanel(session: session)
+        let siblings = PhotoToolCatalog.siblings(of: tool)
+        ToolPanel(title: siblings.count > 1 ? PhotoToolCatalog.categoryTitle(of: tool) : PhotoToolCatalog.title(for: tool),
+                  live: session.live, onDone: done) {
+            accessory
+        } content: {
+            VStack(spacing: 12) {
+                if siblings.count > 1 {
+                    ModeSegments(modes: siblings, selection: $session.activeTool,
+                                 title: { PhotoToolCatalog.title(for: $0) }, symbol: { PhotoToolCatalog.symbol(for: $0) })
+                }
+                PhotoToolContent(session: session, tool: tool)
             }
         }
     }
 
-    private var trailing: AnyView? {
+    @ViewBuilder
+    private var accessory: some View {
         switch tool {
         case .crop:
-            return AnyView(HStack(spacing: 8) {
-                PanelChip(title: L("Cancel")) { session.cancelCrop(); session.activeTool = nil }
-                PanelActionButton(title: L("Done")) { session.commitCrop() }
-            })
+            PanelChip(title: L("Cancel")) {
+                session.cancelCrop()
+                session.activeTool = nil
+            }
         case .erase:
-            return session.brushStrokes.isEmpty ? nil : AnyView(
+            if !session.brushStrokes.isEmpty {
                 PanelActionButton(title: L("Apply"), symbol: "eraser") { session.commitBrushErase() }
                     .accessibilityLabel(L("Erase painted area"))
-            )
+            }
         default:
-            return nil
+            EmptyView()
+        }
+    }
+
+    /// Done keeps the work: the crop is committed, painted strokes are erased on the way out.
+    private func done() {
+        if tool == .crop { session.commitCrop() }
+        session.activeTool = nil
+    }
+}
+
+/// The controls of one tool, built only when its panel is open.
+private struct PhotoToolContent: View {
+    @Bindable var session: PhotoEditorSession
+    let tool: PhotoEditorSession.Tool
+
+    var body: some View {
+        switch tool {
+        case .magic: MagicPanel(session: session)
+        case .focus: FocusPanel(session: session)
+        case .adjust: AdjustPanel(session: session)
+        case .color:
+            ColorControls(mixer: session.colorMixer, grade: session.colorGrade,
+                          onMixer: { session.setColorMixer($0) }, onGrade: { session.setColorGrade($0) },
+                          onBegin: { session.beginColorInteraction($0) }, onEnd: { session.endColorInteraction() },
+                          lut: session.lut, onImportLUT: { session.importLUT(from: $0) },
+                          onLUTIntensity: { session.setLUTIntensity($0) }, onRemoveLUT: { session.removeLUT() })
+        case .looks: LooksPanel(session: session)
+        case .erase: ErasePanel(session: session)
+        case .precise: PrecisePanel(session: session)
+        case .cutout: CutoutPanel(session: session)
+        case .crop: CropPanel(session: session)
+        case .text: TextPanel(session: session)
+        case .shapes: ShapesPanel(session: session)
+        case .layers: LayersPanel(session: session)
         }
     }
 }
 
-/// The action that finishes a panel's work (Done, Erase): the one yellow
-/// capsule in the panel, beside the segments.
+/// The action that finishes a panel's work (Apply, Erase): a white capsule
+/// with a black label, flat because it sits on the panel's glass.
 struct PanelActionButton: View {
     let title: String
     var symbol: String? = nil
     let action: () -> Void
 
     var body: some View {
-        Button { Haptics.confirm(); action() } label: {
-            HStack(spacing: 6) {
-                if let symbol { Image(systemName: symbol).font(.system(size: 15, weight: .medium)) }
-                Text(title).lineLimit(1)
-            }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(PSTheme.onAccent)
-            .padding(.horizontal, 14)
-            .frame(minHeight: 34)
-            .background(Capsule().fill(PSTheme.accent))
-            .contentShape(Capsule())
-        }
-        .buttonStyle(PSPressStyle(scale: 0.96))
-        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+        PSPanelPrimaryButton(title, systemImage: symbol, height: 36, action: action)
+            .transition(.opacity.combined(with: .scale(scale: 0.9)))
     }
 }
 
@@ -187,10 +180,7 @@ struct LooksPanel: View {
                 .transition(.opacity)
             }
             if session.document.baseLayer?.edits.resolvedLook != nil {
-                DialSlider(value: $intensity, range: 0...1, neutral: 1, label: L("Intensity"), format: { "\(Int(($0 * 100).rounded()))%" }) { editing in
-                    if editing { session.beginSliderInteraction(.saturation) } else { session.endSliderInteraction() }
-                }
-                .onChange(of: intensity) { _, newValue in session.setLookIntensity(newValue) }
+                LookIntensityDial(session: session, intensity: $intensity)
             }
         }
         .task {
@@ -212,6 +202,8 @@ struct LooksPanel: View {
 
     /// Thumbnails are rendered once per photo state and kept on the session, so
     /// reopening the panel costs nothing and a hot phone renders them smaller.
+    /// All twenty looks are laid out on one contact sheet, rendered once off
+    /// the main thread and cut into tiles; the panel is updated once.
     private func renderThumbnails() async {
         if let cached = session.lookThumbnails, cached.key == session.lookThumbnailKey {
             thumbnails = cached.images
@@ -220,16 +212,58 @@ struct LooksPanel: View {
         let side = session.app.performance.thumbnailSide
         guard let renderer = session.renderer, let base = try? await renderer.renderBase(session.document, options: PhotoRenderer.Options(targetLongestSide: side, allowExpensiveWork: false)) else { return }
         let key = session.lookThumbnailKey
+        let presets = FilterPreset.gallery
+        let tiles = await Task.detached(priority: .userInitiated) { () -> [FilterPreset: CGImage] in
+            LookContactSheet.render(presets, from: base)
+        }.value
+        guard !Task.isCancelled, !tiles.isEmpty else { return }
         var rendered: [FilterPreset: UIImage] = [:]
-        for preset in FilterPreset.gallery {
-            let adjusted = AdjustmentPipeline.apply(preset.recipe, toneCurve: preset.toneCurve, to: base, scale: 0.05)
-            if let cg = ImageSupport.cgImage(from: adjusted) {
-                rendered[preset] = UIImage(cgImage: cg)
-                thumbnails[preset] = rendered[preset]
-            }
-            await Task.yield()
-        }
+        for (preset, image) in tiles { rendered[preset] = UIImage(cgImage: image) }
+        withAnimation(PSMotion.quick) { thumbnails = rendered }
         session.lookThumbnails = (key, rendered)
+    }
+}
+
+/// The looks' intensity dial, in a leaf that owns the dragged value.
+private struct LookIntensityDial: View {
+    let session: PhotoEditorSession
+    @Binding var intensity: Double
+
+    var body: some View {
+        DialSlider(value: $intensity, range: 0...1, neutral: 1, label: L("Intensity"), format: { "\(Int(($0 * 100).rounded()))%" }) { editing in
+            if editing { session.beginSliderInteraction(.saturation) } else { session.endSliderInteraction() }
+        }
+        .onChange(of: intensity) { _, newValue in session.setLookIntensity(newValue) }
+    }
+}
+
+/// Every look applied to one small render, laid out as a grid and rendered
+/// in a single Core Image pass, then cropped into one image per look.
+enum LookContactSheet {
+    static let columns = 5
+
+    static func render(_ presets: [FilterPreset], from base: CIImage) -> [FilterPreset: CGImage] {
+        let extent = base.extent.integral
+        guard extent.width >= 1, extent.height >= 1, !presets.isEmpty else { return [:] }
+        let tileWidth = extent.width, tileHeight = extent.height
+        let rows = (presets.count + columns - 1) / columns
+        let sheetRect = CGRect(x: 0, y: 0, width: CGFloat(columns) * tileWidth, height: CGFloat(rows) * tileHeight)
+        var sheet = CIImage.empty()
+        for (index, preset) in presets.enumerated() {
+            let adjusted = AdjustmentPipeline.apply(preset.recipe, toneCurve: preset.toneCurve, to: base, scale: 0.05).cropped(to: extent)
+            let column = CGFloat(index % columns), row = CGFloat(index / columns)
+            let placed = adjusted.transformed(by: CGAffineTransform(translationX: column * tileWidth - extent.minX, y: row * tileHeight - extent.minY))
+            sheet = placed.composited(over: sheet)
+        }
+        guard let rendered = ImageSupport.cgImage(from: sheet, rect: sheetRect) else { return [:] }
+        var tiles: [FilterPreset: CGImage] = [:]
+        for (index, preset) in presets.enumerated() {
+            // Core Image counts rows from the bottom, the bitmap from the top.
+            let column = CGFloat(index % columns), row = CGFloat(index / columns)
+            let crop = CGRect(x: column * tileWidth, y: sheetRect.height - (row + 1) * tileHeight, width: tileWidth, height: tileHeight)
+            if let tile = rendered.cropping(to: crop) { tiles[preset] = tile }
+        }
+        return tiles
     }
 }
 
@@ -368,7 +402,7 @@ struct PrecisePanel: View {
                         .padding(.horizontal, 14).frame(minHeight: 36).psField(Capsule())
                         .submitLabel(.go).onSubmit { session.generateInSelection(session.generativePrompt) }
                     Button { session.generateInSelection(session.generativePrompt) } label: { Image(systemName: "sparkles").font(.system(size: 15, weight: .medium)).frame(width: 36, height: 36) }
-                        .buttonStyle(.plain).foregroundStyle(PSTheme.onAccent).psAccentFill(Circle())
+                        .buttonStyle(.plain).foregroundStyle(PSTheme.onPrimary).background(Circle().fill(PSTheme.primary))
                         .disabled(session.generativePrompt.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 HStack {
@@ -590,7 +624,7 @@ struct TextPanel: View {
                     .submitLabel(.done)
                     .onSubmit(commit)
                 Button(action: commit) { Image(systemName: "plus").font(.system(size: 15, weight: .semibold)).frame(width: 36, height: 36) }
-                    .buttonStyle(.plain).foregroundStyle(PSTheme.onAccent).psAccentFill(Circle())
+                    .buttonStyle(.plain).foregroundStyle(PSTheme.onPrimary).background(Circle().fill(PSTheme.primary))
                     .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityLabel(L("Add Text"))
             }
@@ -908,7 +942,7 @@ struct ExportSheet: View {
                                 Spacer()
                                 Text("\(Int(quality * 100))").font(PSFont.mono(12)).contentTransition(.numericText())
                             }
-                            Slider(value: $quality, in: 0.5...1).tint(PSTheme.accent)
+                            Slider(value: $quality, in: 0.5...1).tint(PSTheme.primary)
                         }
                         .padding(.horizontal, 16).padding(.vertical, 12)
                         .psCard(cornerRadius: 18, shadow: false)
