@@ -92,9 +92,28 @@ public final class PhotoEditorSession {
     public let projectID: UUID
     public let app: AppEnvironment
     public private(set) var history: EditHistory<PhotoDocument> {
-        didSet { scheduleAutosave() }
+        didSet {
+            didChangeHistory()
+            scheduleAutosave()
+        }
     }
-    public var document: PhotoDocument { history.present }
+    /// Stored mirror of `history.present`, updated by didChangeHistory() only.
+    public private(set) var document: PhotoDocument
+    public private(set) var canUndo = false
+    public private(set) var canRedo = false
+    /// Past labels, oldest first.
+    public private(set) var undoLabels: [String] = []
+    /// Bumped whenever the document changes (undo and redo included); Live's document version.
+    public private(set) var revision = 0
+    /// The tools whose edits are in the picture (Photos' yellow dot).
+    public private(set) var modifiedTools: Set<Tool>
+    /// The value of the dial being dragged; only the dial reads it.
+    public let dial: DialValue
+    /// Picshop Live in this editor, attached at the end of init.
+    public let live: LiveSession
+    /// True for the whole of a Live session: no toast for Live steps, no spoken reply, no recogniser start.
+    @ObservationIgnored public var liveSpeechSuppressed = false
+    @ObservationIgnored private var isTornDown = false
     /// The photo as this session opened it: Revert starts from it, so layers added since go too.
     private let openedDocument: PhotoDocument
 
@@ -204,22 +223,21 @@ public final class PhotoEditorSession {
     /// Look thumbnails rendered for the current photo state (see `LooksPanel`).
     public var lookThumbnails: (key: String, images: [FilterPreset: UIImage])?
     /// Changes whenever the base photo's pixels change (crop, erase, look…), invalidating the thumbnails.
-    public var lookThumbnailKey: String {
-        let operations = document.baseLayer?.edits.operations.filter { operation in
-            switch operation.kind {
-            case .adjust, .adjustments, .toneCurve, .look, .autoEnhance: return false
-            default: return true
-            }
-        } ?? []
-        return operations.map(\.id.uuidString).joined(separator: "|") + "@\(Int(app.performance.thumbnailSide))"
-    }
+    /// Computed once per document change.
+    public private(set) var lookThumbnailKey: String
 
     public init(document: PhotoDocument, projectID: UUID, app: AppEnvironment) {
         self.projectID = projectID
         self.app = app
         history = EditHistory(initial: document)
+        self.document = document
+        modifiedTools = Self.modifiedTools(in: document)
+        lookThumbnailKey = Self.lookThumbnailKey(for: document, thumbnailSide: app.performance.thumbnailSide)
         openedDocument = document
         previewAspectRatio = document.aspectRatio
+        dial = DialValue()
+        live = LiveSession(app: app, mode: .photo, canGoLive: true)
+        live.attach(self)
     }
 
     // MARK: - Lifecycle
@@ -259,9 +277,22 @@ public final class PhotoEditorSession {
             hasGenerativeEngine = pipeline.hasGenerativeEngine
         }
         pipeline.setLoading(load)
+        // Reading the file's auxiliary data is disk I/O: off the main thread, once (the base image never changes).
+        if let asset = document.baseLayer?.imageAsset {
+            let url = app.store.url(for: asset.relativePath, in: projectID)
+            Task { [weak self] in
+                let hasDepth = await Task.detached(priority: .utility) { ImageSupport.hasDepthData(at: url) }.value
+                guard let self, hasDepth != hasDepthMap else { return }
+                hasDepthMap = hasDepth
+            }
+        }
     }
 
+    /// Ends the session: Live, the voice, rendering and observers stop, and the photo is saved. Idempotent.
     public func teardown() {
+        guard !isTornDown else { return }
+        isTornDown = true
+        live.teardown()
         app.voice.cancel()
         app.voice.onFinalTranscript = nil
         renderTask?.cancel()
@@ -450,6 +481,65 @@ public final class PhotoEditorSession {
 
     // MARK: - History
 
+    /// Brings the stored mirrors up to date after any change to `history`, each
+    /// assigned only when its value changes, then tells Live.
+    private func didChangeHistory() {
+        let present = history.present
+        let documentChanged = present != document
+        let grew = history.past.count > undoLabels.count
+        var changed = documentChanged
+        if documentChanged { document = present }
+        if canUndo != history.canUndo { canUndo = history.canUndo; changed = true }
+        if canRedo != history.canRedo { canRedo = history.canRedo; changed = true }
+        let labels = history.past.map(\.label)
+        if labels != undoLabels { undoLabels = labels; changed = true }
+        if documentChanged {
+            revision += 1
+            let tools = Self.modifiedTools(in: present)
+            if tools != modifiedTools { modifiedTools = tools }
+            let key = Self.lookThumbnailKey(for: present, thumbnailSide: app.performance.thumbnailSide)
+            if key != lookThumbnailKey { lookThumbnailKey = key }
+        }
+        // A dial drag is one change, told when it ends.
+        guard changed, !history.isInTransaction else { return }
+        live.noteDocumentChanged(label: grew ? history.undoLabel : nil)
+    }
+
+    /// Which tools' edits are in the picture: the dock's yellow dots, one per tool.
+    static func modifiedTools(in document: PhotoDocument) -> Set<Tool> {
+        var tools: Set<Tool> = []
+        let base = document.baseLayer?.edits
+        let active = document.activeImageLayerID.flatMap { document.layer(id: $0)?.edits }
+        if base?.resolvedLensBlur != nil { tools.insert(.focus) }
+        if !document.activeAdjustments.isNeutral { tools.insert(.adjust) }
+        if base?.resolvedLook != nil { tools.insert(.looks) }
+        if active?.resolvedColorMixer != nil || active?.resolvedColorGrade != nil || active?.resolvedLUT != nil { tools.insert(.color) }
+        for operation in base?.operations ?? [] {
+            switch operation.kind {
+            case .removeObject, .heal, .blurRegion, .moveObject: tools.insert(.erase)
+            case .removeBackground, .replaceBackground, .blurBackground: tools.insert(.cutout)
+            case .generativeFill, .recolor, .cloneStamp, .pixelPaint: tools.insert(.precise)
+            default: break
+            }
+        }
+        if base?.hasGeometry == true { tools.insert(.crop) }
+        if !document.textLayers.isEmpty { tools.insert(.text) }
+        if !document.shapeLayers.isEmpty { tools.insert(.shapes) }
+        if document.layers.count > 1 { tools.insert(.layers) }
+        return tools
+    }
+
+    /// Changes whenever the base photo's pixels change (crop, erase, look…): tonal steps leave it alone.
+    static func lookThumbnailKey(for document: PhotoDocument, thumbnailSide: Double) -> String {
+        let operations = document.baseLayer?.edits.operations.filter { operation in
+            switch operation.kind {
+            case .adjust, .adjustments, .toneCurve, .look, .autoEnhance: return false
+            default: return true
+            }
+        } ?? []
+        return operations.map(\.id.uuidString).joined(separator: "|") + "@\(Int(thumbnailSide))"
+    }
+
     private func commit(_ newDocument: PhotoDocument, label: String) {
         Diagnostics.shared.note("commit \(label)")
         magicSelection = nil
@@ -590,11 +680,8 @@ public final class PhotoEditorSession {
     public var focusPoint: PSPoint? { document.baseLayer?.edits.resolvedLensBlur?.focus }
     /// 0 = everything sharp … 1 = the widest aperture.
     public var focusAperture: Double { document.baseLayer?.edits.resolvedLensBlur?.aperture ?? 0.55 }
-    /// Whether the photo carries the camera's depth map (else the subject is used).
-    public var hasDepthMap: Bool {
-        guard let asset = document.baseLayer?.imageAsset else { return false }
-        return ImageSupport.hasDepthData(at: app.store.url(for: asset.relativePath, in: projectID))
-    }
+    /// Whether the photo carries the camera's depth map (else the subject is used). Filled in configure().
+    public private(set) var hasDepthMap = false
 
     @ObservationIgnored private var focusMask: MaskReference?
 
@@ -1397,6 +1484,13 @@ public final class PhotoEditorSession {
     }
 
     private static let findsBeforeActing: Set<IntentAction> = [.removeObject, .moveObject, .blurObject, .recolor, .generativeFill, .selectiveAdjust, .cleanUp, .chooseCandidate]
+
+    /// Drops the heavy step that is running, if any: its result is discarded when it
+    /// arrives. True when something was running. Phase 0: nothing is cancellable yet.
+    @discardableResult
+    public func cancelProcessing() -> Bool {
+        false
+    }
 
     @discardableResult
     public func run(_ intent: EditIntent) async -> CommandOutcome {

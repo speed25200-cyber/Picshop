@@ -40,8 +40,23 @@ public final class PDFEditorSession {
     public let projectID: UUID
     public let app: AppEnvironment
     public let services: PDFEditingService
-    public private(set) var history: EditHistory<PDFDocumentModel>
+    public private(set) var history: EditHistory<PDFDocumentModel> {
+        didSet { didChangeHistory() }
+    }
     public var document: PDFDocumentModel { history.present }
+    public private(set) var canUndo = false
+    public private(set) var canRedo = false
+    /// Past labels, oldest first.
+    public private(set) var undoLabels: [String] = []
+    /// Bumped whenever the document changes; Live's document version.
+    private(set) var revision = 0
+    /// Picshop Live in this editor, attached at the end of init. On PDF the orb dictates.
+    public let live: LiveSession
+    /// True for the whole of a Live session: no toast for Live steps, no spoken reply, no recogniser start.
+    @ObservationIgnored public var liveSpeechSuppressed = false
+    /// The document the mirrors were last brought up to date with.
+    @ObservationIgnored private var mirroredDocument: PDFDocumentModel
+    @ObservationIgnored private var isTornDown = false
     private var executor: PDFCommandExecutor
 
     /// Composed PDFKit document shown by the viewer (rebuilt on every change).
@@ -91,8 +106,11 @@ public final class PDFEditorSession {
         self.projectID = projectID
         self.app = app
         history = EditHistory(initial: document)
+        mirroredDocument = document
         services = PDFEditingService(store: app.store, projectID: projectID)
         executor = PDFCommandExecutor(services: services)
+        live = LiveSession(app: app, mode: .pdf, canGoLive: false)
+        live.attach(self)
     }
 
     public func configure() {
@@ -105,7 +123,11 @@ public final class PDFEditorSession {
         recompose()
     }
 
+    /// Ends the session: Live and the voice stop, and the document is saved. Idempotent.
     public func teardown() {
+        guard !isTornDown else { return }
+        isTornDown = true
+        live.teardown()
         app.voice.cancel()
         app.voice.onFinalTranscript = nil
         save()
@@ -136,6 +158,26 @@ public final class PDFEditorSession {
     }
 
     // MARK: History
+
+    /// Brings the stored mirrors up to date after any change to `history`, each
+    /// assigned only when its value changes, then tells Live.
+    private func didChangeHistory() {
+        let present = history.present
+        // The page the viewer shows is view state, not a change to the document.
+        var samePage = present
+        samePage.currentPageIndex = mirroredDocument.currentPageIndex
+        let documentChanged = samePage != mirroredDocument
+        let grew = history.past.count > undoLabels.count
+        var changed = documentChanged
+        mirroredDocument = present
+        if documentChanged { revision += 1 }
+        if canUndo != history.canUndo { canUndo = history.canUndo; changed = true }
+        if canRedo != history.canRedo { canRedo = history.canRedo; changed = true }
+        let labels = history.past.map(\.label)
+        if labels != undoLabels { undoLabels = labels; changed = true }
+        guard changed, !history.isInTransaction else { return }
+        live.noteDocumentChanged(label: grew ? history.undoLabel : nil)
+    }
 
     private func commit(_ updated: PDFDocumentModel, label: String) {
         var copy = updated

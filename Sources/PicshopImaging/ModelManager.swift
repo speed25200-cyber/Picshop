@@ -305,6 +305,13 @@ public actor ModelManager {
     public func cancelInstall(_ id: String) {
         activeTasks[id]?.cancel()
     }
+
+    /// Pauses every install in flight while an editor is open, keeping what was
+    /// already downloaded. Phase 0: nothing is paused yet.
+    public func pauseAll() async {}
+
+    /// Resumes the installs pauseAll() stopped. Phase 0: nothing to resume.
+    public func resumeAll() async {}
 }
 
 enum ModelDownloader {

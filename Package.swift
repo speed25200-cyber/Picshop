@@ -56,7 +56,7 @@ let package = Package(
         ),
         .target(
             name: "PicshopSpeech",
-            dependencies: ["PicshopCore"],
+            dependencies: ["PicshopCore", "PicshopIntent"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .target(

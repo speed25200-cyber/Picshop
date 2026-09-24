@@ -53,10 +53,25 @@ public final class VideoEditorSession {
 
     public let projectID: UUID
     public let app: AppEnvironment
-    public private(set) var history: EditHistory<VideoTimeline>
+    public private(set) var history: EditHistory<VideoTimeline> {
+        didSet { didChangeHistory() }
+    }
     public var timeline: VideoTimeline { history.present }
+    public private(set) var canUndo = false
+    public private(set) var canRedo = false
+    /// Past labels, oldest first.
+    public private(set) var undoLabels: [String] = []
+    /// Bumped whenever the timeline changes (undo and redo included); Live's document version.
+    public private(set) var revision = 0
     public let player: TimelinePlayer
     public let thumbnailer: VideoThumbnailer
+    /// Picshop Live in this editor, attached at the end of init.
+    public let live: LiveSession
+    /// True for the whole of a Live session: no toast for Live steps, no spoken reply, no recogniser start.
+    @ObservationIgnored public var liveSpeechSuppressed = false
+    /// The timeline the mirrors were last brought up to date with.
+    @ObservationIgnored private var mirroredTimeline: VideoTimeline
+    @ObservationIgnored private var isTornDown = false
 
     private var services: AVVideoServices?
     private var executor: VideoCommandExecutor?
@@ -96,9 +111,12 @@ public final class VideoEditorSession {
         self.projectID = projectID
         self.app = app
         history = EditHistory(initial: timeline)
+        mirroredTimeline = timeline
         player = TimelinePlayer(store: app.store, projectID: projectID)
         thumbnailer = VideoThumbnailer(store: app.store, projectID: projectID)
         selectedClipID = timeline.clips.first?.id
+        live = LiveSession(app: app, mode: .video, canGoLive: true)
+        live.attach(self)
     }
 
     public func configure() async {
@@ -127,7 +145,11 @@ public final class VideoEditorSession {
         }
     }
 
+    /// Ends the session: Live, playback and the voice stop, and the video is saved. Idempotent.
     public func teardown() {
+        guard !isTornDown else { return }
+        isTornDown = true
+        live.teardown()
         player.pause()
         app.voice.cancel()
         app.voice.onFinalTranscript = nil
@@ -161,6 +183,26 @@ public final class VideoEditorSession {
     }
 
     // MARK: - History
+
+    /// Brings the stored mirrors up to date after any change to `history`, each
+    /// assigned only when its value changes, then tells Live.
+    private func didChangeHistory() {
+        let present = history.present
+        let timelineChanged = present != mirroredTimeline
+        let grew = history.past.count > undoLabels.count
+        var changed = timelineChanged
+        if timelineChanged {
+            mirroredTimeline = present
+            revision += 1
+        }
+        if canUndo != history.canUndo { canUndo = history.canUndo; changed = true }
+        if canRedo != history.canRedo { canRedo = history.canRedo; changed = true }
+        let labels = history.past.map(\.label)
+        if labels != undoLabels { undoLabels = labels; changed = true }
+        // A dial drag is one change, told when it ends.
+        guard changed, !history.isInTransaction else { return }
+        live.noteDocumentChanged(label: grew ? history.undoLabel : nil)
+    }
 
     private func commit(_ timeline: VideoTimeline, label: String) {
         var updated = timeline
@@ -371,6 +413,13 @@ public final class VideoEditorSession {
             if case .needsClarification = outcome { break }
             if case .failed = outcome { break }
         }
+    }
+
+    /// Drops the heavy step that is running, if any: its result is discarded when it
+    /// arrives. True when something was running. Phase 0: nothing is cancellable yet.
+    @discardableResult
+    public func cancelProcessing() -> Bool {
+        false
     }
 
     @discardableResult

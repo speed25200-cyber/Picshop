@@ -34,6 +34,9 @@ public final class AppEnvironment {
     /// How the previous session ended, when it ended badly (crash, memory kill), until
     /// dismissed. Offer to share it with `writeCrashReport()`.
     public private(set) var pendingCrashReport: Diagnostics.Report?
+    /// Set by EditorHost while an editor is on screen: model installs never start
+    /// or resume while it is true.
+    public var isEditorOpen = false
     @ObservationIgnored private var memoryObserver: NSObjectProtocol?
 
     public init(extraEngines: [any IntentEngine] = []) {
@@ -181,6 +184,10 @@ public final class AppEnvironment {
         RenderContext.shared.clearCaches()
         RenderContext.export.clearCaches()
     }
+
+    /// Warms the on-device planner for the editor about to open. EditorHost calls
+    /// it on appear, so launch does not pay for it.
+    public func prewarmIntentEngine(mode: EditorMode) {}
 
     public func applyPerformanceSettings() {
         performance.preference = settings.performancePreference

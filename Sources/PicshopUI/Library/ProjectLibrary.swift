@@ -17,9 +17,49 @@ public final class ProjectLibrary {
     public internal(set) var isImporting = false
     public var errorMessage: String?
 
+    /// Home's list, newest first, filled by `reload()`.
+    public private(set) var summaries: [ProjectSummary] = []
+    @ObservationIgnored private var slots: [UUID: ThumbnailSlot] = [:]
+
     public init(store: ProjectStore) {
         self.store = store
         refresh()
+    }
+
+    /// Reads every project's summary off the main thread.
+    public func reload() async {
+        let store = self.store
+        summaries = await Task.detached(priority: .userInitiated) { store.listSummaries() }.value
+    }
+
+    /// Decodes a whole project off the main thread, for the editor about to open.
+    public func load(_ id: UUID) async throws -> Project {
+        let store = self.store
+        return try await Task.detached(priority: .userInitiated) { try store.load(id: id) }.value
+    }
+
+    /// Saves a project from an editor. For now the synchronous `save(_:)`; the
+    /// encode and write move off the main thread next.
+    public func persist(_ project: Project) async {
+        save(project)
+    }
+
+    /// Saves synchronously. Termination paths only.
+    public func saveNow(_ project: Project) {
+        save(project)
+    }
+
+    /// Shows a new thumbnail on the project's card at once.
+    public func setThumbnail(_ image: UIImage, for id: UUID, modifiedAt: Date) {
+        slot(for: id).update(image, modifiedAt: modifiedAt)
+    }
+
+    /// The one thumbnail slot of a project; a card reads only its own.
+    public func slot(for id: UUID) -> ThumbnailSlot {
+        if let slot = slots[id] { return slot }
+        let slot = ThumbnailSlot()
+        slots[id] = slot
+        return slot
     }
 
     public func refresh() {
@@ -256,6 +296,22 @@ public final class ProjectLibrary {
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return "\(video ? L("Video") : L("Photo")) · \(formatter.string(from: Date()))"
+    }
+}
+
+/// A project's thumbnail on Home. Each card, the hero and the backdrop read
+/// only their own slot, so a thumbnail arriving redraws that view alone.
+@MainActor
+@Observable
+public final class ThumbnailSlot {
+    public private(set) var image: UIImage?
+    public private(set) var modifiedAt: Date?
+
+    init() {}
+
+    fileprivate func update(_ image: UIImage, modifiedAt: Date) {
+        self.image = image
+        self.modifiedAt = modifiedAt
     }
 }
 

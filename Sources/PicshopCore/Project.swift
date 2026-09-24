@@ -67,6 +67,55 @@ public struct Project: Hashable, Codable, Sendable, Identifiable {
     public static let mediaDirectory = "media"
     public static let masksDirectory = "masks"
     public static let thumbnailName = "thumbnail-2.jpg"
+    /// What Home shows for a project, written next to the manifest (see `ProjectSummary`).
+    public static let summaryName = "summary.json"
+}
+
+/// What Home needs to show a project card, kept small so the library can list
+/// hundreds of projects without decoding a single manifest.
+public struct ProjectSummary: Codable, Sendable, Hashable, Identifiable {
+    public enum Kind: String, Codable, Sendable { case photo, video, pdf }
+
+    public var id: UUID
+    public var kind: Kind
+    public var title: String
+    public var createdAt: Date
+    public var modifiedAt: Date
+    /// Video: timeline duration in seconds; nil otherwise.
+    public var duration: Double?
+    /// PDF: number of pages; nil otherwise.
+    public var pageCount: Int?
+    /// Width / height of what the card shows: the photo canvas, the video render
+    /// size or the first PDF page. 1 when unknown.
+    public var aspectRatio: Double
+
+    public init(project: Project) {
+        id = project.id
+        title = project.title
+        createdAt = project.createdAt
+        modifiedAt = project.modifiedAt
+        switch project.content {
+        case .photo(let document):
+            kind = .photo
+            duration = nil
+            pageCount = nil
+            aspectRatio = Self.usable(document.aspectRatio)
+        case .video(let timeline):
+            kind = .video
+            duration = timeline.duration
+            pageCount = nil
+            aspectRatio = Self.usable(timeline.renderSize.aspectRatio)
+        case .pdf(let document):
+            kind = .pdf
+            duration = nil
+            pageCount = document.pageCount
+            aspectRatio = Self.usable(document.pages.first?.displaySize.aspectRatio ?? 0)
+        }
+    }
+
+    private static func usable(_ ratio: Double) -> Double {
+        ratio.isFinite && ratio > 0 ? ratio : 1
+    }
 }
 
 /// Errors surfaced to the UI. Every case carries a user-presentable message.
@@ -210,5 +259,24 @@ public struct ProjectStore: Sendable {
             }
         }
         return total
+    }
+}
+
+extension ProjectStore {
+    public func summaryURL(for id: UUID) -> URL {
+        packageURL(for: id).appendingPathComponent(Project.summaryName)
+    }
+
+    public func writeSummary(_ summary: ProjectSummary) throws {
+        let data = try encoder.encode(summary)
+        try data.write(to: summaryURL(for: summary.id), options: .atomic)
+    }
+
+    /// Every project's summary, newest first.
+    ///
+    /// For now built from the manifests, as `listProjects()` does; reading
+    /// summary.json and backfilling missing or stale ones comes next.
+    public func listSummaries() -> [ProjectSummary] {
+        listProjects().map(ProjectSummary.init(project:))
     }
 }

@@ -47,6 +47,8 @@ public final class VoiceController {
 
     /// Called with the final transcript of each utterance.
     public var onFinalTranscript: ((String) -> Void)?
+    /// Called with the running transcript while an utterance is heard (dictation captions).
+    public var onPartialTranscript: ((String) -> Void)?
 
     /// Replaced after an audio configuration change: a fresh engine picks up the new hardware format.
     private var audioEngine = AVAudioEngine()
@@ -86,6 +88,12 @@ public final class VoiceController {
     // MARK: - Control
 
     public var isListening: Bool { state == .listening || state == .preparing }
+
+    /// True while Picshop Live owns the audio session: `start()` then sets `.unavailable`.
+    public var isBlockedByLive: Bool {
+        // Phase 0 stub: Live never owns the audio session yet.
+        false
+    }
 
     /// False while a session is still starting or being released.
     public var canStart: Bool {

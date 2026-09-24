@@ -15,6 +15,9 @@ public final class VoiceFeedback: NSObject {
 
     private let synthesizer = AVSpeechSynthesizer()
     public var isEnabled = false
+    /// True for the whole of a Live session, which speaks through its own engine:
+    /// `speak(_:language:force:)` then returns silently, even with `force`.
+    public var isSuppressed = false
     public var rate: Float = AVSpeechUtteranceDefaultSpeechRate * 1.05
     /// Set by `VoiceController` while it prepares, listens or finishes.
     public internal(set) var isMicrophoneActive = false
@@ -30,6 +33,7 @@ public final class VoiceFeedback: NSObject {
     }
 
     public func speak(_ text: String, language: String?, force: Bool = false) {
+        guard !isSuppressed else { return }
         guard isEnabled || force, !text.isEmpty else { return }
         // Heard by the open microphone, the reply would come back as the next command.
         guard !isMicrophoneActive else {

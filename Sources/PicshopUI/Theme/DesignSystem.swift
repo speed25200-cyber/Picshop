@@ -1,6 +1,7 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
 import UIKit
+import PicshopIntent
 
 /// Design tokens.
 ///
@@ -72,6 +73,20 @@ public enum PSTheme {
     /// Sheen laid over flat card surfaces.
     public static let sheen = LinearGradient(colors: [Color.white.opacity(0.05), Color.white.opacity(0.0)], startPoint: .top, endPoint: .bottom)
 
+    // MARK: Studio (Live and the editor shell)
+    /// Primary actions (Export, Send, Done): white prominent glass with a black label.
+    public static let primary = Color.white
+    /// Text and glyphs drawn on `primary`.
+    public static let onPrimary = Color.black
+    /// The Live console's End button (#FF453A).
+    public static let liveEnd = Color(red: 1.0, green: 0.271, blue: 0.227)
+    /// The assistant's caption line.
+    public static let captionPrimary = Color.white.opacity(0.96)
+    /// The user's settled words (0.80 with Increase Contrast, applied in views).
+    public static let captionSecondary = Color.white.opacity(0.62)
+    /// The user's still-changing words (0.60 with Increase Contrast, applied in views).
+    public static let captionVolatile = Color.white.opacity(0.40)
+
     public static let cornerRadius: CGFloat = PSRadius.large
     public static let panelRadius: CGFloat = PSRadius.panel
     public static let spacing: CGFloat = PSSpacing.medium
@@ -113,6 +128,16 @@ public enum PSRadius {
     /// iPhone display corners, for the intelligence glow.
     public static let display: CGFloat = 58
 
+    // Studio.
+    /// Tiles in the Outils sheet.
+    public static let toolTile: CGFloat = 20
+    /// Project cells on Home.
+    public static let projectCell: CGFloat = 14
+    /// The inline ToolPanel card, concentric with the display at a 10-point inset.
+    public static let toolPanel: CGFloat = 34
+    /// Onboarding cards.
+    public static let onboardingCard: CGFloat = 24
+
     /// The radius of a shape nested `inset` points inside one of `radius`.
     public static func concentric(_ radius: CGFloat, inset: CGFloat) -> CGFloat { max(0, radius - inset) }
 }
@@ -149,6 +174,36 @@ public enum PSMetrics {
     public static let dock: CGFloat = 64
     /// Horizontal padding of a chip (12 with a leading glyph).
     public static let chipPadding: CGFloat = 14
+
+    // Studio: the editor shell, the Live dock and the orb.
+    /// Round buttons of the top bar.
+    public static let barButton: CGFloat = 44
+    /// Round buttons of the dock (Outils, mute, keyboard, End).
+    public static let dockButton: CGFloat = 52
+    /// The Ask field.
+    public static let composerHeight: CGFloat = 52
+    /// The Ask field on compact screens (667 points tall).
+    public static let composerHeightCompact: CGFloat = 48
+    /// Idea chips.
+    public static let ideaChip: CGFloat = 40
+    /// The orb at rest, next to the Ask field.
+    public static let orbComposer: CGFloat = 52
+    /// The orb in the Live console.
+    public static let orbConsole: CGFloat = 76
+    /// The orb in the Live console on compact screens.
+    public static let orbConsoleCompact: CGFloat = 64
+    /// The orb in a ToolPanel header.
+    public static let orbMini: CGFloat = 36
+    /// The orb on Home's empty state.
+    public static let orbHero: CGFloat = 120
+    /// The orb on the onboarding pages.
+    public static let orbOnboarding: CGFloat = 160
+    /// The Live console row.
+    public static let consoleHeight: CGFloat = 76
+    /// Tiles in the Outils sheet.
+    public static let toolTile: CGFloat = 76
+    /// Badges over media (the cloud badge).
+    public static let badge: CGFloat = 30
 }
 
 /// Motion vocabulary. Calm, short and nearly bounce-free, as a pro tool
@@ -168,6 +223,20 @@ public enum PSMotion {
     public static let appear = Animation.spring(duration: 0.4, bounce: 0.1)
     /// A result dissolving in over the previous picture.
     public static let dissolve = Animation.easeOut(duration: 0.35)
+
+    // Studio.
+    /// The dock morphing between the composer and the Live console.
+    public static let morph = Animation.spring(duration: 0.42, bounce: 0.16)
+    /// The orb leaving `.off` (0.6 to 1).
+    public static let bloom = Animation.spring(duration: 0.55, bounce: 0.22)
+    /// The orb's palette and scale moving between Live states.
+    public static let orbState = Animation.smooth(duration: 0.6)
+    /// Idea chips arriving or being replaced.
+    public static let ideas = Animation.smooth(duration: 0.45)
+    /// A caption line settling in.
+    public static let captionWord = Animation.easeOut(duration: 0.18)
+    /// The orb springing back after a barge-in dip.
+    public static let bargeIn = Animation.spring(duration: 0.22, bounce: 0.35)
 }
 
 /// SF Pro on Dynamic Type text styles, so optical sizes, tracking and the
@@ -266,6 +335,32 @@ public enum Haptics {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) { softImpact.impactOccurred(intensity: 0.9) }
     }
     public static func prepare() { light.prepare(); medium.prepare(); selection.prepare(); softImpact.prepare() }
+
+    /// When the last Live haptic played (system uptime), for the 300 ms spacing.
+    private static var lastLiveHaptic: TimeInterval = -1
+
+    /// Picshop Live's haptics. At most one every 300 ms; respects `isEnabled`.
+    public static func live(_ haptic: LiveHaptic) {
+        guard isEnabled else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard lastLiveHaptic < 0 || now - lastLiveHaptic >= 0.3 else { return }
+        lastLiveHaptic = now
+        switch haptic {
+        case .liveStart:
+            medium.impactOccurred()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { softImpact.impactOccurred(intensity: 0.5) }
+        case .liveEnd:
+            softImpact.impactOccurred(intensity: 0.4)
+        case .bargeIn:
+            rigid.impactOccurred(intensity: 0.45)
+        case .actionStarted:
+            softImpact.impactOccurred(intensity: 0.5)
+        case .actionApplied:
+            magic()
+        case .problem:
+            notification.notificationOccurred(.warning)
+        }
+    }
 }
 
 /// Localised string lookup for the UI package's catalogue.
