@@ -391,9 +391,6 @@ public actor LocalModelLiveBrain: LiveBrain {
         let ticks = Self.watched(engine.send(messages, options: options), clock: clock, firstToken: firstToken, turn: remaining)
         // Several calls in one generation: each one is checked against the picture as the calls before left it.
         var context = context
-        func refresh(_ changed: Bool) async {
-            if changed { context = await tools.context() }
-        }
         var filter = LocalOutputFilter()
         var records: [CallRecord] = []
         var gotToken = false
@@ -416,14 +413,14 @@ public actor LocalModelLiveBrain: LiveBrain {
                     token()
                     for piece in filter.feed(delta) {
                         try await take(piece, turn: turn, tools: tools, context: context, grounding: grounding, progress: &progress, records: &records, output: output)
-                        if case .toolCall = piece { await refresh(progress.changedDocument) }
+                        if case .toolCall = piece { if progress.changedDocument { context = await tools.context() } }
                     }
                 case .event(.toolCall(let call)):
                     token()
                     let use = ToolArgumentCoercer.rawToolUse(id: call.id.isEmpty ? nextCallID(turn) : call.id, name: call.name, arguments: call.arguments)
                     let record = try await perform(use, turn: turn, tools: tools, context: context, grounding: grounding, progress: &progress, output: output)
                     records.append(record)
-                    await refresh(progress.changedDocument)
+                    if progress.changedDocument { context = await tools.context() }
                 case .event(.rejectedToolCall(let raw)):
                     token()
                     // The engine could not read it; the filter may. Anything else is an invalid call.
@@ -439,7 +436,7 @@ public actor LocalModelLiveBrain: LiveBrain {
                             let use = ToolArgumentCoercer.rawToolUse(id: nextCallID(turn), name: name, arguments: arguments)
                             let record = try await perform(use, turn: turn, tools: tools, context: context, grounding: grounding, progress: &progress, output: output)
                             records.append(record)
-                            await refresh(progress.changedDocument)
+                            if progress.changedDocument { context = await tools.context() }
                         }
                     }
                 case .event(.finished(let stats, let reason)):
