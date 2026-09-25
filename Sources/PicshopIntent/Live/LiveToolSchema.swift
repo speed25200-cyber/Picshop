@@ -28,11 +28,24 @@ public enum LiveToolSchema {
     /// Fields only the video schema has.
     public static let videoFields: Set<String> = ["startSeconds", "endSeconds", "seconds", "clipNumber", "transition", "speed", "scope"]
 
+    /// Fields only the photo schema has: the table steps' (cells … decimals) and the text and region
+    /// primitives' (ref … match).
+    public static let photoFields: Set<String> = [
+        "cells", "row", "column", "values", "min", "max", "decimals", "ref", "box", "size", "weight", "align", "font", "match",
+    ]
+    /// Exact values of the photo enums (the validator refuses anything else).
+    public static let cellsValues = ["empty", "all"]
+    public static let valuesValues = ["random", "sequence", "plausible", "list"]
+    public static let alignValues = ["left", "center", "right"]
+    /// Named text sizes; "x1.5" (a factor) and a number (thousandths of the picture height) are also read.
+    public static let sizeValues = ["tiny", "small", "medium", "large", "title", "bigger", "smaller", "match"]
+
     public static let applyEditsDescription = """
     Apply one or more edits to the open photo or video, in order. Call this whenever the user asks for a change, accepts one of your ideas or \
     says yes to your proposal. Say one short sentence before calling it; when the edit succeeds you usually will not get another turn to comment. \
     Do not call it for questions or opinions. Use only the listed values. At most 6 steps. To say which object, use point (x and y from 0 to 1, \
-    top-left origin, in the last image you saw) or attributes such as a colour or clothing.
+    top-left origin, in the last image you saw) or attributes such as a colour or clothing. Text on the picture and its free areas are named \
+    by their ids (ref t3, l1, f1); a table is filled in ONE fillCells step, however many cells, with the row and column names it shows.
     """
 
     public static let undoDescription = """
@@ -107,7 +120,7 @@ public enum LiveToolSchema {
     public static func stepSchema(for mode: EditorMode) -> JSONValue {
         func enumeration(_ values: [String]) -> JSONValue { .array(values.map { .string($0) }) }
         var properties: [String: JSONValue] = [
-            "action": ["type": "string", "enum": enumeration(allowedActions(for: mode).map(\.rawValue))],
+            "action": ["type": "string", "enum": enumeration(allowedActions(for: mode).map(\.rawValue)), "description": .string(actionDescription(mode))],
             "target": ["type": "string", "maxLength": 40,
                        "description": "Canonical English noun of the object or region: dog, person, car, sign, pole, wire, text, sky, face, eyes, teeth, background. Required for removeObject, moveObject (or point), recolor, selectiveAdjust."],
             "spatialHint": ["type": "string", "enum": enumeration(SpatialHint.allCases.map(\.rawValue))],
@@ -126,12 +139,34 @@ public enum LiveToolSchema {
             "aspect": ["type": "string", "enum": enumeration(AspectPreset.allCases.map(\.rawValue))],
             "degrees": ["type": "number", "minimum": -360, "maximum": 360, "description": "rotate: negative = counter-clockwise. moveObject: direction, 0 right, 90 up, 180 left, 270 down."],
             "flipAxis": ["type": "string", "enum": ["horizontal", "vertical"]],
-            "text": ["type": "string", "maxLength": 200, "description": "addText: the words, verbatim in the user's language. generativeFill: what to generate, in English."],
+            "text": ["type": "string", "maxLength": 200,
+                     "description": "addText and editText: the words, verbatim in the user's language. fillCells: the value written in each cell (24 characters at most; with values list, the values joined with |). generativeFill: what to generate, in English."],
             "placement": ["type": "string", "enum": enumeration(TextElement.Placement.allCases.map(\.rawValue))],
             "color": ["type": "string", "description": "English colour name (red, light blue) or #RRGGBB."],
             "background": ["type": "string", "description": "replaceBackground: colour name, transparent or blur."],
             "choiceIndex": ["type": "integer", "minimum": 1, "description": "1-based index: the candidate, or the destination of moveClip."],
         ]
+        if mode == .photo {
+            properties["cells"] = ["type": "string", "enum": enumeration(cellsValues),
+                                   "description": "Table steps: empty (default) = only the empty cells in scope; all = every cell in scope."]
+            properties["row"] = ["type": "string", "maxLength": 40, "description": "Table steps: a row label as the table lines print it, or its number (1-based, -1 = last); several joined with |."]
+            properties["column"] = ["type": "string", "maxLength": 40, "description": "Table steps: a column header as the table lines print it, or its number (1-based, -1 = last); several joined with |."]
+            properties["values"] = ["type": "string", "enum": enumeration(valuesValues),
+                                    "description": "fillCells: generated values instead of text (list: text holds the values joined with |)."]
+            properties["min"] = ["type": "number", "description": "fillCells random or sequence: the smallest value."]
+            properties["max"] = ["type": "number", "description": "fillCells random: the largest value."]
+            properties["decimals"] = ["type": "integer", "minimum": 0, "maximum": 3, "description": "fillCells random: decimal places."]
+            properties["ref"] = ["type": "string", "maxLength": 8,
+                                 "description": "An id from the scene lines: t3 (printed text), l2 (text layer), o1 (object), f1 (free area)."]
+            properties["box"] = ["type": "array", "minItems": 4, "maxItems": 4, "items": ["type": "number", "minimum": 0, "maximum": 1],
+                                 "description": "[x1, y1, x2, y2] from 0 to 1, top-left origin: the area eraseRegion erases, or where addText and moveText write."]
+            properties["size"] = ["type": "string", "maxLength": 12,
+                                  "description": "Text size: tiny, small, medium, large, title, bigger, smaller, match, a factor such as x1.5, or thousandths of the picture height."]
+            properties["weight"] = ["type": "string", "enum": enumeration(TableGrid.FontWeight.allCases.map(\.rawValue))]
+            properties["align"] = ["type": "string", "enum": enumeration(alignValues)]
+            properties["font"] = ["type": "string", "enum": enumeration(TableGrid.FontDesign.allCases.map(\.rawValue))]
+            properties["match"] = ["type": "string", "maxLength": 8, "description": "Copy the text style of: nearby (the text next to it) or a text id (t3)."]
+        }
         if mode == .video {
             properties["startSeconds"] = ["type": "number", "minimum": 0, "description": "Start of the range in seconds (trim keeps it, deleteRange removes it)."]
             properties["endSeconds"] = ["type": "number", "minimum": 0, "description": "End of the range in seconds."]
@@ -148,6 +183,14 @@ public enum LiveToolSchema {
             "required": ["action"],
             "properties": .object(properties),
         ]
+    }
+
+    /// What the table and text steps do, for the action field (the others are named by the prompts).
+    static func actionDescription(_ mode: EditorMode) -> String {
+        guard mode == .photo else { return "The edit to make." }
+        return "The edit to make. fillCells writes table cells in one step (text or values; cells, row, column); clearCells empties them; "
+            + "highlightCells marks a row or column. addText writes new text (placement, box or ref; size, weight, align, font, match); "
+            + "editText rewrites a text by ref in its own style; removeText and moveText act on a text by ref; eraseRegion erases a box or ref."
     }
 
     static let amountDescription = """

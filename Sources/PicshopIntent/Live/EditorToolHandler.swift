@@ -16,8 +16,16 @@ import PicshopCore
     /// A heavy step already running is waited for, polled this often, at most `busyTimeout`.
     var busyPoll: Double = 0.1
     var busyTimeout: Double = 20
+    /// Act-then-verify: the check of a run's result may take this long (one render, one text pass);
+    /// past it the steps stay unverified rather than hold the turn.
+    var verifyTimeout: Double = 2.0
 
     public var language: NormalizedUtterance.Language = .french
+
+    /// The last actions run through this handler, oldest first: apply_edits calls (.model), grammar
+    /// plans (.grammar) and tapped chips (.idea). A ring of `recentActionsCapacity`.
+    public private(set) var recentActions: [LiveActionRecord] = []
+    public static let recentActionsCapacity = 8
 
     public init(host: any LiveEditingHost, runningAfter: Double = 2.5,
                 onIdeas: @escaping @MainActor ([LiveIdea]) -> Void,
@@ -37,7 +45,9 @@ import PicshopCore
         guard let host else { return LiveToolResult(isError: true, payload: ["error": "editor_closed"], changedDocument: false) }
         switch call.tool {
         case .applyEdits(let intents):
-            return ToolResultEncoder.applyEdits(await run(intents))
+            let execution = await run(intents)
+            record(.model, intents: intents, execution: execution)
+            return ToolResultEncoder.applyEdits(execution)
         case .undo(let count, let redo, let toOriginal):
             let labels = host.liveUndo(count: count, redo: redo, toOriginal: toOriginal)
             return ToolResultEncoder.undo(labels: labels, redo: redo, version: host.liveVersion, language: language)
@@ -56,19 +66,32 @@ import PicshopCore
     public func runIdea(_ idea: LiveIdea) async -> LiveExecution {
         switch ToolInputValidator(mode: mode).steps(raw: idea.steps, context: context()) {
         case .success(let intents):
-            return await run(intents)
+            let execution = await run(intents)
+            record(.idea, intents: intents, execution: execution)
+            return execution
         case .failure(let error):
             let message: String
             if case .problems(let problems) = error { message = problems.joined(separator: "; ") } else { message = "invalid idea" }
             let action = idea.steps.first.flatMap { IntentAction(rawValue: $0.action) } ?? .unknown
-            return LiveExecution(steps: [LiveStepResult(index: 0, action: action, status: .failed, message: message)], version: host?.liveVersion ?? 0,
-                                 canUndo: context().canUndo)
+            // The chip no longer fits the picture: a coded failure, so no validator text is ever spoken.
+            return finished([LiveStepResult(index: 0, action: action, status: .failed, message: message, reason: .unsupported)])
         }
     }
 
     /// Local fast lane: the grammar's intents, as they are.
     public func runPlan(_ plan: EditPlan) async -> LiveExecution {
-        await run(plan.intents.filter { $0.action != .unknown })
+        let intents = plan.intents.filter { $0.action != .unknown }
+        let execution = await run(intents)
+        record(.grammar, intents: intents, execution: execution)
+        return execution
+    }
+
+    /// Keeps a run in `recentActions`, with its arguments in the model's vocabulary.
+    private func record(_ source: LiveActionRecord.Source, intents: [EditIntent], execution: LiveExecution) {
+        guard !intents.isEmpty, !execution.steps.isEmpty else { return }
+        recentActions.append(LiveActionRecord(source: source, steps: intents.map(RawIntentStep.init(intent:)), results: execution.steps,
+                                              version: execution.version))
+        if recentActions.count > Self.recentActionsCapacity { recentActions.removeFirst(recentActions.count - Self.recentActionsCapacity) }
     }
 
     // MARK: Running
@@ -76,9 +99,18 @@ import PicshopCore
     private func run(_ intents: [EditIntent]) async -> LiveExecution {
         guard let host else { return LiveExecution(steps: [], version: 0, canUndo: false) }
         var results: [LiveStepResult] = []
+        /// Act-then-verify: the checks the applied steps asked for, by step.
+        var checks: [(step: Int, request: VerificationRequest)] = []
+        /// D12 on every lane: a step identical to one that did not apply in this run is not run again.
+        var missed: [LocalModelLiveBrain.StepSignature: LiveStepResult] = [:]
         var index = 0
         while index < intents.count {
             let intent = intents[index]
+            if let earlier = missed[LocalModelLiveBrain.StepSignature(intent)] {
+                results.append(LiveStepResult(index: index, action: intent.action, status: .blocked, message: earlier.message, reason: earlier.reason, hint: earlier.hint))
+                index += 1
+                continue
+            }
             guard await waitUntilIdle() else {
                 results.append(LiveStepResult(index: index, action: intent.action, status: .failed, message: busyMessage))
                 results += skipped(intents, after: index)
@@ -93,7 +125,10 @@ import PicshopCore
                 finishInBackground(step, index: index, intents: intents, done: done)
                 break
             }
-            let result = LiveStepResult(index: index, intent: intent, run: run)
+            var result = LiveStepResult(index: index, intent: intent, run: run)
+            result.createdRef = createdRef(of: result, run: run)
+            if result.status == .applied, let request = run.verificationRequest { checks.append((results.count, request)) }
+            if [.failed, .info, .needsUser].contains(result.status) { missed[LocalModelLiveBrain.StepSignature(intent)] = result }
             results.append(result)
             if result.stopsTheRun {
                 results += skipped(intents, after: index)
@@ -101,13 +136,66 @@ import PicshopCore
             }
             index += 1
         }
-        return LiveExecution(steps: results, version: host.liveVersion, canUndo: host.liveIntentContext().canUndo)
+        results = await verified(results, checks: checks)
+        return finished(results)
+    }
+
+    /// The scene id ("l2") of the text layer an applied text step selected (the layer it wrote), read from
+    /// the editor's scene map right after the step, so the model can name it in a repair or a follow-up.
+    private func createdRef(of result: LiveStepResult, run: LiveRunResult) -> String? {
+        guard result.status == .applied, [.addText, .editText, .moveText].contains(result.action), let host else { return nil }
+        let selected = run.effects.compactMap { effect -> UUID? in
+            if case .selectLayer(let id) = effect { return id }
+            return nil
+        }.last
+        guard let selected else { return nil }
+        return host.liveIntentContext().scene?.texts.first { $0.layerID == selected }?.id
+    }
+
+    /// The execution as reported: hints on the steps that carry a reason, and whether the picture is a table.
+    private func finished(_ steps: [LiveStepResult]) -> LiveExecution {
+        let context = context()
+        let hasTable = context.table != nil
+        var execution = LiveExecution(steps: steps.map { step in
+            var step = step
+            if step.hint == nil {
+                if step.status != .applied, step.status != .skipped, let reason = step.reason {
+                    step.hint = ToolHints.hint(for: reason, action: step.action, hasTable: hasTable)
+                } else if step.status == .applied, step.verification?.status == .failed {
+                    step.hint = ToolHints.hint(for: .verifyFailed, action: step.action, hasTable: hasTable)
+                }
+            }
+            return step
+        }, version: host?.liveVersion ?? 0, canUndo: context.canUndo)
+        execution.pictureIsTable = context.table?.coversPicture == true
+        return execution
+    }
+
+    /// One look at the rendered result for every check the run asked for (`LiveEditingHost.liveVerify`),
+    /// within `verifyTimeout`; past it the steps stay unverified. Each report lands on its step.
+    private func verified(_ results: [LiveStepResult], checks: [(step: Int, request: VerificationRequest)]) async -> [LiveStepResult] {
+        guard let host, !checks.isEmpty else { return results }
+        let requests = checks.map(\.request)
+        let looking = Task { @MainActor in await host.liveVerify(requests) }
+        guard let reports = await Self.value(of: looking, within: verifyTimeout), !reports.isEmpty else { return results }
+        var updated = results
+        for (offset, check) in checks.enumerated() {
+            let report = reports.first { $0.intentID == check.request.intentID && $0.action == check.request.action }
+                ?? (reports.count == checks.count ? reports[offset] : nil)
+            guard let report, updated.indices.contains(check.step) else { continue }
+            updated[check.step].verification = report
+        }
+        return updated
     }
 
     private func finishInBackground(_ running: Task<LiveRunResult, Never>, index: Int, intents: [EditIntent], done: [LiveStepResult]) {
         Task { @MainActor [weak self] in
             var results = done
-            let first = LiveStepResult(index: index, intent: intents[index], run: await running.value)
+            var checks: [(step: Int, request: VerificationRequest)] = []
+            let firstRun = await running.value
+            var first = LiveStepResult(index: index, intent: intents[index], run: firstRun)
+            first.createdRef = self?.createdRef(of: first, run: firstRun)
+            if first.status == .applied, let request = firstRun.verificationRequest { checks.append((results.count, request)) }
             results.append(first)
             var next = index + 1
             if first.stopsTheRun {
@@ -120,7 +208,10 @@ import PicshopCore
                     results += self.skipped(intents, after: next)
                     break
                 }
-                let result = LiveStepResult(index: next, intent: intents[next], run: await host.liveRun(intents[next]))
+                let run = await host.liveRun(intents[next])
+                var result = LiveStepResult(index: next, intent: intents[next], run: run)
+                result.createdRef = self.createdRef(of: result, run: run)
+                if result.status == .applied, let request = run.verificationRequest { checks.append((results.count, request)) }
                 results.append(result)
                 if result.stopsTheRun {
                     results += self.skipped(intents, after: next)
@@ -128,8 +219,9 @@ import PicshopCore
                 }
                 next += 1
             }
-            guard let self, let host = self.host else { return }
-            self.onJobFinished(LiveExecution(steps: results, version: host.liveVersion, canUndo: host.liveIntentContext().canUndo))
+            guard let self, self.host != nil else { return }
+            results = await self.verified(results, checks: checks)
+            self.onJobFinished(self.finished(results))
         }
     }
 
@@ -153,8 +245,8 @@ import PicshopCore
     }
 
     /// The task's value if it arrives within the time, else nil (the task keeps running).
-    private static func value(of task: Task<LiveRunResult, Never>, within seconds: Double) async -> LiveRunResult? {
-        let gate = FirstResult()
+    private static func value<Value: Sendable>(of task: Task<Value, Never>, within seconds: Double) async -> Value? {
+        let gate = FirstResult<Value>()
         return await withCheckedContinuation { continuation in
             gate.continuation = continuation
             let timer = Task { @MainActor in
@@ -171,10 +263,10 @@ import PicshopCore
 }
 
 /// Resumes a continuation once, with whichever result comes first.
-@MainActor private final class FirstResult {
-    var continuation: CheckedContinuation<LiveRunResult?, Never>?
+@MainActor private final class FirstResult<Value: Sendable> {
+    var continuation: CheckedContinuation<Value?, Never>?
 
-    func resume(_ value: LiveRunResult?) {
+    func resume(_ value: Value?) {
         continuation?.resume(returning: value)
         continuation = nil
     }

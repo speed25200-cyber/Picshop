@@ -573,10 +573,18 @@ private struct CanvasStage: View {
                 .transition(.opacity)
             }
             if session.isProcessing, !session.isCropping {
-                WorkingShimmer(mask: workingMask, region: session.magicSelection?.boundingBox,
+                WorkingShimmer(mask: workingMask, region: session.magicSelection?.boundingBox ?? session.workingRegion,
                                animated: effects != .minimal && !reducedMotion)
                     .frame(width: frame.width, height: frame.height)
                     .position(x: frame.midX, y: frame.midY)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+            if session.cellWork != nil, !session.liveSpeechSuppressed, !session.processingTitle.isEmpty {
+                // Outside Live (Live says it in its captions): how many cells are being written.
+                GlassChip(session.processingTitle, systemImage: "tablecells", variant: .clear)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .padding(.top, layout.top + 12)
                     .allowsHitTesting(false)
                     .transition(.opacity)
             }
@@ -589,6 +597,7 @@ private struct CanvasStage: View {
             }
             CommittedStrokes(session: session, frame: frame)
             CanvasOverlays(session: session, frame: frame, stage: stage, container: container, zoom: viewport.zoom)
+            ResultMarks(session: session, frame: frame)
             LiveStroke(session: session, stroke: stroke, frame: frame, stage: stage)
             if let split = session.compareSplit, PhotoCanvasView.canSplitCompare(session), !session.isCropping {
                 SplitCompareLine(frame: frame, split: split) { session.compareSplit = $0 }
@@ -764,6 +773,46 @@ private struct LiveStroke: View {
     }
 }
 
+/// What a step just did, on the picture: the cells of a table step flash once where they landed
+/// (0.6 s, `pulsingGroupID`), and the places whose check failed (a cell that does not read as
+/// written, text still there) stay ringed in the warning colour for a moment (`verificationMarks`).
+/// A leaf: only it reads those two, so a flash never re-evaluates the stage.
+private struct ResultMarks: View {
+    let session: PhotoEditorSession
+    let frame: CGRect
+
+    @Environment(\.psReducedMotion) private var reducedMotion
+
+    var body: some View {
+        let pulsing = session.pulsingGroupID
+        let cells: [PSRect] = pulsing.map { id in session.document.layers(inGroup: id).compactMap { session.overlayBounds(for: $0) } } ?? []
+        let marks = session.verificationMarks
+        Canvas { context, _ in
+            for cell in cells {
+                let rect = viewRect(cell).insetBy(dx: -4, dy: -3)
+                let path = Path(roundedRect: rect, cornerRadius: 5)
+                context.fill(path, with: .color(PSTheme.accent.opacity(0.20)))
+                context.stroke(path, with: .color(PSTheme.accent.opacity(0.85)), lineWidth: 1.5)
+            }
+            for mark in marks {
+                let rect = viewRect(mark).insetBy(dx: -2, dy: -2)
+                let path = Path(roundedRect: rect, cornerRadius: 6)
+                context.fill(path, with: .color(PSTheme.warning.opacity(0.12)))
+                context.stroke(path, with: .color(PSTheme.warning), style: StrokeStyle(lineWidth: 2, dash: [5, 3]))
+            }
+        }
+        .opacity(cells.isEmpty && marks.isEmpty ? 0 : 1)
+        .animation(reducedMotion ? Animation.easeInOut(duration: 0.15) : Animation.easeOut(duration: 0.35), value: pulsing)
+        .animation(.easeOut(duration: 0.25), value: marks)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func viewRect(_ rect: PSRect) -> CGRect {
+        CGRect(x: frame.minX + rect.minX * frame.width, y: frame.minY + rect.minY * frame.height, width: rect.width * frame.width, height: rect.height * frame.height)
+    }
+}
+
 /// Grid, lasso, clone source, focus reticle, text and shape handles, the
 /// picked object and the numbered candidates.
 private struct CanvasOverlays: View {
@@ -785,7 +834,10 @@ private struct CanvasOverlays: View {
         let cloneSource = session.activeTool == .precise && session.preciseMode == .clone ? session.cloneSource : nil
         let focusReticle = session.activeTool == .focus ? session.focusPoint : nil
         let selection = session.activeTool == .magic ? session.magicSelection : nil
-        let overlayLayers = session.activeTool == .text ? session.document.textLayers : (session.activeTool == .shapes ? session.document.shapeLayers : [])
+        // A table's cells (dozens of layers) show a handle only once one is tapped: the cell being edited.
+        let selectedID = session.document.selectedLayerID
+        let overlayLayers = (session.activeTool == .text ? session.document.textLayers : (session.activeTool == .shapes ? session.document.shapeLayers : []))
+            .filter { $0.group == nil || $0.id == selectedID }
         let textBoxes: [(UUID, PSRect, Double, Bool)] = overlayLayers.compactMap { layer -> (UUID, PSRect, Double, Bool)? in
             guard let bounds = session.overlayBounds(for: layer), let geometry = session.overlayGeometry(for: layer) else { return nil }
             return (layer.id, bounds, geometry.rotation, session.document.selectedLayerID == layer.id)

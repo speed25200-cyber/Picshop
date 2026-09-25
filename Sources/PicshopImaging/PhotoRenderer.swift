@@ -104,7 +104,15 @@ public actor PhotoRenderer {
     /// warning does not make the open photo redo its erases.
     private var displayedKeys: Set<String> = []
     private var displayGeneration = 0
+    /// Rasterised text and shape layers per content and size. A table fill adds one text layer per cell
+    /// (45 to 400): they all stay, so a render after the fill rasterises nothing again. Least recently
+    /// used out first past `overlayCacheLimit` entries or `overlayByteLimit` bytes.
     private var overlayCache: [String: CIImage] = [:]
+    private var overlayUse: [String: Int] = [:]
+    private var overlayTick = 0
+    private var overlayBytes = 0
+    private static let overlayCacheLimit = 600
+    private static let overlayByteLimit = 96 * 1_048_576
     /// Results of the expensive operations (erase, generate, upscale, denoise)
     /// are worth keeping so undo and a panel change do not re-run a neural
     /// model, but not forever: unbounded, a long session grew until the system
@@ -171,7 +179,7 @@ public actor PhotoRenderer {
         operationCache.removeAll()
         operationOrder.removeAll()
         displayedKeys.removeAll()
-        overlayCache.removeAll()
+        clearOverlays()
         disparityCache.removeAll()
     }
 
@@ -183,7 +191,7 @@ public actor PhotoRenderer {
         sourceOrder.removeAll()
         maskCache.removeAll()
         maskOrder.removeAll()
-        overlayCache.removeAll()
+        clearOverlays()
         disparityCache.removeAll()
         let displayedSizes = Set(displayedKeys.compactMap(Self.sizeSuffix(ofKey:)))
         evict(downTo: keep) { key in Self.sizeSuffix(ofKey: key).map { !displayedSizes.contains($0) } ?? true }
@@ -781,24 +789,54 @@ public actor PhotoRenderer {
     // MARK: - Compositing
 
     private func overlayImage(key: String, make: () -> CIImage?) -> CIImage? {
-        if let cached = overlayCache[key] { return cached }
+        overlayTick += 1
+        if let cached = overlayCache[key] {
+            overlayUse[key] = overlayTick
+            return cached
+        }
         guard let image = make() else { return nil }
-        if overlayCache.count > 32 { overlayCache.removeAll() }
         overlayCache[key] = image
+        overlayUse[key] = overlayTick
+        overlayBytes += Self.rasterBytes(of: image)
+        if overlayCache.count > Self.overlayCacheLimit || overlayBytes > Self.overlayByteLimit {
+            // Out go the least recently used, down to three quarters of the limits (one sort per eviction).
+            for old in overlayUse.sorted(by: { $0.value < $1.value }).map(\.key) where old != key {
+                guard overlayCache.count > Self.overlayCacheLimit * 3 / 4 || overlayBytes > Self.overlayByteLimit * 3 / 4 else { break }
+                if let evicted = overlayCache.removeValue(forKey: old) { overlayBytes -= Self.rasterBytes(of: evicted) }
+                overlayUse[old] = nil
+            }
+        }
         return image
+    }
+
+    private func clearOverlays() {
+        overlayCache.removeAll()
+        overlayUse.removeAll()
+        overlayBytes = 0
+    }
+
+    /// Bytes of a rasterised overlay (RGBA of its extent).
+    private static func rasterBytes(of image: CIImage) -> Int {
+        let extent = image.extent
+        guard extent.width.isFinite, extent.height.isFinite, !extent.isEmpty else { return 0 }
+        return Int(extent.width * extent.height) * 4
     }
 
     private func composite(_ image: CIImage, over canvas: CIImage, layer: Layer, canvasRect: CGRect, isBase: Bool) -> CIImage {
         var placed = image
         if !isBase {
             // Fit inside the canvas, then apply the layer transform (normalised centre, scale, rotation, flips).
+            // A text layer sits where its element says: the text tool, hit-testing and the executors move
+            // `TextElement.center` and turn `.rotation`, so the element is the truth for text (scale and flips stay
+            // the layer's).
             let fit = min(canvasRect.width / max(1, image.extent.width), canvasRect.height / max(1, image.extent.height), 1)
             let scale = fit * layer.transform.scale
+            let (center, rotation) = OverlayPlacement.placement(of: layer)
             var transform = CGAffineTransform.identity
-            let cx = canvasRect.minX + layer.transform.center.x * canvasRect.width
-            let cy = canvasRect.minY + (1 - layer.transform.center.y) * canvasRect.height
+            let cx = canvasRect.minX + CGFloat(center.x) * canvasRect.width
+            let cy = canvasRect.minY + (1 - CGFloat(center.y)) * canvasRect.height
             transform = transform.translatedBy(x: cx, y: cy)
-            transform = transform.rotated(by: CGFloat(-layer.transform.rotation * .pi / 180))
+            transform = transform.rotated(by: CGFloat(-rotation * .pi / 180))
             transform = transform.scaledBy(x: scale * (layer.transform.isFlippedHorizontally ? -1 : 1), y: scale * (layer.transform.isFlippedVertically ? -1 : 1))
             transform = transform.translatedBy(x: -image.extent.midX, y: -image.extent.midY)
             placed = image.transformed(by: transform)

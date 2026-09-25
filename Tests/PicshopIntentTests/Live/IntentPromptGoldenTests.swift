@@ -16,9 +16,11 @@ final class IntentPromptGoldenTests: XCTestCase {
 
     func testSystemInstructionsAreByteIdentical() {
         let golden: [(EditorMode, Int, String)] = [
-            (.photo, 11542, "9a2e76c7d5761892"),
-            (.video, 9052, "63fbdee51d2d1093"),
-            (.pdf, 9090, "62c6b62812b00abe"),
+            // Re-baselined for the table and primitive actions (fillCells, clearCells, highlightCells,
+            // eraseRegion, moveText) that IntentPrompt.actionList now names.
+            (.photo, 11604, "18af3526a194c2f3"),
+            (.video, 9114, "b6e2cf970d3a5cd4"),
+            (.pdf, 9152, "5e87a86986d86af9"),
         ]
         for (mode, length, hash) in golden {
             let text = IntentPrompt.systemInstructions(mode: mode)

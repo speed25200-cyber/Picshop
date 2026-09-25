@@ -64,9 +64,13 @@ public struct LiveUserTurn: Sendable, Equatable {
     public var interruptedAfter: String?
     /// Titles of the idea chips on screen, in order (additive to contract 6.4).
     public var ideasOnScreen: [String]
+    /// The last actions run on the editor by any lane (the model, the grammar, a chip), oldest first,
+    /// with their arguments and results: the `last:` line that follow-ups ("les autres aussi",
+    /// "pareil", "encore", "plus gros") resolve against. The session passes the handler's last 3.
+    public var recentActions: [LiveActionRecord]
 
     public init(id: Int, kind: Kind, text: String, language: NormalizedUtterance.Language, image: LiveImage?, editorState: LiveEditorState,
-                sinceLastReply: [String] = [], interruptedAfter: String? = nil, ideasOnScreen: [String] = []) {
+                sinceLastReply: [String] = [], interruptedAfter: String? = nil, ideasOnScreen: [String] = [], recentActions: [LiveActionRecord] = []) {
         self.id = id
         self.kind = kind
         self.text = text
@@ -76,6 +80,7 @@ public struct LiveUserTurn: Sendable, Equatable {
         self.sinceLastReply = sinceLastReply
         self.interruptedAfter = interruptedAfter
         self.ideasOnScreen = ideasOnScreen
+        self.recentActions = recentActions
     }
 }
 

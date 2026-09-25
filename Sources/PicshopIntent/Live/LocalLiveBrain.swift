@@ -45,12 +45,27 @@ public actor LocalLiveBrain: LiveBrain {
             return
         }
         let context = await tools.context()
+        // A question the table or the scene map answers: said by code, nothing edited.
+        if let answer = LiveQuestionAnswers.answer(turn.text, table: context.table, scene: context.scene, language: language) {
+            output.yield(.text(answer))
+            output.yield(.completed(.answered))
+            return
+        }
         let plan = await router.plan(turn.text, context: context)
         try Task.checkCancellation()
         let intents = plan.intents.filter { $0.action != .unknown }
-        guard !intents.isEmpty else {
+        // A question the rules could not answer above changes nothing ("pourquoi tu ne peux pas écrire derrière ?",
+        // "est-ce que le titre est lisible ?"): said so, never an edit made of its words.
+        if RuleBasedIntentEngine.asksAQuestion(NormalizedUtterance(turn.text), original: turn.text),
+           intents.contains(where: { !$0.action.isMeta && $0.action != .describe }) || (intents.isEmpty && plan.clarification == nil) {
+            output.yield(.text(LiveLines.line(.cannotAnswerLocal, language)))
+            output.yield(.completed(.answered))
+            return
+        }
+        // "Quelle case ?", "Avec quoi ?": the planner's question comes before any step it could only guess.
+        guard !intents.isEmpty, plan.clarification == nil else {
             // Nothing to run: the question the planner asks, else what can be said instead.
-            output.yield(.text(plan.clarification ?? Replies.suggestions(for: mode, language: language)))
+            output.yield(.text(plan.clarification ?? Replies.suggestions(for: mode, language: language, hasTable: context.table != nil)))
             output.yield(.completed(.answered))
             return
         }
@@ -59,19 +74,24 @@ public actor LocalLiveBrain: LiveBrain {
         output.yield(.toolStarted(id: id, name: .applyEdits, activity: LiveActivityTitles.title(for: call.tool, language: language)))
         let result = await tools.perform(call)
         output.yield(.toolFinished(id: id, name: .applyEdits, result: result))
-        let execution = result.execution
-        let reported = execution?.steps.first { [.info, .needsUser, .failed, .needsClarification].contains($0.status) }
-        let running = execution?.steps.contains { $0.status == .running || $0.status == .queued } ?? false
-        let reply: String
-        if let reported, let message = reported.message, !message.isEmpty {
-            reply = message
-        } else if running {
-            reply = LiveLines.line(.running, language)
+        output.yield(.text(Self.reply(to: plan, intents: intents, execution: result.execution, language: language)))
+        output.yield(.completed(.answered))
+    }
+
+    /// What the grammar lane says after its run, as the session's fast lane does: the honest line when a
+    /// check of the result failed, the count line of a table step, the reason-aware line of a step that
+    /// did not apply, else the grammar's own reply; never the executor's raw text (D11).
+    static func reply(to plan: EditPlan, intents: [EditIntent], execution: LiveExecution?, language: NormalizedUtterance.Language) -> String {
+        var reply: String
+        if let execution, let failed = execution.verifications.first(where: { $0.status == .failed }) {
+            reply = LiveLines.verification(failed, language)
+        } else if let execution, execution.tableReport != nil || !execution.allApplied {
+            reply = execution.outcomeText(language: language)
         } else {
             reply = plan.reply ?? Replies.combined(for: intents, language: language)
         }
-        output.yield(.text(reply))
-        output.yield(.completed(.answered))
+        if reply.isEmpty { reply = Replies.combined(for: intents, language: language) }
+        return LiveSpeechSanitizer.clean(reply, language: language)
     }
 
     public func interrupt(turn: Int, spokenText: String) async {}

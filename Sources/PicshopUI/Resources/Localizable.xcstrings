@@ -65,6 +65,54 @@
         }
       }
     },
+    "%d cells cleared": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d cells cleared"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d cases vidées"
+          }
+        }
+      }
+    },
+    "%d cells filled": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d cells filled"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d cases remplies"
+          }
+        }
+      }
+    },
+    "%d cells highlighted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d cells highlighted"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d cases surlignées"
+          }
+        }
+      }
+    },
     "%d keyframes": {
       "localizations": {
         "en": {
@@ -141,6 +189,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "%d mots · touchez pour barrer"
+          }
+        }
+      }
+    },
+    "1 cell cleared": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 cell cleared"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 case vidée"
+          }
+        }
+      }
+    },
+    "1 cell filled": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 cell filled"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 case remplie"
+          }
+        }
+      }
+    },
+    "1 cell highlighted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 cell highlighted"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 case surlignée"
           }
         }
       }
@@ -253,6 +349,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Un appel téléphonique au milieu d'une réponse."
+          }
+        }
+      }
+    },
+    "About 200 spoken requests on a table screenshot and a poster, run through the on-device model: what it did to the picture and what it said. Keep the screen on; it takes several minutes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "About 200 spoken requests on a table screenshot and a poster, run through the on-device model: what it did to the picture and what it said. Keep the screen on; it takes several minutes."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Environ 200 demandes parlées sur une capture de tableau et une affiche, passées au modèle de l'iPhone : ce qu'il a fait à l'image et ce qu'il a dit. Garde l'écran allumé ; cela prend plusieurs minutes."
           }
         }
       }
@@ -1569,6 +1681,22 @@
         }
       }
     },
+    "Case %d of %d…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Case %d of %d…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cas %d sur %d…"
+          }
+        }
+      }
+    },
     "Centre": {
       "localizations": {
         "en": {
@@ -1713,6 +1841,22 @@
         }
       }
     },
+    "Clear Cells": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear Cells"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vider les cases"
+          }
+        }
+      }
+    },
     "Clear Keyframes": {
       "localizations": {
         "en": {
@@ -1757,6 +1901,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Effacer les traits"
+          }
+        }
+      }
+    },
+    "Clearing %d cells…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clearing %d cells…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je vide %d cases…"
+          }
+        }
+      }
+    },
+    "Clearing 1 cell…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clearing 1 cell…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je vide 1 case…"
+          }
+        }
+      }
+    },
+    "Clearing cells…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clearing cells…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je vide les cases…"
           }
         }
       }
@@ -3025,6 +3217,22 @@
         }
       }
     },
+    "Edit Text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Text"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier le texte"
+          }
+        }
+      }
+    },
     "Edit by text": {
       "localizations": {
         "en": {
@@ -3261,6 +3469,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gomme & détourage"
+          }
+        }
+      }
+    },
+    "Erase Area": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase Area"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer la zone"
           }
         }
       }
@@ -3585,6 +3809,22 @@
         }
       }
     },
+    "Failed turns: %d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed turns: %d"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tours ratés : %d"
+          }
+        }
+      }
+    },
     "Failed: %@": {
       "localizations": {
         "en": {
@@ -3633,6 +3873,22 @@
         }
       }
     },
+    "Fill Cells": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fill Cells"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remplir les cases"
+          }
+        }
+      }
+    },
     "Filled": {
       "localizations": {
         "en": {
@@ -3661,6 +3917,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sans les euh"
+          }
+        }
+      }
+    },
+    "Filling %d cells…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filling %d cells…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je remplis %d cases…"
+          }
+        }
+      }
+    },
+    "Filling 1 cell…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filling 1 cell…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je remplis 1 case…"
+          }
+        }
+      }
+    },
+    "Filling the table…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filling the table…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je remplis le tableau…"
           }
         }
       }
@@ -4493,6 +4797,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Surligner"
+          }
+        }
+      }
+    },
+    "Highlight Cells": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Highlight Cells"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Surligner les cases"
+          }
+        }
+      }
+    },
+    "Highlight · %d boxes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Highlight · %d boxes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Surlignage · %d zones"
+          }
+        }
+      }
+    },
+    "Highlighting…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Highlighting…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je surligne…"
           }
         }
       }
@@ -5617,6 +5969,22 @@
         }
       }
     },
+    "Loading the model…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading the model…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement du modèle…"
+          }
+        }
+      }
+    },
     "Loads the local brain as the editor opens, so the first answer doesn't wait.": {
       "localizations": {
         "en": {
@@ -6241,6 +6609,22 @@
         }
       }
     },
+    "Move Text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Text"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déplacer le texte"
+          }
+        }
+      }
+    },
     "Move down": {
       "localizations": {
         "en": {
@@ -6333,6 +6717,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Je déplace %@…"
+          }
+        }
+      }
+    },
+    "Moving the text…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moving the text…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je déplace le texte…"
           }
         }
       }
@@ -8753,6 +9153,22 @@
         }
       }
     },
+    "Rewriting the text…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rewriting the text…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je réécris le texte…"
+          }
+        }
+      }
+    },
     "Right Way Up": {
       "localizations": {
         "en": {
@@ -8845,6 +9261,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lance « Tester le vocal » ci-dessus : les six étapes, en répondant Oui ou Non. Au moindre ✗, exporte le journal."
+          }
+        }
+      }
+    },
+    "Run the understanding eval": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run the understanding eval"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lancer l'éval de compréhension"
           }
         }
       }
@@ -10081,6 +10513,22 @@
         }
       }
     },
+    "Table · %d cells": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Table · %d cells"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tableau · %d cases"
+          }
+        }
+      }
+    },
     "Talk to your photos.": {
       "localizations": {
         "en": {
@@ -10993,6 +11441,22 @@
         }
       }
     },
+    "The on-device model is not ready on this iPhone: install it in Settings › Intelligence, then try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The on-device model is not ready on this iPhone: install it in Settings › Intelligence, then try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le modèle de l'iPhone n'est pas prêt : installe-le dans Réglages › Intelligence, puis réessaie."
+          }
+        }
+      }
+    },
     "The photo changed in the meantime. Try again.": {
       "localizations": {
         "en": {
@@ -11693,6 +12157,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Écrivez ou dites « ajoute le texte … »"
+          }
+        }
+      }
+    },
+    "Understanding eval": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Understanding eval"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Éval de compréhension"
           }
         }
       }

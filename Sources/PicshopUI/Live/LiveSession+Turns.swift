@@ -73,6 +73,7 @@ extension LiveSession {
 
         let language = NormalizedUtterance(text).language
         replyLanguage = language
+        lastUserWords = text
         // Read fresh: the grammar bakes the playhead and the last tap into its intents.
         let grammar = RuleBasedIntentEngine().parse(text, context: currentIntentContext())
         currentKind = chooseBrain()
@@ -144,6 +145,7 @@ extension LiveSession {
             let brains = [modelBrain, onDeviceBrain, localBrain].compactMap { $0 }
             Task { for brain in brains { await brain.reset() } }
             brainIdeas = []
+            tableIdeas = []
             sinceLastReply = []
             lastResponseChunks = []
             refreshIdeas(immediately: true)
@@ -200,13 +202,26 @@ extension LiveSession {
             let labels = execution.steps.filter { $0.status == .applied }.compactMap(\.label)
             // Only an edit this run added: after "annule" or "lecture" the chip would take away another one.
             if let label = execution.undoLabel(since: versionBefore) { self.offerUndo(label: label) }
-            self.appendSinceLastReply("said '\(text.prefix(80))'; applied \(labels.isEmpty ? "nothing" : labels.joined(separator: ", "))")
+            self.appendSinceLastReply("said '\(text.prefix(80))'; applied \(labels.isEmpty ? "nothing" : labels.joined(separator: ", "))" + Self.tableFacts(execution))
+            // The check of the result, for the model's next turn only (English, never spoken).
+            if let summary = execution.verificationSummary { self.appendSinceLastReply(summary) }
+            self.noteTableEdit(execution, language: language)
             self.refreshIdeas()
             // Interrupted meanwhile: the edit stands, its confirmation is not spoken.
             guard !Task.isCancelled, self.brainTurnID == turn else { return }
-            var reply = execution.allApplied ? (plan.reply ?? execution.outcomeText(language: language)) : execution.outcomeText(language: language)
+            var reply: String
+            if let failed = execution.verifications.first(where: { $0.status == .failed }) {
+                // Applied, but the result does not read as asked: one honest sentence, no retry here.
+                reply = LiveLines.verification(failed, language)
+            } else if execution.tableReport != nil {
+                // The count line ("J'ai rempli les 45 cases."), not the grammar's line said before the run.
+                reply = execution.outcomeText(language: language)
+            } else {
+                reply = execution.allApplied ? (plan.reply ?? execution.outcomeText(language: language)) : execution.outcomeText(language: language)
+            }
             // Every step ignored or skipped: the grammar's own line, so the turn is never silent.
             if reply.isEmpty { reply = Replies.combined(for: plan.intents, language: language) }
+            reply = LiveSpeechSanitizer.clean(reply, language: language)
             if !reply.isEmpty { self.speak(reply, language: language, turn: turn, isResponse: true) }
             self.feed(.turn(turn, .ended(endsWithQuestion: reply.hasSuffix("?")), at: self.clock.now()))
             self.lastResponseChunks = self.responseChunks
@@ -315,8 +330,10 @@ extension LiveSession {
         // Only a brain that sees pictures gets one, at the size it asks for.
         if capabilities.seesImages { image = await snapshotForTurn(maxPixel: Self.snapshotSide(capabilities)) }
         guard isRunning, brainTurnID == id, !Task.isCancelled else { return .cancelled }
+        // The last actions by any lane, with their arguments and results: what follow-ups resolve against.
         let turn = LiveUserTurn(id: id, kind: kind, text: text, language: language, image: image, editorState: host.liveContextSummary(),
-                                sinceLastReply: drainSinceLastReply(), interruptedAfter: takeInterruptedAfter())
+                                sinceLastReply: drainSinceLastReply(), interruptedAfter: takeInterruptedAfter(),
+                                recentActions: Array(toolHandler?.recentActions.suffix(3) ?? []))
         toolHandler?.language = language
         var chunker = SpeechChunker(language: language)
         var gotOutput = false
@@ -365,7 +382,9 @@ extension LiveSession {
                     assignActivityTitle(nil)
                     // The inline Undo is offered by LiveToolProxy, which knows the version before the call.
                     if result.changedDocument { refreshIdeas() }
-                    if let line = result.execution?.outcomeText(language: language), !line.isEmpty { toolLine = line }
+                    if let line = result.execution?.outcomeText(language: language), !line.isEmpty {
+                        toolLine = LiveSpeechSanitizer.clean(line, language: language)
+                    }
                 case .ideas(let proposed):
                     gotIdeas = true
                     receiveBrainIdeas(proposed)
@@ -559,9 +578,11 @@ extension LiveSession {
 
     // MARK: Voice
 
-    /// One chunk to the voice, or to the captions when liveSpeaks is off.
+    /// One chunk to the voice, or to the captions when liveSpeaks is off. The last guard of D11:
+    /// whatever built the line (a brain, the executor, a tool result), no internal label or
+    /// machine code is heard or captioned; Live's own lines pass through unchanged.
     func speak(_ text: String, language: NormalizedUtterance.Language, turn: Int, isResponse: Bool = false) {
-        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clean = LiveSpeechSanitizer.clean(text, language: language).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty, isRunning else { return }
         if isResponse {
             if responseChunks.isEmpty { latency.mark(.firstChunk, at: clock.now(), turn: turn) }
@@ -724,7 +745,10 @@ extension LiveSession {
         if execution.steps.contains(where: { $0.status == .running || $0.status == .queued }) { backgroundJobs += 1 }
     }
 
-    /// A job that outlived its tool call finished.
+    /// A job that outlived its tool call finished (a cold table read, an erase, a text rewrite):
+    /// what it did and what its check found go to the model's next turn, and Live says it the way a
+    /// run it waited for would be said: the count of a table step, the honest line when the check
+    /// failed, why it did not happen, else the short "ready" line.
     func jobFinished(_ execution: LiveExecution) {
         backgroundJobs = max(0, backgroundJobs - 1)
         let label = execution.steps.last(where: { $0.status == .applied })?.label
@@ -732,12 +756,27 @@ extension LiveSession {
             audio?.playEarcon(.applied)
             if state != .hearing, state != .dictating { Haptics.live(.actionApplied) }
         }
-        if let label { appendSinceLastReply("finished '\(label)'") }
+        if let label {
+            appendSinceLastReply("finished '\(label)'" + Self.tableFacts(execution))
+        } else if let failed = execution.steps.first(where: { $0.status == .failed || $0.status == .info || $0.status == .needsUser }) {
+            appendSinceLastReply("background \(failed.action.rawValue) \(failed.status.rawValue)" + (failed.reason.map { "[\($0.rawValue)]" } ?? ""))
+        }
+        if let summary = execution.verificationSummary { appendSinceLastReply(summary) }
+        noteTableEdit(execution, language: replyLanguage)
         if let edit = execution.lastEditLabel { offerUndo(label: edit) }
-        if isRunning, !isConnecting, state != .speaking, state != .hearing, execution.anyApplied {
-            speak(LiveLines.line(.jobDone, replyLanguage), turn: machine.state.turn)
+        if isRunning, !isConnecting, state != .speaking, state != .hearing {
+            if let line = Self.jobLine(execution, language: replyLanguage) { speak(line, turn: machine.state.turn) }
         }
         refreshIdeas()
+    }
+
+    /// What Live says when a background job ends; nil when there is nothing worth saying.
+    static func jobLine(_ execution: LiveExecution, language: NormalizedUtterance.Language) -> String? {
+        let precise = execution.verificationFailed || execution.tableReport != nil || execution.reason != nil
+        if execution.anyApplied, !precise { return LiveLines.line(.jobDone, language) }
+        let line = LiveSpeechSanitizer.clean(execution.outcomeText(language: language), language: language)
+        if line.isEmpty { return execution.anyApplied ? LiveLines.line(.jobDone, language) : nil }
+        return line
     }
 
     // MARK: Ideas
@@ -781,15 +820,49 @@ extension LiveSession {
             guard sceneReady else { return }
             ideasReady = true
         }
-        publishIdeas()
+        publishIdeas(state: summary)
     }
 
-    private func publishIdeas() {
+    /// The chips: the model's merged with the heuristic ones by what the picture is (`state`: a
+    /// look or colour idea goes last or away on a table), and after a fill its alternative first.
+    private func publishIdeas(state: LiveEditorState? = nil) {
         let fromBrain = brainIdeas.filter { !dismissedIdeas.contains($0.id) }
         let fill = heuristicIdeas.filter { !dismissedIdeas.contains($0.id) }
-        var shown = fromBrain.isEmpty ? Array(fill.prefix(3)) : IdeaEngine.merge(current: [], incoming: fromBrain, dismissed: dismissedIdeas, fill: fill)
+        var shown: [LiveIdea]
+        if fromBrain.isEmpty {
+            shown = Array(fill.prefix(3))
+        } else {
+            shown = IdeaEngine.merge(current: [], incoming: fromBrain, dismissed: dismissedIdeas, fill: fill,
+                                     state: state ?? host?.liveContextSummary(), userWords: lastUserWords)
+        }
         if shown.isEmpty { shown = Array((fromBrain + fill).prefix(3)) }
+        let afterTable = tableIdeas.filter { !dismissedIdeas.contains($0.id) && !$0.steps.isEmpty }
+        if !afterTable.isEmpty {
+            shown = Array((afterTable + shown.filter { idea in !afterTable.contains { $0.id == idea.id } }).prefix(3))
+        }
         assignIdeas(.ready(shown))
+    }
+
+    /// What a table step did, for the model's "since your reply" note: " (filled 44, empty left 1)".
+    static func tableFacts(_ execution: LiveExecution) -> String {
+        guard let report = execution.tableReport else { return "" }
+        let verb: String
+        switch report.action {
+        case .clearCells: verb = "cleared"
+        case .highlightCells: verb = "highlighted"
+        default: verb = "filled"
+        }
+        return " (\(verb) \(report.changed), empty left \(report.emptyLeft))"
+    }
+
+    /// After a fill, the alternative the user named becomes the first chip; any other edit drops it.
+    func noteTableEdit(_ execution: LiveExecution, language: NormalizedUtterance.Language) {
+        guard execution.anyApplied else { return }
+        if let report = execution.tableReport, report.action == .fillCells {
+            tableIdeas = IdeaEngine.afterTableEdit(report, language: language)
+        } else if !tableIdeas.isEmpty {
+            tableIdeas = []
+        }
     }
 
     /// propose_ideas, from a model brain (through the tool handler and the event stream).
@@ -817,8 +890,9 @@ extension LiveSession {
             restingPhase = .acting
             publishState()
         }
-        assignActivityTitle(idea.title)
         let language = live ? replyLanguage : chipLanguage
+        // A model wrote the title: shown as the activity, it is held to the same rule as speech.
+        assignActivityTitle(LiveSpeechSanitizer.clean(idea.title, language: language))
         toolHandler.language = language
         liveEditDepth += 1
         let versionBefore = host?.liveVersion ?? 0
@@ -836,8 +910,15 @@ extension LiveSession {
                 self.publishState()
             }
             self.brainIdeas.removeAll { $0.id == idea.id }
-            self.appendSinceLastReply("tapped idea '\(idea.title)' -> \(applied ? "applied" : "not applied")")
-            let line = applied ? LiveLines.ideaApplied(idea.title, language) : execution.outcomeText(language: language)
+            self.tableIdeas.removeAll { $0.id == idea.id }
+            self.appendSinceLastReply("tapped idea '\(idea.title)' -> \(applied ? "applied" : "not applied")" + Self.tableFacts(execution))
+            if let summary = execution.verificationSummary { self.appendSinceLastReply(summary) }
+            self.noteTableEdit(execution, language: language)
+            // After a table fill the count line ("J'ai mis des nombres au hasard dans les 45 cases."), and
+            // the honest line when the check of the result failed; never raw executor text.
+            let said = applied && execution.tableReport == nil && !execution.verificationFailed
+                ? LiveLines.ideaApplied(idea.title, language) : execution.outcomeText(language: language)
+            let line = LiveSpeechSanitizer.clean(said, language: language)
             if execution.undoLabel(since: versionBefore) != nil { self.offerUndo(label: idea.title) }
             if self.isRunning {
                 // Interrupted meanwhile (the user spoke, the orb): the edit stands and is in
@@ -862,10 +943,12 @@ extension LiveSession {
         refreshIdeas()
     }
 
-    /// A numbered candidate, tapped or picked by voice.
+    /// A numbered candidate, tapped or picked by voice. The step the choice resumes gets the same
+    /// check as any other (act-then-verify); a table step says its count, a failed check its honest line.
     func runChoice(_ choice: LiveCandidateChoice) {
         guard let host else { return }
         liveEditDepth += 1
+        let language = isRunning ? replyLanguage : chipLanguage
         Task { @MainActor [weak self] in
             let result = await host.liveChooseCandidate(choice)
             guard let self else { return }
@@ -875,8 +958,22 @@ extension LiveSession {
             case .all: self.appendSinceLastReply("chose all candidates")
             }
             if case .applied(let label) = result.outcome { self.offerUndo(label: label) }
-            if !self.isRunning, let message = result.outcome.message, !message.isEmpty {
-                self.showReply(message, isProblem: !result.outcome.isSuccess, isError: false)
+            var step = LiveStepResult(index: 0, intent: EditIntent(action: .chooseCandidate), run: result)
+            if step.status == .applied, let request = result.verificationRequest {
+                step.verification = await host.liveVerify([request]).first
+            }
+            let execution = LiveExecution(steps: [step], version: host.liveVersion, canUndo: host.liveIntentContext().canUndo)
+            if let summary = execution.verificationSummary { self.appendSinceLastReply(summary) }
+            self.noteTableEdit(execution, language: language)
+            if execution.verificationFailed || execution.tableReport != nil {
+                let line = LiveSpeechSanitizer.clean(execution.outcomeText(language: language), language: language)
+                if self.isRunning {
+                    if self.state != .speaking, self.state != .hearing { self.speak(line, language: language, turn: self.machine.state.turn) }
+                } else if !line.isEmpty {
+                    self.showReply(line, isProblem: execution.verificationFailed, isError: false)
+                }
+            } else if !self.isRunning, let message = result.outcome.message, !message.isEmpty {
+                self.showReply(LiveSpeechSanitizer.clean(message, language: language), isProblem: !result.outcome.isSuccess, isError: false)
             }
             self.refreshIdeas()
         }
@@ -935,7 +1032,9 @@ extension LiveSession {
             guard let self else { return }
             self.restingPhase = nil
             self.publishState()
-            if !reply.text.isEmpty { self.showReply(reply.text, isProblem: reply.isProblem, isError: reply.isError) }
+            let language = NormalizedUtterance.Language(rawValue: reply.language) ?? self.chipLanguage
+            let text = LiveSpeechSanitizer.clean(reply.text, language: language)
+            if !text.isEmpty { self.showReply(text, isProblem: reply.isProblem, isError: reply.isError) }
             self.refreshIdeas()
         }
     }
@@ -1029,6 +1128,7 @@ final class LiveToolProxy: LiveToolHandler {
             session.notePlayback(execution, turn: started?.turn ?? session.brainTurnID)
             // Only apply_edits that raised the version: never after undo, compare or a seek.
             if case .applyEdits = call.tool, let label = execution.undoLabel(since: versionBefore) { session.offerUndo(label: label) }
+            if case .applyEdits = call.tool { session.noteTableEdit(execution, language: handler.language) }
         }
         if let started {
             let changed = result.changedDocument && (session.host?.liveVersion ?? 0) > versionBefore

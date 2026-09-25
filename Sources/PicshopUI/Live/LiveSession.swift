@@ -55,10 +55,33 @@ public final class LiveSession {
         host?.livePendingChoice ?? scriptedChoices
     }
 
-    /// The title is stored here; the progress is passed through from the host.
+    /// The title is stored here; the progress is passed through from the host. While the editor runs
+    /// a table step, the line says how many cells it touches ("Je remplis 45 cases…") rather than
+    /// the brain's generic one.
     public var activity: LiveActivity? {
         guard let activityTitle else { return nil }
-        return LiveActivity(title: activityTitle, progress: host?.liveProcessingProgress ?? scriptedProgress)
+        let language = isRunning ? replyLanguage : chipLanguage
+        let precise = (host as? LiveCellWorkReporting)?.cellWork.flatMap { Self.cellWorkTitle($0, language) }
+        return LiveActivity(title: precise ?? activityTitle, progress: host?.liveProcessingProgress ?? scriptedProgress)
+    }
+
+    /// "Je remplis 45 cases…" / "Filling 45 cells…"; nil for a step with nothing to count.
+    static func cellWorkTitle(_ work: LiveCellWork, _ language: NormalizedUtterance.Language) -> String? {
+        let fr = language == .french
+        switch work.action {
+        case .fillCells:
+            guard let count = work.count else { return fr ? "Je remplis le tableau…" : "Filling the table…" }
+            if count == 1 { return fr ? "Je remplis la case…" : "Filling the cell…" }
+            return fr ? "Je remplis \(count) cases…" : "Filling \(count) cells…"
+        case .clearCells:
+            guard let count = work.count else { return fr ? "Je vide les cases…" : "Clearing the cells…" }
+            if count == 1 { return fr ? "Je vide la case…" : "Clearing the cell…" }
+            return fr ? "Je vide \(count) cases…" : "Clearing \(count) cells…"
+        case .highlightCells:
+            return fr ? "Je surligne…" : "Highlighting…"
+        default:
+            return nil
+        }
     }
 
     // MARK: Observed internals
@@ -164,6 +187,12 @@ public final class LiveSession {
 
     @ObservationIgnored var heuristicIdeas: [LiveIdea] = []
     @ObservationIgnored var brainIdeas: [LiveIdea] = []
+    /// After a table fill: the alternative the user named ("Chiffres au hasard"), shown first
+    /// (IdeaEngine.afterTableEdit); gone after the next edit that is not a table one.
+    @ObservationIgnored var tableIdeas: [LiveIdea] = []
+    /// The user's last committed words: a model's colour idea stays on a table screenshot only
+    /// when they talked colour (IdeaEngine.merge).
+    @ObservationIgnored var lastUserWords: String?
     /// Per document: an editor session owns one LiveSession.
     @ObservationIgnored var dismissedIdeas: Set<String> = []
     @ObservationIgnored var ideasRefreshTask: Task<Void, Never>?
@@ -457,6 +486,24 @@ public final class LiveSession {
         if hub.isModelReady { return LiveRoute(brain: .model, modelName: hub.status.model?.displayName) }
         return LiveRoute(brain: app.activeEngine == .appleIntelligence ? .onDevice : .commands)
     }
+}
+
+/// A table step the editor is running, and how many cells it touches when that is known.
+public struct LiveCellWork: Equatable, Sendable {
+    public var action: IntentAction
+    public var count: Int?
+
+    public init(action: IntentAction, count: Int?) {
+        self.action = action
+        self.count = count
+    }
+}
+
+/// An editor that reports the table step it is running (the photo editor), so Live's activity line
+/// can name it with its count instead of the brain's generic line.
+@MainActor
+protocol LiveCellWorkReporting: AnyObject {
+    var cellWork: LiveCellWork? { get }
 }
 
 #if DEBUG

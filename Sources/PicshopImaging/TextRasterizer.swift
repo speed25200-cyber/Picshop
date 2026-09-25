@@ -58,8 +58,12 @@ public enum TextRasterizer {
         }
 
         let attributed = NSAttributedString(string: element.text, attributes: attributes)
-        let maxWidth = element.maxRelativeWidth * canvasSize.width
-        let bounds = attributed.boundingRect(with: CGSize(width: maxWidth, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil)
+        // A frame (table cells) lays the text out in a box that wide, so leading and trailing alignment
+        // hold inside it; the image, frame and padding, stays centred on the element's centre.
+        let frameWidth = element.frameWidth.map { CGFloat(max(0.001, $0)) * canvasSize.width }
+        let maxWidth = frameWidth ?? CGFloat(element.maxRelativeWidth) * canvasSize.width
+        var bounds = attributed.boundingRect(with: CGSize(width: maxWidth, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil)
+        if let frameWidth { bounds.size.width = frameWidth }
         let padding = fontSize * (element.style == .pill || element.style == .banner ? 0.55 : 0.4)
         let size = CGSize(width: ceil(bounds.width + padding * 2), height: ceil(bounds.height + padding * 2))
         return Layout(fontSize: fontSize, attributes: attributes, attributed: attributed, bounds: bounds, padding: padding, size: size)
@@ -147,22 +151,57 @@ public enum TextRasterizer {
         return image.cgImage
     }
 
+    /// Font names in the D5 grammar, "<Family>-<Weight>":
+    /// - "SFProDigits-<W>": the system font with monospaced digits (table values);
+    /// - "SFProSerif-<W>" (and "NewYork-<W>"): the system serif design;
+    /// - "SFMono-<W>": the monospaced system font;
+    /// - "SFProRounded-<W>": the rounded design;
+    /// - "SFPro-<W>": the system font;
+    /// W is Regular, Medium, Semibold, Bold or Black (also UltraLight, Thin, Light, Heavy). Without a known
+    /// weight a family keeps its old look (rounded, serif and mono semibold, SF Pro bold), so the names
+    /// already saved in projects ("SFProRounded-Bold", "SFProSerif-Semibold", "SFMono-Semibold") draw as
+    /// before. Any other name is a PostScript font name, else the bold system font.
     static func resolvedFont(named name: String, size: CGFloat) -> UIFont {
-        if name.hasPrefix("SFProRounded") {
-            let weight: UIFont.Weight = name.hasSuffix("Bold") ? .bold : (name.hasSuffix("Black") ? .black : .semibold)
-            let base = UIFont.systemFont(ofSize: size, weight: weight)
-            if let descriptor = base.fontDescriptor.withDesign(.rounded) { return UIFont(descriptor: descriptor, size: size) }
-            return base
+        let parts = name.split(separator: "-", maxSplits: 1).map(String.init)
+        let family = parts.first ?? name
+        let weight = parts.count > 1 ? systemWeight(named: parts[1]) : nil
+        switch family {
+        case "SFProDigits":
+            return UIFont.monospacedDigitSystemFont(ofSize: size, weight: weight ?? .regular)
+        case "SFProRounded":
+            return systemFont(design: .rounded, size: size, weight: weight ?? .semibold)
+        case "SFProSerif", "NewYork":
+            return systemFont(design: .serif, size: size, weight: weight ?? .semibold)
+        case "SFMono":
+            return UIFont.monospacedSystemFont(ofSize: size, weight: weight ?? .semibold)
+        case "SFPro":
+            return UIFont.systemFont(ofSize: size, weight: weight ?? .bold)
+        default:
+            return UIFont(name: name, size: size) ?? UIFont.systemFont(ofSize: size, weight: .bold)
         }
-        if name.hasPrefix("SFProSerif") || name.hasPrefix("NewYork") {
-            let base = UIFont.systemFont(ofSize: size, weight: .semibold)
-            if let descriptor = base.fontDescriptor.withDesign(.serif) { return UIFont(descriptor: descriptor, size: size) }
-            return base
+    }
+
+    /// The system font in a design (rounded, serif) at a weight; the plain system font when the design is missing.
+    private static func systemFont(design: UIFontDescriptor.SystemDesign, size: CGFloat, weight: UIFont.Weight) -> UIFont {
+        let base = UIFont.systemFont(ofSize: size, weight: weight)
+        if let descriptor = base.fontDescriptor.withDesign(design) { return UIFont(descriptor: descriptor, size: size) }
+        return base
+    }
+
+    /// The weight a face name says ("Semibold", "bold"), nil for any other word.
+    private static func systemWeight(named face: String) -> UIFont.Weight? {
+        switch face.lowercased() {
+        case "ultralight": return .ultraLight
+        case "thin": return .thin
+        case "light": return .light
+        case "regular": return .regular
+        case "medium": return .medium
+        case "semibold": return .semibold
+        case "bold": return .bold
+        case "heavy": return .heavy
+        case "black": return .black
+        default: return nil
         }
-        if name.hasPrefix("SFMono") {
-            return UIFont.monospacedSystemFont(ofSize: size, weight: .semibold)
-        }
-        return UIFont(name: name, size: size) ?? UIFont.systemFont(ofSize: size, weight: .bold)
     }
 
     /// Fonts offered in the text tool.

@@ -163,6 +163,45 @@ final class ToolArgumentCoercionTests: XCTestCase {
         }
     }
 
+    /// What the model copies from the table lines and writes for corners and factors (review): a cut name, "r6",
+    /// "c3", "r6c3", "bottom right", "size": 2 — each reaches the editor meaning what it meant.
+    func testTheFormsAModelActuallyWrites() throws {
+        func coerced(_ step: JSONValue) throws -> JSONValue {
+            try XCTUnwrap(try JSONValue.parse(ToolArgumentCoercer.rawToolUse(id: "c", name: "apply_edits", arguments: ["steps": [step]]).rawInput)["steps"]?.array?.first)
+        }
+        XCTAssertEqual(try coerced(["action": "fillCells", "row": "Novel problem…", "text": "1"])["row"], "Novel problem")
+        XCTAssertEqual(try coerced(["action": "fillCells", "row": "r6", "column": "c3", "text": "1"])["row"], "6")
+        XCTAssertEqual(try coerced(["action": "fillCells", "row": "r6", "column": "c3", "text": "1"])["column"], "3")
+        XCTAssertEqual(try coerced(["action": "fillCells", "row": "ligne 6", "column": "colonne 3", "text": "1"])["column"], "3")
+        let cell = try coerced(["action": "fillCells", "row": "r6c3", "text": "1"])
+        XCTAssertEqual(cell["row"], "6")
+        XCTAssertEqual(cell["column"], "3")
+        for (said, placement) in [("bottom right", "bottomTrailing"), ("bottomRight", "bottomTrailing"), ("top-left", "topLeading"), ("en bas à droite", "bottomTrailing"),
+                                  ("topRight", "topTrailing"), ("bottomLeft", "bottomLeading"), ("en haut", "top")] {
+            XCTAssertEqual(try coerced(["action": "addText", "text": "x", "placement": .string(said)])["placement"], .string(placement), said)
+        }
+        XCTAssertEqual(try coerced(["action": "editText", "ref": "l1", "size": 2])["size"], "x2")
+        XCTAssertEqual(try coerced(["action": "editText", "ref": "l1", "size": "1,5"])["size"], "x1.5")
+        XCTAssertEqual(try coerced(["action": "editText", "ref": "l1", "size": "x1.5"])["size"], "x1.5")
+        XCTAssertEqual(try coerced(["action": "editText", "ref": "l1", "size": 0.05])["size"], "0.05", "a size as part of the height stays")
+        XCTAssertEqual(IntentNormalizer.textSize(named: "x2"), .scale(2))
+
+        // Validated against the benchmark: the cut names resolve (word-boundary cut, or a prefix of exactly one name).
+        let context = IntentContext(mode: .photo, table: TableFixtures.benchmark(), scene: SceneFixtures.benchmarkScene())
+        for row in ["Novel problem sol…", "Graduate-level re…", "Agentic terminal…", "r6", "row 6"] {
+            let use = ToolArgumentCoercer.rawToolUse(id: "c", name: "apply_edits", arguments: ["steps": [["action": "fillCells", "row": .string(row), "text": "1"]]])
+            XCTAssertNoThrow(try ToolInputValidator(mode: .photo).validate(use, context: context).get(), row)
+        }
+        let cut = ToolArgumentCoercer.rawToolUse(id: "c", name: "apply_edits", arguments: ["steps": [["action": "fillCells", "row": "Novel problem sol…", "text": "1"]]])
+        guard case .applyEdits(let intents) = try ToolInputValidator(mode: .photo).validate(cut, context: context).get().tool else { return XCTFail("apply_edits") }
+        XCTAssertEqual(intents.first?.table?.rows, [.index(5)])
+        // Restyling cells: no value, a style.
+        let restyle = ToolArgumentCoercer.rawToolUse(id: "c", name: "apply_edits", arguments: ["steps": [["action": "fillCells", "cells": "all", "size": "bigger"]]])
+        guard case .applyEdits(let styled) = try ToolInputValidator(mode: .photo).validate(restyle, context: context).get().tool else { return XCTFail("apply_edits") }
+        XCTAssertNil(styled.first?.table?.value)
+        XCTAssertEqual(styled.first?.table?.style?.scale, 1.35)
+    }
+
     func testTypedValues() throws {
         let redo = ToolArgumentCoercer.rawToolUse(id: "c", name: "undo", arguments: ["direction": "refaire", "to_original": "non"])
         XCTAssertEqual(try JSONValue.parse(redo.rawInput), ["direction": "redo", "to_original": false])

@@ -16,6 +16,12 @@ public enum LiveTurnRouter {
         .zoom, .play, .pause, .seek, .setSpeed, .mute, .unmute, .setVolume,
     ]
 
+    /// Table steps the grammar owns (D9): they take the local lane even with the model loaded, on
+    /// longer sentences ("remplis les cases vides avec des nombres au hasard entre 50 et 90").
+    public static let tableActions: Set<IntentAction> = [.fillCells, .clearCells, .highlightCells]
+    /// The most words a table plan may have on the local lane.
+    static let tableTokenLimit = 24
+
     public static func route(_ text: String, grammar: EditPlan, brain: LiveBrainKind, ideasOnScreen: Int, jobRunning: Bool, fastLane: Bool) -> LiveLane {
         let utterance = NormalizedUtterance(text)
         let tokens = utterance.tokens
@@ -25,6 +31,12 @@ public enum LiveTurnRouter {
         if isQuestion(text, tokens: tokens) { return .brain(isQuestion: true) }
         if fastLane, !grammar.isEmpty, grammar.confidence >= 0.9, grammar.clarification == nil, tokens.count <= 10,
            grammar.intents.allSatisfy({ instantActions.contains($0.action) }) {
+            return .local(grammar)
+        }
+        if fastLane, !grammar.isEmpty, grammar.confidence >= 0.9, grammar.clarification == nil, tokens.count <= tableTokenLimit,
+           grammar.intents.contains(where: { tableActions.contains($0.action) }),
+           grammar.intents.allSatisfy({ tableActions.contains($0.action) || instantActions.contains($0.action) }),
+           !namesOneCellLoosely(utterance, grammar) {
             return .local(grammar)
         }
         return .brain(isQuestion: false)
@@ -106,6 +118,17 @@ public enum LiveTurnRouter {
         return index
     }
 
+    /// "la case …" said, but a table step that does not name one row and one column: the words and the plan
+    /// disagree, so the model (or a question) decides, never the fast lane (the wrong cells are never filled
+    /// silently).
+    static func namesOneCellLoosely(_ utterance: NormalizedUtterance, _ grammar: EditPlan) -> Bool {
+        guard RuleBasedIntentEngine.namesOneCellNoun(utterance) else { return false }
+        return grammar.intents.contains { intent in
+            guard tableActions.contains(intent.action), let spec = intent.table else { return false }
+            return spec.rows.count != 1 || spec.columns.count != 1
+        }
+    }
+
     // MARK: Questions
 
     static let questionWords: Set<String> = [
@@ -115,6 +138,8 @@ public enum LiveTurnRouter {
     static let questionPhrases = ["qu est ce", "est ce que", "tu penses", "tu trouves", "a ton avis", "do you", "should i", "would you", "what s", "t en penses"]
 
     static func isQuestion(_ text: String, tokens: [String]) -> Bool {
+        // "tu peux mettre des 1 partout ?", "can you fill every cell?": a request, which the recognizer ends with "?".
+        if PoliteRequest.isRequest(tokens) { return false }
         if text.contains("?") { return true }
         if tokens.contains(where: { questionWords.contains($0) }) { return true }
         let joined = " " + tokens.joined(separator: " ") + " "

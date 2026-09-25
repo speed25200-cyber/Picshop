@@ -129,6 +129,13 @@ public enum Replies {
         case .cleanUp: return fr ? "J'enlève les passants." : "Removing the passers-by."
         case .autoCrop: return fr ? "Je cherche le meilleur cadrage." : "Finding the best framing."
         case .blurObject: return fr ? "Je floute." : "Blurring it."
+        case .fillCells: return tableFillReply(intent.table?.value, scope: tableScope(intent.table, fr: fr), fr: fr)
+        case .clearCells: return fr ? "Je vide \(tableScope(intent.table, fr: true))." : "Clearing \(tableScope(intent.table, fr: false))."
+        case .highlightCells:
+            let scope = tableScope(intent.table, fr: fr)
+            return fr ? (scope == "les cases" ? "Je surligne le tableau." : "Je surligne \(scope).") : (scope == "the cells" ? "Highlighting the table." : "Highlighting \(scope).")
+        case .eraseRegion: return fr ? "J'efface cette zone." : "Erasing that area."
+        case .moveText: return fr ? "Je déplace le texte." : "Moving the text."
         case .unknown: return fr ? "Je n'ai pas compris. Tu peux reformuler ?" : "I didn't catch that. Could you rephrase?"
         }
     }
@@ -162,6 +169,53 @@ public enum Replies {
         else if scene.brightness > 0.8 { sentence += fr ? " La photo est très claire." : " The photo is very bright." }
         if scene.colourfulness < 0.12 { sentence += fr ? " Les couleurs sont ternes." : " The colours are muted." }
         return sentence
+    }
+
+    /// "Je remplis les cases avec 1." before a fill runs ("la colonne Opus 5" when one is named); the count
+    /// line after it comes from Live.
+    static func tableFillReply(_ value: CellValue?, scope: String, fr: Bool) -> String {
+        switch value {
+        case .constant(let text)?: return fr ? "Je remplis \(scope) avec \(text)." : "Filling \(scope) with \(text)."
+        case .random?: return fr ? "Je remplis \(scope) avec des nombres au hasard." : "Filling \(scope) with random numbers."
+        case .sequence?: return fr ? "Je numérote \(scope)." : "Numbering \(scope)."
+        case .list?: return fr ? "Je mets ces valeurs dans \(scope)." : "Putting those values in \(scope)."
+        case .plausible?: return fr ? "Je remplis \(scope) avec des valeurs plausibles." : "Filling \(scope) with plausible values."
+        case nil: return fr ? "Je remplis \(scope)." : "Filling \(scope)."
+        }
+    }
+
+    /// What a table step acts on, as said: "la colonne Opus 5", "la ligne Agentic coding", "la case Opus 5 / Agentic coding",
+    /// "la dernière colonne", or "les cases".
+    static func tableScope(_ spec: TableEditSpec?, fr: Bool) -> String {
+        guard let spec else { return fr ? "les cases" : "the cells" }
+        func name(_ ref: TableEditSpec.Ref, _ noun: String, _ nounEN: String) -> String {
+            switch ref {
+            case .name(let name): return fr ? "la \(noun) \(name)" : "the \(name) \(nounEN)"
+            case .index(-1): return fr ? "la dernière \(noun)" : "the last \(nounEN)"
+            case .index(1): return fr ? "la première \(noun)" : "the first \(nounEN)"
+            case .index(let index): return fr ? "la \(noun) \(index)" : "\(nounEN) \(index)"
+            }
+        }
+        switch (spec.rows.count, spec.columns.count) {
+        case (0, 0): return fr ? "les cases" : "the cells"
+        case (0, 1): return name(spec.columns[0], "colonne", "column")
+        case (1, 0): return name(spec.rows[0], "ligne", "row")
+        case (1, 1):
+            if case .name(let column) = spec.columns[0], case .name(let row) = spec.rows[0] { return fr ? "la case \(column) / \(row)" : "the \(column) / \(row) cell" }
+            return fr ? "cette case" : "that cell"
+        default: return fr ? "ces cases" : "those cells"
+        }
+    }
+
+    /// Three concrete things to try, shown when a request was not understood; table examples when the
+    /// picture is a table.
+    public static func suggestions(for mode: EditorMode, language: NormalizedUtterance.Language, hasTable: Bool) -> String {
+        guard hasTable, mode == .photo else { return suggestions(for: mode, language: language) }
+        let fr = language == .french
+        let examples = fr ? ["Remplis les cases vides avec 0", "Surligne la dernière colonne", "Mets 90 % dans la première case"]
+            : ["Fill the empty cells with 0", "Highlight the last column", "Put 90% in the first cell"]
+        let joined = examples.map { fr ? "« \($0) »" : "“\($0)”" }.joined(separator: " · ")
+        return (fr ? "Essayez : " : "Try: ") + joined
     }
 
     /// Three concrete things to try, shown when a request was not understood.

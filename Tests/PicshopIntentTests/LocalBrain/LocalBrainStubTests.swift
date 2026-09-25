@@ -27,7 +27,7 @@ final class LocalBrainStubTests: XCTestCase {
         XCTAssertEqual(limits.turnTimeout, 25)
         XCTAssertEqual(limits.maxRounds, 3)
         XCTAssertEqual(limits.maxApplyEdits, 2)
-        XCTAssertEqual(limits.compactAt, 6_000)
+        XCTAssertEqual(limits.compactAt, 7_000)
         XCTAssertEqual(limits.maxImagesInContext, 2)
         XCTAssertEqual([limits.speechMaxTokens, limits.ideasMaxTokens, limits.hotMaxTokens], [120, 320, 80])
     }

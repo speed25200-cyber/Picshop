@@ -162,7 +162,7 @@ final class LiveContractTests: XCTestCase {
         _ = LiveLines.filler(.french, avoiding: nil)
         _ = LiveLines.line(.greetingLooking, .french, mode: .video)
         for key in [LiveLineKey.greetingLocal, .greetingLooking, .refusal, .lostThread, .jobDone, .jobCancelled, .resume, .stopping, .running, .micRestarted,
-                    .modelLoading] {
+                    .modelLoading, .cannotAnswerLocal] {
             _ = LiveLines.line(key, .english)
         }
 

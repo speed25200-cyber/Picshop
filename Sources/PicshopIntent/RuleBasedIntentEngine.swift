@@ -32,16 +32,51 @@ public struct RuleBasedIntentEngine: IntentEngine {
             return EditPlan.unknown(utterance)
         }
 
+        // "Opus 5.5" after "Quelle colonne : Opus 5.5 ou Opus 5 ?": the name said picks the column.
+        if let pending = context.pendingClarification, IntentNormalizer.tableActions.contains(pending.pendingIntent.action),
+           let index = pending.candidates.firstIndex(where: { candidate in
+               let said = Set(TableGrid.foldedTokens(utterance)), name = Set(TableGrid.foldedTokens(candidate.label))
+               return !name.isEmpty && name.isSubset(of: said) && !pending.candidates.contains { $0.label != candidate.label && Set(TableGrid.foldedTokens($0.label)).isSubset(of: said) && Set(TableGrid.foldedTokens($0.label)).count > name.count }
+           }) {
+            let choice = EditIntent(action: .chooseCandidate, index: index + 1, confidence: 0.95)
+            return EditPlan(utterance: utterance, intents: [choice], confidence: choice.confidence, language: language.rawValue,
+                            reply: Replies.reply(for: choice, language: language), engine: .rules)
+        }
         if let pending = context.pendingClarification, let choice = parseCandidateChoice(normalized, pending: pending, context: context) {
             return EditPlan(utterance: utterance, intents: [choice], confidence: choice.confidence, language: language.rawValue,
                             reply: Replies.reply(for: choice, language: language), engine: .rules)
         }
 
+        // Table commands read the whole utterance: " et " would split "entre 50 et 90".
+        if context.mode == .photo, let table = parseTablePlan(normalized, original: utterance, context: context) {
+            let intents = table.intents.map { withOriginalWords($0, from: utterance) }
+            let confidence = intents.map(\.confidence).min() ?? 0
+            if let asked = table.question {
+                let question: String
+                switch asked {
+                case .value: question = language == .french ? "Avec quoi ? Des 1, ou des nombres au hasard ?" : "With what? Ones, or random numbers?"
+                case .cell: question = language == .french ? "Quelle case ? Dis-moi sa ligne et sa colonne." : "Which cell? Tell me its row and column."
+                }
+                return EditPlan(utterance: utterance, intents: intents, confidence: min(confidence, 0.6), language: language.rawValue, reply: question,
+                                clarification: question, engine: .rules)
+            }
+            return EditPlan(utterance: utterance, intents: intents, confidence: confidence, language: language.rawValue,
+                            reply: Replies.combined(for: intents, language: language), engine: .rules)
+        }
+
         var intents: [EditIntent] = []
+        var unreadClause = false
         let clauses = UtteranceSegmenter.clauses(of: utterance).map { NormalizedUtterance($0).text }.filter { !$0.isEmpty }
         for segment in clauses.flatMap({ UtteranceSegmenter.segments(of: $0) }) {
             let piece = NormalizedUtterance(segment)
-            let parsed = parseSegment(piece, original: utterance, context: context)
+            var parsed = parseSegment(piece, original: utterance, context: context)
+            // "enlève le prix, le sous-titre et le titre", "écris « A » en haut et « B » en bas": a clause with no
+            // verb repeats the step before it on what it names.
+            if parsed.allSatisfy({ $0.action == .unknown }), let previous = intents.last(where: { $0.action != .unknown }),
+               let elided = parseElidedClause(piece, original: utterance, after: previous, context: context) {
+                parsed = [elided]
+            }
+            if parsed.allSatisfy({ $0.action == .unknown }), !piece.tokens.allSatisfy(Self.clauseFiller.contains) { unreadClause = true }
             intents.append(contentsOf: parsed)
         }
 
@@ -62,7 +97,10 @@ public struct RuleBasedIntentEngine: IntentEngine {
             understood[first] = merged
         }
         let final = (understood.isEmpty ? intents : understood).map { withOriginalWords($0, from: utterance) }
-        let confidence = final.map(\.confidence).min() ?? 0
+        var confidence = final.map(\.confidence).min() ?? 0
+        // A clause left unread ("recadre en carré et <something the rules miss>"): what was understood is not
+        // the whole request, so the plan stays below the fast lane and a model, when there is one, reads it all.
+        if !understood.isEmpty, unreadClause { confidence = min(confidence, 0.85) }
         return EditPlan(utterance: utterance, intents: final, confidence: confidence, language: language.rawValue,
                         reply: Replies.combined(for: final, language: language), engine: .rules)
     }
@@ -77,6 +115,8 @@ public struct RuleBasedIntentEngine: IntentEngine {
         if let version = parseVersion(u, original: original) { return [version] }
         if let meta = parseMeta(u, context: context) { return [meta] }
         if context.mode == .photo, let describe = parseDescribe(u) { return [describe] }
+        if context.mode == .photo, let scene = parseSceneText(u, original: original, context: context) { return [scene] }
+        if context.mode == .photo, let again = parseLastFollowUp(u, original: original, context: context) { return [again] }
         if context.mode == .pdf { return parsePDF(u, original: original, context: context) }
         if context.mode == .video, let video = parseVideo(u, context: context) { return video }
         if context.mode == .photo, let goal = parseGoal(u, context: context) { return goal }
@@ -433,6 +473,8 @@ public struct RuleBasedIntentEngine: IntentEngine {
     ]
 
     func parseGenerative(_ u: NormalizedUtterance, original: String, context: IntentContext) -> EditIntent? {
+        // "mets des chiffres aléatoires dans toutes les cases" is a table fill, never a picture to generate.
+        if Self.namesTableCells(u) { return nil }
         // "mets-moi sur une plage", "put us in Paris", "emmène-moi à la montagne": a new place behind the people.
         let teleport = ["mets moi", "mets nous", "met moi", "place moi", "place nous", "emmene moi", "emmene nous", "teleporte moi", "teleporte nous", "envoie moi",
                         "put me", "put us", "place me", "place us", "take me", "take us", "send me", "teleport me", "teleport us"]
@@ -445,6 +487,19 @@ public struct RuleBasedIntentEngine: IntentEngine {
             if leadsToPlace, !place.isEmpty {
                 return EditIntent(action: .generativeFill, target: ObjectTarget(label: "background", originalPhrase: u.language == .french ? "le fond" : "the background"),
                                   text: place.joined(separator: " "), confidence: 0.85)
+            }
+        }
+        // "remplis le ciel de nuages", "fill the sky with stars": something new generated over a part of the picture.
+        if let rest = remainder(of: u, after: ["remplis", "remplir", "fill", "couvre", "recouvre", "cover"]) {
+            let words = rest.split(separator: " ").map(String.init)
+            if let split = words.indices.dropFirst().first(where: { ["de", "d", "des", "with", "avec"].contains(words[$0]) }), split < words.count - 1 {
+                var content = Array(words[(split + 1)...])
+                while let first = content.first, ["un", "une", "des", "de", "d", "some", "a", "the", "les"].contains(first) { content.removeFirst() }
+                if !content.isEmpty, let target = makeTarget(from: words[..<split].joined(separator: " "), context: context), target.label != "object",
+                   ObjectVocabulary.entry(forLabel: target.label) != nil {
+                    let prompt = originalSubstring(matching: content.joined(separator: " "), in: original) ?? content.joined(separator: " ")
+                    return EditIntent(action: .generativeFill, target: target, text: prompt, confidence: 0.85)
+                }
             }
         }
         // "remplace le ciel par un coucher de soleil" / "replace the sky with a sunset" / "turn the car into a boat"
@@ -923,10 +978,19 @@ public struct RuleBasedIntentEngine: IntentEngine {
     // MARK: - Text
 
     func parseText(_ u: NormalizedUtterance, original: String, context: IntentContext) -> EditIntent? {
+        // "écris 1 dans chaque case du tableau" is a table fill, not a text layer saying "1 dans chaque case".
+        if Self.namesTableCells(u) { return nil }
+        // A question is answered, never written: "pourquoi tu ne peux pas écrire derrière ?", "est-ce que le titre est lisible ?".
+        if Self.isQuestion(u, original: original) { return nil }
+        // Nouns alone ("titre", "légende") never add text: only a verb does ("ajoute un titre", "write …").
         let addPhrases = ["add text", "add the text", "add a text", "add some text", "add a caption", "add caption", "add a title", "add title", "add the words", "add the word", "write", "put the text", "put text", "insert text", "insert the text", "type",
-                          "ajoute le texte", "ajoute un texte", "ajoute du texte", "ajoute texte", "ajoute une legende", "ajoute la legende", "ajoute un titre", "ajoute le titre", "ajoutes le texte", "ecris", "ecrire", "mets le texte", "mets un texte", "mets le mot", "mets les mots", "insere le texte", "insere un texte", "marque", "note", "titre", "legende", "caption"]
+                          "ajoute le texte", "ajoute un texte", "ajoute du texte", "ajoute texte", "ajoute une legende", "ajoute la legende", "ajoute un titre", "ajoute le titre", "ajoutes le texte", "ecris", "ecrire", "mets le texte", "mets un texte", "mets le mot", "mets les mots", "insere le texte", "insere un texte"]
         let editPhrases = ["change the text to", "change the text", "replace the text with", "replace the text by", "edit the text", "modifie le texte", "change le texte en", "change le texte", "remplace le texte par", "remplace le texte"]
         let mentionsText = u.contains(["text", "texte", "title", "titre", "caption", "legende", "words", "mots", "subtitle", "sous titre", "label", "heading"])
+        // The words in quotes this clause holds ("écris « A » en haut et « B » en bas": A, then B).
+        let quoted = quote(for: u, in: original)
+        let addVerbs = ["ajoute", "ajouter", "ajoutes", "rajoute", "mets", "met", "place", "add", "put", "insere", "insert", "ecris", "ecrire", "write",
+                        "inscris", "tape", "type", "marque", "note"]
         if context.textLayerCount > 0, u.contains(editPhrases) {
             var intent = EditIntent(action: .editText)
             intent.text = extractQuoted(from: original) ?? remainder(of: u, after: editPhrases)?.replacingOccurrences(of: "^(en|par|to|with|by|into) ", with: "", options: .regularExpression)
@@ -940,10 +1004,21 @@ public struct RuleBasedIntentEngine: IntentEngine {
             if u.contains(["smaller", "plus petit", "petit", "small"]) { intent.amount = .multiplier(0.75) }
             return intent
         }
-        guard u.contains(addPhrases) || (mentionsText && u.contains(["add", "ajoute", "mets", "put", "insert", "insere", "with", "avec", "saying", "disant", "qui dit"])) else { return nil }
+        // "remplace le titre par Benchmark 2026" when no scene map says where the title is: an edit to ask
+        // about or leave to the model, never new text saying "par Benchmark 2026".
+        if context.mode == .photo, u.contains(Self.sceneReplaceVerbs), u.contains(Self.textBlockNouns) {
+            guard context.scene == nil else { return nil }
+            var edit = EditIntent(action: .editText, confidence: 0.6)
+            edit.text = quoted ?? Self.originalWords(after: ["par", "by", "with", "to", "into"], in: original)
+            if edit.text == nil, let after = Self.originalWords(after: ["en"], in: original), colorMention(in: NormalizedUtterance(after)) == nil { edit.text = after }
+            edit.color = colorMention(in: u)
+            return edit
+        }
+        guard u.contains(addPhrases) || (mentionsText && u.contains(["add", "ajoute", "mets", "put", "insert", "insere", "with", "avec", "saying", "disant", "qui dit"]))
+            || (quoted != nil && u.contains(addVerbs)) else { return nil }
         if u.contains(Self.removeVerbs) && !u.contains(["add", "ajoute"]) { return nil }
         var intent = EditIntent(action: .addText)
-        var content = extractQuoted(from: original)
+        var content = quoted ?? extractQuoted(from: original)
         if content == nil {
             // Take the words after the trigger phrase, dropping placement and styling words.
             let after = remainder(of: u, after: addPhrases + ["saying", "that says", "qui dit", "disant", "which says", "with the text", "avec le texte", "with the words", "avec les mots", "the text", "le texte", "text", "texte"])
@@ -962,11 +1037,18 @@ public struct RuleBasedIntentEngine: IntentEngine {
                 content = originalSubstring(matching: joined, in: original) ?? joined
             }
         }
+        // "mets le texte en haut" with a text there already and nothing new to write: it moves.
+        if content == nil, context.textLayerCount > 0, let place = placement(in: u) {
+            return EditIntent(action: .editText, placement: place, confidence: 0.85)
+        }
         intent.text = content
         intent.placement = placement(in: u) ?? .bottom
         intent.color = colorMention(in: u)
         if u.contains(["big", "large", "grand", "gros", "huge", "enorme", "en grand", "bigger"]) { intent.amount = .absolute(0.09) }
         if u.contains(["small", "petit", "tiny", "discret", "en petit"]) { intent.amount = .absolute(0.035) }
+        // On a picture the scene map describes: a free area in that part of it, else a spot clear of its text;
+        // size words as its size classes; the page's own typography on screenshots, tables and documents.
+        if context.mode == .photo, let scene = context.scene { Self.placeOnScene(&intent, u: u, scene: scene) }
         if context.mode == .video {
             let times = TimeExpressions.allTimes(in: u.tokens, frameRate: context.frameRate)
             if u.contains(["from", "de", "entre", "between"]), times.count >= 2 {

@@ -123,10 +123,13 @@ public enum ToolArgumentCoercer {
 
     // MARK: Steps
 
-    static let numberFields = ["amount", "degrees", "startSeconds", "endSeconds", "seconds", "speed"]
-    static let integerFields = ["ordinal", "choiceIndex", "clipNumber"]
+    static let numberFields = ["amount", "degrees", "startSeconds", "endSeconds", "seconds", "speed", "min", "max"]
+    static let integerFields = ["ordinal", "choiceIndex", "clipNumber", "decimals"]
     static let booleanFields = ["all"]
-    static let textFields = ["target", "text", "color", "background"]
+    /// A number written for one of these becomes its text: "text": 1 → "1", "row": 3 → "3", "size": 24 → "24".
+    static let textFields = ["target", "text", "color", "background", "row", "column", "ref", "size", "match"]
+    /// Steps whose box is a region of their own (erase it, write in it), not a way to point at an object.
+    static let boxActions: Set<String> = [IntentAction.eraseRegion.rawValue, IntentAction.addText.rawValue, IntentAction.moveText.rawValue]
 
     private static func stepList(_ value: JSONValue) -> JSONValue {
         guard let items = list(value) else { return value }
@@ -139,10 +142,23 @@ public enum ToolArgumentCoercer {
     /// One apply_edits step: types, enums, point, aliases.
     static func coerceStep(_ input: [String: JSONValue]) -> [String: JSONValue] {
         var step = dropNulls(input)
+        if let action = step["action"]?.string {
+            // The exact name first ("FillCells", "fill_cells"), then the names small models use ("fill_table").
+            let exact = canonical(action, among: IntentAction.allCases.map(\.rawValue), field: "action")
+            step["action"] = .string(IntentAction(rawValue: exact) != nil ? exact : actionAliases[foldedKey(action)]?.rawValue ?? action)
+        }
+        let action = step["action"]?.string.flatMap(IntentAction.init(rawValue:))
+        if let action, IntentNormalizer.tableActions.contains(action) { step = tableStep(step) }
         // Unambiguous aliases small models use.
-        for (alias, field) in [("value", "amount"), ("param", "parameter"), ("preset", "look"), ("filter", "look")] where step[field] == nil {
+        for (alias, field) in [("value", "amount"), ("param", "parameter"), ("preset", "look"), ("filter", "look"), ("fontSize", "size"),
+                               ("font_size", "size"), ("textSize", "size"), ("text_size", "size"), ("alignment", "align"), ("fontWeight", "weight")]
+            where step[field] == nil {
             if let value = step.removeValue(forKey: alias) { step[field] = value }
         }
+        // "size": 1.5 or "2" for « une fois et demie / deux fois plus gros »: a factor, never thousandths of the height.
+        if let size = step["size"], let factor = sizeFactor(size) { step["size"] = .string("x" + shortNumber(factor)) }
+        // "bottom right", "en bas à droite", "top-left": the corner as the enum spells it.
+        if let placement = step["placement"]?.string, let corner = placementSynonyms[foldedKey(placement)] { step["placement"] = .string(corner) }
         for field in numberFields { if let value = step[field] { step[field] = number(value) ?? value } }
         // A number that is not whole stays a number, so the validator says "must be an integer".
         for field in integerFields { if let value = step[field] { step[field] = integer(value) ?? number(value) ?? value } }
@@ -162,14 +178,143 @@ public enum ToolArgumentCoercer {
                 break
             }
         }
+        let keepsBox = step["action"]?.string.map { boxActions.contains($0) } ?? false
+        if keepsBox, let raw = ["box", "bbox_2d", "bbox"].lazy.compactMap({ step[$0] }).first {
+            // The region itself: [x1, y1, x2, y2] in 0–1.
+            step["box"] = box(raw) ?? raw
+            for key in ["bbox_2d", "bbox"] { step[key] = nil }
+        }
         if let point = step["point"] {
             step["point"] = self.point(point) ?? point
-        } else if let box = ["bbox_2d", "bbox", "box"].lazy.compactMap({ step[$0] }).first, let center = boxCenter(box) {
+        } else if !keepsBox, let box = ["bbox_2d", "bbox", "box"].lazy.compactMap({ step[$0] }).first, let center = boxCenter(box) {
             step["point"] = center
         }
-        if step["point"] != nil { for key in ["bbox_2d", "bbox", "box"] { step[key] = nil } }
+        if step["point"] != nil, !keepsBox { for key in ["bbox_2d", "bbox", "box"] { step[key] = nil } }
         return step
     }
+
+    /// A size written as a bare number between 0.25 and 4 (1.5, "2", "1,5"): a factor. A number with an "x", a
+    /// word or a fraction below 0.25 (a size as part of the height) is left as it is.
+    static func sizeFactor(_ value: JSONValue) -> Double? {
+        if let text = value.string, text.lowercased().contains("x") || text.contains("×") { return nil }
+        guard let factor = number(value)?.double, factor.isFinite, (0.25...4).contains(factor) else { return nil }
+        return factor
+    }
+
+    /// 1.5 -> "1.5", 2 -> "2".
+    static func shortNumber(_ value: Double) -> String {
+        value == value.rounded() ? String(Int(value)) : String(format: "%g", value)
+    }
+
+    /// Placements small models (and people) write another way, folded, to the enum's values.
+    static let placementSynonyms: [String: String] = {
+        var map: [String: String] = [:]
+        let table: [(String, [String])] = [
+            ("topLeading", ["topleft", "lefttop", "upperleft", "topleftcorner", "hautgauche", "enhautagauche", "enhautgauche", "hautagauche", "coinhautgauche"]),
+            ("topTrailing", ["topright", "righttop", "upperright", "toprightcorner", "hautdroite", "enhautadroite", "enhautdroite", "hautadroite", "coinhautdroite"]),
+            ("bottomLeading", ["bottomleft", "leftbottom", "lowerleft", "bottomleftcorner", "basgauche", "enbasagauche", "enbasgauche", "basagauche", "coinbasgauche"]),
+            ("bottomTrailing", ["bottomright", "rightbottom", "lowerright", "bottomrightcorner", "basdroite", "enbasadroite", "enbasdroite", "basadroite", "coinbasdroite"]),
+            ("top", ["haut", "enhaut", "upper", "attop", "atthetop"]),
+            ("bottom", ["bas", "enbas", "lower", "atbottom", "atthebottom"]),
+            ("center", ["centre", "middle", "milieu", "aucentre", "aumilieu", "centered", "centred"]),
+        ]
+        for (value, keys) in table { for key in keys { map[key] = value } }
+        return map
+    }()
+
+    /// Action names small models use for the table and text steps (the validator wants the exact names).
+    static let actionAliases: [String: IntentAction] = [
+        "fill": .fillCells, "filltable": .fillCells, "fillgrid": .fillCells, "fillcell": .fillCells, "setcell": .fillCells, "setcells": .fillCells,
+        "populate": .fillCells, "populatetable": .fillCells, "writecells": .fillCells, "writecell": .fillCells, "fillin": .fillCells,
+        "clearcell": .clearCells, "clearcolumn": .clearCells, "clearrow": .clearCells, "emptycells": .clearCells, "cleartable": .clearCells,
+        "highlightcolumn": .highlightCells, "highlightrow": .highlightCells, "highlightcell": .highlightCells,
+        "shadecolumn": .highlightCells, "shaderow": .highlightCells,
+        "erasearea": .eraseRegion, "erasebox": .eraseRegion, "clearregion": .eraseRegion, "cleararea": .eraseRegion,
+        "movelabel": .moveText, "movetitle": .moveText,
+        "writetext": .addText, "placetext": .addText, "inserttext": .addText,
+        "changetext": .editText, "rewritetext": .editText, "replacetextblock": .editText, "restyletext": .editText,
+        "erasetext": .removeText, "deletetext": .removeText,
+    ]
+
+    /// cells / values synonyms, and the table step's own aliases: `value` is the text written in the cells
+    /// (or "random"), `scope` is `cells`, a list of rows or columns is joined with "|", `range` is min and max.
+    static func tableStep(_ input: [String: JSONValue]) -> [String: JSONValue] {
+        var step = input
+        if step["text"] == nil, let value = step.removeValue(forKey: "value") {
+            if let text = value.string, let values = valuesSynonyms[foldedKey(text)] { step["values"] = .string(values) }
+            else if let text = scalarText(value) { step["text"] = .string(text) }
+        }
+        if step["cells"] == nil, let scope = step.removeValue(forKey: "scope") { step["cells"] = scope }
+        if let cells = step["cells"]?.string, let canonical = cellsSynonyms[foldedKey(cells)] { step["cells"] = .string(canonical) }
+        if let values = step["values"]?.string, let canonical = valuesSynonyms[foldedKey(values)] { step["values"] = .string(canonical) }
+        for field in ["row", "column", "rows", "columns"] {
+            guard case .array(let items)? = step[field] else { continue }
+            step[field] = .string(items.compactMap(scalarText).joined(separator: "|"))
+        }
+        for (plural, singular) in [("rows", "row"), ("columns", "column")] where step[singular] == nil {
+            if let value = step.removeValue(forKey: plural) { step[singular] = value }
+        }
+        // The forms the table lines print, as the model copies them: "Novel problem…" (a cut name), "r6", "c3",
+        // "row 6", "colonne 3", and one "r6c3" in row or column (the cells: line's notation).
+        for field in ["row", "column"] {
+            guard let text = step[field].flatMap(scalarText) else { continue }
+            if let cell = cellAddress(text) {
+                if step["row"].flatMap(scalarText).map({ cellAddress($0) != nil || $0 == text }) ?? true { step["row"] = .string(String(cell.row)) }
+                if step["column"].flatMap(scalarText).map({ cellAddress($0) != nil || $0 == text }) ?? true { step["column"] = .string(String(cell.column)) }
+                continue
+            }
+            step[field] = .string(tableRef(text, axis: field))
+        }
+        if let range = step.removeValue(forKey: "range"), step["min"] == nil, step["max"] == nil {
+            var bounds: [Double] = []
+            switch range {
+            case .array(let items): bounds = items.compactMap { number($0)?.double }
+            case .string(let text): bounds = text.split(whereSeparator: { $0 == "-" || $0 == "–" || $0 == "," || $0 == " " }).compactMap { number(.string(String($0)))?.double }
+            default: break
+            }
+            if bounds.count == 2 { step["min"] = .number(bounds[0]); step["max"] = .number(bounds[1]) } else { step["range"] = range }
+        }
+        return step
+    }
+
+    /// "r6c3", "R6 C3", "l6c3": a cell by its 1-based data row and column.
+    static func cellAddress(_ text: String) -> (row: Int, column: Int)? {
+        let key = text.lowercased().filter { !$0.isWhitespace }
+        guard let first = key.first, first == "r" || first == "l", let c = key.firstIndex(of: "c"),
+              let row = Int(key[key.index(after: key.startIndex)..<c]), let column = Int(key[key.index(after: c)...]), row >= 1, column >= 1 else { return nil }
+        return (row, column)
+    }
+
+    /// One row or column name as printed: the ellipsis of a cut name dropped; "r6", "row 6", "ligne 6" -> "6"
+    /// (rows), "c3", "col 3", "colonne 3" -> "3" (columns). Several joined with "|" each get the same.
+    static func tableRef(_ text: String, axis: String) -> String {
+        text.split(separator: "|", omittingEmptySubsequences: false).map { part -> String in
+            var name = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            while name.hasSuffix("…") || name.hasSuffix(".") { name.removeLast() }
+            name = name.trimmingCharacters(in: .whitespaces)
+            let key = name.lowercased()
+            let prefixes = axis == "row" ? ["row ", "ligne ", "rangée ", "rangee ", "r"] : ["column ", "colonne ", "col ", "col. ", "c"]
+            for prefix in prefixes where key.hasPrefix(prefix) {
+                let rest = key.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces)
+                if let number = Int(rest), number >= 1 || number == -1 { return String(number) }
+            }
+            return name
+        }.joined(separator: "|")
+    }
+
+    static let cellsSynonyms: [String: String] = [
+        "empty": "empty", "blank": "empty", "remaining": "empty", "rest": "empty", "others": "empty", "other": "empty", "missing": "empty",
+        "emptyonly": "empty", "vides": "empty", "vide": "empty", "autres": "empty", "reste": "empty",
+        "all": "all", "every": "all", "everything": "all", "allcells": "all", "toutes": "all", "tout": "all", "tous": "all",
+    ]
+
+    static let valuesSynonyms: [String: String] = [
+        "random": "random", "randomnumbers": "random", "randomnumber": "random", "randomvalues": "random", "aleatoire": "random", "aleatoires": "random",
+        "hasard": "random", "auhasard": "random", "chiffresaleatoires": "random", "nombresaleatoires": "random",
+        "sequence": "sequence", "sequential": "sequence", "count": "sequence", "numbering": "sequence", "increasing": "sequence",
+        "plausible": "plausible", "realistic": "plausible", "credible": "plausible", "realiste": "plausible", "realistes": "plausible",
+        "list": "list",
+    ]
 
     static let enumFields: [(String, [String])] = [
         ("action", IntentAction.allCases.map(\.rawValue)),
@@ -182,6 +327,11 @@ public enum ToolArgumentCoercer {
         ("transition", TransitionKind.allCases.map(\.rawValue)),
         ("amountMode", ["relative", "absolute", "multiplier"]),
         ("scope", ["current", "all", "selection"]),
+        ("cells", LiveToolSchema.cellsValues),
+        ("values", LiveToolSchema.valuesValues),
+        ("weight", TableGrid.FontWeight.allCases.map(\.rawValue)),
+        ("align", LiveToolSchema.alignValues),
+        ("font", TableGrid.FontDesign.allCases.map(\.rawValue)),
     ]
 
     /// The exact enum value that `text` spells with another case or separators.
@@ -222,6 +372,38 @@ public enum ToolArgumentCoercer {
             return (-0.01...1.01).contains(scaled) ? min(max(scaled, 0), 1) : scaled
         }
         return ["x": .number(round4(unit(x))), "y": .number(round4(unit(y)))]
+    }
+
+    /// A region as the validator reads it, `[x1, y1, x2, y2]` in 0–1, from `[x1, y1, x2, y2]` (0–1000,
+    /// Qwen-VL's grid, or 0–1), "x1, y1, x2, y2", `{"x1","y1","x2","y2"}` or `{"x","y","width","height"}`.
+    /// Nil when it is not a box (the validator names the field).
+    static func box(_ value: JSONValue) -> JSONValue? {
+        var corners: [Double]?
+        switch value {
+        case .array(let items) where items.count == 4:
+            let numbers = items.compactMap { number($0)?.double }
+            if numbers.count == 4 { corners = numbers }
+        case .object(let object):
+            func read(_ keys: [String]) -> Double? { keys.lazy.compactMap { object[$0].flatMap(number)?.double }.first }
+            if let x1 = read(["x1", "left"]), let y1 = read(["y1", "top"]), let x2 = read(["x2", "right"]), let y2 = read(["y2", "bottom"]) {
+                corners = [x1, y1, x2, y2]
+            } else if let x = read(["x"]), let y = read(["y"]), let width = read(["width", "w"]), let height = read(["height", "h"]) {
+                corners = [x, y, x + width, y + height]
+            }
+        case .string(let text):
+            if let parsed = lenientJSON(text), parsed != value { return box(parsed) }
+            let parts = text.split(whereSeparator: { $0 == "," || $0 == ";" || $0.isWhitespace }).compactMap { number(.string(String($0)))?.double }
+            if parts.count == 4 { corners = parts }
+        default:
+            break
+        }
+        guard let corners else { return nil }
+        let scale = corners.contains { $0 > 1 } ? 1_000.0 : 1
+        let unit = corners.map { corner -> Double in
+            let scaled = corner / scale
+            return (-0.01...1.01).contains(scaled) ? min(max(scaled, 0), 1) : scaled
+        }
+        return .array(unit.map { .number(round4($0)) })
     }
 
     /// A box `[x1, y1, x2, y2]` (0–1000 or 0–1): its centre.

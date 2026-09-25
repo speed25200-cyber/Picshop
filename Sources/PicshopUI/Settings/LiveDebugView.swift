@@ -1,5 +1,6 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
+import UIKit
 import PicshopIntent
 
 /// Settings › Live › Diagnostic Live: the voice self-test, what the audio stack,
@@ -37,6 +38,8 @@ struct LiveDebugView: View {
             latencySection
 
             LiveBrainDebugSection()
+
+            LiveUnderstandingEvalSection()
 
             Section(L("Last answer")) {
                 value(L("Model"), debug.lastStats?.model ?? "")
@@ -267,6 +270,99 @@ private struct LiveBrainDebugSection: View {
         case .ready: return "ready"
         case .failed(let message): return "failed: \(message.prefix(60))"
         }
+    }
+}
+
+/// The understanding eval: the dialogue corpus of the unit tests (the same cases, pictures and scorer) through
+/// the model loaded on this iPhone, a new conversation per case. The per-category lines are shown here and go to
+/// the Live log as counts; the failed turns (which quote what was said) are shown, never logged.
+private struct LiveUnderstandingEvalSection: View {
+    @State private var task: Task<Void, Never>?
+    @State private var step: (done: Int, total: Int)?
+    @State private var lines: [String] = []
+    @State private var failures: [String] = []
+    @State private var refusal: String?
+
+    var body: some View {
+        Section {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                Text(verbatim: line).font(PSFont.mono(11)).foregroundStyle(PSTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !failures.isEmpty {
+                DisclosureGroup(String(format: L("Failed turns: %d"), failures.count)) {
+                    ForEach(Array(failures.prefix(60).enumerated()), id: \.offset) { _, failure in
+                        Text(verbatim: failure).font(PSFont.mono(11)).foregroundStyle(PSTheme.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            if let refusal {
+                Text(verbatim: refusal).font(PSFont.footnote()).foregroundStyle(PSTheme.warning)
+            }
+            if task != nil {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text(verbatim: step.map { String(format: L("Case %d of %d…"), $0.done, $0.total) } ?? L("Loading the model…"))
+                        .foregroundStyle(PSTheme.textSecondary)
+                    Spacer()
+                    Button(L("Stop")) { task?.cancel() }
+                }
+            } else {
+                Button(L("Run the understanding eval")) { start() }
+            }
+        } header: {
+            Text(L("Understanding eval"))
+        } footer: {
+            Text(L("About 200 spoken requests on a table screenshot and a poster, run through the on-device model: what it did to the picture and what it said. Keep the screen on; it takes several minutes."))
+        }
+    }
+
+    private func start() {
+        lines = []
+        failures = []
+        refusal = nil
+        step = nil
+        task = Task {
+            UIApplication.shared.isIdleTimerDisabled = true
+            defer {
+                UIApplication.shared.isIdleTimerDisabled = false
+                task = nil
+            }
+            guard let brain = await LocalBrainHub.shared.evalBrain(mode: .photo) else {
+                refusal = L("The on-device model is not ready on this iPhone: install it in Settings › Intelligence, then try again.")
+                return
+            }
+            let model = LocalBrainHub.shared.status.model?.displayName ?? "model"
+            let report = await LiveDialogueEvalRunner.evaluate(LiveDialogueCases.all, label: model, makeBrain: { _ in
+                // One conversation per case: the case starts from nothing the previous one said.
+                await brain.reset()
+                return brain
+            }, progress: { done, total in
+                step = (done, total)
+            })
+            await brain.reset()
+            lines = report.lines
+            failures = report.failures
+            Self.log(report, model: model, stopped: Task.isCancelled)
+        }
+    }
+
+    /// Counts only: the Live log never carries a transcript.
+    private static func log(_ report: LiveDialogueEvalRunner.Report, model: String, stopped: Bool) {
+        let now = ProcessInfo.processInfo.systemUptime
+        for category in LiveDialogueCase.Category.allCases {
+            guard let score = report.scores[category] else { continue }
+            LiveServices.shared.record(LiveLogEntry(time: now, event: "eval.category", fields: [
+                "category": category.rawValue, "cases": String(score.cases), "turns": String(score.turns), "passed": String(score.passed),
+                "percent": String(score.percent), "local_turns": String(score.localTurns), "local_wrong": String(score.localWrong),
+            ]))
+        }
+        let passed = report.scores.values.reduce(0) { $0 + $1.passed }
+        let turns = report.scores.values.reduce(0) { $0 + $1.turns }
+        LiveServices.shared.record(LiveLogEntry(time: now, event: "eval.done", fields: [
+            "model": model, "turns": String(turns), "passed": String(passed), "stopped": stopped ? "1" : "0",
+        ]))
     }
 }
 

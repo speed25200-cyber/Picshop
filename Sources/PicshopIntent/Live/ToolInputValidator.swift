@@ -181,7 +181,9 @@ public struct ToolInputValidator: Sendable {
             problems.append("\(path): must be an object")
             return nil
         }
-        let allowed = mode == .video ? Self.stepKeys.union(LiveToolSchema.videoFields) : Self.stepKeys
+        var allowed = Self.stepKeys
+        if mode == .video { allowed.formUnion(LiveToolSchema.videoFields) }
+        if mode == .photo { allowed.formUnion(LiveToolSchema.photoFields) }
         unknownKeys(object, allowed: allowed, path: path, problems: &problems)
         guard let action = string(object["action"], path: "\(path).action", problems: &problems) else {
             if object["action"] == nil || object["action"] == .null { problems.append("\(path).action: required") }
@@ -214,6 +216,22 @@ public struct ToolInputValidator: Sendable {
             step.transition = string(object["transition"], path: "\(path).transition", problems: &problems)
             step.speed = number(object["speed"], path: "\(path).speed", problems: &problems)
             step.scope = string(object["scope"], path: "\(path).scope", problems: &problems)
+        }
+        if mode == .photo {
+            step.cells = string(object["cells"], path: "\(path).cells", problems: &problems)
+            step.row = string(object["row"], path: "\(path).row", problems: &problems)
+            step.column = string(object["column"], path: "\(path).column", problems: &problems)
+            step.values = string(object["values"], path: "\(path).values", problems: &problems)
+            step.min = number(object["min"], path: "\(path).min", problems: &problems)
+            step.max = number(object["max"], path: "\(path).max", problems: &problems)
+            step.decimals = integer(object["decimals"], path: "\(path).decimals", problems: &problems)
+            step.ref = string(object["ref"], path: "\(path).ref", problems: &problems)
+            step.box = box(object["box"], path: "\(path).box", problems: &problems)
+            step.size = string(object["size"], path: "\(path).size", problems: &problems)
+            step.weight = string(object["weight"], path: "\(path).weight", problems: &problems)
+            step.align = string(object["align"], path: "\(path).align", problems: &problems)
+            step.font = string(object["font"], path: "\(path).font", problems: &problems)
+            step.match = string(object["match"], path: "\(path).match", problems: &problems)
         }
         return step
     }
@@ -249,7 +267,22 @@ public struct ToolInputValidator: Sendable {
             ]
             for (field, present) in videoOnly where present { problems.append("\(path).\(field): not available for a \(mode.rawValue)") }
         }
+        if mode != .photo {
+            let photoOnly: [(String, Bool)] = [
+                ("cells", step.cells != nil), ("row", step.row != nil), ("column", step.column != nil), ("values", step.values != nil),
+                ("min", step.min != nil), ("max", step.max != nil), ("decimals", step.decimals != nil), ("ref", step.ref != nil),
+                ("box", step.box != nil), ("size", step.size != nil), ("weight", step.weight != nil), ("align", step.align != nil),
+                ("font", step.font != nil), ("match", step.match != nil),
+            ]
+            for (field, present) in photoOnly where present { problems.append("\(path).\(field): not available for a \(mode.rawValue)") }
+        }
         if step.replacement != nil { problems.append("\(path).replacement: unknown field") }
+        // A name cut in the table lines ("Novel problem sol…", "Graduate-level re…") that begins exactly one row or
+        // column: that one, by its number (the round is not spent on a truncation the prompt itself printed).
+        if IntentNormalizer.tableActions.contains(action), let table = context.table {
+            step.row = Self.resolvingPrefix(step.row, axis: .row, in: table)
+            step.column = Self.resolvingPrefix(step.column, axis: .column, in: table)
+        }
 
         // Enumerations, exactly.
         func member<T: RawRepresentable>(_ value: String?, _ field: String, _ type: T.Type) where T.RawValue == String {
@@ -269,6 +302,24 @@ public struct ToolInputValidator: Sendable {
         if let scope = step.scope, !["current", "all", "selection"].contains(scope) {
             problems.append("\(path).scope: '\(scope)' is not a valid value")
         }
+        func oneOf(_ value: String?, _ field: String, _ values: [String]) {
+            guard let value else { return }
+            if !values.contains(value) { problems.append("\(path).\(field): '\(value)' is not one of \(values.joined(separator: ", "))") }
+        }
+        oneOf(step.cells, "cells", LiveToolSchema.cellsValues)
+        oneOf(step.values, "values", LiveToolSchema.valuesValues)
+        oneOf(step.weight, "weight", TableGrid.FontWeight.allCases.map(\.rawValue))
+        oneOf(step.align, "align", LiveToolSchema.alignValues)
+        oneOf(step.font, "font", TableGrid.FontDesign.allCases.map(\.rawValue))
+        if let size = step.size, !LiveToolSchema.sizeValues.contains(size), IntentNormalizer.textSize(named: size) == nil {
+            problems.append("\(path).size: '\(size)' is not one of \(LiveToolSchema.sizeValues.joined(separator: ", ")), a factor such as x1.5 or a number")
+        }
+        if let ref = step.ref, SceneRef(ref) == nil {
+            problems.append("\(path).ref: '\(ref)' is not a scene id such as t3, l2, o1 or f1")
+        }
+        if let match = step.match, match != "nearby", SceneRef(match) == nil {
+            problems.append("\(path).match: '\(match)' is not nearby or a text id such as t3")
+        }
 
         // Strings: trimmed, non-empty, no control characters, within their limits.
         func checkText(_ value: String?, _ field: String, limit: Int) {
@@ -282,6 +333,8 @@ public struct ToolInputValidator: Sendable {
         checkText(step.text, "text", limit: 200)
         checkText(step.color, "color", limit: 40)
         checkText(step.background, "background", limit: 40)
+        checkText(step.row, "row", limit: 40)
+        checkText(step.column, "column", limit: 40)
         if let attributes = step.attributes {
             if attributes.count > 3 { problems.append("\(path).attributes: at most 3") }
             for (index, attribute) in attributes.enumerated() { checkText(attribute, "attributes[\(index)]", limit: 24) }
@@ -324,6 +377,19 @@ public struct ToolInputValidator: Sendable {
             if !(1...limit).contains(choice) { problems.append("\(path).choiceIndex: \(choice) is outside 1...\(limit)") }
         }
         if let ordinal = step.ordinal, !(1...20).contains(ordinal) { problems.append("\(path).ordinal: \(ordinal) is outside 1...20") }
+        if let decimals = step.decimals, !(0...3).contains(decimals) { problems.append("\(path).decimals: \(decimals) is outside 0...3") }
+        for (field, value) in [("min", step.min), ("max", step.max)] {
+            if let value, !value.isFinite { problems.append("\(path).\(field): must be a number") }
+        }
+        if let low = step.min, let high = step.max, !(low < high) { problems.append("\(path).max: must be greater than min") }
+        if let box = step.box {
+            let inside = [box.minX, box.minY, box.maxX, box.maxY].allSatisfy { $0.isFinite && $0 >= 0 && $0 <= 1 }
+            if !inside {
+                problems.append("\(path).box: x1, y1, x2 and y2 must be within 0...1")
+            } else if IntentNormalizer.region(from: box) == nil {
+                problems.append("\(path).box: too small to act on")
+            }
+        }
         if let point = step.point, !(0...1).contains(point.x) || !(0...1).contains(point.y) {
             problems.append("\(path).point: x and y must be within 0...1")
         }
@@ -347,6 +413,15 @@ public struct ToolInputValidator: Sendable {
         case .adjust: need(step.parameter != nil, "parameter")
         case .applyLook: need(step.look != nil, "look")
         case .addText: need(step.text != nil, "text")
+        case .fillCells:
+            // No text and no values with a colour, weight or size: the cells already filled are restyled.
+            need(step.text != nil || step.values != nil || step.color != nil || step.weight != nil || step.size != nil,
+                 "text or values (or color, weight or size to restyle filled cells)")
+            if step.values == "list", !(step.text?.contains("|") ?? false) { problems.append("\(path).text: values list needs the values joined with |, one per cell") }
+        case .clearCells: need(step.row != nil || step.column != nil || step.cells != nil, "row, column or cells")
+        case .highlightCells: need(step.row != nil || step.column != nil, "row or column")
+        case .eraseRegion: need(step.box != nil || step.ref != nil || step.point != nil, "box or ref")
+        case .moveText: need(step.box != nil || step.point != nil || step.placement != nil || step.degrees != nil, "box, point or placement")
         case .trim, .deleteRange: need(step.startSeconds != nil && step.endSeconds != nil, "startSeconds and endSeconds")
         case .seek: need(step.seconds != nil, "seconds")
         case .setSpeed: need(step.speed != nil, "speed")
@@ -358,12 +433,104 @@ public struct ToolInputValidator: Sendable {
         default: break
         }
 
+        if IntentNormalizer.tableActions.contains(action), step.values != "list", let text = step.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+           text.count > Self.cellTextLimit {
+            problems.append("\(path).text: at most \(Self.cellTextLimit) characters in a cell")
+        }
+        grounded(step, action: action, path: path, context: context, problems: &problems)
+
         guard problems.count == before else { return nil }
         guard let intent = IntentNormalizer.normalize(step, context: context) else {
             problems.append("\(path): not executable")
             return nil
         }
         return intent
+    }
+
+    /// "Novel problem sol…" -> "5" when it names no row as said but the start of exactly one (folded tokens, the
+    /// last one a prefix); anything else as it was.
+    static func resolvingPrefix(_ field: String?, axis: TableGrid.Axis, in table: TableGrid) -> String? {
+        guard let field else { return nil }
+        return field.split(separator: "|", omittingEmptySubsequences: false).map { part -> String in
+            let said = String(part)
+            let refs = IntentNormalizer.tableRefs(said)
+            guard refs.count == 1, case .name = refs[0], case .none = table.match(refs[0], on: axis) else { return said }
+            let words = TableGrid.foldedTokens(said.replacingOccurrences(of: "…", with: " ").replacingOccurrences(of: "...", with: " "))
+            guard !words.isEmpty else { return said }
+            let names = table.names(axis)
+            let matching = names.indices.filter { index in
+                let lines = [names[index]] + names[index].split(separator: "\n").map(String.init)
+                return lines.contains { line in
+                    let tokens = TableGrid.foldedTokens(line)
+                    guard tokens.count >= words.count else { return false }
+                    return zip(words, tokens).enumerated().allSatisfy { offset, pair in
+                        offset == words.count - 1 ? pair.1.hasPrefix(pair.0) : pair.0 == pair.1
+                    }
+                }
+            }
+            return matching.count == 1 ? String(matching[0] + 1) : said
+        }.joined(separator: "|")
+    }
+
+    /// The most a table step writes in one cell (D6).
+    static let cellTextLimit = 24
+
+    // MARK: Grounding
+
+    /// Checks against what the editor knows of the picture: table rows and columns resolve against the
+    /// table, scene ids against the scene map, and nothing asks for a subject on a picture that has none.
+    /// The problems name what exists, so the model corrects itself in one round.
+    func grounded(_ step: RawIntentStep, action: IntentAction, path: String, context: IntentContext, problems: inout [String]) {
+        guard mode == .photo else { return }
+        if let table = context.table, IntentNormalizer.tableActions.contains(action) {
+            for (field, axis, value) in [("row", TableGrid.Axis.row, step.row), ("column", TableGrid.Axis.column, step.column)] {
+                for ref in IntentNormalizer.tableRefs(value) {
+                    guard case .none = table.match(ref, on: axis) else { continue }
+                    let said: String
+                    switch ref {
+                    case .index(let number): said = String(number)
+                    case .name(let name): said = name
+                    }
+                    let names = table.names(axis).enumerated().map { "\($0.offset + 1) \($0.element.replacingOccurrences(of: "\n", with: " "))" }
+                    let list = String(names.joined(separator: ", ").prefix(180))
+                    problems.append("\(path).\(field): '\(said)' is not a \(field); \(field == "row" ? "rows" : "columns"): \(list)")
+                }
+            }
+        }
+        let background = step.target.map { ["background", "arriere plan", "fond"].contains($0.normalizedForMatching) } ?? false
+        if ToolHints.subjectActions.contains(action) || background {
+            if context.table?.coversPicture == true {
+                problems.append("\(path).action: " + ToolHints.noSubjectProblem)
+            } else if let scene = context.scene, [.screenshot, .document, .table].contains(scene.kind),
+                      !scene.objects.contains(where: { $0.kind == .person || $0.kind == .face || $0.kind == .animal }) {
+                problems.append("\(path).action: " + ToolHints.noSubjectScreenshotProblem)
+            }
+        }
+        guard let scene = context.scene else { return }
+        let ids = Self.sceneIDs(scene)
+        if let raw = step.ref, let ref = SceneRef(raw) {
+            if scene.box(ref) == nil {
+                problems.append("\(path).ref: '\(ref.id)' is not on the picture; ids: \(ids)")
+            } else if [.editText, .removeText, .moveText].contains(action), !ref.isText {
+                problems.append("\(path).ref: \(ref.id) is not a text; \(action.rawValue) needs a text id (t or l)")
+            }
+        }
+        if let raw = step.match, let ref = SceneRef(raw) {
+            if scene.block(ref) == nil { problems.append("\(path).match: '\(ref.id)' is not a text on the picture; ids: \(ids)") }
+        }
+    }
+
+    /// "t1, t2, l1, o1, f1": the ids a step may use, at most about 120 characters.
+    static func sceneIDs(_ scene: SceneMap) -> String {
+        let all = scene.texts.map(\.id) + scene.objects.map(\.id) + scene.freeAreas.map(\.id)
+        guard !all.isEmpty else { return "none" }
+        var list = ""
+        for id in all {
+            let next = list.isEmpty ? id : ", " + id
+            guard list.count + next.count <= 120 else { return list + ", …" }
+            list += next
+        }
+        return list
     }
 
     // MARK: Typed readers
@@ -431,6 +598,25 @@ public struct ToolInputValidator: Sendable {
             if let text = string(item, path: "\(path)[\(index)]", problems: &problems) { result.append(text) }
         }
         return result
+    }
+
+    /// `[x1, y1, x2, y2]` (0...1, top-left origin) as a rect; the range is checked with the step.
+    private func box(_ value: JSONValue?, path: String, problems: inout [String]) -> PSRect? {
+        guard let value, value != .null else { return nil }
+        guard case .array(let items) = value, items.count == 4 else {
+            problems.append("\(path): must be [x1, y1, x2, y2]")
+            return nil
+        }
+        var corners: [Double] = []
+        for (index, item) in items.enumerated() {
+            guard let number = number(item, path: "\(path)[\(index)]", problems: &problems) else { return nil }
+            corners.append(number)
+        }
+        guard corners[2] > corners[0], corners[3] > corners[1] else {
+            problems.append("\(path): x2 and y2 must be greater than x1 and y1")
+            return nil
+        }
+        return PSRect(x: corners[0], y: corners[1], width: corners[2] - corners[0], height: corners[3] - corners[1])
     }
 
     private func point(_ value: JSONValue?, path: String, problems: inout [String]) -> PSPoint? {

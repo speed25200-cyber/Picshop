@@ -273,6 +273,14 @@ public struct LiveEditorState: Sendable, Equatable {
     public var hasGenerativeEngine: Bool = false
     public var canUndo: Bool = false
     public var busyTitle: String? = nil
+    /// Photo: the main table, overlaid with Picshop layers (`TableGrid.overlaying`), rendered as the
+    /// `table:` lines. Nil when the picture has none.
+    public var table: TableGrid? = nil
+    /// Photo: the scene map of the current state, overlaid with Picshop text layers
+    /// (`SceneMap.overlaying`), rendered as the `scene:` id lines. It must be the same map as
+    /// `IntentContext.scene`, so the ids the model reads ("t3", "o1") are the ids its steps resolve
+    /// against. Nil until the picture was read.
+    public var sceneMap: SceneMap? = nil
 
     public init(mode: EditorMode, version: Int) {
         self.mode = mode
@@ -283,10 +291,15 @@ public struct LiveEditorState: Sendable, Equatable {
 public struct LiveRunResult: Sendable, Equatable {
     public var outcome: CommandOutcome
     public var effects: [EditorEffect]
+    /// Act-then-verify: the checks this step's result deserves (`EditVerifier.request`, built by the
+    /// host from the documents before and after the step), nil when there is nothing to check.
+    /// `EditorToolHandler` batches the requests of one run into a single `LiveEditingHost.liveVerify`.
+    public var verificationRequest: VerificationRequest?
 
-    public init(outcome: CommandOutcome, effects: [EditorEffect] = []) {
+    public init(outcome: CommandOutcome, effects: [EditorEffect] = [], verificationRequest: VerificationRequest? = nil) {
         self.outcome = outcome
         self.effects = effects
+        self.verificationRequest = verificationRequest
     }
 }
 
@@ -309,6 +322,8 @@ public struct LiveCommandReply: Sendable, Equatable {
 public struct LiveStepResult: Sendable, Equatable {
     public enum Status: String, Sendable {
         case applied, info, needsClarification = "needs_clarification", needsUser = "needs_user", failed, ignored, skipped, running, queued
+        /// Not run: the same step (action and key arguments) already failed this turn (D12).
+        case blocked
     }
 
     public var index: Int
@@ -319,8 +334,21 @@ public struct LiveStepResult: Sendable, Equatable {
     public var candidates: [String]
     /// select_region | tap_to_erase | crop_handles
     public var needsUser: String?
+    /// Why the step did not do what was asked, as the executor coded it (`ExecutionReason(effects:)`).
+    public var reason: ExecutionReason?
+    /// What a table step did (`TableEditReport(effects:)`).
+    public var report: TableEditReport?
+    /// English, for the model only (ToolHints); never spoken.
+    public var hint: String?
+    /// Act-then-verify: what the check of the rendered result found; nil when the step was not checked.
+    public var verification: VerificationReport?
+    /// The scene id of the text layer an applied addText, editText or moveText wrote ("l1"), so a repair or a
+    /// follow-up can name it (printed text rewritten becomes a layer: t2 → l2). Nil otherwise (D13).
+    public var createdRef: String?
 
-    public init(index: Int, action: IntentAction, status: Status, label: String? = nil, message: String? = nil, candidates: [String] = [], needsUser: String? = nil) {
+    public init(index: Int, action: IntentAction, status: Status, label: String? = nil, message: String? = nil, candidates: [String] = [], needsUser: String? = nil,
+                reason: ExecutionReason? = nil, report: TableEditReport? = nil, hint: String? = nil, verification: VerificationReport? = nil,
+                createdRef: String? = nil) {
         self.index = index
         self.action = action
         self.status = status
@@ -328,6 +356,11 @@ public struct LiveStepResult: Sendable, Equatable {
         self.message = message
         self.candidates = candidates
         self.needsUser = needsUser
+        self.reason = reason
+        self.report = report
+        self.hint = hint
+        self.verification = verification
+        self.createdRef = createdRef
     }
 }
 
@@ -335,6 +368,9 @@ public struct LiveExecution: Sendable, Equatable {
     public var steps: [LiveStepResult]
     public var version: Int
     public var canUndo: Bool
+    /// The picture is a table screenshot (`TableGrid.coversPicture`), as the editor saw it when the steps
+    /// ran: the no-subject line then offers to fill the cells. Set by `EditorToolHandler`.
+    public var pictureIsTable = false
 
     public init(steps: [LiveStepResult], version: Int, canUndo: Bool) {
         self.steps = steps
@@ -362,21 +398,71 @@ public struct LiveExecution: Sendable, Equatable {
         version > versionBefore ? lastEditLabel : nil
     }
 
-    /// What to say or show after a local run: the question or the problem a step
-    /// reported, else "running" for a long job, else a short done.
+    /// What the first table step reported ("filled 44, kept 1, empty left 0"), if any.
+    public var tableReport: TableEditReport? { steps.lazy.compactMap(\.report).first }
+
+    /// The code of the first step that did not do what was asked (failed, info, needs_user,
+    /// needs_clarification), else verify_failed when a check of the result failed.
+    public var reason: ExecutionReason? {
+        if let coded = steps.first(where: { $0.status != .applied && $0.reason != nil })?.reason { return coded }
+        return verificationFailed ? .verifyFailed : nil
+    }
+
+    /// The checks of the steps that were verified, in step order.
+    public var verifications: [VerificationReport] { steps.compactMap(\.verification) }
+
+    /// A step applied but the check of its rendered result failed: the model gets one repair round,
+    /// the grammar lane says so in one honest sentence.
+    public var verificationFailed: Bool { steps.contains { $0.verification?.status == .failed } }
+
+    /// English, for the model only (a tool result, a "since your reply" note): the first failed
+    /// check's summary ("verify failed 1/3: r1c2 reads '7'"), else nil. Never spoken.
+    public var verificationSummary: String? { verifications.first { $0.status == .failed }?.summary }
+
+    /// Reasons whose Live line offers the closest thing that works (a table screenshot has no subject:
+    /// "Je remplis les cases à la place ?"), which the executor's sentence cannot.
+    static let reasonsWithOffers: Set<ExecutionReason> = [.noSubject, .verifyFailed, .unsupported]
+
+    /// What to say or show after a local run, never the executor's raw text when it carries an internal
+    /// word (D11), in this order:
+    /// 1. the first step that did not do what was asked, by its reason code: `LiveLines.outcome`, or the
+    ///    executor's own sentence when it is clean and the code has no offer to make (it names the columns);
+    /// 2. a question or a problem without a code: the executor's words, sanitized;
+    /// 3. "running" for a long job;
+    /// 4. after applied steps: the honest line when a check of the result failed, the count line of a
+    ///    table step (`LiveLines.tableDone`), the step's own spoken sentence, else a short done.
     public func outcomeText(language: NormalizedUtterance.Language) -> String {
         let fr = language == .french
-        if let step = steps.first(where: { $0.status == .needsClarification || $0.status == .failed }), let message = step.message, !message.isEmpty {
-            return message
+        func spoken(_ message: String) -> String { LiveSpeechSanitizer.clean(message, language: language) }
+        if let step = steps.first(where: { $0.status != .applied && $0.status != .skipped && $0.status != .queued && $0.status != .running && $0.reason != nil }),
+           let reason = step.reason {
+            // The executor's own sentence when it names what exists ("Colonnes : Opus 5.5, …") and says
+            // nothing internal; Live's line when it carries an offer the executor cannot make.
+            if !Self.reasonsWithOffers.contains(reason), step.status != .blocked, let message = step.message, !message.isEmpty,
+               LiveSpeechSanitizer.isClean(message, language: language) {
+                return message
+            }
+            return LiveLines.outcome(reason, action: step.action, hasTable: pictureIsTable, language)
+        }
+        if let step = steps.first(where: { $0.status == .needsClarification || $0.status == .failed || $0.status == .blocked }), let message = step.message, !message.isEmpty {
+            let line = spoken(message)
+            if !line.isEmpty { return line }
         }
         if let step = steps.first(where: { $0.status == .info || $0.status == .needsUser }), let message = step.message, !message.isEmpty {
-            return message
+            let line = spoken(message)
+            if !line.isEmpty { return line }
         }
         if steps.contains(where: { $0.status == .running || $0.status == .queued }) { return LiveLines.line(.running, language) }
         if anyApplied {
-            if let spoken = steps.first(where: { $0.status == .applied })?.message, !spoken.isEmpty { return spoken }
+            if let failed = verifications.first(where: { $0.status == .failed }) { return LiveLines.verification(failed, language) }
+            if let report = tableReport { return LiveLines.tableDone(report, language) }
+            if let message = steps.first(where: { $0.status == .applied })?.message, !message.isEmpty {
+                let line = spoken(message)
+                if !line.isEmpty { return line }
+            }
             return fr ? "C'est fait." : "Done."
         }
+        if steps.contains(where: { $0.status == .blocked }) { return LiveLines.line(.refusal, language) }
         return ""
     }
 }

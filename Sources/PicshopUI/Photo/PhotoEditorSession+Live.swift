@@ -18,11 +18,30 @@ extension PhotoEditorSession: LiveEditingHost {
     /// The photo tasks report completion rather than a fraction.
     public var liveProcessingProgress: Double? { nil }
 
-    /// The pending question and its numbered candidates, as Live shows and speaks them.
+    /// The pending question and its numbered candidates, as Live shows and speaks them: in the
+    /// interface's words ("chien (gauche)"), never the detector's English label; a table's rows and
+    /// columns by their own names, which are the picture's words.
     public var livePendingChoice: LiveChoiceRequest? {
         guard let request = pendingClarification, !request.candidates.isEmpty else { return nil }
-        let candidates = request.candidates.enumerated().map { LiveChoiceRequest.Candidate(id: $0.offset + 1, label: $0.element.spokenDescription) }
-        return LiveChoiceRequest(question: request.question, candidates: candidates, allowsAll: candidates.count > 1)
+        let names = Self.tableActions.contains(request.pendingIntent.action)
+        let candidates = request.candidates.enumerated().map { offset, candidate in
+            LiveChoiceRequest.Candidate(id: offset + 1, label: names ? candidate.label : Self.choiceLabel(candidate, french: psPrefersFrench))
+        }
+        return LiveChoiceRequest(question: LiveSpeechSanitizer.clean(request.question, language: language), candidates: candidates,
+                                 allowsAll: candidates.count > 1 && !names)
+    }
+
+    /// "chien (gauche)" / "dog (left)": the candidate's label in the interface's language and where it is.
+    static func choiceLabel(_ candidate: ObjectCandidate, french: Bool) -> String {
+        let label = candidate.label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let x = candidate.boundingBox.midX
+        guard french else {
+            let side = x < 0.34 ? "left" : (x > 0.66 ? "right" : "centre")
+            return "\(label) (\(side))"
+        }
+        let name = ObjectVocabulary.frenchName(forLabel: label) ?? ObjectVocabulary.frenchSceneLabel(label)
+        let side = x < 0.34 ? "gauche" : (x > 0.66 ? "droite" : "centre")
+        return "\(name) (\(side))"
     }
 
     public func liveIntentContext() -> IntentContext { intentContext }
@@ -38,7 +57,12 @@ extension PhotoEditorSession: LiveEditingHost {
             state.candidates = request.candidates.enumerated().map { "\($0.offset + 1): \($0.element.spokenDescription)" }
         }
         state.scene = sceneDescription
-        state.mediaText = document.textLayers.compactMap { $0.textElement?.text }.filter { !$0.isEmpty }
+        // Table cells are in the table lines, not in the text list.
+        state.mediaText = document.textLayers.filter { $0.group == nil }.compactMap { $0.textElement?.text }.filter { !$0.isEmpty }
+        // The same overlaid table and scene map the intent context carries: the ids and cells the
+        // model reads are the ones its steps resolve against.
+        state.table = liveTable
+        state.sceneMap = liveSceneMap
         state.hasGenerativeEngine = hasGenerativeEngine
         state.canUndo = canUndo
         state.busyTitle = isProcessing && !processingTitle.isEmpty ? processingTitle : nil
@@ -54,6 +78,9 @@ extension PhotoEditorSession: LiveEditingHost {
             default: return "selected region"
             }
         }
+        if let group = document.selectedLayer?.group, let row = group.row, let column = group.column {
+            return "table cell r\(row) c\(column)"
+        }
         if let layer = document.selectedLayer, let text = layer.textElement?.text {
             return "text layer '\(text.prefix(40))'"
         }
@@ -63,7 +90,8 @@ extension PhotoEditorSession: LiveEditingHost {
     }
 
     /// The editor's own run(_:), once a step already running has finished (100 ms
-    /// polls, 20 s at most), with no toast and no speech: Live tells it.
+    /// polls, 20 s at most), with no toast and no speech: Live tells it. The result carries the
+    /// checks the step deserves; Live batches them into one liveVerify after the run.
     public func liveRun(_ intent: EditIntent) async -> LiveRunResult {
         var waited = 0.0
         while isProcessing, waited < 20 {
@@ -72,8 +100,15 @@ extension PhotoEditorSession: LiveEditingHost {
         }
         liveRunDepth += 1
         defer { liveRunDepth -= 1 }
-        let outcome = await run(intent)
-        return LiveRunResult(outcome: outcome, effects: lastEffects)
+        let step = await runStep(intent)
+        return LiveRunResult(outcome: step.outcome, effects: lastEffects, verificationRequest: step.verification)
+    }
+
+    /// Act-then-verify: the rendered picture checked against the steps that just applied, one render
+    /// and one text pass for all of them; what failed is ringed on the canvas. Empty when it could not
+    /// be checked. The handler hands the reports to the model (tool result) or the fast lane (its line).
+    public func liveVerify(_ requests: [VerificationRequest]) async -> [VerificationReport] {
+        await checkResult(requests)
     }
 
     public func liveUndo(count: Int, redo: Bool, toOriginal: Bool) -> [String] {
@@ -140,4 +175,7 @@ extension PhotoEditorSession: LiveEditingHost {
         cancelProcessing()
     }
 }
+
+/// The table step running now (`cellWork`), for Live's activity line.
+extension PhotoEditorSession: LiveCellWorkReporting {}
 #endif

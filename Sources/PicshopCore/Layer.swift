@@ -79,10 +79,12 @@ public struct Layer: Hashable, Codable, Sendable, Identifiable {
     public var isLocked: Bool
     public var mask: MaskReference?
     public var edits: EditStack
+    /// The group the layer was made with (the cells of one table fill); nil for a layer on its own.
+    public var group: LayerGroup?
 
     public init(id: UUID = UUID(), name: String, content: Content, transform: LayerTransform = .identity,
                 opacity: Double = 1, blendMode: BlendMode = .normal, isVisible: Bool = true,
-                isLocked: Bool = false, mask: MaskReference? = nil, edits: EditStack = EditStack()) {
+                isLocked: Bool = false, mask: MaskReference? = nil, edits: EditStack = EditStack(), group: LayerGroup? = nil) {
         self.id = id
         self.name = name
         self.content = content
@@ -93,6 +95,7 @@ public struct Layer: Hashable, Codable, Sendable, Identifiable {
         self.isLocked = isLocked
         self.mask = mask
         self.edits = edits
+        self.group = group
     }
 
     public var isImage: Bool {

@@ -82,6 +82,18 @@ Each turn goes to the best brain available, so Live never goes silent:
 The models act only through four validated tools (apply edits, undo, compare before/after, propose ideas); anything
 they produce outside the app's vocabulary is dropped. Every failure is shown and said out loud, in French or English.
 
+**What Live sees, and how it checks its work.** For every state of the picture, PicShop reads once, on the iPhone, what
+it holds: its text blocks (with their size and colour), the people and objects, the table grid (rows, columns, which
+cells are empty) and the free areas, each with a short id the brain can name. With that map, one step writes a value
+in every cell of a table in the table's own typography (« remplis chaque case du tableau avec 1 », then « les autres
+aussi »), writes text in a place or a box in the style of the text next to it, rewrites or moves a printed text, or
+erases an area. After a table fill, a text or an erase, PicShop reads the result again (the text where it was
+written, the cells that were filled, what was erased): the brain gets one chance to repair what does not read right,
+then says it honestly in one sentence, and the places to look at are ringed on the photo. Progress says how many cells
+are being written (« Je remplis 45 cases… »), the cells flash where they landed, and the Layers panel shows a table as
+one row (« Tableau · 45 cases ») that hides, deletes or opens in one tap. No internal word ever reaches a caption,
+a choice or a toast.
+
 **Honest expectations.** This is a capable editing assistant that talks, looks at the photo, acts and proposes ideas,
 all offline — not a cloud chatbot.
 
@@ -108,7 +120,8 @@ slow; Settings › Intelligence › Quality can pick Max or Rapide within the me
 **Settings.** Settings › Intelligence: the model, its tier and why, download over Wi‑Fi (cellular only after a
 confirmation that shows the size), cancel, delete, storage used, the speed test, Apple Intelligence, and « Préparer Live
 à l'ouverture ». Settings › PicShop Live: auto-start, instant commands, duplex conversation with headphones, and
-Diagnostic Live with a six-step voice test (permissions, speech model, voice, ear, headphones, brain) and a log to export
+Diagnostic Live with a six-step voice test (permissions, speech model, voice, ear, headphones, brain), the understanding
+eval (the unit tests' dialogue corpus through the model loaded on the iPhone, scored per category) and a log to export
 that holds no transcript.
 
 ## Fluidity and heat

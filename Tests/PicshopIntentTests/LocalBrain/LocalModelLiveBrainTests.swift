@@ -115,9 +115,13 @@ final class LocalModelLiveBrainTests: XCTestCase {
         XCTAssertEqual(engine.options[1].maxTokens, engine.options[0].maxTokens)
     }
 
+    /// A different failing step each round (identical ones are blocked, LocalTurnRepairTests).
+    static func warmer(_ amount: Double) -> [LocalChatEvent] {
+        [Say.call("apply_edits", ["steps": [["action": "adjust", "parameter": "temperature", "amount": .number(amount)]]]), Say.done()]
+    }
+
     func testApplyEditsLimitEndsWithLoopLimit() async throws {
-        let failing: [LocalChatEvent] = [Say.call("apply_edits", Say.warmer), Say.done()]
-        let factory = FakeEngineFactory(scripts: [[failing, failing, failing, failing]])
+        let factory = FakeEngineFactory(scripts: [[Self.warmer(15), Self.warmer(20), Self.warmer(25), Self.warmer(30)]])
         let handler = ScriptedToolHandler()
         await MainActor.run { handler.stepStatus = .failed }
         let (events, error) = await drain(brain(factory).respond(to: BrainTurns.speech("plus chaud"), tools: handler))
@@ -130,8 +134,7 @@ final class LocalModelLiveBrainTests: XCTestCase {
     }
 
     func testRoundLimitEndsWithLoopLimit() async throws {
-        let failing: [LocalChatEvent] = [Say.call("apply_edits", Say.warmer), Say.done()]
-        let factory = FakeEngineFactory(scripts: [[failing, failing, failing, failing]])
+        let factory = FakeEngineFactory(scripts: [[Self.warmer(15), Self.warmer(20), Self.warmer(25), Self.warmer(30)]])
         var limits = LocalModelLiveBrain.Limits()
         limits.maxApplyEdits = 10
         let handler = ScriptedToolHandler()

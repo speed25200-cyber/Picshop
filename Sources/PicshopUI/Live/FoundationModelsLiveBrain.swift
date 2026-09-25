@@ -231,10 +231,11 @@ final class FoundationModelsToolBridge: @unchecked Sendable {
         lock.withLock { _ = applied.insert(turn) }
     }
 
-    func applyEdits(_ steps: [RawIntentStep]) async -> String {
+    func applyEdits(_ arguments: [LiveStepArguments]) async -> String {
         guard let call = claim() else { return "{\"ok\":false,\"error\":\"no active turn\"}" }
         let context = await call.handler.context()
-        switch ToolInputValidator(mode: mode).steps(raw: Array(steps.prefix(4)), context: context) {
+        let steps = arguments.prefix(4).map { $0.raw(for: mode) }
+        switch ToolInputValidator(mode: mode).steps(raw: steps, context: context) {
         case .failure(let error):
             let problems: [JSONValue]
             switch error {
@@ -267,7 +268,7 @@ final class FoundationModelsToolBridge: @unchecked Sendable {
         let context = await call.handler.context()
         let validator = ToolInputValidator(mode: mode)
         let ideas: [LiveIdea] = proposed.prefix(3).map { idea in
-            let steps = Array(idea.steps.prefix(4).map(\.raw))
+            let steps = Array(idea.steps.prefix(4).map { $0.raw(for: mode) })
             let valid: Bool
             if case .success = validator.steps(raw: steps, context: context) { valid = true } else { valid = false }
             return LiveIdea(title: idea.title, why: idea.why, symbol: idea.symbol, steps: valid ? steps : [], source: .onDevice)
@@ -327,14 +328,73 @@ struct LiveStepArguments {
     var clipNumber: Int?
     @Guide(description: "Video: speed multiplier.")
     var speed: Double?
+    @Guide(description: "Table steps: empty (the default) or all.", .anyOf(["empty", "all"]))
+    var cells: String?
+    @Guide(description: "Table steps: a row name or number from the table lines.")
+    var row: String?
+    @Guide(description: "Table steps: a column name or number from the table lines.")
+    var column: String?
+    @Guide(description: "fillCells without text: random, sequence or plausible.", .anyOf(["random", "sequence", "plausible"]))
+    var values: String?
+    @Guide(description: "fillCells random: lowest value.")
+    var min: Double?
+    @Guide(description: "fillCells random: highest value.")
+    var max: Double?
+    @Guide(description: "fillCells random: decimals, 0 to 3.")
+    var decimals: Int?
+    @Guide(description: "A scene id from the scene lines: t3 printed text, l2 your text, o1 an object.")
+    var ref: String?
+    @Guide(description: "A box x1,y1,x2,y2 on the 0-1000 grid of the scene lines.")
+    var box: String?
+    @Guide(description: "Text size: small, medium, large, title, bigger, smaller or match.")
+    var size: String?
+    @Guide(description: "Text weight.", .anyOf(["regular", "medium", "semibold", "bold"]))
+    var weight: String?
+    @Guide(description: "Text alignment.", .anyOf(["left", "center", "right"]))
+    var align: String?
+    @Guide(description: "Text design.", .anyOf(["sans", "serif", "mono", "rounded"]))
+    var font: String?
+    @Guide(description: "Copy the style of nearby text, or of a scene id such as t3.")
+    var match: String?
 }
 
 @available(iOS 26.0, *)
 extension LiveStepArguments {
-    var raw: RawIntentStep {
-        RawIntentStep(action: action, target: target, spatialHint: spatialHint, all: all, parameter: parameter, amountMode: amountMode, amount: amount,
-                      look: look, aspect: aspect, degrees: degrees, flipAxis: flipAxis, text: text, color: color, startSeconds: startSeconds,
-                      endSeconds: endSeconds, seconds: seconds, clipNumber: clipNumber, speed: speed)
+    /// The step as the validator reads it. The table and text-primitive fields exist for photos only:
+    /// in another mode a field the model filled by mistake is dropped rather than failing the step.
+    func raw(for mode: EditorMode) -> RawIntentStep {
+        var step = RawIntentStep(action: action, target: target, spatialHint: spatialHint, all: all, parameter: parameter, amountMode: amountMode,
+                                 amount: amount, look: look, aspect: aspect, degrees: degrees, flipAxis: flipAxis, text: text, color: color,
+                                 startSeconds: startSeconds, endSeconds: endSeconds, seconds: seconds, clipNumber: clipNumber, speed: speed)
+        guard mode == .photo else { return step }
+        step.cells = cells
+        step.row = row
+        step.column = column
+        step.values = values
+        step.min = min
+        step.max = max
+        step.decimals = decimals.map { Swift.min(Swift.max($0, 0), 3) }
+        step.ref = ref
+        step.box = box.flatMap(Self.region)
+        step.size = size
+        step.weight = weight
+        step.align = align
+        step.font = font
+        step.match = match
+        return step
+    }
+
+    /// "120,340,560,420" (the 0-1000 grid the scene lines print) or "0.12,0.34,0.56,0.42" as a
+    /// normalised box, corners in any order; nil when it is not four numbers or has no area.
+    static func region(_ text: String) -> PSRect? {
+        let numbers = text.split(whereSeparator: { $0 == "," || $0 == " " || $0 == ";" || $0 == "[" || $0 == "]" }).compactMap { Double($0) }
+        guard numbers.count == 4 else { return nil }
+        let scale = numbers.contains { $0 > 1 } ? 1000.0 : 1.0
+        let values = numbers.map { Swift.min(Swift.max($0 / scale, 0), 1) }
+        let x0 = Swift.min(values[0], values[2]), x1 = Swift.max(values[0], values[2])
+        let y0 = Swift.min(values[1], values[3]), y1 = Swift.max(values[1], values[3])
+        guard x1 - x0 > 0.001, y1 - y0 > 0.001 else { return nil }
+        return PSRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
     }
 }
 
@@ -351,7 +411,7 @@ struct LiveApplyEditsTool: Tool {
     }
 
     func call(arguments: Arguments) async throws -> String {
-        await bridge.applyEdits(arguments.steps.map(\.raw))
+        await bridge.applyEdits(arguments.steps)
     }
 }
 

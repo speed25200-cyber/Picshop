@@ -80,6 +80,41 @@ public struct LocalGenerationOptions: Sendable, Equatable {
     public init() {}
 }
 
+extension LocalGenerationOptions {
+    /// What a generation is for, which sets its sampling (contract §11). Thinking stays off.
+    public enum Style: String, Sendable, CaseIterable {
+        /// An action verb, a table or `last:` line, not a question: tool JSON wants little randomness.
+        case edit
+        /// Questions and opinions.
+        case conversation
+        /// The one round after a failed, blocked or unverified step: greedy.
+        case repair
+    }
+
+    /// edit 0.25 / 0.8 / 20 / 0; conversation 0.6 / 0.8 / 20 / 0.3; repair 0 (greedy).
+    public init(style: Style, maxTokens: Int) {
+        self.init()
+        self.maxTokens = maxTokens
+        switch style {
+        case .edit:
+            temperature = 0.25
+            topP = 0.8
+            topK = 20
+            presencePenalty = 0
+        case .conversation:
+            temperature = 0.6
+            topP = 0.8
+            topK = 20
+            presencePenalty = 0.3
+        case .repair:
+            temperature = 0
+            topP = 1
+            topK = 1
+            presencePenalty = 0
+        }
+    }
+}
+
 public enum LocalStopReason: String, Sendable { case endOfTurn, maxTokens, cancelled }
 
 /// What an engine streams for one assistant turn.

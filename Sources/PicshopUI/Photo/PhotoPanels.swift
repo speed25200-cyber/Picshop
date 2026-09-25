@@ -769,42 +769,54 @@ struct ShapesPanel: View {
 
 struct LayersPanel: View {
     @Bindable var session: PhotoEditorSession
+    /// Groups opened to show their cells, one row each.
+    @State private var expanded: Set<UUID> = []
+
+    /// Top layer first. A group (a table's cells, a highlight's boxes) is one row where its top layer
+    /// stands; opened, its layers follow it, indented.
+    private enum Row: Identifiable {
+        case layer(Layer, index: Int, inGroup: Bool)
+        case group(LayerGroup, members: [Layer])
+
+        var id: UUID {
+            switch self {
+            case .layer(let layer, _, _): return layer.id
+            case .group(let group, _): return group.id
+            }
+        }
+    }
+
+    private var rows: [Row] {
+        let layers = session.document.layers
+        var rows: [Row] = []
+        var shown: Set<UUID> = []
+        for (index, layer) in layers.enumerated().reversed() {
+            guard let group = layer.group else {
+                rows.append(.layer(layer, index: index, inGroup: false))
+                continue
+            }
+            guard !shown.contains(group.id) else { continue }
+            shown.insert(group.id)
+            let members = layers.enumerated().filter { $0.element.group?.id == group.id }.reversed()
+            rows.append(.group(group, members: members.map { $0.element }))
+            if expanded.contains(group.id) {
+                rows += members.map { Row.layer($0.element, index: $0.offset, inGroup: true) }
+            }
+        }
+        return rows
+    }
 
     var body: some View {
         VStack(spacing: 8) {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 6) {
-                    ForEach(Array(session.document.layers.enumerated().reversed()), id: \.element.id) { index, layer in
-                        let selected = session.document.selectedLayerID == layer.id
-                        let isBase = index == 0
-                        HStack(spacing: 10) {
-                            Image(systemName: layer.symbolName)
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundStyle(PSTheme.textSecondary)
-                                .frame(width: 28, height: 28)
-                                .background(Circle().fill(Color.white.opacity(0.08)))
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(layer.name).font(.subheadline.weight(.medium)).lineLimit(1)
-                                Text(isBase ? L("Photo") : (layer.isText ? L("Text") : (layer.isShape ? L("Shapes") : L("Layers"))))
-                                    .font(.caption2).foregroundStyle(PSTheme.textTertiary)
-                            }
-                            Spacer(minLength: 4)
-                            if !isBase {
-                                LayerRowButton(symbol: "chevron.up", enabled: index < session.document.layers.count - 1) { session.moveLayer(layer.id, to: min(session.document.layers.count - 1, index + 1)) }
-                                LayerRowButton(symbol: "chevron.down", enabled: index > 1) { session.moveLayer(layer.id, to: max(1, index - 1)) }
-                            }
-                            LayerRowButton(symbol: layer.isVisible ? "eye" : "eye.slash", enabled: true) { session.updateLayer(layer.id) { $0.isVisible.toggle() } }
-                            if !isBase {
-                                LayerRowButton(symbol: "trash", enabled: true, tint: PSTheme.danger) { Haptics.warning(); session.removeLayer(layer.id) }
-                            }
+                    ForEach(rows) { row in
+                        switch row {
+                        case .layer(let layer, let index, let inGroup):
+                            layerRow(layer, index: index, inGroup: inGroup)
+                        case .group(let group, let members):
+                            groupRow(group, members: members)
                         }
-                        .foregroundStyle(PSTheme.textPrimary)
-                        .padding(.horizontal, 10).padding(.vertical, 8)
-                        .background(Color.white.opacity(selected ? 0.16 : 0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .opacity(layer.isVisible ? 1 : 0.55)
-                        .contentShape(Rectangle())
-                        .animation(PSMotion.quick, value: selected)
-                        .onTapGesture { Haptics.tick(); session.selectLayer(layer.id) }
                     }
                 }
             }
@@ -818,6 +830,85 @@ struct LayersPanel: View {
                     .pickerStyle(.menu).tint(PSTheme.textPrimary).fixedSize()
                 }
             }
+        }
+    }
+
+    /// One layer. A table cell (opened group) is indented and only shown, hidden or deleted: its place
+    /// in the stack is its group's.
+    private func layerRow(_ layer: Layer, index: Int, inGroup: Bool) -> some View {
+        let selected = session.document.selectedLayerID == layer.id
+        let isBase = index == 0
+        let count = session.document.layers.count
+        return HStack(spacing: 10) {
+            Image(systemName: layer.symbolName)
+                .font(.system(size: inGroup ? 13 : 15, weight: .medium))
+                .foregroundStyle(PSTheme.textSecondary)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(Color.white.opacity(0.08)))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(inGroup ? (layer.textElement?.text ?? layer.name) : layer.name).font(.subheadline.weight(.medium)).lineLimit(1)
+                Text(inGroup ? layer.name : (isBase ? L("Photo") : (layer.isText ? L("Text") : (layer.isShape ? L("Shapes") : L("Layers")))))
+                    .font(.caption2).foregroundStyle(PSTheme.textTertiary).lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            if !isBase, !inGroup {
+                LayerRowButton(symbol: "chevron.up", enabled: index < count - 1) { session.moveLayer(layer.id, to: min(count - 1, index + 1)) }
+                LayerRowButton(symbol: "chevron.down", enabled: index > 1) { session.moveLayer(layer.id, to: max(1, index - 1)) }
+            }
+            LayerRowButton(symbol: layer.isVisible ? "eye" : "eye.slash", enabled: true) { session.updateLayer(layer.id) { $0.isVisible.toggle() } }
+            if !isBase {
+                LayerRowButton(symbol: "trash", enabled: true, tint: PSTheme.danger) { Haptics.warning(); session.removeLayer(layer.id) }
+            }
+        }
+        .foregroundStyle(PSTheme.textPrimary)
+        .padding(.horizontal, 10).padding(.vertical, inGroup ? 6 : 8)
+        .background(Color.white.opacity(selected ? 0.16 : 0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.leading, inGroup ? 22 : 0)
+        .opacity(layer.isVisible ? 1 : 0.55)
+        .contentShape(Rectangle())
+        .animation(PSMotion.quick, value: selected)
+        .onTapGesture { Haptics.tick(); session.selectLayer(layer.id) }
+    }
+
+    /// A group as one row: "Tableau · 45 cases". Tapping it opens it (its cells) and selects the
+    /// table, so "plus gros" or "en rouge" then apply to every cell; the eye and the bin act on all.
+    private func groupRow(_ group: LayerGroup, members: [Layer]) -> some View {
+        let isOpen = expanded.contains(group.id)
+        let selected = members.contains { $0.id == session.document.selectedLayerID }
+        let visible = members.contains(where: \.isVisible)
+        let title = group.kind == .tableCells ? String(format: L("Table · %d cells"), members.count) : String(format: L("Highlight · %d boxes"), members.count)
+        return HStack(spacing: 10) {
+            Image(systemName: group.kind == .tableCells ? "tablecells" : "highlighter")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(PSTheme.textSecondary)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(Color.white.opacity(0.08)))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.subheadline.weight(.medium)).lineLimit(1)
+                Text(group.kind == .tableCells ? L("Text") : L("Shapes")).font(.caption2).foregroundStyle(PSTheme.textTertiary)
+            }
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(PSTheme.textTertiary)
+                .rotationEffect(.degrees(isOpen ? 90 : 0))
+            Spacer(minLength: 4)
+            LayerRowButton(symbol: visible ? "eye" : "eye.slash", enabled: true) { session.setGroupVisible(group.id, !visible) }
+            LayerRowButton(symbol: "trash", enabled: true, tint: PSTheme.danger) {
+                expanded.remove(group.id)
+                session.removeGroup(group.id)
+            }
+        }
+        .foregroundStyle(PSTheme.textPrimary)
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .background(Color.white.opacity(selected ? 0.16 : 0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .opacity(visible ? 1 : 0.55)
+        .contentShape(Rectangle())
+        .animation(PSMotion.quick, value: selected)
+        .animation(PSMotion.quick, value: isOpen)
+        .onTapGesture {
+            Haptics.tick()
+            if isOpen { expanded.remove(group.id) } else { expanded.insert(group.id) }
+            session.selectGroup(group.id)
         }
     }
 }

@@ -309,7 +309,8 @@ struct UndoOfferChip: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(PSPressStyle(scale: 0.95))
-        .accessibilityHint(label)
+        // History labels are English keys ("Fill Cells"): read in the interface's language.
+        .accessibilityHint(LD(label))
     }
 }
 

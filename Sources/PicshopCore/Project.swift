@@ -133,6 +133,9 @@ public enum PicshopError: Error, Sendable, Equatable {
     case permissionDenied(String)
     case speechUnavailable(String)
     case cancelled
+    /// No person and no main subject to cut out (a screenshot, a table, a landscape): what the
+    /// subject mask throws, instead of objectNotFound with an internal English label.
+    case noSubject
 
     /// In the language the device speaks.
     public var message: String { message(french: Self.devicePrefersFrench) }
@@ -142,16 +145,42 @@ public enum PicshopError: Error, Sendable, Equatable {
         case .projectNotFound: return french ? "Ce projet est introuvable." : "This project could not be found."
         case .corruptProject(let detail): return french ? "Le fichier du projet est abîmé (\(detail))." : "The project file is damaged (\(detail))."
         case .mediaUnavailable(let name): return french ? "Le média « \(name) » est introuvable." : "The media “\(name)” is missing."
-        case .objectNotFound(let target): return french ? "Je ne trouve pas « \(target) » sur la photo." : "I couldn't find “\(target)” in the picture."
+        case .objectNotFound(let target):
+            // Never an internal English label inside a French sentence: "subject" is said "pas de sujet".
+            if french, let noun = Self.frenchLabel(for: target) {
+                let elided = ["a", "e", "i", "o", "u", "é", "â", "h"].contains { noun.hasPrefix($0) }
+                return "Je ne trouve pas \(elided ? "d'" : "de ")\(noun) sur la photo."
+            }
+            return french ? "Je ne trouve pas « \(target) » sur la photo." : "I couldn't find “\(target)” in the picture."
         case .ambiguousTarget(let count): return french ? "J'en vois \(count) — lequel ?" : "I found \(count) matches — which one?"
-        case .unsupportedOperation(let name): return french ? "« \(name) » n'est pas possible ici." : "“\(name)” isn't available here."
+        // The name is the feature's English one: in French it is left out rather than quoted.
+        case .unsupportedOperation(let name): return french ? "Ce n'est pas possible ici." : "“\(name)” isn't available here."
         case .modelUnavailable(let name): return french ? "Le modèle \(name) n'est pas encore installé." : "The \(name) model isn't installed yet."
         case .renderFailed(let detail): return french ? "Le rendu a échoué : \(detail)" : "Rendering failed: \(detail)"
         case .exportFailed(let detail): return french ? "L'export a échoué : \(detail)" : "Export failed: \(detail)"
-        case .permissionDenied(let what): return french ? "L'accès à \(what) est refusé. Vous pouvez l'autoriser dans Réglages." : "Permission for \(what) was denied. You can enable it in Settings."
+        case .permissionDenied(let what): return french ? "L'accès à \(what) est refusé. Tu peux l'autoriser dans Réglages." : "Permission for \(what) was denied. You can enable it in Settings."
         case .speechUnavailable(let detail): return french ? "La commande vocale est indisponible : \(detail)" : "Voice control is unavailable: \(detail)"
         case .cancelled: return french ? "Annulé." : "Cancelled."
+        case .noSubject: return french ? "Je ne vois ni personne ni sujet à détacher sur cette image." : "There's no person or main subject to cut out in this picture."
         }
+    }
+
+    /// The French noun for an internal English label ("subject" -> "sujet", "the person" -> "personne"),
+    /// nil for anything else (words the person said are kept as said).
+    public static func frenchLabel(for label: String) -> String? {
+        let table: [String: String] = [
+            "subject": "sujet", "object": "objet", "person": "personne", "people": "personnes", "face": "visage", "faces": "visages", "hand": "main",
+            "text": "texte", "background": "arrière-plan", "foreground": "premier plan", "sky": "ciel", "dog": "chien", "cat": "chat", "bird": "oiseau",
+            "horse": "cheval", "cow": "vache", "sheep": "mouton", "animal": "animal", "car": "voiture", "truck": "camion", "bus": "bus", "bicycle": "vélo",
+            "motorcycle": "moto", "boat": "bateau", "airplane": "avion", "tree": "arbre", "blemish": "imperfection", "logo": "logo", "watermark": "filigrane",
+            "sign": "panneau", "table": "tableau", "cell": "case", "cells": "cases", "number": "nombre", "numbers": "nombres", "data": "données",
+            "region": "zone", "area": "zone", "selection": "sélection", "phone": "téléphone", "window": "fenêtre", "building": "bâtiment", "lamp": "lampe",
+            "chair": "chaise", "bottle": "bouteille", "cup": "tasse", "glasses": "lunettes", "hat": "chapeau", "shadow": "ombre", "teeth": "dents",
+            "eyes": "yeux", "hair": "cheveux", "skin": "peau", "wire": "fil", "wires": "fils", "pole": "poteau", "trash": "déchet", "plate": "plaque",
+        ]
+        var key = label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        for article in ["the ", "a ", "an "] where key.hasPrefix(article) { key.removeFirst(article.count) }
+        return table[key]
     }
 
     /// Whether the person reads French first, as the interface does.

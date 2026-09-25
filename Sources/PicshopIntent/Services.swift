@@ -18,11 +18,29 @@ public protocol PhotoAIServices: Sendable {
     func describe(_ document: PhotoDocument) async throws -> SceneDescription
     /// The framing a photographer would choose (normalised), nil when the photo is already well framed.
     func bestCrop(in document: PhotoDocument) async throws -> PSRect?
+    /// The main table (canvas space, normalised, top-left), with styles and formats, or nil (D8).
+    /// `remembered` (PhotoDocument.rememberedTable): when it matches the picture, its geometry, styles and
+    /// formats are kept and only occupancy is read again; then the result is never nil.
+    func tableGrid(in document: PhotoDocument, remembered: TableGrid?) async throws -> TableGrid?
+    /// What the picture holds (text blocks with their measured style, objects and people, the table,
+    /// free areas) for the document's base state, or nil when it cannot be read. Cached per
+    /// `document.baseStateKey` and computed off the main actor; one text pass is shared with the table
+    /// and erase queries. Picshop text layers are not in it: callers lay them over with `overlaying(_:)`.
+    func sceneMap(in document: PhotoDocument) async throws -> SceneMap?
+    /// Act-then-verify: checks the rendered result (base and layers) against each request (OCR inside the
+    /// regions, the detector for removed objects), with one render and one text pass for all of them.
+    /// One report per request, in order. The default checks the document alone (`EditVerifier.structural`).
+    func verify(_ requests: [VerificationRequest], in document: PhotoDocument) async throws -> [VerificationReport]
 }
 
 public extension PhotoAIServices {
     func describe(_ document: PhotoDocument) async throws -> SceneDescription { SceneDescription() }
     func bestCrop(in document: PhotoDocument) async throws -> PSRect? { nil }
+    func tableGrid(in document: PhotoDocument, remembered: TableGrid?) async throws -> TableGrid? { nil }
+    func sceneMap(in document: PhotoDocument) async throws -> SceneMap? { nil }
+    func verify(_ requests: [VerificationRequest], in document: PhotoDocument) async throws -> [VerificationReport] {
+        requests.map { EditVerifier.structural($0, in: document) }
+    }
 }
 
 /// Facts about a photo, assembled into a sentence by the executor.
@@ -182,12 +200,149 @@ public struct ExecutionResult: Sendable, Equatable {
 
     public var changedDocument: Bool { outcome.isSuccess && !label.isEmpty && effects.allSatisfy { effect in
         switch effect {
-        case .undo, .redo, .revert, .compare, .zoom, .export, .share, .play, .pause, .seek, .help, .pickMusic, .pickBackground, .pickColorReference, .clarify, .message, .confirm, .cancel:
+        case .message(let message):
+            // The machine channel (D10) says what happened; it never stands for a document change of its own.
+            return ExecutionReason.isMachineMessage(message)
+        case .undo, .redo, .revert, .compare, .zoom, .export, .share, .play, .pause, .seek, .help, .pickMusic, .pickBackground, .pickColorReference, .clarify, .confirm, .cancel:
             return false
         case .selectLayer, .selectClip:
             return true
         }
     } }
+
+    /// The reason code the effects carry, if any.
+    public var reason: ExecutionReason? { ExecutionReason(effects: effects) }
+    /// The table report the effects carry, if any.
+    public var tableReport: TableEditReport? { TableEditReport(effects: effects) }
+}
+
+// MARK: - Machine channel (D10)
+
+/// Why a step did not do what was asked, as a code the model and Live read. Carried in
+/// `EditorEffect.message("reason:<code>")`; never spoken.
+public enum ExecutionReason: String, Sendable, Equatable, CaseIterable {
+    case noSubject = "no_subject"
+    case notFound = "not_found"
+    case noTable = "no_table"
+    case unknownRow = "unknown_row"
+    case unknownColumn = "unknown_column"
+    case ambiguous
+    case nothingToDo = "nothing_to_do"
+    case tooMany = "too_many"
+    case needsSelection = "needs_selection"
+    case unsupported
+    /// A scene-map id ("t7", "o3") that is not on the picture any more, or never was.
+    case unknownRef = "unknown_ref"
+    /// A region or point outside the picture, or too small to act on.
+    case badRegion = "bad_region"
+    /// editText, removeText or moveText with no text to act on.
+    case noText = "no_text"
+    /// The step applied but the check on the rendered result failed (act-then-verify).
+    case verifyFailed = "verify_failed"
+
+    static let prefix = "reason:"
+
+    /// `.message("reason:" + rawValue)`.
+    public var effect: EditorEffect { .message(Self.prefix + rawValue) }
+
+    /// The first reason among the effects.
+    public init?(effects: [EditorEffect]) {
+        for effect in effects {
+            guard case .message(let message) = effect, message.hasPrefix(Self.prefix) else { continue }
+            if let reason = ExecutionReason(rawValue: String(message.dropFirst(Self.prefix.count))) {
+                self = reason
+                return
+            }
+        }
+        return nil
+    }
+
+    /// Messages of the machine channel ("reason:", "table:"): neutral for `changedDocument`.
+    public static func isMachineMessage(_ message: String) -> Bool {
+        message.hasPrefix(prefix) || message.hasPrefix(TableEditReport.prefix)
+    }
+}
+
+/// What a table step did, for the model ("filled 44, kept 1, empty left 0"), the spoken line and the UI
+/// toast. Carried in `EditorEffect.message("table:…")`.
+public struct TableEditReport: Hashable, Sendable {
+    public var action: IntentAction
+    /// Cells written, cleared or highlighted.
+    public var changed: Int
+    /// Cells in scope left as they were (printed, or already filled).
+    public var kept: Int
+    /// Data cells still empty afterwards.
+    public var emptyLeft: Int
+    public var dataRows: Int
+    public var dataColumns: Int
+    /// "1", "random", "random 50–90".
+    public var value: String?
+    public var alternative: String?
+    public var groupID: UUID?
+
+    public init(action: IntentAction, changed: Int, kept: Int, emptyLeft: Int, dataRows: Int, dataColumns: Int,
+                value: String? = nil, alternative: String? = nil, groupID: UUID? = nil) {
+        self.action = action
+        self.changed = changed
+        self.kept = kept
+        self.emptyLeft = emptyLeft
+        self.dataRows = dataRows
+        self.dataColumns = dataColumns
+        self.value = value
+        self.alternative = alternative
+        self.groupID = groupID
+    }
+
+    static let prefix = "table:"
+    static let valueLimit = 40
+
+    /// `.message("table:action=fillCells;changed=44;kept=1;left=0;rows=9;cols=5;value=1;alt=random;group=<uuid>")`;
+    /// value and alt percent-encoded; at most 200 characters.
+    public var effect: EditorEffect {
+        // The value and the alternative are the only open-ended fields: they shrink, the counts never do.
+        for limit in [Self.valueLimit, 16, 8] {
+            let message = message(valueLimit: limit)
+            if message.count <= 200 { return .message(message) }
+        }
+        return .message(message(valueLimit: 0))
+    }
+
+    func message(valueLimit limit: Int) -> String {
+        var fields = ["action=\(action.rawValue)", "changed=\(changed)", "kept=\(kept)", "left=\(emptyLeft)", "rows=\(dataRows)", "cols=\(dataColumns)"]
+        if let value, limit > 0 { fields.append("value=" + Self.encode(String(value.prefix(limit)))) }
+        if let alternative, limit > 0 { fields.append("alt=" + Self.encode(String(alternative.prefix(limit)))) }
+        if let groupID { fields.append("group=" + groupID.uuidString) }
+        return Self.prefix + fields.joined(separator: ";")
+    }
+
+    /// The first table report among the effects.
+    public init?(effects: [EditorEffect]) {
+        for effect in effects {
+            guard case .message(let message) = effect, message.hasPrefix(Self.prefix) else { continue }
+            var values: [String: String] = [:]
+            for field in message.dropFirst(Self.prefix.count).split(separator: ";") {
+                let parts = field.split(separator: "=", maxSplits: 1)
+                guard parts.count == 2 else { continue }
+                values[String(parts[0])] = String(parts[1])
+            }
+            guard let actionName = values["action"], let action = IntentAction(rawValue: actionName),
+                  let changed = values["changed"].flatMap({ Int($0) }), let kept = values["kept"].flatMap({ Int($0) }),
+                  let left = values["left"].flatMap({ Int($0) }), let rows = values["rows"].flatMap({ Int($0) }),
+                  let columns = values["cols"].flatMap({ Int($0) }) else { continue }
+            self.init(action: action, changed: changed, kept: kept, emptyLeft: left, dataRows: rows, dataColumns: columns,
+                      value: values["value"].flatMap { $0.removingPercentEncoding }, alternative: values["alt"].flatMap { $0.removingPercentEncoding },
+                      groupID: values["group"].flatMap { UUID(uuidString: $0) })
+            return
+        }
+        return nil
+    }
+
+    /// Percent-encodes everything but letters, digits and a few safe marks, so ";" and "=" never break the fields.
+    static func encode(_ text: String) -> String {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: ".-_~")
+        return text.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+    }
 }
 
 // MARK: - PDF

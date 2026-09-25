@@ -53,7 +53,14 @@ public enum LivePrompt {
             lines.append("selection: " + (state.selection.map(clean) ?? "none"))
             lines.append("question: " + (state.pendingQuestion.map(clean) ?? "none"))
             if !candidates.isEmpty { lines.append("candidates: " + candidates.map(clean).joined(separator: " | ")) }
-            if let scene = state.scene { lines.append("scene: " + sceneLine(scene, labels: labels)) }
+            let kind = LiveSceneLines.kind(state)
+            if let scene = state.scene {
+                lines.append("scene: " + ([kind].compactMap { $0 } + [sceneLine(scene, labels: labels)]).joined(separator: "; "))
+            } else if let kind {
+                lines.append("scene: " + kind)
+            }
+            if let table = state.table { lines += LiveSceneLines.table(table) }
+            if let map = state.sceneMap { lines += LiveSceneLines.scene(map, budget: state.table == nil ? LocalLivePrompt.Budgets.sceneLines : LocalLivePrompt.Budgets.sceneLinesWithTable) }
             if let video = state.video { lines.append(timelineLine(video)) }
             if let busy = state.busyTitle { lines.append("running: " + clean(busy)) }
             if !since.isEmpty { lines.append("since your reply: " + since.map(clean).joined(separator: "; ")) }
@@ -70,8 +77,10 @@ public enum LivePrompt {
             return lines.joined(separator: "\n")
         }
 
+        // The table and scene lines have budgets of their own (D15).
+        let limit = state.table != nil || state.sceneMap != nil ? 1_800 : 1_200
         var text = render()
-        while text.count > 1_200 {
+        while text.count > limit {
             // Cut the longest list from its oldest end.
             let lists = [applied.count, since.count, candidates.count, ideas.count, labels.count]
             guard let longest = lists.indices.max(by: { lists[$0] < lists[$1] }), lists[longest] > 0 else { break }
@@ -84,8 +93,8 @@ public enum LivePrompt {
             }
             text = render()
         }
-        if text.count > 1_200 {
-            let body = String(text.dropLast("\n</editor_state>".count).prefix(1_200 - "\n</editor_state>".count - 1))
+        if text.count > limit {
+            let body = String(text.dropLast("\n</editor_state>".count).prefix(limit - "\n</editor_state>".count - 1))
             text = body + "…\n</editor_state>"
         }
         return text
@@ -161,7 +170,18 @@ public enum LivePrompt {
         var compact = "Editor: " + parts.joined(separator: "; ")
         if compact.count > 600 { compact = String(compact.prefix(599)) + "…" }
         var lines = [compact]
-        if let scene = state.scene { lines.append("Scene: " + sceneLine(scene, labels: scene.labels)) }
+        let kind = LiveSceneLines.kind(state)
+        if let scene = state.scene {
+            lines.append("Scene: " + ([kind].compactMap { $0 } + [sceneLine(scene, labels: scene.labels)]).joined(separator: "; "))
+        } else if let kind {
+            lines.append("Scene: " + kind)
+        }
+        if let table = state.table {
+            lines += LiveSceneLines.table(table)
+            if let focus = LiveSceneLines.tableFocus(table, words: turn.text) { lines.append(focus) }
+        }
+        if let map = state.sceneMap { lines += LiveSceneLines.scene(map, budget: LocalLivePrompt.Budgets.sceneLinesWithTable) }
+        if let last = turn.recentActions.last { lines.append(LiveSceneLines.last(last, scene: state.sceneMap)) }
         let words = turn.kind == .sessionStart ? "(the Live session just started: greet in a few words)" : turn.text
         lines.append("User: " + words)
         return lines.joined(separator: "\n")

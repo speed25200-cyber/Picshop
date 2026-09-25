@@ -264,3 +264,77 @@ public extension ObjectVocabulary {
         return table[identifier] ?? identifier.replacingOccurrences(of: "_", with: " ")
     }
 }
+
+public extension ObjectVocabulary {
+    /// The French noun for an internal label, so no English word reaches a French sentence
+    /// ("subject" -> "sujet"); nil when the label has no known French name.
+    static func frenchName(forLabel label: String) -> String? {
+        PicshopError.frenchLabel(for: label)
+    }
+}
+
+/// Words that name a table and its parts, for the table grammar and the erase-memory guard.
+public enum TableVocabulary {
+    /// Normalised (lower case, no accents). In English "case" alone never counts ("just in case").
+    public static let tableNouns: Set<String> = [
+        "tableau", "tableaux", "grille", "grilles", "case", "cases", "cellule", "cellules", "colonne", "colonnes", "ligne", "lignes",
+        "rangee", "rangees", "table", "tables", "grid", "grids", "cell", "cells", "column", "columns", "row", "rows",
+    ]
+
+    /// Nouns that name only the parts of a table, not the whole ("la case", "the column").
+    public static let partNouns: Set<String> = [
+        "case", "cases", "cellule", "cellules", "colonne", "colonnes", "ligne", "lignes", "rangee", "rangees",
+        "cell", "cells", "column", "columns", "row", "rows",
+    ]
+
+    /// Whether an erase target names the text of a table (its values, a column, a row, its data), so the
+    /// executor saves the table memory before erasing (D7).
+    public static func namesTableText(_ target: ObjectTarget) -> Bool {
+        let phrase = NormalizedUtterance.normalize(target.originalPhrase + " " + target.label)
+        let words = Set(phrase.split(separator: " ").map(String.init))
+        guard !words.isDisjoint(with: tableNouns) else { return false }
+        // "le texte de la ligne 3" names table text; "la ligne d'horizon" does not.
+        let tableWords: Set<String> = ["tableau", "tableaux", "grille", "table", "grid", "case", "cases", "cellule", "cellules", "cell", "cells",
+                                       "colonne", "colonnes", "column", "columns"]
+        let dataWords: Set<String> = ["donnees", "donnee", "valeurs", "valeur", "chiffres", "chiffre", "nombres", "nombre", "data", "values", "value",
+                                      "numbers", "number", "texte", "text", "contenu", "content"]
+        return !words.isDisjoint(with: tableWords) || !words.isDisjoint(with: dataWords)
+    }
+}
+
+/// "tu peux mettre des 1 partout ?", "can you fill every cell?": a request asked politely, which the speech
+/// recognizer ends with a question mark. The table grammar and Live's router both read it as a request,
+/// never as a question to answer without acting. "tu peux me dire…", "can you see…" stay questions.
+public enum PoliteRequest {
+    /// Normalised openers, longest first where one contains another.
+    public static let openers: [String] = [
+        "est ce que tu pourrais", "est ce que tu peux", "est ce que vous pouvez", "est ce qu on peut", "tu pourrais", "pourrais tu", "tu peux", "peux tu",
+        "vous pouvez", "pouvez vous", "pourriez vous", "peut on", "on peut", "could you", "can you", "would you", "will you", "can we", "could we",
+    ]
+    /// Words before the opener that change nothing ("ok, tu peux…", "dis, peux-tu…").
+    static let leading: Set<String> = ["ok", "okay", "alors", "dis", "dites", "bon", "hey", "et", "so", "and", "please", "stp", "svp", "euh", "hmm", "well", "maintenant", "now"]
+    /// Pronouns between the opener and its verb ("tu peux me dire", "tu peux le mettre").
+    static let clitics: Set<String> = ["me", "m", "moi", "le", "la", "les", "l", "y", "en", "lui", "leur", "nous", "vous", "te", "t", "just", "juste", "please", "stp", "svp"]
+    /// Verbs that ask for an answer, not an edit: "tu peux me dire…", "can you see…".
+    static let answerVerbs: Set<String> = [
+        "dire", "expliquer", "voir", "lire", "compter", "decrire", "confirmer", "repeter", "tell", "explain", "see", "read", "count", "describe", "confirm",
+        "repeat", "hear", "entendre", "comprendre", "understand",
+    ]
+
+    /// True when the words open (after a filler or two) with a request opener followed by an editing verb.
+    public static func isRequest(_ tokens: [String]) -> Bool {
+        var start = 0
+        while start < tokens.count, start < 2, leading.contains(tokens[start]) { start += 1 }
+        let rest = Array(tokens[start...])
+        for opener in openers {
+            let words = opener.split(separator: " ").map(String.init)
+            guard rest.count > words.count, Array(rest.prefix(words.count)) == words else { continue }
+            var index = words.count
+            if index < rest.count, rest[index] == "pas" { return false }
+            while index < rest.count, clitics.contains(rest[index]) { index += 1 }
+            guard index < rest.count else { return false }
+            return !answerVerbs.contains(rest[index])
+        }
+        return false
+    }
+}

@@ -14,6 +14,9 @@ public struct PhotoDocument: Hashable, Codable, Sendable, Identifiable {
     public var selectedLayerID: UUID?
     public var createdAt: Date
     public var modifiedAt: Date
+    /// The main table as it was before Picshop erased its values (D7), keyed by `tableGeometryKey`.
+    /// Nil until a table's values are erased; older projects decode it as nil.
+    public var tableMemory: TableMemory?
 
     public init(id: UUID = UUID(), title: String, canvasSize: PSSize, backgroundColor: PSColor = .clear,
                 layers: [Layer] = [], selectedLayerID: UUID? = nil, createdAt: Date = Date(), modifiedAt: Date = Date()) {

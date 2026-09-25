@@ -163,6 +163,27 @@ struct GeneratedStep {
 
     @Guide(description: "current for the selected clip, all for every clip, selection when the step is about a sound track rather than a clip.", .anyOf(["current", "all", "selection"]))
     var scope: String?
+
+    @Guide(description: "fillCells/clearCells: empty (only empty cells, the default) or all.", .anyOf(["empty", "all"]))
+    var cells: String?
+
+    @Guide(description: "Table steps: a row label or 1-based number as the table shows it; -1 for the last.")
+    var row: String?
+
+    @Guide(description: "Table steps: a column header or 1-based number as the table shows it; -1 for the last.")
+    var column: String?
+
+    @Guide(description: "fillCells without a fixed text: random, sequence or plausible (plausible only when asked).", .anyOf(["random", "sequence", "plausible"]))
+    var values: String?
+
+    @Guide(description: "fillCells random or sequence: the lowest value (or the first number).")
+    var min: Double?
+
+    @Guide(description: "fillCells random: the highest value.")
+    var max: Double?
+
+    @Guide(description: "fillCells random: digits after the decimal point, 0 to 3.")
+    var decimals: Int?
 }
 
 @available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
@@ -190,7 +211,8 @@ extension GeneratedPlan {
                           amountMode: step.amountMode, amount: step.amount, look: step.look, aspect: step.aspect, degrees: step.degrees, flipAxis: step.flipAxis,
                           text: step.text, placement: step.placement, color: step.color, background: step.background, startSeconds: step.startSeconds,
                           endSeconds: step.endSeconds, seconds: step.seconds, clipNumber: step.clipNumber, transition: step.transition, speed: step.speed,
-                          choiceIndex: step.choiceIndex, scope: step.scope, replacement: step.replacement)
+                          choiceIndex: step.choiceIndex, scope: step.scope, replacement: step.replacement, cells: step.cells, row: step.row,
+                          column: step.column, values: step.values, min: step.min, max: step.max, decimals: step.decimals)
         }, reply: reply, clarification: clarification, language: language)
     }
 }

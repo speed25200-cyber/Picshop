@@ -39,12 +39,23 @@ public struct IntentContext: Sendable {
     /// Photo: the area the person selected (lasso, wand), which a blur or a move of
     /// something not found falls back to.
     public var selectionMask: MaskReference?
+    /// Photo: the main table, overlaid with Picshop layers (the session builds it); nil when none.
+    public var table: TableGrid?
+    /// Photo: the last table edit that applied (the session sets it): "les autres aussi" reuses its value.
+    public var lastTableEdit: TableEditSpec?
+    /// Photo: the scene map of the current state, overlaid with Picshop text layers, as the model saw it
+    /// (the ids "t3", "l1", "o2" steps and references use); nil until the picture was read.
+    public var scene: SceneMap?
+    /// The last step that applied, by any lane (the session sets it): "encore", "pareil pour le sous-titre",
+    /// "plus gros" reuse it with a new scope or a new size.
+    public var lastIntent: EditIntent?
 
     public init(mode: EditorMode, currentAdjustments: Adjustments = .neutral, hasSelection: Bool = false, selectedIndex: Int? = nil,
                 clipCount: Int = 0, textLayerCount: Int = 0, playheadSeconds: Double = 0, timelineDuration: Double = 0, frameRate: Double = 30,
                 pendingClarification: ClarificationRequest? = nil, lastTapPoint: PSPoint? = nil, canUndo: Bool = false, canRedo: Bool = false,
                 preferredLanguage: String? = nil, pageCount: Int = 0, currentPage: Int = 1, hasSignature: Bool = false,
-                lastParameter: AdjustmentParameter? = nil, lastAdjustmentDirection: Int = 0, selectionMask: MaskReference? = nil) {
+                lastParameter: AdjustmentParameter? = nil, lastAdjustmentDirection: Int = 0, selectionMask: MaskReference? = nil,
+                table: TableGrid? = nil, lastTableEdit: TableEditSpec? = nil, scene: SceneMap? = nil, lastIntent: EditIntent? = nil) {
         self.mode = mode
         self.currentAdjustments = currentAdjustments
         self.hasSelection = hasSelection
@@ -65,6 +76,10 @@ public struct IntentContext: Sendable {
         self.lastParameter = lastParameter
         self.lastAdjustmentDirection = lastAdjustmentDirection
         self.selectionMask = selectionMask
+        self.table = table
+        self.lastTableEdit = lastTableEdit
+        self.scene = scene
+        self.lastIntent = lastIntent
     }
 
     public static let photo = IntentContext(mode: .photo)

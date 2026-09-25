@@ -151,6 +151,17 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     /// Moves an object across the photo, filling where it was (target; degrees = direction, 0 right / 90 up;
     /// amount = distance as a fraction of the frame; placement .center = to the middle).
     case moveObject
+    /// Writes a value in table cells: one text layer per cell, one undo step (EditIntent.table).
+    case fillCells
+    /// Empties table cells: Picshop layers removed, printed values erased with a tight mask.
+    case clearCells
+    /// A translucent box over rows, columns or cells.
+    case highlightCells
+    /// Erases a region (`region`, or the box of `ref`) and fills it from its surroundings.
+    case eraseRegion
+    /// Moves a text block (`ref`: a printed block is erased and rewritten in its own style; a layer
+    /// moves) to `target.point`, into `region`, to `placement`, or `degrees` + `amount` away.
+    case moveText
 
     public var isVideoOnly: Bool {
         switch self {
@@ -166,7 +177,8 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
 
     public var isPhotoOnly: Bool {
         switch self {
-        case .selectLayer, .duplicateLayer, .deleteLayer, .upscale, .relight, .generativeFill, .recolor, .describe, .saveStyle, .applyStyle, .expandCanvas, .moveObject, .textBehind, .cleanUp, .autoCrop, .blurObject: return true
+        case .selectLayer, .duplicateLayer, .deleteLayer, .upscale, .relight, .generativeFill, .recolor, .describe, .saveStyle, .applyStyle, .expandCanvas, .moveObject, .textBehind, .cleanUp, .autoCrop, .blurObject,
+             .fillCells, .clearCells, .highlightCells, .eraseRegion, .moveText: return true
         default: return false
         }
     }
@@ -323,12 +335,25 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
     public var confidence: Double
     /// Replacement text for `replaceText`.
     public var replacement: String?
+    /// Table steps (fillCells, clearCells, highlightCells): which cells, and what goes in them.
+    public var table: TableEditSpec?
+    /// Photo primitives: the scene-map thing the step acts on — a text block ("t3" printed, "l2" a text
+    /// layer) for editText, removeText and moveText; a text block, an object ("o1") or a free area ("f1")
+    /// for eraseRegion; an object for removeObject, blurObject, moveObject and recolor (instead of a
+    /// target phrase); a free area for addText (write there).
+    public var ref: SceneRef?
+    /// Photo primitives, normalised canvas space (top-left): the area eraseRegion erases, or the box
+    /// addText and moveText lay the text out in.
+    public var region: PSRect?
+    /// Photo primitives: size, weight, design, alignment and style matching of addText, editText, moveText.
+    public var textStyle: TextStyleSpec?
 
     public init(id: UUID = UUID(), action: IntentAction, target: ObjectTarget? = nil, parameter: AdjustmentParameter? = nil,
                 amount: AmountSpec? = nil, look: FilterPreset? = nil, aspect: AspectPreset? = nil, degrees: Double? = nil,
                 flipAxis: FlipAxis? = nil, text: String? = nil, placement: TextElement.Placement? = nil, color: PSColor? = nil,
                 background: BackgroundSpec? = nil, timeRange: TimeSpan? = nil, time: Double? = nil, clipIndex: Int? = nil,
-                transition: TransitionKind? = nil, index: Int? = nil, scope: TargetScope = .current, confidence: Double = 1, replacement: String? = nil) {
+                transition: TransitionKind? = nil, index: Int? = nil, scope: TargetScope = .current, confidence: Double = 1, replacement: String? = nil,
+                table: TableEditSpec? = nil, ref: SceneRef? = nil, region: PSRect? = nil, textStyle: TextStyleSpec? = nil) {
         self.id = id
         self.action = action
         self.target = target
@@ -350,6 +375,10 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         self.scope = scope
         self.confidence = confidence
         self.replacement = replacement
+        self.table = table
+        self.ref = ref
+        self.region = region
+        self.textStyle = textStyle
     }
 
     /// Short human description shown in the command feedback chip.
@@ -470,6 +499,11 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .cleanUp: return "Clean up"
         case .autoCrop: return "Best crop"
         case .blurObject: return "Blur \(target?.originalPhrase ?? "faces")"
+        case .fillCells: return "Fill cells"
+        case .clearCells: return "Clear cells"
+        case .highlightCells: return "Highlight cells"
+        case .eraseRegion: return "Erase area"
+        case .moveText: return "Move text"
         }
     }
 }

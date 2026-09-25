@@ -8,3 +8,6 @@ Sources/PicshopUI/App/AppSettings.swift:"liveUseClaude"
 Tests/PicshopImagingTests/VisionTextQueryTests.swift:Claude Opus 5.5
 # The release note saying the cloud option is gone.
 CHANGELOG.md:Claude
+# The same benchmark table's title in the Diagnostic Live eval fixture (text in a picture the eval reads), not an integration.
+Sources/PicshopIntent/Live/Eval/LiveEvalFixtures.swift:Claude Opus 5.5
+Sources/PicshopIntent/Live/Eval/LiveDialogueCorpus.swift:gone("Claude Opus 5.5")

@@ -33,8 +33,15 @@ public actor LocalModelLiveBrain: LiveBrain {
         /// Generations per turn, tool round trips included.
         public var maxRounds = 3
         public var maxApplyEdits = 2
-        /// Context tokens above which the conversation is compacted.
-        public var compactAt = 6_000
+        /// Rounds after a step that failed with a reason, was blocked as a repeat, or applied but
+        /// failed its check (act-then-verify): one, greedy; then the turn says so in one sentence.
+        public var maxRepairRounds = 1
+        /// How long the check of an applied result may hold the turn, on top of the step itself.
+        public var verifyTimeout = 2.0
+        /// Context tokens above which the conversation is compacted. 7,000 since the table and text
+        /// examples (a prefix of about 4,000 tokens): room for five or six grounded turns, and a turn's
+        /// worst case (a grounded message, a picture, three generations) still fits in 8,192.
+        public var compactAt = 7_000
         public var maxImagesInContext = 2
         public var speechMaxTokens = 120
         /// Session start and opinions, when propose_ideas is expected.
@@ -213,6 +220,57 @@ public actor LocalModelLiveBrain: LiveBrain {
         var stop: LocalStopReason = .endOfTurn
         /// This turn attached a picture.
         var looked = false
+        /// Steps that failed this turn, by what makes them the same (D12): a repeat is answered blocked.
+        var failedSteps: [StepSignature: LiveStepResult] = [:]
+        /// Rounds given after a reasoned failure, a blocked repeat or a failed check (at most `maxRepairRounds`).
+        var repairRounds = 0
+        /// The last run left something to own up to (a failure, a block, a failed check) and nothing was
+        /// said since: `finish` says it.
+        var owesOutcome = false
+        /// Step actions and reason codes of the turn's calls, for `model.tool`.
+        var loggedActions: [String] = []
+        /// Some step of the turn changed the picture (the turn then ends `.editApplied`).
+        var changedDocument = false
+    }
+
+    /// What makes two steps the same for the identical-failure block (D12): the action and its key
+    /// arguments (target, text, table scope, scene ref, region). A step whose signature already
+    /// failed this turn is not run again: it comes back `blocked[repeat]`.
+    struct StepSignature: Hashable, Sendable {
+        var action: IntentAction
+        var target: String?
+        var text: String?
+        var rows: [TableEditSpec.Ref]
+        var columns: [TableEditSpec.Ref]
+        var onlyEmpty: Bool?
+        var ref: String?
+        var region: PSRect?
+        /// Every other argument, in the model's vocabulary (amount, parameter, look, point, value…):
+        /// "plus chaud" with 15 then with 25 are two different steps.
+        var arguments: String
+
+        init(_ intent: EditIntent) {
+            action = intent.action
+            target = intent.target?.label
+            text = intent.text?.lowercased()
+            rows = intent.table?.rows ?? []
+            columns = intent.table?.columns ?? []
+            onlyEmpty = intent.table?.onlyEmpty
+            ref = intent.ref?.id
+            region = intent.region
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            arguments = (try? encoder.encode(RawIntentStep(intent: intent))).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        }
+    }
+
+    /// The sampling style of a turn's first generation (contract §11): questions, opinions and the
+    /// session start talk (0.6); everything else is edit-like (an action verb, a follow-up on the `last:`
+    /// line, a table request) and wants tool JSON with little randomness (0.25). The repair round is greedy.
+    static func style(for turn: LiveUserTurn) -> LocalGenerationOptions.Style {
+        if turn.kind == .sessionStart || expectsIdeas(turn) { return .conversation }
+        if LiveTurnRouter.isQuestion(turn.text, tokens: NormalizedUtterance(turn.text).tokens) { return .conversation }
+        return .edit
     }
 
     /// One tool call of the current generation and what came of it.
@@ -222,6 +280,8 @@ public actor LocalModelLiveBrain: LiveBrain {
         var result: LiveToolResult
         var needsReply: Bool
         var invalid: Bool
+        /// A reasoned failure, a blocked repeat or a failed check: the next round is the repair round.
+        var wantsRepair = false
 
         var message: LocalChatMessage { .toolResult(callID: id, name: name, content: ToolResultEncoder.compactText(result)) }
     }
@@ -257,10 +317,12 @@ public actor LocalModelLiveBrain: LiveBrain {
         owedResults = []
         lastSentState = turn.editorState
 
-        var options = LocalGenerationOptions()
-        options.maxTokens = thermalSerious ? limits.hotMaxTokens : (Self.expectsIdeas(turn) ? limits.ideasMaxTokens : limits.speechMaxTokens)
+        let maxTokens = thermalSerious ? limits.hotMaxTokens : (Self.expectsIdeas(turn) ? limits.ideasMaxTokens : limits.speechMaxTokens)
+        var options = LocalGenerationOptions(style: Self.style(for: turn), maxTokens: maxTokens)
 
-        let context = await tools.context()
+        // Re-read after every round that changed the picture: a repair names what the last round made ("l1"),
+        // and a block it erased ("t1") must no longer validate.
+        var context = await tools.context()
         let grounding = ToolInputValidator.Grounding(imageAspect: lastImageAspect, canvasAspect: turn.editorState.canvasPixels.flatMap(Self.aspect))
         var progress = Progress()
         progress.looked = imageJPEG != nil
@@ -278,10 +340,18 @@ public actor LocalModelLiveBrain: LiveBrain {
             }
             if records.contains(where: \.needsReply) {
                 if records.contains(where: \.invalid) { progress.invalidRetries += 1 }
+                let repair = records.contains(where: \.wantsRepair)
+                if repair { progress.repairRounds += 1 }
                 if progress.invalidRetries > 1, progress.spoken.isEmpty, let fallback {
                     // Still invalid after one retry, nothing said: the grammar answers the same words.
                     owedResults = replies
                     return try await forward(turn, to: fallback, tools: tools, progress: progress, output: output)
+                }
+                if progress.repairRounds > limits.maxRepairRounds {
+                    // The repair round did not fix it (D12): one honest sentence, no more tries.
+                    owedResults = replies
+                    note("model.repair_exhausted", ["turn": String(turn.id), "rounds": String(progress.rounds)])
+                    return finish(turn, progress.changedDocument ? .editApplied : .loopLimit, progress: progress, output: output)
                 }
                 if progress.rounds >= limits.maxRounds || progress.invalidRetries > 1 {
                     owedResults = replies
@@ -289,10 +359,15 @@ public actor LocalModelLiveBrain: LiveBrain {
                     return finish(turn, .loopLimit, progress: progress, output: output)
                 }
                 messages = replies
+                // The repair round is greedy: the model reads the code and the hint, and follows them.
+                if repair { options = LocalGenerationOptions(style: .repair, maxTokens: options.maxTokens) }
+                if progress.changedDocument { context = await tools.context() }
                 continue
             }
             owedResults = replies
             if records.isEmpty, progress.spoken.isEmpty {
+                // Nothing said after a step ran (a repair round left silent): the reason-aware outcome.
+                if progress.lastExecution != nil { return finish(turn, progress.changedDocument ? .editApplied : .answered, progress: progress, output: output) }
                 // The model said nothing at all.
                 if let fallback { return try await forward(turn, to: fallback, tools: tools, progress: progress, output: output) }
                 throw LiveBrainError.streamTruncated
@@ -314,6 +389,11 @@ public actor LocalModelLiveBrain: LiveBrain {
         let cold = cacheIsCold || progress.looked
         let firstToken = progress.rounds == 1 && cold ? max(limits.firstTokenTimeout, limits.coldFirstTokenTimeout) : limits.firstTokenTimeout
         let ticks = Self.watched(engine.send(messages, options: options), clock: clock, firstToken: firstToken, turn: remaining)
+        // Several calls in one generation: each one is checked against the picture as the calls before left it.
+        var context = context
+        func refresh(_ changed: Bool) async {
+            if changed { context = await tools.context() }
+        }
         var filter = LocalOutputFilter()
         var records: [CallRecord] = []
         var gotToken = false
@@ -336,12 +416,14 @@ public actor LocalModelLiveBrain: LiveBrain {
                     token()
                     for piece in filter.feed(delta) {
                         try await take(piece, turn: turn, tools: tools, context: context, grounding: grounding, progress: &progress, records: &records, output: output)
+                        if case .toolCall = piece { await refresh(progress.changedDocument) }
                     }
                 case .event(.toolCall(let call)):
                     token()
                     let use = ToolArgumentCoercer.rawToolUse(id: call.id.isEmpty ? nextCallID(turn) : call.id, name: call.name, arguments: call.arguments)
                     let record = try await perform(use, turn: turn, tools: tools, context: context, grounding: grounding, progress: &progress, output: output)
                     records.append(record)
+                    await refresh(progress.changedDocument)
                 case .event(.rejectedToolCall(let raw)):
                     token()
                     // The engine could not read it; the filter may. Anything else is an invalid call.
@@ -357,6 +439,7 @@ public actor LocalModelLiveBrain: LiveBrain {
                             let use = ToolArgumentCoercer.rawToolUse(id: nextCallID(turn), name: name, arguments: arguments)
                             let record = try await perform(use, turn: turn, tools: tools, context: context, grounding: grounding, progress: &progress, output: output)
                             records.append(record)
+                            await refresh(progress.changedDocument)
                         }
                     }
                 case .event(.finished(let stats, let reason)):
@@ -389,6 +472,7 @@ public actor LocalModelLiveBrain: LiveBrain {
             }
             output.yield(.text(speakable))
             progress.spoken += speakable
+            progress.owesOutcome = false
         case .toolCall(let name, let arguments):
             let use = ToolArgumentCoercer.rawToolUse(id: nextCallID(turn), name: name, arguments: arguments)
             let record = try await perform(use, turn: turn, tools: tools, context: context, grounding: grounding, progress: &progress, output: output)
@@ -398,11 +482,24 @@ public actor LocalModelLiveBrain: LiveBrain {
         }
     }
 
-    /// Validates a call, runs it on the editor, and says what the model must hear back.
+    /// Validates a call, runs it on the editor, and says what the model must hear back. A step identical
+    /// to one that failed this turn is not run again (D12): it comes back `blocked[repeat]`, and a call
+    /// made only of repeats does not count toward `maxApplyEdits`.
     private func perform(_ use: RawToolUse, turn: LiveUserTurn, tools: any LiveToolHandler, context: IntentContext,
                          grounding: ToolInputValidator.Grounding, progress: inout Progress, output: Output) async throws -> CallRecord {
         try Task.checkCancellation()
         let name = LiveToolName(rawValue: use.name)
+        let validation = ToolInputValidator(mode: mode).validate(use, context: context, grounding: grounding)
+        if name == .applyEdits, case .success(let call) = validation, case .applyEdits(let intents) = call.tool, !intents.isEmpty,
+           intents.allSatisfy({ progress.failedSteps[StepSignature($0)] != nil }) {
+            // Nothing new in it: answered without the editor, and without counting.
+            let execution = blockedExecution(intents, progress: progress, version: turn.editorState.version, canUndo: context.canUndo)
+            let result = ToolResultEncoder.applyEdits(execution)
+            progress.lastExecution = execution
+            progress.owesOutcome = true
+            logTool(turn, name: .applyEdits, execution: execution, needsReply: true, progress: &progress)
+            return CallRecord(id: call.id, name: LiveToolName.applyEdits.rawValue, result: result, needsReply: true, invalid: false, wantsRepair: true)
+        }
         if name == .applyEdits, progress.applyEdits >= limits.maxApplyEdits {
             progress.loopLimited = true
             return CallRecord(id: use.id, name: use.name, result: ToolResultEncoder.loopLimit(), needsReply: false, invalid: false)
@@ -412,34 +509,154 @@ public actor LocalModelLiveBrain: LiveBrain {
             let skipped = LiveToolResult(isError: false, payload: ["ok": false, "message": "Not now."], changedDocument: false)
             return CallRecord(id: use.id, name: use.name, result: skipped, needsReply: false, invalid: false)
         }
-        switch ToolInputValidator(mode: mode).validate(use, context: context, grounding: grounding) {
+        switch validation {
         case .failure(let error):
+            if case .problems(let problems) = error,
+               let refused = subjectRefusal(use, problems: problems, turn: turn, context: context, grounding: grounding, progress: &progress) {
+                return refused
+            }
             note("model.invalid_call", ["turn": String(turn.id), "tool": String(use.name.prefix(40))])
             return CallRecord(id: use.id, name: use.name, result: ToolResultEncoder.invalid(error), needsReply: true, invalid: true)
         case .success(let call):
             guard let name else { return CallRecord(id: use.id, name: use.name, result: ToolResultEncoder.invalid(.unknownTool(use.name)), needsReply: true, invalid: true) }
             if name == .applyEdits { progress.applyEdits += 1 }
             output.yield(.toolStarted(id: call.id, name: name, activity: LiveActivityTitles.title(for: call.tool, language: turn.language)))
-            let result = await tools.perform(call)
+            var result: LiveToolResult
+            var intents: [EditIntent] = []
+            if case .applyEdits(let all) = call.tool {
+                intents = all
+                result = await runSkippingRepeats(call, intents: all, tools: tools, progress: progress, canUndo: context.canUndo)
+            } else {
+                result = await tools.perform(call)
+            }
             output.yield(.toolFinished(id: call.id, name: name, result: result))
             if case .proposeIdeas(let ideas) = call.tool, !ideas.isEmpty { output.yield(.ideas(ideas)) }
             let steps = result.execution?.steps ?? []
-            let needsReply = result.isError || steps.contains { [.failed, .needsUser, .needsClarification].contains($0.status) }
-            if let execution = result.execution { progress.lastExecution = execution }
-            if !needsReply {
-                switch name {
-                case .applyEdits where result.changedDocument:
-                    progress.cleanEdit = true
-                    remember(edits: steps.filter { $0.status == .applied }.compactMap(\.label))
-                case .undo where result.changedDocument:
-                    remember(edits: ["undo"])
-                default:
-                    break
-                }
+            // Remember what failed, so the same step is not run again this turn.
+            for step in steps where Self.countsAsFailure(step) && step.status != .blocked && intents.indices.contains(step.index) {
+                progress.failedSteps[StepSignature(intents[step.index])] = step
             }
-            note("model.tool", ["turn": String(turn.id), "tool": name.rawValue, "reply": needsReply ? "1" : "0"])
-            return CallRecord(id: call.id, name: name.rawValue, result: result, needsReply: needsReply, invalid: false)
+            let verifyFailed = steps.contains { $0.status == .applied && $0.verification?.status == .failed }
+            let needsReply = result.isError || verifyFailed
+                || steps.contains { [.failed, .needsUser, .needsClarification, .blocked].contains($0.status) || ($0.status == .info && $0.reason != nil) }
+            let wantsRepair = verifyFailed || steps.contains { $0.status == .blocked || ($0.status != .applied && $0.status != .skipped && $0.reason != nil) }
+            if let execution = result.execution {
+                progress.lastExecution = execution
+                progress.owesOutcome = needsReply && execution.steps.contains { $0.status != .applied || $0.verification?.status == .failed }
+            }
+            if name == .applyEdits, result.changedDocument {
+                progress.changedDocument = true
+                // The recap keeps what ran with its arguments, so a follow-up after a compaction still resolves.
+                remember(edits: steps.filter { $0.status == .applied }.compactMap { step in
+                    guard let label = step.label else { return nil }
+                    guard intents.indices.contains(step.index) else { return label }
+                    return label + " [" + LiveSceneLines.step(of: RawIntentStep(intent: intents[step.index]), limit: 4) + "]"
+                })
+                if !needsReply { progress.cleanEdit = true }
+            }
+            if name == .undo, result.changedDocument, !needsReply { remember(edits: ["undo"]) }
+            if let execution = result.execution {
+                logTool(turn, name: name, execution: execution, needsReply: needsReply, progress: &progress)
+            } else {
+                note("model.tool", ["turn": String(turn.id), "tool": name.rawValue, "reply": needsReply ? "1" : "0"])
+            }
+            return CallRecord(id: call.id, name: name.rawValue, result: result, needsReply: needsReply, invalid: false, wantsRepair: wantsRepair)
         }
+    }
+
+    /// A subject step (textBehind, a background swap…) on a picture the validator knows has no subject (a
+    /// table screenshot): answered as the failure it would be, `failed[no_subject]` with its hint, without
+    /// reaching the editor. So the model gets a code and a way out rather than "invalid input", the repair
+    /// round follows the hint, and a model that insists gets `blocked[repeat]` (D12, A4).
+    private func subjectRefusal(_ use: RawToolUse, problems: [String], turn: LiveUserTurn, context: IntentContext,
+                                grounding: ToolInputValidator.Grounding, progress: inout Progress) -> CallRecord? {
+        let refusals = [ToolHints.noSubjectProblem, ToolHints.noSubjectScreenshotProblem]
+        guard use.name == LiveToolName.applyEdits.rawValue, !problems.isEmpty,
+              problems.allSatisfy({ problem in refusals.contains { problem.hasSuffix($0) } }) else { return nil }
+        // The same call read without what the editor knows of the picture: the steps as the model meant them.
+        var bare = context
+        bare.table = nil
+        bare.scene = nil
+        guard case .success(let call) = ToolInputValidator(mode: mode).validate(use, context: bare, grounding: grounding),
+              case .applyEdits(let intents) = call.tool, !intents.isEmpty else { return nil }
+        let hasTable = context.table != nil
+        let steps = intents.enumerated().map { index, intent -> LiveStepResult in
+            if progress.failedSteps[StepSignature(intent)] != nil { return blocked(intent, index: index, progress: progress) }
+            let background = intent.target.map { ["background", "arriere plan", "fond"].contains($0.label.normalizedForMatching) } ?? false
+            guard ToolHints.subjectActions.contains(intent.action) || background else {
+                return LiveStepResult(index: index, action: intent.action, status: .skipped)
+            }
+            return LiveStepResult(index: index, action: intent.action, status: .failed, message: nil, reason: .noSubject,
+                                  hint: ToolHints.hint(for: .noSubject, action: intent.action, hasTable: hasTable))
+        }
+        for step in steps where step.status == .failed { progress.failedSteps[StepSignature(intents[step.index])] = step }
+        var execution = LiveExecution(steps: steps, version: progress.lastExecution?.version ?? turn.editorState.version, canUndo: context.canUndo)
+        execution.pictureIsTable = context.table?.coversPicture == true
+        progress.lastExecution = execution
+        progress.owesOutcome = true
+        logTool(turn, name: .applyEdits, execution: execution, needsReply: true, progress: &progress)
+        return CallRecord(id: call.id, name: LiveToolName.applyEdits.rawValue, result: ToolResultEncoder.applyEdits(execution), needsReply: true, invalid: false,
+                          wantsRepair: true)
+    }
+
+    /// Runs the steps that did not fail yet; the repeats come back blocked, in their places.
+    private func runSkippingRepeats(_ call: LiveToolCall, intents: [EditIntent], tools: any LiveToolHandler, progress: Progress, canUndo: Bool) async -> LiveToolResult {
+        let repeats = Set(intents.indices.filter { progress.failedSteps[StepSignature(intents[$0])] != nil })
+        guard !repeats.isEmpty else { return await tools.perform(call) }
+        let fresh = intents.indices.filter { !repeats.contains($0) }
+        let ran = await tools.perform(LiveToolCall(id: call.id, tool: .applyEdits(fresh.map { intents[$0] })))
+        guard let execution = ran.execution else { return ran }
+        var steps: [LiveStepResult] = []
+        for index in intents.indices {
+            if repeats.contains(index) {
+                steps.append(blocked(intents[index], index: index, progress: progress))
+            } else if let position = fresh.firstIndex(of: index), let step = execution.steps.first(where: { $0.index == position }) {
+                var moved = step
+                moved.index = index
+                steps.append(moved)
+            }
+        }
+        var merged = execution
+        merged.steps = steps
+        return ToolResultEncoder.applyEdits(merged)
+    }
+
+    private func blockedExecution(_ intents: [EditIntent], progress: Progress, version: Int, canUndo: Bool) -> LiveExecution {
+        var execution = LiveExecution(steps: intents.indices.map { blocked(intents[$0], index: $0, progress: progress) },
+                                      version: progress.lastExecution?.version ?? version, canUndo: progress.lastExecution?.canUndo ?? canUndo)
+        execution.pictureIsTable = progress.lastExecution?.pictureIsTable ?? false
+        return execution
+    }
+
+    /// A repeat, answered with what the first try said (its reason and words), so the spoken line stays right.
+    private func blocked(_ intent: EditIntent, index: Int, progress: Progress) -> LiveStepResult {
+        let first = progress.failedSteps[StepSignature(intent)]
+        return LiveStepResult(index: index, action: intent.action, status: .blocked, message: first?.message, reason: first?.reason, hint: first?.hint)
+    }
+
+    /// Failed, or a needs-user / info step with a code: not worth running again this turn.
+    static func countsAsFailure(_ step: LiveStepResult) -> Bool {
+        switch step.status {
+        case .failed, .blocked: return true
+        case .needsUser, .info: return step.reason != nil
+        default: return false
+        }
+    }
+
+    /// `model.tool` with the step actions and reason codes (RC12), never the words.
+    private func logTool(_ turn: LiveUserTurn, name: LiveToolName, execution: LiveExecution, needsReply: Bool, progress: inout Progress) {
+        let actions = execution.steps.map(\.action.rawValue)
+        let reasons = execution.steps.compactMap { step -> String? in
+            if step.status == .blocked { return "repeat" }
+            return step.status == .applied ? nil : step.reason?.rawValue
+        }
+        progress.loggedActions += actions
+        var fields = ["turn": String(turn.id), "tool": name.rawValue, "reply": needsReply ? "1" : "0",
+                      "actions": String(actions.joined(separator: ",").prefix(120))]
+        if !reasons.isEmpty { fields["reasons"] = String(reasons.joined(separator: ",").prefix(80)) }
+        let checks = execution.verifications
+        if !checks.isEmpty { fields["verify"] = checks.map(\.status.rawValue).joined(separator: ",") }
+        note("model.tool", fields)
     }
 
     private func invalidCall(_ raw: String, turn: LiveUserTurn) -> CallRecord {
@@ -470,13 +687,17 @@ public actor LocalModelLiveBrain: LiveBrain {
 
     private func finish(_ turn: LiveUserTurn, _ end: LiveTurnEnd, progress: Progress, output: Output) {
         var spoken = progress.spoken
-        if spoken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            // Never a silent turn: an edit with no sentence gets the executor's words.
-            let line = progress.lastExecution?.outcomeText(language: turn.language) ?? ""
-            let fill = line.isEmpty && end == .loopLimit ? LiveLines.line(.lostThread, turn.language) : line
+        let silent = spoken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if silent || progress.owesOutcome {
+            // Never a silent turn, and never a failure left unsaid: the reason-aware line (LiveLines), never
+            // the executor's raw text, always through the sanitizer.
+            let outcome = progress.lastExecution?.outcomeText(language: turn.language) ?? ""
+            let line = LiveSpeechSanitizer.clean(outcome, language: turn.language)
+            let fill = line.isEmpty && end == .loopLimit && silent ? LiveLines.line(.lostThread, turn.language) : line
             if !fill.isEmpty {
-                output.yield(.text(fill))
-                spoken = fill
+                let piece = silent || spoken.last?.isWhitespace == true ? fill : " " + fill
+                output.yield(.text(piece))
+                spoken += piece
             }
         }
         output.yield(.stats(stats(progress)))
@@ -636,6 +857,13 @@ public actor LocalModelLiveBrain: LiveBrain {
             history.append(.assistant(example.assistant, toolCalls: [LocalToolCall(id: id, name: tool.rawValue, arguments: example.arguments ?? [:])]))
             if let result = example.toolResult {
                 history.append(.toolResult(callID: id, name: tool.rawValue, content: result))
+                if let repair = example.repair {
+                    // The one repair round after a failed check: a second call, its result, then the closing line.
+                    let repairID = id + "_repair"
+                    history.append(.assistant(repair.assistant, toolCalls: [LocalToolCall(id: repairID, name: repair.toolName.rawValue, arguments: repair.arguments)]))
+                    history.append(.toolResult(callID: repairID, name: repair.toolName.rawValue, content: repair.toolResult))
+                }
+                if let after = example.afterResult { history.append(.assistant(after, toolCalls: [])) }
             }
         }
         return history

@@ -431,6 +431,7 @@ DYNAMIC_KEYS = {
     "Dissolve", "Fade to Black", "Fade to White", "Slide Left", "Slide Right", "Wipe", "Zoom", "Blur",
     # Executor labels shown in toasts and the History menu.
     "Right Way Up", "Rotate 180°", "Remove Mirror", "Play Forwards", "Flip Horizontal", "Flip Vertical", "Remove Background", "Remove Text",
+    "Fill Cells", "Clear Cells", "Highlight Cells", "Edit Text", "Erase Area", "Move Text",
     # AppEnvironment.appleIntelligenceReason, shown in Settings › Live through LD().
     "This device doesn't support Apple Intelligence.", "Enable Apple Intelligence in Settings to use this brain.",
     "The Apple Intelligence model is still downloading.", "Apple Intelligence is unavailable.",

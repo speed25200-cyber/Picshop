@@ -17,7 +17,18 @@ public struct PhotoCommandExecutor: Sendable {
         var document = input
         let language = self.language
         let fr = language == .french
+        // Primitives on a scene block ("t3", "l1") and text laid out in a box or a style.
+        if let ref = intent.ref, ref.isText, intent.action == .editText { return await editTextBlock(ref, intent: intent, on: document, context: context) }
+        if let ref = intent.ref, ref.isText, intent.action == .removeText { return await removeTextBlock(ref, intent: intent, on: document, context: context) }
+        if intent.action == .addText, intent.region != nil || intent.textStyle != nil || intent.ref != nil { return await placeText(intent, on: document, context: context) }
+        if let ref = intent.ref, ref.isText, intent.action == .removeObject { return await removeTextBlock(ref, intent: intent, on: document, context: context) }
         switch intent.action {
+        case .fillCells: return await fillCells(intent, on: document, context: context)
+        case .clearCells: return await clearCells(intent, on: document, context: context)
+        case .highlightCells: return await highlightCells(intent, on: document, context: context)
+        case .eraseRegion: return await eraseRegion(intent, on: document, context: context)
+        case .moveText: return await moveText(intent, on: document, context: context)
+
         case .autoCrop:
             do {
                 guard let rect = try await services.bestCrop(in: document) else {
@@ -26,7 +37,7 @@ public struct PhotoCommandExecutor: Sendable {
                 document.apply(.crop(rect.clampedToUnit()))
                 return (document, .applied("Best crop"))
             } catch {
-                return (document, .failed(errorMessage(error)))
+                return (document, failure(error))
             }
 
         case .cleanUp:
@@ -43,6 +54,8 @@ public struct PhotoCommandExecutor: Sendable {
             return (document, .effect(.pickColorReference, label: ""))
 
         case .textBehind:
+            // A table screenshot has no one to put a title behind: say so without asking Vision.
+            if context.table?.coversPicture == true { return (document, failure(PicshopError.noSubject)) }
             do {
                 let mask = try await services.subjectMask(in: document)
                 guard document.placeTextBehindSubject(intent.text, subjectMask: mask, placeholder: fr ? "TITRE" : "TITLE") != nil else {
@@ -50,15 +63,35 @@ public struct PhotoCommandExecutor: Sendable {
                 }
                 return (document, .applied("Text behind subject"))
             } catch {
-                return (document, .failed(errorMessage(error)))
+                return (document, failure(error))
             }
 
         case .removeObject, .moveObject, .blurObject:
-            guard let target = intent.target else { return (document, .failed(PicshopError.objectNotFound("object").message(french: language == .french))) }
+            if case .object? = intent.ref { return await actOnSceneObject(intent, on: document, context: context) }
+            guard let target = intent.target else {
+                let verb: String
+                switch intent.action {
+                case .moveObject: verb = fr ? "déplacer" : "move"
+                case .blurObject: verb = fr ? "flouter" : "blur"
+                default: verb = fr ? "retirer" : "remove"
+                }
+                let message = fr ? "Je ne sais pas quoi \(verb) : touche-le ou nomme-le." : "I don't know what to \(verb): tap it or name it."
+                return (document, ExecutionResult(outcome: .info(message: message), effects: [.message("tapToErase"), ExecutionReason.needsSelection.effect]))
+            }
+            // D7: the table as it is, kept before its values go, so a later fill writes in its typography.
+            if intent.action == .removeObject, context.table != nil || TableVocabulary.namesTableText(target),
+               let (raw, _) = await tables(in: document) {
+                var remembered = document
+                rememberTable(raw, in: &remembered)
+                let (erased, result) = await removeObject(target: target, intent: intent, document: remembered, selection: context.selectionMask)
+                // The memory lands in the same commit as the erase, and only with it.
+                return result.outcome.isSuccess ? (erased, result) : (document, result)
+            }
             return await removeObject(target: target, intent: intent, document: document, selection: context.selectionMask)
 
         case .chooseCandidate:
             guard let pending = context.pendingClarification else { return (document, ExecutionResult(outcome: .ignored)) }
+            if IntentNormalizer.tableActions.contains(pending.pendingIntent.action) { return await chooseTableCandidate(intent, pending: pending, on: document, context: context) }
             let chosen: [ObjectCandidate]
             if intent.scope == .all {
                 chosen = pending.candidates
@@ -69,9 +102,9 @@ public struct PhotoCommandExecutor: Sendable {
                 case .single(let candidate): chosen = [candidate]
                 case .multiple(let candidates): chosen = candidates
                 case .ambiguous(let candidates):
-                    let request = ClarificationRequest(question: CandidateSelector.question(for: target, options: candidates, language: language), candidates: candidates, pendingIntent: pending.pendingIntent)
+                    let request = ClarificationRequest(question: CandidateSelector.question(for: spoken(target), options: candidates, language: language), candidates: candidates, pendingIntent: pending.pendingIntent)
                     return (document, .clarify(request))
-                case .none: return (document, .failed(PicshopError.objectNotFound(target.originalPhrase).message(french: language == .french)))
+                case .none: return (document, notFound(target))
                 }
             } else {
                 return (document, ExecutionResult(outcome: .ignored))
@@ -81,18 +114,20 @@ public struct PhotoCommandExecutor: Sendable {
             return await apply(pendingIntent: resumed, candidates: chosen, document: document)
 
         case .removeBackground:
+            if context.table?.coversPicture == true { return (document, failure(PicshopError.noSubject)) }
             do {
                 let mask = try await services.subjectMask(in: document)
                 document.apply(.removeBackground(mask))
                 return (document, .applied("Remove Background"))
             } catch {
-                return (document, .failed(errorMessage(error)))
+                return (document, failure(error))
             }
 
         case .replaceBackground:
             guard let background = intent.background else {
                 return (document, .effect(.pickBackground, label: ""))
             }
+            if context.table?.coversPicture == true { return (document, failure(PicshopError.noSubject)) }
             do {
                 let mask = try await services.subjectMask(in: document)
                 let resolved: Background
@@ -107,10 +142,11 @@ public struct PhotoCommandExecutor: Sendable {
                 document.apply(.replaceBackground(resolved, mask: mask))
                 return (document, .applied("Replace Background"))
             } catch {
-                return (document, .failed(errorMessage(error)))
+                return (document, failure(error))
             }
 
         case .blurBackground:
+            if context.table?.coversPicture == true { return (document, failure(PicshopError.noSubject)) }
             do {
                 let mask = try await services.subjectMask(in: document)
                 let current = currentBlurAmount(in: document)
@@ -118,11 +154,11 @@ public struct PhotoCommandExecutor: Sendable {
                 document.apply(.blurBackground(amount: amount, mask: mask))
                 return (document, .applied("Blur Background"))
             } catch {
-                return (document, .failed(errorMessage(error)))
+                return (document, failure(error))
             }
 
         case .adjust:
-            guard let parameter = intent.parameter else { return (document, .failed("Unknown adjustment")) }
+            guard let parameter = intent.parameter else { return (document, .failed(fr ? "Je ne sais pas quel réglage changer." : "I don't know which setting to change.")) }
             let current = document.activeAdjustments[parameter]
             let value = (intent.amount ?? .relative(parameter.defaultStep)).resolve(current: current, range: parameter.range)
             document.apply(.adjust(parameter, value: value))
@@ -139,17 +175,19 @@ public struct PhotoCommandExecutor: Sendable {
                 case .single(let candidate): return await apply(pendingIntent: intent, candidates: [candidate], document: document)
                 case .multiple(let list): return await apply(pendingIntent: intent, candidates: list, document: document)
                 case .ambiguous(let options):
-                    return (document, .clarify(ClarificationRequest(question: CandidateSelector.question(for: target, options: options, language: language), candidates: options, pendingIntent: intent)))
+                    return (document, .clarify(ClarificationRequest(question: CandidateSelector.question(for: spoken(target), options: options, language: language), candidates: options, pendingIntent: intent)))
                 case .none:
-                    let message = fr ? "Je ne trouve pas « \(target.originalPhrase) ». Touche ou entoure la zone." : "I can't find “\(target.originalPhrase)”. Tap or lasso the area."
+                    let message = fr ? "Je ne trouve pas « \(spoken(target).originalPhrase) ». Touche ou entoure la zone." : "I can't find “\(target.originalPhrase)”. Tap or lasso the area."
                     return (document, ExecutionResult(outcome: .info(message: message), effects: [.message("selectRegion")]))
                 }
             } catch {
-                return (document, .failed(errorMessage(error)))
+                return (document, failure(error))
             }
 
         case .selectiveAdjust:
-            guard let target = intent.target, let parameter = intent.parameter else { return (document, .failed("Missing target")) }
+            guard let target = intent.target, let parameter = intent.parameter else {
+                return (document, .failed(fr ? "Dis-moi quoi retoucher, ou touche-le." : "Tell me what to change, or tap it."))
+            }
             do {
                 let candidates = try await services.candidates(for: target, in: document)
                 switch CandidateSelector.select(from: candidates, for: target) {
@@ -164,12 +202,12 @@ public struct PhotoCommandExecutor: Sendable {
                     document.apply(.selectiveAdjust(mask, Self.selectiveAdjustments(parameter, value, on: target)))
                     return (document, .applied("Selective \(parameter.englishName)"))
                 case .ambiguous(let options):
-                    return (document, .clarify(ClarificationRequest(question: CandidateSelector.question(for: target, options: options, language: language), candidates: options, pendingIntent: intent)))
+                    return (document, .clarify(ClarificationRequest(question: CandidateSelector.question(for: spoken(target), options: options, language: language), candidates: options, pendingIntent: intent)))
                 case .none:
-                    return (document, .failed(PicshopError.objectNotFound(target.originalPhrase).message(french: language == .french)))
+                    return (document, notFound(target))
                 }
             } catch {
-                return (document, .failed(errorMessage(error)))
+                return (document, failure(error))
             }
 
         case .applyLook:
@@ -187,13 +225,11 @@ public struct PhotoCommandExecutor: Sendable {
             if let target = intent.target {
                 do {
                     let framing = try await services.framingRect(for: target, in: document)
-                    guard let rect = framing else {
-                        return (document, .failed(PicshopError.objectNotFound(target.originalPhrase).message(french: language == .french)))
-                    }
+                    guard let rect = framing else { return (document, notFound(target)) }
                     document.apply(.crop(rect.clampedToUnit()))
                     return (document, .applied("Crop to \(target.originalPhrase)"))
                 } catch {
-                    return (document, .failed(errorMessage(error)))
+                    return (document, failure(error))
                 }
             }
             let aspect = intent.aspect ?? .free
@@ -229,7 +265,7 @@ public struct PhotoCommandExecutor: Sendable {
                 }
                 return (document, ExecutionResult(outcome: .info(message: fr ? "L'horizon est déjà droit." : "The horizon already looks level.")))
             } catch {
-                return (document, .failed(errorMessage(error)))
+                return (document, failure(error))
             }
 
         case .flip:
@@ -257,30 +293,52 @@ public struct PhotoCommandExecutor: Sendable {
                 return (document, ExecutionResult(outcome: .info(message: fr ? "Quel texte ?" : "What should it say?")))
             }
             var element = TextElement(text: text)
-            element.center = (intent.placement ?? .bottom).center
+            // RC2: a point said or shown wins over the anchor.
+            element.center = intent.target?.point.map { PSPoint(x: $0.x.clamped(to: 0...1), y: $0.y.clamped(to: 0...1)) } ?? (intent.placement ?? .bottom).center
             if let color = intent.color { element.color = color }
-            if let amount = intent.amount, amount.mode == .absolute { element.relativeSize = amount.value }
-            let layer = Layer(name: text, content: .text(element))
+            if let amount = intent.amount, amount.mode == .absolute { element.relativeSize = amount.value.clamped(to: TextStyleSpec.relativeSizeRange) }
+            // At a placement (not a point the user showed), new text never lands on the text already there or on
+            // the table: it moves the shortest way to a clear spot of its own size (down from the top, up from the bottom).
+            // The map the step was planned on (never a new text pass for this).
+            if intent.target?.point == nil, let scene = context.scene?.overlaying(document.layers) {
+                let box = element.estimatedBox(canvasSize: document.canvasSize)
+                if let clear = RuleBasedIntentEngine.clearBox(for: intent.placement ?? .bottom, in: scene, size: box.size, anchor: element.center) {
+                    element.center = clear.center
+                }
+            }
+            let layer = Layer(name: text, content: .text(element), transform: LayerTransform(center: element.center))
             document.addLayer(layer)
             return (document, .applied("Add Text", effects: [.selectLayer(layer.id)]))
 
         case .editText:
             guard let layerID = document.selectedLayer?.isText == true ? document.selectedLayerID : document.textLayers.last?.id else {
-                return (document, .failed(fr ? "Aucun texte à modifier." : "There's no text to edit."))
+                return (document, ExecutionResult(outcome: .failed(message: fr ? "Aucun texte à modifier." : "There's no text to edit."), effects: [ExecutionReason.noText.effect]))
+            }
+            // A table cell layer: a change of size, colour or weight is for the whole fill ("plus gros", "en rouge").
+            if let group = document.layer(id: layerID)?.group, group.kind == .tableCells, intent.text == nil, intent.placement == nil, intent.target?.point == nil {
+                for member in document.layers(inGroup: group.id) {
+                    document.update(layerID: member.id) { layer in
+                        guard var element = layer.textElement else { return }
+                        Self.restyle(&element, with: intent)
+                        layer.textElement = element
+                    }
+                }
+                return (document, .applied("Edit Text"))
             }
             document.update(layerID: layerID) { layer in
                 guard var element = layer.textElement else { return }
                 if let text = intent.text, !text.isEmpty { element.text = text; layer.name = text }
-                if let placement = intent.placement { element.center = placement.center }
-                if let color = intent.color { element.color = color }
-                if let amount = intent.amount, amount.mode == .multiplier { element.relativeSize = (element.relativeSize * amount.value).clamped(to: 0.02...0.3) }
+                if let point = intent.target?.point { element.center = PSPoint(x: point.x.clamped(to: 0...1), y: point.y.clamped(to: 0...1)) }
+                else if let placement = intent.placement { element.center = placement.center }
+                Self.restyle(&element, with: intent)
                 layer.textElement = element
+                layer.transform.center = element.center
             }
             return (document, .applied("Edit Text"))
 
         case .removeText:
             guard let layerID = document.selectedLayer?.isText == true ? document.selectedLayerID : document.textLayers.last?.id else {
-                return (document, .failed(fr ? "Aucun texte à supprimer." : "There's no text to remove."))
+                return (document, ExecutionResult(outcome: .failed(message: fr ? "Aucun texte à supprimer." : "There's no text to remove."), effects: [ExecutionReason.noText.effect]))
             }
             document.removeLayer(id: layerID)
             return (document, .applied("Remove Text"))
@@ -333,7 +391,7 @@ public struct PhotoCommandExecutor: Sendable {
             return (document, .failed(fr ? "Calque introuvable." : "Layer not found."))
 
         case .duplicateLayer:
-            guard let selected = document.selectedLayer else { return (document, .failed("No layer")) }
+            guard let selected = document.selectedLayer else { return (document, .failed(fr ? "Aucun calque n'est sélectionné." : "No layer is selected.")) }
             var copy = selected
             copy.id = UUID()
             copy.name += " copy"
@@ -357,7 +415,7 @@ public struct PhotoCommandExecutor: Sendable {
                 let sentence = Replies.describe(scene, language: language)
                 return (document, ExecutionResult(outcome: .info(message: sentence), effects: [.message("speak:" + sentence)]))
             } catch {
-                return (document, .failed(errorMessage(error)))
+                return (document, failure(error))
             }
         case .saveVersion: return (document, .effect(.message("version:save:" + (intent.text ?? "")), label: ""))
         case .saveStyle: return (document, .effect(.message("style:save:" + (intent.text ?? "")), label: ""))
@@ -372,7 +430,9 @@ public struct PhotoCommandExecutor: Sendable {
         case .unknown:
             return (document, ExecutionResult(outcome: .info(message: Replies.reply(for: intent, language: language))))
         default:
-            return (document, .failed(PicshopError.unsupportedOperation(intent.summary).message(french: language == .french)))
+            // In French the English action name never goes inside « ».
+            let message = fr ? "Ça, je ne peux pas le faire sur une photo." : PicshopError.unsupportedOperation(intent.summary).message(french: false)
+            return (document, ExecutionResult(outcome: .failed(message: message), effects: [ExecutionReason.unsupported.effect]))
         }
     }
 
@@ -390,7 +450,7 @@ public struct PhotoCommandExecutor: Sendable {
             case .multiple(let list):
                 return await apply(pendingIntent: intent, candidates: list, document: document)
             case .ambiguous(let options):
-                let request = ClarificationRequest(question: CandidateSelector.question(for: target, options: options, language: language), candidates: options, pendingIntent: intent)
+                let request = ClarificationRequest(question: CandidateSelector.question(for: spoken(target), options: options, language: language), candidates: options, pendingIntent: intent)
                 return (document, .clarify(request))
             case .none:
                 // Nothing named that was seen: hand over to the finger instead of stopping at an error.
@@ -398,7 +458,7 @@ public struct PhotoCommandExecutor: Sendable {
                     let message = fr ? "Touche l'élément à effacer, ou décris-le (« le poteau à droite »)." : "Tap the thing to erase, or describe it (“the pole on the right”)."
                     return (document, ExecutionResult(outcome: .info(message: message), effects: [.message("tapToErase")]))
                 }
-                let phrase = target.originalPhrase
+                let phrase = spoken(target).originalPhrase
                 if intent.action == .removeObject {
                     let message = fr ? "Je ne trouve pas « \(phrase) ». Touche ou entoure ce qu'il faut effacer." : "I can't find “\(phrase)”. Tap or circle what to erase."
                     return (document, ExecutionResult(outcome: .info(message: message), effects: [.message("tapToErase")]))
@@ -410,18 +470,19 @@ public struct PhotoCommandExecutor: Sendable {
                 return (document, ExecutionResult(outcome: .info(message: message), effects: [.message("selectRegion")]))
             }
         } catch {
-            return (document, .failed(errorMessage(error)))
+            return (document, failure(error))
         }
     }
 
     func apply(pendingIntent intent: EditIntent, candidates: [ObjectCandidate], document input: PhotoDocument) async -> (PhotoDocument, ExecutionResult) {
         var document = input
-        guard let target = intent.target else { return (document, .failed("Missing target")) }
+        let fr = language == .french
+        guard let target = intent.target else { return (document, .failed(fr ? "Dis-moi sur quoi agir, ou touche-le." : "Tell me what to act on, or tap it.")) }
         do {
             let mask = try await services.mask(for: candidates, target: target, in: document)
             switch intent.action {
             case .selectiveAdjust:
-                guard let parameter = intent.parameter else { return (document, .failed("Unknown adjustment")) }
+                guard let parameter = intent.parameter else { return (document, .failed(fr ? "Je ne sais pas quel réglage changer." : "I don't know which setting to change.")) }
                 let value = (intent.amount ?? .relative(parameter.defaultStep)).resolve(current: 0, range: parameter.range)
                 document.apply(.selectiveAdjust(mask, Self.selectiveAdjustments(parameter, value, on: target)))
                 return (document, .applied("Selective \(parameter.englishName)"))
@@ -430,7 +491,7 @@ public struct PhotoCommandExecutor: Sendable {
                 document.apply(.crop(rect))
                 return (document, .applied("Crop to \(target.originalPhrase)"))
             case .generativeFill:
-                guard let prompt = intent.text, !prompt.isEmpty else { return (document, .failed("Missing prompt")) }
+                guard let prompt = intent.text, !prompt.isEmpty else { return (document, .failed(fr ? "Dis-moi quoi mettre à la place." : "Tell me what to put there.")) }
                 document.apply(.generativeFill(mask, prompt: prompt))
                 return (document, .applied("Generate “\(prompt)”"))
             case .blurObject:
@@ -440,7 +501,7 @@ public struct PhotoCommandExecutor: Sendable {
                 let box = candidates.map(\.boundingBox).reduce(candidates.first?.boundingBox ?? .zero) { $0.union($1) }
                 return move(mask, box: box, intent: intent, target: target, document: document)
             case .recolor:
-                guard let color = intent.color else { return (document, .failed("Missing colour")) }
+                guard let color = intent.color else { return (document, .failed(fr ? "Quelle couleur ?" : "Which colour?")) }
                 document.apply(.recolor(mask, color, strength: (intent.amount?.value ?? 0.9).clamped(to: 0...1)))
                 return (document, .applied("Recolor \(target.originalPhrase)"))
             default:
@@ -449,7 +510,7 @@ public struct PhotoCommandExecutor: Sendable {
                 return (document, .applied(label))
             }
         } catch {
-            return (document, .failed(errorMessage(error)))
+            return (document, failure(error))
         }
     }
 
@@ -508,5 +569,54 @@ public struct PhotoCommandExecutor: Sendable {
     func errorMessage(_ error: Error) -> String {
         if let known = error as? PicshopError { return known.message(french: language == .french) }
         return error.localizedDescription
+    }
+
+    /// A failure as the user reads it, with the reason code the model and Live read (D10): no subject on
+    /// the picture, something not found.
+    func failure(_ error: Error) -> ExecutionResult {
+        var result = ExecutionResult.failed(errorMessage(error))
+        switch error as? PicshopError {
+        case .noSubject?: result.effects = [ExecutionReason.noSubject.effect]
+        case .objectNotFound?: result.effects = [ExecutionReason.notFound.effect]
+        default: break
+        }
+        return result
+    }
+
+    /// The target as it is said to the person: in French, an internal English label ("person", "the sign",
+    /// a model's own word) becomes its French noun; the person's own words stay as they were.
+    func spoken(_ target: ObjectTarget) -> ObjectTarget {
+        guard language == .french else { return target }
+        var said = target
+        let phrase = target.originalPhrase.trimmingCharacters(in: .whitespaces)
+        if let noun = PicshopError.frenchLabel(for: phrase.isEmpty ? target.label : phrase) {
+            let feminine: Set<String> = ["personne", "personnes", "voiture", "main", "zone", "sélection", "lampe", "chaise", "bouteille", "tasse", "fenêtre",
+                                         "ombre", "plaque", "vache", "moto", "peau", "case", "cases", "imperfection"]
+            let plural = noun.hasSuffix("s") || noun.hasSuffix("x")
+            let elided = ["a", "e", "i", "o", "u", "é", "â", "h"].contains { noun.hasPrefix($0) }
+            said.originalPhrase = plural ? "les \(noun)" : elided ? "l'\(noun)" : feminine.contains(noun) ? "la \(noun)" : "le \(noun)"
+        }
+        return said
+    }
+
+    /// "Je ne trouve pas « la lampe » sur la photo.", in the person's words (never an internal English label), not_found.
+    func notFound(_ target: ObjectTarget) -> ExecutionResult {
+        let phrase = target.originalPhrase.trimmingCharacters(in: .whitespaces).isEmpty ? target.label : target.originalPhrase
+        return failure(PicshopError.objectNotFound(phrase))
+    }
+
+    /// Size, colour, weight and design of an edit laid over a text element (editText, a whole table fill).
+    static func restyle(_ element: inout TextElement, with intent: EditIntent) {
+        if let color = intent.color { element.color = color }
+        if let amount = intent.amount, amount.mode == .multiplier { element.relativeSize = (element.relativeSize * amount.value).clamped(to: 0.004...0.3) }
+        if let amount = intent.amount, amount.mode == .absolute, amount.value > 0, amount.value < 0.3 { element.relativeSize = amount.value.clamped(to: 0.004...0.3) }
+        guard let style = intent.textStyle else { return }
+        let current = TableGrid.Style(relativeSize: element.relativeSize, color: element.color, weight: SceneMap.weight(ofFontNamed: element.fontName),
+                                      design: SceneMap.design(ofFontNamed: element.fontName), alignment: element.alignment)
+        let next = style.applied(to: current)
+        element.relativeSize = next.relativeSize
+        element.alignment = next.alignment
+        // Table values keep their digit-aligned face; other text is plain SF Pro in the new weight.
+        if style.weight != nil || style.design != nil { element.fontName = element.fontName.hasPrefix("SFProDigits") && next.design == .sans ? next.fontName : textFontName(next) }
     }
 }

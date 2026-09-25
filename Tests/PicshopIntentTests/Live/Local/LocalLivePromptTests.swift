@@ -9,20 +9,10 @@ final class LocalLivePromptTests: XCTestCase {
     static let modes: [EditorMode] = [.photo, .video]
     static let sizes: [LocalPromptSize] = [.full, .compact]
 
-    /// The examples as the engine's history, the way the model brain replays them.
+    /// The examples as the engine's history, the way the model brain replays them (a recovery's
+    /// afterResult included).
     static func history(mode: EditorMode, size: LocalPromptSize) -> [LocalChatMessage] {
-        var history: [LocalChatMessage] = []
-        for (index, example) in LocalLivePrompt.examples(mode: mode, size: size).enumerated() {
-            history.append(.user(example.user, imageJPEG: nil))
-            guard let tool = example.toolName else {
-                history.append(.assistant(example.assistant, toolCalls: []))
-                continue
-            }
-            let id = "example_\(index + 1)"
-            history.append(.assistant(example.assistant, toolCalls: [LocalToolCall(id: id, name: tool.rawValue, arguments: example.arguments ?? [:])]))
-            if let result = example.toolResult { history.append(.toolResult(callID: id, name: tool.rawValue, content: result)) }
-        }
-        return history
+        LocalModelLiveBrain.exampleHistory(mode: mode, size: size)
     }
 
     static func setup(mode: EditorMode, size: LocalPromptSize) -> LocalChatSetup {
@@ -40,8 +30,11 @@ final class LocalLivePromptTests: XCTestCase {
                 let system = LocalLivePrompt.system(mode: mode, size: size)
                 XCTAssertLessThanOrEqual(system.count, size == .full ? LocalLivePrompt.Budgets.systemFull : LocalLivePrompt.Budgets.systemCompact)
                 let ledger = LocalContextLedger(setup: Self.setup(mode: mode, size: size))
-                // The cached prefix: about 2K tokens (4B) and less for the 2B, so a conversation has room for ~15 exchanges in 8K.
-                XCTAssertLessThanOrEqual(ledger.prefixTokens, size == .full ? 2_900 : 2_300, "\(mode) \(size)")
+                // The cached prefix, estimated at 3.2 characters a token (conservative): about 4.9K for the 4B's
+                // photo prompt with its 15 examples (each id grounded in its own state, a failed check and its
+                // repair), 3K for the 2B's, so a grounded conversation has room for four or five turns before
+                // `compactAt` (7,000).
+                XCTAssertLessThanOrEqual(ledger.prefixTokens, size == .full ? 5_000 : 3_000, "\(mode) \(size)")
                 XCTAssertGreaterThan(ledger.prefixTokens, 1_000)
             }
             XCTAssertLessThan(LocalLivePrompt.system(mode: mode, size: .compact).count, LocalLivePrompt.system(mode: mode, size: .full).count)
@@ -76,9 +69,20 @@ final class LocalLivePromptTests: XCTestCase {
             XCTAssertTrue(full.contains(rule), rule)
         }
         XCTAssertTrue(full.hasPrefix("Tu es Picshop Live"), "French first")
-        // About 120 words of persona for the 2B; the 4B's adds the undo, compare and vague-request rules.
-        XCTAssertLessThanOrEqual(LocalLivePrompt.persona(mode: .photo, size: .full).split(whereSeparator: \.isWhitespace).count, 220)
-        XCTAssertLessThanOrEqual(LocalLivePrompt.persona(mode: .photo, size: .compact).split(whereSeparator: \.isWhitespace).count, 140)
+        // About 230 words of persona for the 2B; the 4B's adds the undo, compare, vague-request, text and recovery rules,
+        // and both say what a follow-up changes, that « tu peux … ? » is a request, and never to speak an id.
+        XCTAssertLessThanOrEqual(LocalLivePrompt.persona(mode: .photo, size: .full).split(whereSeparator: \.isWhitespace).count, 380)
+        XCTAssertLessThanOrEqual(LocalLivePrompt.persona(mode: .photo, size: .compact).split(whereSeparator: \.isWhitespace).count, 235)
+        // The table, follow-up and recovery rules (contract §11), and textBehind only behind a person.
+        for rule in ["Tableau (lignes table:)", "jamais addText, textBehind ni generativeFill", "refont last: sur la nouvelle portée",
+                     "changent ce que last: a écrit (editText/moveText sur son id l…", "« tu peux … ? » est une demande : fais-la", "Ne dis jamais un id",
+                     "ne relance jamais la même étape",
+                     "dis pourquoi en une phrase et propose l'action la plus proche", "jamais un look sans rapport"] {
+            XCTAssertTrue(full.contains(rule), rule)
+        }
+        XCTAssertFalse(full.contains("behind the subject"), "textBehind is worded for a person")
+        XCTAssertTrue(full.contains("textBehind: a title behind a PERSON only"))
+        XCTAssertFalse(LocalLivePrompt.system(mode: .video, size: .full).contains("fillCells"), "tables are photo-only")
         let compact = LocalLivePrompt.system(mode: .photo, size: .compact)
         for rule in ["tutoie", "apply_edits", "undo", "propose_ideas", "<editor_state>", "N'identifie jamais"] {
             XCTAssertTrue(compact.contains(rule), "compact: \(rule)")
@@ -124,23 +128,86 @@ final class LocalLivePromptTests: XCTestCase {
 
     // MARK: Examples
 
-    func testSixExamplesForTheFourBAndFourForTheTwoB() {
+    func testTheExamplesTeachWhatASmallModelMustDo() {
         let photo = LocalLivePrompt.examples(mode: .photo, size: .full)
-        XCTAssertEqual(photo.map(\.toolName), [.applyEdits, .undo, .proposeIdeas, .applyEdits, .applyEdits, nil],
-                       "warmer, too much, opinion, make it pop, remove with a point, off topic")
-        XCTAssertTrue(photo[4].arguments?.serialized().contains("\"point\"") ?? false)
-        XCTAssertTrue(photo.contains { $0.user.hasSuffix("make it pop") }, "an English example")
+        XCTAssertEqual(photo.count, 15, "10 to 20 targeted examples for the 4B")
+        XCTAssertEqual(photo.map(\.toolName), [.applyEdits, .undo, .proposeIdeas, .applyEdits, .applyEdits, .applyEdits, .applyEdits, .applyEdits,
+                                                .applyEdits, .applyEdits, .applyEdits, .applyEdits, nil, .applyEdits, nil])
+        func calls(_ example: LocalPromptExample) -> String { example.arguments?.serialized() ?? "" }
+        XCTAssertTrue(calls(photo[3]).contains("\"point\""), "remove with a point")
+        XCTAssertEqual(photo[4].arguments?["steps"]?.array?.count, 2, "two steps in one call")
+        XCTAssertTrue(calls(photo[5]).contains("\"match\":\"t2\""), "write in the style of a text")
+        XCTAssertTrue(calls(photo[6]).contains("\"ref\":\"t2\""), "replace a text by its id")
+        XCTAssertTrue(photo[6].user.contains("texts: t1"), "the replacement reads its own texts line")
+        XCTAssertTrue(photo[6].toolResult?.contains("(now l2)") ?? false, "the result names the layer the rewrite made")
+        XCTAssertTrue(photo[7].user.contains("last: editText ref=t2→l2"), "a follow-up reads the last line, with the live id")
+        XCTAssertFalse(photo[7].user.contains("t2 \""), "the erased block is off the texts line")
+        XCTAssertTrue(calls(photo[7]).contains("\"ref\":\"l2\""), "…and acts on what it wrote")
+        XCTAssertTrue(photo[8].user.contains("table: 5 rows x 4 cols"))
+        XCTAssertTrue(calls(photo[8]).contains("fillCells"))
+        XCTAssertTrue(photo[9].user.contains("last: fillCells"), "« les autres aussi »")
+        XCTAssertTrue(calls(photo[9]).contains("\"cells\":\"empty\""))
+        XCTAssertTrue(photo[10].user.hasSuffix("in the Atlas column"), "an English table request")
+        XCTAssertTrue(calls(photo[11]).contains("\"row\"") && calls(photo[11]).contains("\"column\""), "one cell")
+        XCTAssertTrue(photo[12].user.contains("table_focus:"), "a question the table line answers, without a tool")
+        // Act-then-verify: a failed check, one repair on the layer the step made, then one line.
+        let repaired = photo[13]
+        XCTAssertTrue(repaired.toolResult?.contains("verify failed 1/1: text missing") ?? false, repaired.toolResult ?? "")
+        XCTAssertTrue(repaired.toolResult?.contains("Hint:") ?? false)
+        XCTAssertTrue(repaired.toolResult?.contains("(l1)") ?? false, "the result names what the step wrote")
+        XCTAssertEqual(repaired.repair?.arguments["steps"]?.array?.first?["ref"], "l1")
+        XCTAssertTrue(repaired.repair?.toolResult.contains("verified 1/1") ?? false)
+        XCTAssertNotNil(repaired.afterResult)
+        // A refusal the picture explains, with an offer and no call, comes last.
+        XCTAssertNil(photo.last?.toolName)
+        XCTAssertTrue(photo.last?.user.contains("scene: table screenshot") ?? false)
+        XCTAssertTrue(photo.last?.assistant.hasSuffix("?") ?? false)
+
+        // Every id an example's call names was printed in a state the model read by then (never teach a guess).
+        var read = ""
+        for example in photo {
+            read += example.user
+            for step in example.arguments?["steps"]?.array ?? [] {
+                for key in ["ref", "match"] {
+                    guard let id = step[key]?.string, id != "nearby" else { continue }
+                    XCTAssertTrue(read.contains(id + " "), "\(id) was never printed before '\(example.user.suffix(60))'")
+                }
+            }
+        }
+        // And every ref, match, row and column a call names is in that example's own user text (or, for the repair
+        // round, in the result it just read): no example teaches an id the model could not have seen.
+        for size in Self.sizes {
+            for example in LocalLivePrompt.examples(mode: .photo, size: size) {
+                let calls: [(JSONValue?, String)] = [(example.arguments, example.user)] + [example.repair.map { ($0.arguments, example.user + (example.toolResult ?? "")) }].compactMap { $0 }
+                for (arguments, visible) in calls {
+                    for step in arguments?["steps"]?.array ?? [] {
+                        for key in ["ref", "match", "row", "column"] {
+                            guard let value = step[key]?.string, value != "nearby", Int(value) == nil else { continue }
+                            XCTAssertTrue(visible.contains(value), "\(size): '\(value)' is not in its own state: '\(example.user.suffix(80))'")
+                        }
+                    }
+                }
+            }
+        }
         XCTAssertEqual(LocalLivePrompt.examples(mode: .video, size: .full).count, 6)
-        XCTAssertEqual(LocalLivePrompt.examples(mode: .photo, size: .compact).map(\.toolName), [.applyEdits, .undo, .proposeIdeas, nil])
+        XCTAssertEqual(LocalLivePrompt.examples(mode: .video, size: .compact).count, 4)
+        let compact = LocalLivePrompt.examples(mode: .photo, size: .compact)
+        XCTAssertEqual(compact.map(\.toolName), [.applyEdits, .undo, .proposeIdeas, nil, .applyEdits, .applyEdits, .applyEdits, nil])
+        XCTAssertFalse(compact.contains { $0.repair != nil }, "the repair example is the 4B's")
+        XCTAssertTrue(compact.contains { calls($0).contains("fillCells") }, "the 2B learns fillCells too")
+        XCTAssertFalse(compact.contains { $0.user.hasSuffix("make it pop") }, "the 2B drops pop")
         for mode in Self.modes {
             for size in Self.sizes {
                 for example in LocalLivePrompt.examples(mode: mode, size: size) {
-                    let words = example.assistant.split(whereSeparator: \.isWhitespace).count
-                    XCTAssertLessThan(words, 20, example.assistant)
+                    for said in [example.assistant] + [example.afterResult].compactMap({ $0 }) {
+                        XCTAssertLessThan(said.split(whereSeparator: \.isWhitespace).count, 20, said)
+                        XCTAssertEqual(FilteredOutput.run([said]).speech, said, "speakable as written")
+                        XCTAssertTrue(LiveSpeechSanitizer.isClean(said, language: .french), said)
+                    }
                     XCTAssertTrue(example.user.contains("<editor_state"), "the real message format")
                     XCTAssertTrue(example.user.contains("langue: "))
-                    XCTAssertEqual(FilteredOutput.run([example.assistant]).speech, example.assistant, "speakable as written")
                     XCTAssertEqual(example.toolResult == nil, example.toolName == nil)
+                    XCTAssertFalse(example.user.lowercased().contains("claude"))
                 }
             }
         }
@@ -160,9 +227,9 @@ final class LocalLivePromptTests: XCTestCase {
                     let call = try ToolInputValidator(mode: mode).validate(use, context: context, grounding: grounding).get()
                     if case .proposeIdeas(let ideas) = call.tool {
                         XCTAssertTrue(ideas.allSatisfy { !$0.steps.isEmpty }, "\(mode) \(size)")
-                        XCTAssertEqual(ideas.count, size == .full ? 3 : 2)
+                        XCTAssertEqual(ideas.count, mode == .video && size == .full ? 3 : 2)
                     }
-                    if case .applyEdits(let intents) = call.tool, intents.first?.action == .removeObject {
+                    if case .applyEdits(let intents) = call.tool, intents.first?.action == .removeObject, intents.first?.target?.point != nil {
                         XCTAssertEqual(use.rawInput.contains("0.82"), true, "the 0-1000 point reaches the validator in 0-1")
                     }
                 }
@@ -321,10 +388,12 @@ final class LocalLivePromptTests: XCTestCase {
     /// change: review it (LIVE_PROMPT_DUMP writes the files), then update the hashes.
     func testGoldenPrefix() {
         let golden: [(EditorMode, LocalPromptSize, Int, String)] = [
-            (.photo, .full, 8185, "5d1663976260f968"),
-            (.photo, .compact, 6489, "4fb1f22a74ed4ba3"),
-            (.video, .full, 8262, "77329c114b49be27"),
-            (.video, .compact, 6482, "a6fd520f002f05e9"),
+            // Re-baselined for the review round: the request-as-question and follow-up-on-last: rules, ids never
+            // spoken, the corner/size/restyle guide lines, and the 15 photo examples (8 for the 2B) with a repair.
+            (.photo, .full, 15728, "d13f8c6129ce6d95"),
+            (.photo, .compact, 9457, "4e1e3119c40b9196"),
+            (.video, .full, 8868, "d7ec0a13801f42d1"),
+            (.video, .compact, 6822, "ac1d4d10810c4fc5"),
         ]
         for (mode, size, length, hash) in golden {
             let text = QwenChatTemplate.render(Self.setup(mode: mode, size: size), addGenerationPrompt: false)

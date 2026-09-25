@@ -47,11 +47,14 @@ public struct TextElement: Hashable, Codable, Sendable, Identifiable {
     public var lineSpacing: Double
     /// Maximum width as a fraction of the canvas width before wrapping.
     public var maxRelativeWidth: Double
+    /// Fraction of canvas width: the text is laid out in a box this wide so leading/trailing alignment
+    /// holds (a table cell, a text block). Nil: the box hugs the text, as before.
+    public var frameWidth: Double?
 
     public init(id: UUID = UUID(), text: String, fontName: String = "SFProRounded-Bold", relativeSize: Double = 0.06,
                 color: PSColor = .white, alignment: Alignment = .center, style: Style = .shadowed,
                 center: PSPoint = Placement.bottom.center, rotation: Double = 0, opacity: Double = 1,
-                letterSpacing: Double = 0, lineSpacing: Double = 1.1, maxRelativeWidth: Double = 0.85) {
+                letterSpacing: Double = 0, lineSpacing: Double = 1.1, maxRelativeWidth: Double = 0.85, frameWidth: Double? = nil) {
         self.id = id
         self.text = text
         self.fontName = fontName
@@ -65,5 +68,6 @@ public struct TextElement: Hashable, Codable, Sendable, Identifiable {
         self.letterSpacing = letterSpacing
         self.lineSpacing = lineSpacing
         self.maxRelativeWidth = maxRelativeWidth
+        self.frameWidth = frameWidth
     }
 }

@@ -1,6 +1,7 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
 import UIKit
+import PicshopCore
 import PicshopIntent
 
 /// What one idea chip shows. Built from a `LiveIdea` in editors; Home builds
@@ -22,9 +23,37 @@ struct IdeaChipModel: Identifiable, Equatable {
         self.why = why
     }
 
+    /// A brain may have written the title and the why: on screen they follow the rule speech follows
+    /// (no internal label, no machine code), and the glyph says what the chip does.
     init(_ idea: LiveIdea) {
-        self.init(id: idea.id, title: idea.title, symbol: idea.symbol, fromModel: idea.source == .model,
-                  why: idea.why.isEmpty ? nil : idea.why)
+        let language: NormalizedUtterance.Language = psPrefersFrench ? .french : .english
+        let why = LiveSpeechSanitizer.clean(idea.why, language: language)
+        self.init(id: idea.id, title: LiveSpeechSanitizer.clean(idea.title, language: language), symbol: Self.symbol(for: idea),
+                  fromModel: idea.source == .model, why: why.isEmpty ? nil : why)
+    }
+
+    /// The glyph of what the chip does: a table's own chips (fill, highlight, clear) always look like
+    /// table work; any other keeps the symbol its author chose, and one left at the default
+    /// ("sparkles") gets the symbol of its first step (text, an erase, a crop, a look…).
+    static func symbol(for idea: LiveIdea) -> String {
+        guard let action = idea.steps.first.flatMap({ IntentAction(rawValue: $0.action) }) else { return idea.symbol }
+        switch action {
+        case .fillCells: return "tablecells"
+        case .highlightCells: return "highlighter"
+        case .clearCells: return "eraser"
+        default: break
+        }
+        guard idea.symbol == "sparkles" else { return idea.symbol }
+        switch action {
+        case .addText, .editText, .textBehind, .moveText: return "textformat"
+        case .removeText, .removeObject, .eraseRegion, .cleanUp: return "eraser"
+        case .applyLook: return "camera.filters"
+        case .crop, .autoCrop, .setAspect, .straighten: return "crop"
+        case .adjust, .selectiveAdjust: return "slider.horizontal.3"
+        case .blurBackground: return "camera.aperture"
+        case .removeBackground, .replaceBackground: return "person.crop.rectangle"
+        default: return idea.symbol
+        }
     }
 }
 

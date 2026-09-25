@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased — Tables and text Live can see, write and check
+
+- Tables: « Remplis chaque case du tableau avec le chiffre 1 » writes every empty cell in one step, in the table's own
+  size, colour, weight and alignment, and one Undo takes it all back. A column, a row, one cell, random numbers in a
+  range, « les autres aussi », clearing and highlighting work too, also on a table whose values were erased earlier
+  (the table is remembered right before an erase).
+- A scene map for each state of the picture, read on the iPhone: text blocks, people and objects, the table and the
+  free areas, with ids Live's brain names in its steps. Text can be written in a place or a box in the style of the
+  text next to it, a printed text rewritten in its own style, a text moved, an area erased.
+- Act-then-verify: after a table fill, a text or an erase, PicShop reads the result again. The local brain gets one
+  repair round; the instant commands, the chips and the numbered choices say one honest sentence when a check fails,
+  and the places to look at are ringed on the photo for a moment. Commands outside Live get the same check, after
+  their reply.
+- Progress names the work (« Je remplis 45 cases… »), the cells flash where they landed, the toast says « 45 cases
+  remplies » with Undo, and the Layers panel shows a table as one row, « Tableau · 45 cases », to show, hide, delete
+  or open; editing one cell edits only that cell, and selecting the row lets « plus gros » apply to the whole table.
+- Idea chips follow the picture: on a table, highlight its column or sharpen the text, never a colour look; after a
+  fill, the other value you named comes first (« Chiffres au hasard »), and each chip's glyph says what it does.
+- No internal word is heard or shown: captions, notices, toasts, the numbered choices (« chien (gauche) », never
+  « dog (left) ») and chip titles go through one sanitizer, and a job that ends in the background says what it did
+  or why it could not.
+- Apple Intelligence can write in tables and use the text steps too.
+- « Tu peux remplir… ? » is a request, not a question; « la case en haut à droite », « à droite de 80 % », « plutôt
+  des 2 », « en rouge » after a fill (restyle, values kept) and « pareil en bas » are understood; new text never lands
+  on the title or the table; ids (« t2 », « r6c3 ») are never spoken.
+- Diagnostic Live › Understanding eval runs the same ~200-request dialogue corpus as the unit tests through the model
+  loaded on the iPhone and logs the per-category scores (counts only).
+
 ## Unreleased — Live, entirely on the iPhone
 
 - Live runs entirely on the iPhone: the Claude option, the API key, the consent sheet, the cloud badge and the usage

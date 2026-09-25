@@ -31,12 +31,20 @@ public protocol LiveEditingHost: AnyObject {
     func livePausePlayback()
     /// The video plays: its sound is not in the echo canceller's reference, so Live does not hear meanwhile.
     var liveIsPlaying: Bool { get }
+    /// Act-then-verify: checks the rendered result against the requests of the steps that just applied
+    /// (`LiveRunResult.verificationRequest`), with one render and one text pass for all of them
+    /// (`PhotoAIServices.verify`). One report per request, in order; empty when the editor cannot
+    /// check (video, PDF) or the check could not run. Never throws, never changes the document.
+    func liveVerify(_ requests: [VerificationRequest]) async -> [VerificationReport]
 }
 
 extension LiveEditingHost {
     public func livePausePlayback() {}
 
     public var liveIsPlaying: Bool { false }
+
+    /// Editors that cannot look at their result: nothing is verified.
+    public func liveVerify(_ requests: [VerificationRequest]) async -> [VerificationReport] { [] }
 
     /// Runs the intents in order through liveRun; stops after failed or needsClarification; later steps are skipped.
     public func execute(steps: [EditIntent]) async -> LiveExecution {
@@ -81,6 +89,9 @@ extension LiveStepResult {
         case .ignored:
             self.init(index: index, action: intent.action, status: .ignored)
         }
+        // The machine channel (D10): the reason code and the table report, never spoken.
+        reason = ExecutionReason(effects: run.effects)
+        report = TableEditReport(effects: run.effects)
     }
 
     /// failed and needs_clarification end a run: later steps are skipped.

@@ -32,6 +32,17 @@ public final class VisionPhotoServices: PhotoAIServices, @unchecked Sendable {
     private let embedding = NLEmbedding.wordEmbedding(for: .english)
     private var analysisCache: [Int: (documentHash: Int, image: CGImage)] = [:]
     private let cacheLock = NSLock()
+    /// Entries kept per cache below, least recently used first.
+    static let cacheCapacity = 4
+    /// OCR words per base state and resolution: one text pass shared by the table, the scene map, the
+    /// text candidates and text erases.
+    private var wordsCache: [(key: String, value: [VisionWord])] = []
+    private var wordsInFlight: [String: Task<[VisionWord], Error>] = [:]
+    /// Table grids per base state and remembered grid (a nil result is kept too).
+    private var tableCache: [(key: String, value: TableGrid?)] = []
+    /// Scene maps per base state, and the last one built (its ids carry over to the next state).
+    private var sceneCache: [(key: String, value: SceneMap)] = []
+    private var lastSceneMap: SceneMap?
 
     public init(renderer: PhotoRenderer, store: ProjectStore, projectID: UUID) {
         self.renderer = renderer
@@ -69,15 +80,69 @@ public final class VisionPhotoServices: PhotoAIServices, @unchecked Sendable {
     // MARK: - PhotoAIServices
 
     public func candidates(for target: ObjectTarget, in document: PhotoDocument) async throws -> [ObjectCandidate] {
-        let image = try await analysisImage(for: document, longestSide: Self.analysisSide(for: target))
-        return try VisionGrounding.candidates(in: image, for: target, maskStore: maskStore, embedding: embedding, mergingText: true)
+        let side = Self.analysisSide(for: target)
+        let image = try await analysisImage(for: document, longestSide: side)
+        var words: [VisionWord]?
+        if VisionTextQuery.isTextTarget(target) { words = try await sharedWords(for: document, image: image, side: side) }
+        return try VisionGrounding.candidates(in: image, for: target, maskStore: maskStore, embedding: embedding, mergingText: true, words: words)
     }
 
     /// Text candidates for an explicit query, read at the text resolution. Pass them to
     /// `mask(for:query:in:)` with the same query.
     public func textCandidates(_ query: VisionTextQuery, in document: PhotoDocument) async throws -> [ObjectCandidate] {
-        let image = try await analysisImage(for: document, longestSide: Self.textAnalysisLongestSide)
-        return try VisionGrounding.textCandidates(in: image, query: query, maskStore: maskStore, merging: true)
+        let side = Self.textAnalysisLongestSide
+        let image = try await analysisImage(for: document, longestSide: side)
+        let words = try await sharedWords(for: document, image: image, side: side)
+        return try VisionGrounding.textCandidates(in: image, query: query, maskStore: maskStore, merging: true, words: words)
+    }
+
+    // MARK: - Shared text pass
+
+    /// The OCR words of `image`, the analysis image of `document` at `side`: read once per base state
+    /// (`PhotoDocument.baseStateKey`, which tonal edits leave alone, so a slider moved during Live reads
+    /// nothing again; LRU of 4, concurrent callers wait for the same pass) and shared by the table, the
+    /// scene map, the text candidates and text erases.
+    func sharedWords(for document: PhotoDocument, image: CGImage, side: Int) async throws -> [VisionWord] {
+        let key = "\(document.baseStateKey)@\(side)"
+        enum Found { case words([VisionWord]), running(Task<[VisionWord], Error>) }
+        let found: Found = cacheLock.withLock {
+            if let words = Self.lookup(key, in: &wordsCache) { return .words(words) }
+            if let running = wordsInFlight[key] { return .running(running) }
+            let task = Task.detached(priority: .userInitiated) { try VisionGrounding.recognizedWords(in: image) }
+            wordsInFlight[key] = task
+            return .running(task)
+        }
+        switch found {
+        case .words(let words):
+            return words
+        case .running(let task):
+            do {
+                let words = try await task.value
+                cacheLock.withLock {
+                    Self.store(words, for: key, in: &wordsCache)
+                    wordsInFlight[key] = nil
+                }
+                return words
+            } catch {
+                cacheLock.withLock { wordsInFlight[key] = nil }
+                throw error
+            }
+        }
+    }
+
+    /// The cached value for `key`, moved to the most recent end.
+    static func lookup<Value>(_ key: String, in cache: inout [(key: String, value: Value)]) -> Value? {
+        guard let index = cache.firstIndex(where: { $0.key == key }) else { return nil }
+        let entry = cache.remove(at: index)
+        cache.append(entry)
+        return entry.value
+    }
+
+    /// Stores `value` as the most recent entry, dropping the least recent beyond `cacheCapacity`.
+    static func store<Value>(_ value: Value, for key: String, in cache: inout [(key: String, value: Value)]) {
+        cache.removeAll { $0.key == key }
+        cache.append((key: key, value: value))
+        if cache.count > cacheCapacity { cache.removeFirst(cache.count - cacheCapacity) }
     }
 
     /// The main things in the picture, largest first, each named by the
@@ -249,17 +314,203 @@ public final class VisionPhotoServices: PhotoAIServices, @unchecked Sendable {
     }
 }
 
+// MARK: - Table, scene map, act-then-verify
+
+extension VisionPhotoServices {
+    /// PhotoAIServices witness (contract §6). LRU(4) keyed by `document.baseStateKey` (asset path, canvas
+    /// and base op ids, like `analysisImage`) + `remembered?.id`. Shares one VNRecognizeTextRequest pass per
+    /// base state with `textCandidates` and `candidates` (the words cache), then `TableDetection.grid`.
+    public func tableGrid(in document: PhotoDocument, remembered: TableGrid?) async throws -> TableGrid? {
+        let key = document.baseStateKey + "|" + (remembered?.id ?? "-")
+        if let cached = cacheLock.withLock({ Self.lookup(key, in: &tableCache) }) { return cached }
+        let side = Self.textAnalysisLongestSide
+        let image = try await analysisImage(for: document, longestSide: side)
+        let words = try await sharedWords(for: document, image: image, side: side)
+        let timer = PSTimer("table grid")
+        let grid = TableDetection.grid(in: image, words: words, remembered: remembered)
+        timer.log(category: .imaging)
+        cacheLock.withLock { Self.store(grid, for: key, in: &tableCache) }
+        return grid
+    }
+
+    /// PhotoAIServices witness: the scene map of the base state, built once per `document.baseStateKey`
+    /// (LRU of 4), off the main actor, by `SceneMapBuilder` from the shared text pass, the people, face,
+    /// animal and instance detectors, `tableGrid(in:remembered:)` and the pixels. Ids are carried from the
+    /// previous map this service built (`SceneMap.carryingIDs(from:)`), so "t3" keeps naming the same text
+    /// across versions. Picshop text layers are not in it: callers lay them over (`overlaying(_:)`).
+    /// Instances are skipped on text-heavy pictures (a table screenshot has no object worth a name).
+    public func sceneMap(in document: PhotoDocument) async throws -> SceneMap? {
+        let key = document.baseStateKey
+        if let cached = cacheLock.withLock({ Self.lookup(key, in: &sceneCache) }) { return cached }
+        let timer = PSTimer("scene map")
+        let side = Self.textAnalysisLongestSide
+        let image = try await analysisImage(for: document, longestSide: side)
+        let words = (try? await sharedWords(for: document, image: image, side: side)) ?? []
+        let table = try? await tableGrid(in: document, remembered: document.rememberedTable)
+        let textHeavy = table?.coversPicture == true || words.count > 60
+        let detections = Self.sceneDetections(in: image, instances: !textHeavy, maskStore: maskStore)
+        let bitmap = SceneMapBuilder.Bitmap(rgba: ImageSupport.rgbaBytes(from: image), width: image.width, height: image.height)
+        var map = SceneMapBuilder.build(SceneMapBuilder.Input(stateKey: key, canvasSize: document.canvasSize, words: words.map(TableGridBuilder.Word.init),
+                                                              detections: detections, table: table, bitmap: bitmap))
+        let previous = cacheLock.withLock { lastSceneMap }
+        if let previous, previous.stateKey != key { map = map.carryingIDs(from: previous) }
+        cacheLock.withLock {
+            Self.store(map, for: key, in: &sceneCache)
+            lastSceneMap = map
+        }
+        timer.log(category: .imaging)
+        return map
+    }
+
+    /// PhotoAIServices witness (act-then-verify): one render of the result (base and layers) at the text
+    /// resolution, one text pass over the part the text checks cover, the detectors over the objectAbsent
+    /// regions only, then `PixelVerifier` against each request, in order; what the pixels cannot decide
+    /// keeps the structural outcome.
+    public func verify(_ requests: [VerificationRequest], in document: PhotoDocument) async throws -> [VerificationReport] {
+        let structural = requests.map { EditVerifier.structural($0, in: document) }
+        let checks = requests.flatMap(\.checks)
+        guard !checks.isEmpty else { return structural }
+        let timer = PSTimer("verify")
+        defer { timer.log(category: .imaging) }
+        let options = PhotoRenderer.Options(targetLongestSide: Double(Self.textAnalysisLongestSide), includeOverlays: true, allowExpensiveWork: true)
+        let rendered = try await renderer.render(document, options: options)
+        guard let image = ImageSupport.cgImage(from: rendered) else { return structural }
+
+        var observation = PixelVerifier.Observation(objectsChecked: false)
+        let textRegions = checks.filter { $0.kind != .objectAbsent }.map(\.region)
+        if let first = textRegions.first {
+            let union = textRegions.dropFirst().reduce(first) { $0.union($1) }
+            if let crop = Self.crop(image, to: union.insetBy(dx: -0.02, dy: -0.02).clampedToUnit()) {
+                let words = (try? VisionGrounding.recognizedWords(in: crop.image)) ?? []
+                observation.words = words.map {
+                    TableGridBuilder.Word(text: $0.text, box: Self.canvasRect($0.box, in: crop.region), line: $0.line, confidence: $0.confidence)
+                }
+                observation.patch = PixelVerifier.GrayPatch(bytes: ImageSupport.grayBytes(from: crop.image), width: crop.image.width,
+                                                            height: crop.image.height, region: crop.region)
+            }
+        }
+        let objectChecks = checks.filter { $0.kind == .objectAbsent }
+        if !objectChecks.isEmpty {
+            observation.objectsChecked = true
+            for check in objectChecks {
+                let around = check.region.insetBy(dx: -check.region.width * 0.3, dy: -check.region.height * 0.3).clampedToUnit()
+                guard let crop = Self.crop(image, to: around) else { continue }
+                let found = Self.objectDetections(in: crop.image, label: check.label ?? "object", maskStore: maskStore)
+                observation.detections += found.map { (object: SceneMap.Object) -> SceneMap.Object in
+                    var placed = object
+                    placed.box = Self.canvasRect(object.box, in: crop.region)
+                    return placed
+                }
+            }
+        }
+        return PixelVerifier.reports(for: requests, observation: observation, structural: structural)
+    }
+
+    // MARK: Helpers
+
+    /// The pixels of `region` (normalised, top-left) and the exact region they cover; nil when too small.
+    static func crop(_ image: CGImage, to region: PSRect) -> (image: CGImage, region: PSRect)? {
+        let width = Double(image.width), height = Double(image.height)
+        let pixels = CGRect(x: region.minX * width, y: region.minY * height, width: region.width * width, height: region.height * height)
+            .integral.intersection(CGRect(x: 0, y: 0, width: width, height: height))
+        guard !pixels.isNull, pixels.width >= 8, pixels.height >= 8, let cropped = image.cropping(to: pixels) else { return nil }
+        return (cropped, PSRect(x: Double(pixels.minX) / width, y: Double(pixels.minY) / height,
+                                width: Double(pixels.width) / width, height: Double(pixels.height) / height))
+    }
+
+    /// A rect normalised to a crop, back in the whole picture's space.
+    static func canvasRect(_ box: PSRect, in region: PSRect) -> PSRect {
+        PSRect(x: region.minX + box.minX * region.width, y: region.minY + box.minY * region.height,
+               width: box.width * region.width, height: box.height * region.height)
+    }
+
+    /// Classifier labels too vague to name a thing.
+    static let vagueLabels: Set<String> = ["structure", "material", "object", "outdoor", "indoor", "adult", "people", "human", "clothing",
+                                           "furniture", "equipment", "device", "plant", "text", "document", "screenshot"]
+
+    /// People, faces (outside the people), animals and, with `instances`, the four largest foreground
+    /// instances named by the classifier: the objects of the scene map, ids given later.
+    static func sceneDetections(in image: CGImage, instances: Bool, maskStore: MaskStore) -> [SceneMap.Object] {
+        let handler = VNImageRequestHandler(cgImage: image, orientation: .up, options: [:])
+        let humans = VNDetectHumanRectanglesRequest()
+        humans.upperBodyOnly = false
+        let faces = VNDetectFaceRectanglesRequest()
+        let animals = VNRecognizeAnimalsRequest()
+        try? handler.perform([humans, faces, animals])
+        var found: [SceneMap.Object] = (humans.results ?? []).filter { $0.confidence > 0.4 }.map {
+            SceneMap.Object(id: "", label: "person", box: PSRect.fromVision($0.boundingBox), confidence: Double($0.confidence), kind: .person)
+        }
+        let people = found.map(\.box)
+        for face in faces.results ?? [] {
+            let box = PSRect.fromVision(face.boundingBox)
+            guard !people.contains(where: { $0.contains(box.center) }) else { continue }
+            found.append(SceneMap.Object(id: "", label: "face", box: box, confidence: Double(face.confidence), kind: .face))
+        }
+        for animal in animals.results ?? [] {
+            guard let top = animal.labels.max(by: { $0.confidence < $1.confidence }), top.confidence > 0.3 else { continue }
+            found.append(SceneMap.Object(id: "", label: top.identifier.lowercased(), box: PSRect.fromVision(animal.boundingBox),
+                                         confidence: Double(top.confidence), kind: .animal))
+        }
+        guard instances else { return found }
+        let detector = Detector(image: image, maskStore: maskStore, embedding: nil)
+        let list = ((try? detector.instanceList()) ?? []).filter { $0.area > 0.01 }.sorted { $0.area > $1.area }.prefix(4)
+        for instance in list where !found.contains(where: { $0.box.iou(instance.box) > 0.5 }) {
+            let named = ((try? detector.classify(detector.croppedImage(masked: instance))) ?? [])
+                .first { !vagueLabels.contains($0.identifier) && $0.confidence > 0.1 }
+            let label = named.map { $0.identifier.replacingOccurrences(of: "_", with: " ") } ?? "object"
+            found.append(SceneMap.Object(id: "", label: label, box: instance.box, confidence: 0.5 + min(0.4, instance.area * 2), kind: .object))
+        }
+        return found
+    }
+
+    /// What still stands in a crop, for an objectAbsent check: people, faces or animals by their own
+    /// detector, anything else as a foreground instance (labelled like the check).
+    static func objectDetections(in image: CGImage, label: String, maskStore: MaskStore) -> [SceneMap.Object] {
+        let handler = VNImageRequestHandler(cgImage: image, orientation: .up, options: [:])
+        switch PixelVerifier.objectKind(of: label) {
+        case .person:
+            let request = VNDetectHumanRectanglesRequest()
+            request.upperBodyOnly = false
+            try? handler.perform([request])
+            return (request.results ?? []).filter { $0.confidence > 0.4 }.map {
+                SceneMap.Object(id: "", label: "person", box: PSRect.fromVision($0.boundingBox), confidence: Double($0.confidence), kind: .person)
+            }
+        case .face:
+            let request = VNDetectFaceRectanglesRequest()
+            try? handler.perform([request])
+            return (request.results ?? []).map {
+                SceneMap.Object(id: "", label: "face", box: PSRect.fromVision($0.boundingBox), confidence: Double($0.confidence), kind: .face)
+            }
+        case .animal:
+            let request = VNRecognizeAnimalsRequest()
+            try? handler.perform([request])
+            return (request.results ?? []).compactMap { (animal: VNRecognizedObjectObservation) -> SceneMap.Object? in
+                guard let top = animal.labels.max(by: { $0.confidence < $1.confidence }), top.confidence > 0.3 else { return nil }
+                return SceneMap.Object(id: "", label: top.identifier.lowercased(), box: PSRect.fromVision(animal.boundingBox),
+                                       confidence: Double(top.confidence), kind: .animal)
+            }
+        case .object:
+            let detector = Detector(image: image, maskStore: maskStore, embedding: nil)
+            return ((try? detector.instanceList()) ?? []).map {
+                SceneMap.Object(id: "", label: label, box: $0.box, confidence: 0.5 + min(0.4, $0.area * 2), kind: .object)
+            }
+        }
+    }
+}
+
 // MARK: - Grounding entry point
 
 /// Stateless entry point shared by the photo services and the video pipeline.
 public enum VisionGrounding {
     /// With `mergingText` (photos), a text query that selects all comes back as one candidate
     /// carrying the union mask. Video tracks each box, so it keeps one candidate per line or word.
+    /// `words`, when given, are this image's OCR already read (the photo services' shared text pass).
     public static func candidates(in image: CGImage, for target: ObjectTarget, maskStore: MaskStore, embedding: NLEmbedding? = NLEmbedding.wordEmbedding(for: .english),
-                                  mergingText: Bool = false) throws -> [ObjectCandidate] {
+                                  mergingText: Bool = false, words: [VisionWord]? = nil) throws -> [ObjectCandidate] {
         let timer = PSTimer("ground \(target.label)")
         defer { timer.log(category: .imaging) }
         let detector = Detector(image: image, maskStore: maskStore, embedding: embedding)
+        if let words { detector.recognizedWords = words }
         let entry = ObjectVocabulary.entry(forLabel: target.label)
         var candidates: [ObjectCandidate] = []
 
@@ -305,8 +556,17 @@ public enum VisionGrounding {
     /// Text candidates for an explicit query (the target's own words are not read): one per
     /// line, word or occurrence, or, with `merging` and a query that selects all, one with
     /// every selected word.
-    public static func textCandidates(in image: CGImage, query: VisionTextQuery, maskStore: MaskStore, merging: Bool = false) throws -> [ObjectCandidate] {
-        try Detector(image: image, maskStore: maskStore, embedding: nil).textCandidates(for: query, merging: merging)
+    public static func textCandidates(in image: CGImage, query: VisionTextQuery, maskStore: MaskStore, merging: Bool = false,
+                                      words: [VisionWord]? = nil) throws -> [ObjectCandidate] {
+        let detector = Detector(image: image, maskStore: maskStore, embedding: nil)
+        if let words { detector.recognizedWords = words }
+        return try detector.textCandidates(for: query, merging: merging)
+    }
+
+    /// Accurate OCR of a picture, one box per word (normalised, top-left), top line first: the pass the
+    /// table, the scene map, the text queries and the verification read.
+    public static func recognizedWords(in image: CGImage) throws -> [VisionWord] {
+        try Detector.recognizeWords(with: VNImageRequestHandler(cgImage: image, orientation: .up, options: [:]))
     }
 
     /// Magic-wand selection saved as a mask reference.
@@ -371,6 +631,20 @@ public enum VisionGrounding {
     }
 }
 
+// MARK: - Text pass counter
+
+/// How many accurate text passes ran in this process: tests check that the table, the scene map and
+/// the text queries of one state share one (contract A14).
+final class VisionTextPasses: @unchecked Sendable {
+    static let shared = VisionTextPasses()
+    private let lock = NSLock()
+    private var passes = 0
+
+    var count: Int { lock.withLock { passes } }
+
+    func increment() { lock.withLock { passes += 1 } }
+}
+
 // MARK: - Detector
 
 /// Runs Vision requests against one analysis image and turns results into
@@ -384,7 +658,8 @@ final class Detector {
     let height: Int
     private var instanceObservation: VNInstanceMaskObservation??
     private var personSegmentation: [UInt8]??
-    private var recognizedWords: [VisionWord]?
+    /// This image's OCR, read once (or given by the shared text pass).
+    var recognizedWords: [VisionWord]?
 
     init(image: CGImage, maskStore: MaskStore, embedding: NLEmbedding?) {
         self.image = image
@@ -684,6 +959,14 @@ final class Detector {
     /// correction (so "87,3" or "GPT-4o" stay literal) and small text included. Cached.
     func words() throws -> [VisionWord] {
         if let recognizedWords { return recognizedWords }
+        let words = try Self.recognizeWords(with: handler)
+        recognizedWords = words
+        return words
+    }
+
+    /// One accurate text pass (counted by `VisionTextPasses`, so tests can check it is shared).
+    static func recognizeWords(with handler: VNImageRequestHandler) throws -> [VisionWord] {
+        VisionTextPasses.shared.increment()
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["fr-FR", "en-US"]
@@ -704,7 +987,6 @@ final class Detector {
                 words.append(VisionWord(text: String(token), box: box, line: line, confidence: Double(candidate.confidence)))
             }
         }
-        recognizedWords = words
         return words
     }
 
@@ -804,7 +1086,9 @@ final class Detector {
             let buffer = try observation.generateScaledMaskForImage(forInstances: observation.allInstances, from: handler)
             return MaskStore.bytes(from: buffer, width: width, height: height)
         }
-        throw PicshopError.objectNotFound("subject")
+        // Screenshots, documents, tables: nothing to cut out. The executor answers with a French
+        // sentence and ExecutionReason.noSubject, never the English label.
+        throw PicshopError.noSubject
     }
 
     // MARK: Attributes

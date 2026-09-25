@@ -9,6 +9,7 @@ import PicshopCore
 /// - Later chunks are whole sentences; past 28 words, a sentence is split at
 ///   its last comma, else at a word boundary.
 /// - Never inside a number (3.5, 10:30), an abbreviation, a URL or a quote.
+/// - Every chunk goes through LiveSpeechSanitizer: no internal word or code reaches the voice.
 public struct SpeechChunker: Sendable {
     public struct Parameters: Sendable {
         public var firstMinWords = 4
@@ -61,7 +62,9 @@ public struct SpeechChunker: Sendable {
     }
 
     private mutating func emit(_ raw: String, into chunks: inout [String]) {
-        let chunk = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The last guard on the voice (D11): a code or an English label the model echoed from a tool
+        // result is never spoken. Clean text passes through unchanged.
+        let chunk = LiveSpeechSanitizer.clean(raw.trimmingCharacters(in: .whitespacesAndNewlines), language: language)
         guard !chunk.isEmpty else { return }
         chunks.append(chunk)
         emitted += 1

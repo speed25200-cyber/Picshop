@@ -6,6 +6,8 @@ import XCTest
 struct FakePhotoServices: PhotoAIServices {
     var candidates: [ObjectCandidate]
     var horizon: Double? = 3
+    /// The table `tableGrid(in:remembered:)` finds; nil = no table.
+    var grid: TableGrid? = nil
 
     func candidates(for target: ObjectTarget, in document: PhotoDocument) async throws -> [ObjectCandidate] {
         candidates.filter { $0.label == target.label || target.label == "object" }
@@ -25,6 +27,8 @@ struct FakePhotoServices: PhotoAIServices {
     func framingRect(for target: ObjectTarget, in document: PhotoDocument) async throws -> PSRect? {
         candidates.first { $0.label == target.label }?.boundingBox
     }
+
+    func tableGrid(in document: PhotoDocument, remembered: TableGrid?) async throws -> TableGrid? { grid }
 }
 
 struct FakeVideoServices: VideoAIServices {

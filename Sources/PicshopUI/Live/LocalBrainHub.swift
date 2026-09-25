@@ -642,6 +642,13 @@ public final class LocalBrainHub {
 
     // MARK: Brains
 
+    /// Diagnostic Live's understanding eval: the model brain, its weights loaded first (up to 25 s); nil when
+    /// this iPhone has no model installed or it cannot load now.
+    public func evalBrain(mode: EditorMode) async -> (any LiveBrain)? {
+        guard await waitUntilReady(reason: "selftest", seconds: 25) else { return nil }
+        return makeLiveBrains(mode: mode).model
+    }
+
     /// Returns at once and never loads weights. A model brain whenever the model
     /// for this iPhone is installed and the runtime can run it: each turn still
     /// goes to it only while `isModelReady` (the session checks), so a model that

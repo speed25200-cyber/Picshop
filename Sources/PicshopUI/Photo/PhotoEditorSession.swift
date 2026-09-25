@@ -120,7 +120,10 @@ public final class PhotoEditorSession {
     /// Picshop Live in this editor, attached at the end of init.
     public let live: LiveSession
     /// True for the whole of a Live session: no toast for Live steps, no spoken reply, no recogniser start.
-    @ObservationIgnored public var liveSpeechSuppressed = false
+    /// Live grounds its steps on the table and the scene map: they are read as soon as it starts.
+    @ObservationIgnored public var liveSpeechSuppressed = false {
+        didSet { if liveSpeechSuppressed, !oldValue { prefetchSceneAnalysis() } }
+    }
     @ObservationIgnored private var isTornDown = false
     /// > 0 while Live runs a step (liveRun, a chip, a choice, an undo): no toast, no speech.
     @ObservationIgnored var liveRunDepth = 0
@@ -232,6 +235,32 @@ public final class PhotoEditorSession {
     public var sceneDescription: SceneDescription? {
         didSet { if sceneDescription != oldValue { live.noteContextChanged() } }
     }
+    /// The main table of the picture (canvas space, top-left), read once per base state when the
+    /// picture has text or a remembered table (D7); nil when there is none or it is not read yet.
+    /// Live and the grammar see it overlaid with Picshop's layers (`liveTable`).
+    public private(set) var tableGrid: TableGrid? {
+        didSet { if tableGrid != oldValue { live.noteContextChanged() } }
+    }
+    /// What the picture holds for the current base state (text blocks, objects, the table, free
+    /// areas), without Picshop's text layers: Live and the grammar read it overlaid (`liveSceneMap`).
+    public private(set) var sceneMap: SceneMap? {
+        didSet { if sceneMap != oldValue { live.noteContextChanged() } }
+    }
+    /// The last table edit that applied: "les autres aussi" reuses its value (IntentContext.lastTableEdit).
+    @ObservationIgnored var lastTableEdit: TableEditSpec?
+    /// The last step that applied, by any lane: "encore", "pareil", "plus gros" start from it.
+    @ObservationIgnored var lastIntent: EditIntent?
+    /// The layers of the table step that just applied, flashed for a moment on the canvas (0.6 s).
+    public private(set) var pulsingGroupID: UUID?
+    /// Act-then-verify: where the check of the last result failed (a cell that does not read as
+    /// written, text still there, an object still visible), ringed on the canvas for a moment so the
+    /// person sees what to look at. Cleared by the next change.
+    public private(set) var verificationMarks: [PSRect] = []
+    /// The table step running now and how many cells it touches, for the spinner and Live's line
+    /// ("Je remplis 45 cases…"); nil otherwise.
+    public private(set) var cellWork: LiveCellWork?
+    /// Where the running step works, for the shimmer over the picture: the table while a table step runs.
+    public var workingRegion: PSRect? { cellWork != nil ? tableGrid?.bounds : nil }
     /// The picker for a picture whose colours this photo should take.
     public var showsColorReferencePicker = false
     public var isFindingObjects = false
@@ -260,6 +289,21 @@ public final class PhotoEditorSession {
     /// Changes whenever the base photo's pixels change (crop, erase, look…), invalidating the thumbnails.
     /// Computed once per document change.
     public private(set) var lookThumbnailKey: String
+    /// `document.baseStateKey`, brought up to date by didChangeHistory(): the table and the scene map
+    /// belong to one base state and are read again when it changes.
+    @ObservationIgnored private var baseStateKey: String
+    /// The base states the scene map and the table were read for.
+    @ObservationIgnored private var sceneMapKey: String?
+    @ObservationIgnored private var tableGridKey: String?
+    @ObservationIgnored private var isAnalysingScene = false
+    /// The scene map overlaid with the text layers, once per revision: Live's state and the intent
+    /// context share it, so the ids the model reads are the ids its steps resolve against.
+    @ObservationIgnored private var overlaidScene: (revision: Int, stateKey: String, map: SceneMap)?
+    @ObservationIgnored private var pulseTask: Task<Void, Never>?
+    @ObservationIgnored private var marksTask: Task<Void, Never>?
+    /// > 0 while a result is checked (one render, one text pass): the scene analysis waits for it,
+    /// as it waits for a long step, so two Vision passes never compete for memory.
+    @ObservationIgnored private var verifyDepth = 0
 
     public init(document: PhotoDocument, projectID: UUID, app: AppEnvironment) {
         self.projectID = projectID
@@ -268,6 +312,7 @@ public final class PhotoEditorSession {
         self.document = document
         modifiedTools = Self.modifiedTools(in: document)
         lookThumbnailKey = Self.lookThumbnailKey(for: document, thumbnailSide: app.performance.thumbnailSide)
+        baseStateKey = document.baseStateKey
         openedDocument = document
         previewAspectRatio = document.aspectRatio
         dial = DialValue()
@@ -438,7 +483,7 @@ public final class PhotoEditorSession {
                       selectedIndex: document.selectedLayerID.flatMap { document.index(of: $0) }, clipCount: 0, textLayerCount: document.textLayers.count,
                       pendingClarification: pendingClarification, lastTapPoint: lastTapPoint, canUndo: history.canUndo, canRedo: history.canRedo,
                       preferredLanguage: app.settings.languageHint, lastParameter: lastAdjustment?.parameter, lastAdjustmentDirection: lastAdjustment?.direction ?? 0,
-                      selectionMask: selectionMask)
+                      selectionMask: selectionMask, table: liveTable, lastTableEdit: lastTableEdit, scene: liveSceneMap, lastIntent: lastIntent)
     }
 
     // MARK: - Rendering
@@ -544,6 +589,10 @@ public final class PhotoEditorSession {
             if tools != modifiedTools { modifiedTools = tools }
             let key = Self.lookThumbnailKey(for: present, thumbnailSide: app.performance.thumbnailSide)
             if key != lookThumbnailKey { lookThumbnailKey = key }
+            let baseKey = present.baseStateKey
+            if baseKey != baseStateKey { baseStateDidChange(to: baseKey) }
+            // The rings of a failed check belong to the result they checked: an undo or a new step takes them away.
+            if !verificationMarks.isEmpty { clearVerificationMarks() }
             // A step landed under a dial drag (a voice edit, an erase finishing): the drag carries on over it.
             if let edit = interaction?.edit {
                 var working = present
@@ -654,6 +703,9 @@ public final class PhotoEditorSession {
     public func revert() -> Bool {
         guard differsFromImport() else { return false }
         commit(openedDocument.restoredToImport(), label: L("Revert to Original"))
+        // Follow-ups start afresh: "les autres aussi" has nothing to follow.
+        lastTableEdit = nil
+        lastIntent = nil
         Haptics.confirm()
         return true
     }
@@ -1209,6 +1261,159 @@ public final class PhotoEditorSession {
             sceneObjects = found
             if let scene { sceneDescription = scene }
         }
+        // With the description known (text or not), the scene map and the table, off this task
+        // so the objects row does not wait for them.
+        Task { [weak self] in await self?.loadSceneAnalysis() }
+    }
+
+    // MARK: - What the picture holds (scene map, table) and act-then-verify
+
+    /// The base picture changed (an erase, a crop, a look): what was read from it no longer holds.
+    /// While Live is on it is read again at once, since Live grounds its next step on it.
+    private func baseStateDidChange(to key: String) {
+        baseStateKey = key
+        // An undo can bring back a state read before: it is read again (the services' cache answers).
+        // The last map and table stay until the new read lands, so "le titre", the texts: and table: lines and
+        // "la case à droite" keep working meanwhile: the executor re-reads a stale map (`currentScene` compares
+        // state keys, carrying the ids over) and always re-detects the table, and `liveSceneMap` drops the
+        // printed blocks an erase covered.
+        sceneMapKey = nil
+        tableGridKey = nil
+        if liveSpeechSuppressed { prefetchSceneAnalysis() }
+    }
+
+    /// Live starts, or the picture changed under it: the objects and the description, then the scene
+    /// map and the table, in the background (each once per state).
+    private func prefetchSceneAnalysis() {
+        guard isConfigured, !isTornDown else { return }
+        Task { [weak self] in
+            await self?.loadSceneObjects()
+            await self?.loadSceneAnalysis()
+        }
+    }
+
+    /// Reads the scene map, and the table when the picture may hold one, for the current base state:
+    /// once per state (the services cache them too, off the main actor), after any long step or
+    /// render, since Vision next to them competes for memory. A state that changes meanwhile is read
+    /// again; what was read for an older one is dropped.
+    func loadSceneAnalysis() async {
+        guard let services, !isAnalysingScene else { return }
+        isAnalysingScene = true
+        defer { isAnalysingScene = false }
+        while !Task.isCancelled, !isTornDown {
+            let key = document.baseStateKey
+            let needsMap = sceneMapKey != key
+            let needsTable = tableGridKey != key && wantsTable
+            guard needsMap || needsTable else { return }
+            while isProcessing || isRendering || verifyDepth > 0 {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled, !isTornDown else { return }
+            }
+            let analysed = document
+            guard analysed.baseStateKey == key else { continue }
+            if needsMap {
+                let map: SceneMap? = try? await services.sceneMap(in: analysed)
+                guard key == document.baseStateKey else { continue }
+                sceneMapKey = key
+                sceneMap = map
+            }
+            if tableGridKey != key, wantsTable {
+                let grid: TableGrid? = try? await services.tableGrid(in: analysed, remembered: analysed.rememberedTable)
+                guard key == document.baseStateKey else { continue }
+                tableGridKey = key
+                tableGrid = grid ?? sceneMap?.table
+            }
+        }
+    }
+
+    /// Worth a look for a table: text in the picture, or a table remembered from before its values were erased.
+    private var wantsTable: Bool {
+        sceneDescription?.hasText == true || document.tableMemory != nil || sceneMap?.table != nil || sceneMap?.texts.isEmpty == false
+    }
+
+    /// The main table overlaid with Picshop's layers (cells a fill wrote read as `.layer`): what Live's
+    /// state shows and what the grammar and the model's steps resolve against.
+    var liveTable: TableGrid? {
+        tableGrid?.overlaying(document.layers)
+    }
+
+    /// The scene map overlaid with Picshop's text layers (`l<n>`), one per revision, the ids of the
+    /// previous one carried over: Live's state and the intent context read the same map.
+    var liveSceneMap: SceneMap? {
+        guard var base = sceneMap else { return nil }
+        if let cached = overlaidScene, cached.revision == revision, cached.stateKey == base.stateKey { return cached.map }
+        // Read before the last erase: the printed blocks an erase covered (half of them or more) are gone from
+        // the picture, so neither the model nor the grammar sees them until the new read lands.
+        if base.stateKey != document.baseStateKey {
+            let erased = (document.baseLayer?.edits.operations ?? []).compactMap { operation -> PSRect? in
+                if case .removeObject(let mask) = operation.kind { return mask.boundingBox }
+                return nil
+            }
+            if !erased.isEmpty {
+                base.texts.removeAll { block in !block.isLayer && erased.contains { $0.intersection(block.box).area >= block.box.area * 0.5 } }
+            }
+        }
+        var overlaid = base.overlaying(document.layers)
+        if let previous = overlaidScene?.map { overlaid = overlaid.carryingIDs(from: previous) }
+        overlaidScene = (revision, base.stateKey, overlaid)
+        return overlaid
+    }
+
+    /// Act-then-verify: the services look at the committed picture once for every request (one render,
+    /// one text pass, the detectors over the erased places only). Where a check failed is ringed on
+    /// the canvas while the picture is still the one checked. Empty when they cannot look; never
+    /// changes the document. Live batches a run's requests into one call (`liveVerify`); the command
+    /// path checks after its reply (`checkInBackground`).
+    func checkResult(_ requests: [VerificationRequest]) async -> [VerificationReport] {
+        guard !requests.isEmpty, let services, !isTornDown else { return [] }
+        let checked = document
+        let checkedRevision = revision
+        verifyDepth += 1
+        defer { verifyDepth -= 1 }
+        let reports = (try? await services.verify(requests, in: checked)) ?? []
+        let failed = reports.filter { $0.status == .failed }
+        for report in failed { Diagnostics.shared.note("verify \(report.action.rawValue): \(report.summary)") }
+        if revision == checkedRevision {
+            showVerificationMarks(failed.flatMap { $0.failures.map(\.check.region) })
+        }
+        return reports
+    }
+
+    /// The command path (outside Live): its reply is already out, so the check runs after it, off the
+    /// command's way. Only a failure shows: the honest line in a toast with Undo, the places ringed.
+    private func checkInBackground(_ requests: [VerificationRequest], language: NormalizedUtterance.Language) {
+        guard !requests.isEmpty else { return }
+        let checkedRevision = revision
+        Task { [weak self] in
+            guard let self else { return }
+            let reports = await self.checkResult(requests)
+            guard self.revision == checkedRevision, !self.isQuiet,
+                  let failed = reports.first(where: { $0.status == .failed }) else { return }
+            self.showToast(LiveLines.verification(failed, language), undoable: self.canUndo)
+            Haptics.warning()
+        }
+    }
+
+    /// Rings the places a check found wrong for 3 s (at most 60).
+    private func showVerificationMarks(_ regions: [PSRect]) {
+        marksTask?.cancel()
+        let marks = Array(regions.prefix(60))
+        guard !marks.isEmpty else {
+            if !verificationMarks.isEmpty { verificationMarks = [] }
+            return
+        }
+        withAnimation(PSMotion.quick) { verificationMarks = marks }
+        marksTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled, let self else { return }
+            withAnimation(.easeOut(duration: 0.3)) { self.verificationMarks = [] }
+        }
+    }
+
+    private func clearVerificationMarks() {
+        marksTask?.cancel()
+        marksTask = nil
+        verificationMarks = []
     }
 
     /// Erases one of the objects found in the picture.
@@ -1287,10 +1492,38 @@ public final class PhotoEditorSession {
             guard var element = layer.textElement else { return }
             body(&element)
             layer.textElement = element
-            layer.name = element.text
+            // A table cell keeps its address as its name ("Agentic coding · Opus 5"); editing it edits only it.
+            if layer.group == nil { layer.name = element.text }
         }
         history.commit(document, label: "Edit Text")
         requestPreview(interactive: true)
+    }
+
+    // MARK: - Layer groups (a table's cells, a highlight's boxes)
+
+    /// Shows or hides every layer of a group (a table's cells) in one step.
+    public func setGroupVisible(_ groupID: UUID, _ visible: Bool) {
+        var document = self.document
+        let members = document.layers.filter { $0.group?.id == groupID && $0.isVisible != visible }.map(\.id)
+        guard !members.isEmpty else { return }
+        for id in members { document.update(layerID: id) { $0.isVisible = visible } }
+        history.commit(document, label: "Layer")
+        requestPreview()
+    }
+
+    /// Deletes every layer of a group in one step: one undo brings them all back.
+    public func removeGroup(_ groupID: UUID) {
+        var document = self.document
+        guard document.removeLayers(inGroup: groupID) > 0 else { return }
+        commit(document, label: "Delete Layer")
+        Haptics.warning()
+    }
+
+    /// Selects a group through its first layer: "plus gros", "en rouge" then apply to the whole table
+    /// (the executor widens an edit on a cell layer to its group); a cell tapped alone edits only itself.
+    public func selectGroup(_ groupID: UUID) {
+        guard let first = document.layers.first(where: { $0.group?.id == groupID }) else { return }
+        if document.selectedLayerID != first.id { selectLayer(first.id) }
     }
 
     public func updateLayer(_ layerID: UUID, _ body: (inout Layer) -> Void) {
@@ -1577,7 +1810,11 @@ public final class PhotoEditorSession {
         lastReplyIsProblem = false
         lastReplyIsError = false
         replyID = UUID()
-        let plan = await app.router.plan(text, context: intentContext)
+        var plan = await app.router.plan(text, context: intentContext)
+        // What is shown and said never carries an internal word (D11), whichever brain planned it.
+        let replyLanguage = plan.language.flatMap(NormalizedUtterance.Language.init(rawValue:)) ?? language
+        plan.reply = plan.reply.map { LiveSpeechSanitizer.clean($0, language: replyLanguage) }
+        plan.clarification = plan.clarification.map { LiveSpeechSanitizer.clean($0, language: replyLanguage) }
         lastPlan = plan
         if plan.isEmpty {
             Haptics.warning()
@@ -1592,7 +1829,10 @@ public final class PhotoEditorSession {
             speak(reply, language: plan.language)
             return
         }
-        if let clarification = plan.clarification, plan.intents.allSatisfy({ $0.action == .unknown }) {
+        // The grammar's own question ("Quelle case ?", "Avec quoi ?") comes before any table step it could only
+        // guess: a table step below the fast lane's confidence is never run with its question pending.
+        if let clarification = plan.clarification,
+           plan.intents.allSatisfy({ $0.action == .unknown || (IntentNormalizer.tableActions.contains($0.action) && $0.confidence < 0.9) }) {
             lastPlan?.reply = clarification
             if !isQuiet, !repliesInCapsule { showToast(clarification) }
             speak(clarification, language: plan.language)
@@ -1604,10 +1844,14 @@ public final class PhotoEditorSession {
         isRunningVoiceCommand = true
         defer { isRunningVoiceCommand = false }
         var told: String?
+        /// Act-then-verify: what the applied steps should show, checked once the reply is out.
+        var checks: [VerificationRequest] = []
+        defer { checkInBackground(checks, language: replyLanguage) }
         steps: for intent in plan.intents where intent.action != .unknown {
             lastOutcomeNeedsHand = false
-            let outcome = await run(intent)
-            switch outcome {
+            let step = await runStep(intent)
+            if let request = step.verification { checks.append(request) }
+            switch step.outcome {
             case .info(let message):
                 told = message
                 lastReplyIsProblem = lastOutcomeNeedsHand
@@ -1618,7 +1862,7 @@ public final class PhotoEditorSession {
                 break steps
             case .needsClarification(let request):
                 // The question is the reply; the numbered choices show under it.
-                lastPlan?.reply = request.question
+                lastPlan?.reply = LiveSpeechSanitizer.clean(request.question, language: replyLanguage)
                 replyID = UUID()
                 return
             case .applied, .ignored:
@@ -1626,10 +1870,12 @@ public final class PhotoEditorSession {
             }
         }
         if let told {
-            // The reply says what really happened, not what was hoped for, and shows it afresh.
-            lastPlan?.reply = told
+            // The reply says what really happened, not what was hoped for, and shows it afresh,
+            // never with an internal word in it (D11).
+            let line = LiveSpeechSanitizer.clean(told, language: replyLanguage)
+            lastPlan?.reply = line
             replyID = UUID()
-            speak(told, language: plan.language)
+            speak(line, language: plan.language)
         } else if mustFindFirst {
             speak(plan.reply ?? "", language: plan.language)
         }
@@ -1667,6 +1913,27 @@ public final class PhotoEditorSession {
         return String(format: L("Erase %@"), String(label.dropFirst("Remove ".count)))
     }
 
+    /// "45 cells filled": what a table step did, in the toast with Undo.
+    private func tableToast(_ report: TableEditReport) -> String {
+        let count = report.changed
+        switch report.action {
+        case .clearCells: return count == 1 ? L("1 cell cleared") : String(format: L("%d cells cleared"), count)
+        case .highlightCells: return count == 1 ? L("1 cell highlighted") : String(format: L("%d cells highlighted"), count)
+        default: return count == 1 ? L("1 cell filled") : String(format: L("%d cells filled"), count)
+        }
+    }
+
+    /// The layers of a table step flash for 0.6 s (the canvas reads `pulsingGroupID`).
+    private func pulse(group: UUID) {
+        pulseTask?.cancel()
+        pulsingGroupID = group
+        pulseTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled, let self, self.pulsingGroupID == group else { return }
+            self.pulsingGroupID = nil
+        }
+    }
+
     private static let findsBeforeActing: Set<IntentAction> = [.removeObject, .moveObject, .blurObject, .recolor, .generativeFill, .selectiveAdjust, .cleanUp, .chooseCandidate]
 
     /// Drops the heavy step that is running, if any: its result is discarded when it
@@ -1678,39 +1945,52 @@ public final class PhotoEditorSession {
         droppedGenerations.insert(processingGeneration)
         processingTask = nil
         isProcessing = false
+        cellWork = nil
         Diagnostics.shared.note("processing cancelled")
         return true
     }
 
     @discardableResult
     public func run(_ intent: EditIntent) async -> CommandOutcome {
+        await runStep(intent).outcome
+    }
+
+    /// run(_:), with the checks its result deserves (act-then-verify): what the rendered picture should
+    /// show after the step, from the documents before and after it and the scene map it was planned
+    /// on (`EditVerifier.request`). Nil when the step did not apply or there is nothing to look at.
+    func runStep(_ intent: EditIntent) async -> (outcome: CommandOutcome, verification: VerificationRequest?) {
         lastEffects = []
-        guard var executor else { return .failed(message: L("Still getting ready — try again in a moment.")) }
+        guard var executor else { return (outcome: .failed(message: L("Still getting ready — try again in a moment.")), verification: nil) }
         executor.language = language
         func refuse(_ message: String) -> CommandOutcome {
             if !isRunningVoiceCommand, !isQuiet { showToast(message, isError: true) }
             return .failed(message: message)
         }
         if intent.action == .generativeFill, !hasGenerativeEngine {
-            return refuse(L("Install Generative Fill in Settings › On-device models to use prompts."))
+            return (outcome: refuse(L("Install Generative Fill in Settings › On-device models to use prompts.")), verification: nil)
         }
         if [.generativeFill, .upscale, .expandCanvas].contains(intent.action), !app.performance.allowsHeavyWork {
-            return refuse(L("The iPhone is too hot for generation right now. Let it cool for a moment."))
+            return (outcome: refuse(L("The iPhone is too hot for generation right now. Let it cool for a moment.")), verification: nil)
         }
+        // Table steps may read the picture first (one OCR pass); a printed block is erased before it is rewritten.
         let isHeavy = [.removeObject, .removeBackground, .blurBackground, .replaceBackground, .upscale, .selectiveAdjust, .chooseCandidate, .straighten, .generativeFill, .recolor,
-                       .moveObject, .cleanUp, .expandCanvas, .textBehind, .autoCrop, .blurObject].contains(intent.action)
+                       .moveObject, .cleanUp, .expandCanvas, .textBehind, .autoCrop, .blurObject,
+                       .fillCells, .clearCells, .highlightCells, .eraseRegion, .moveText].contains(intent.action) || Self.erasesPrintedText(intent)
         var generation: Int?
         if isHeavy {
             // One long step at a time (a tap during a spoken erase, a second chip…).
             guard !isProcessing else {
                 let message = L("One moment…")
                 if !isRunningVoiceCommand, !isQuiet { showToast(message) }
-                return .info(message: message)
+                return (outcome: .info(message: message), verification: nil)
             }
             // A drag in progress is committed first: the step starts from what is on screen.
             if interaction != nil { endInteraction() }
             isProcessing = true
-            processingTitle = intent.action == .chooseCandidate ? L("Erasing…") : processingLabel(for: intent)
+            // A table step says how many cells it is about to touch, read on the table as it is shown.
+            let work = plannedCellWork(intent)
+            cellWork = work
+            processingTitle = intent.action == .chooseCandidate ? L("Erasing…") : processingLabel(for: intent, cells: work?.count)
             processingGeneration += 1
             generation = processingGeneration
             Diagnostics.shared.note("run \(intent.action)")
@@ -1718,7 +1998,12 @@ public final class PhotoEditorSession {
             if MemoryBudget.isLow { app.performance.constrainMemory() }
         }
         // Only the step that raised the flag lowers it, unless it was dropped and another began.
-        defer { if let generation, generation == processingGeneration, isProcessing { isProcessing = false } }
+        defer {
+            if let generation, generation == processingGeneration {
+                if isProcessing { isProcessing = false }
+                if cellWork != nil { cellWork = nil }
+            }
+        }
         let context = intentContext
         let base = document
         let updated: PhotoDocument
@@ -1732,12 +2017,19 @@ public final class PhotoEditorSession {
             if processingTask == task { processingTask = nil }
             if droppedGenerations.remove(generation) != nil {
                 Diagnostics.shared.note("dropped result: \(intent.action)")
-                return .failed(message: L("Cancelled."))
+                return (outcome: .failed(message: L("Cancelled.")), verification: nil)
             }
         } else {
             (updated, result) = await executor.execute(intent, on: base, context: context)
         }
         let outcome = handle(result, updatedDocument: updated, intent: intent, base: base)
+        var verification: VerificationRequest?
+        if case .applied = outcome {
+            let ran = Self.stepAsRun(intent, context: context)
+            remember(ran)
+            // After: what was committed (a result carried over a change made meanwhile included).
+            verification = EditVerifier.request(for: ran, before: base, after: document, result: result, scene: context.scene)
+        }
         if case .applied = outcome, intent.action == .adjust || intent.action == .selectiveAdjust, let parameter = intent.parameter {
             let direction: Int
             if let amount = intent.amount {
@@ -1751,7 +2043,37 @@ public final class PhotoEditorSession {
             }
             lastAdjustment = (parameter, direction)
         }
-        return outcome
+        return (outcome: outcome, verification: verification)
+    }
+
+    static let tableActions: Set<IntentAction> = [.fillCells, .clearCells, .highlightCells]
+
+    /// editText or removeText on a printed block ("t3") erase its pixels first: a long step.
+    private static func erasesPrintedText(_ intent: EditIntent) -> Bool {
+        guard intent.action == .editText || intent.action == .removeText, case .text(_)? = intent.ref else { return false }
+        return true
+    }
+
+    /// The step as it ran: a choice among candidates runs the question's pending step (its checks
+    /// keep the id of the step Live ran).
+    private static func stepAsRun(_ intent: EditIntent, context: IntentContext) -> EditIntent {
+        guard intent.action == .chooseCandidate, var pending = context.pendingClarification?.pendingIntent else { return intent }
+        pending.id = intent.id
+        return pending
+    }
+
+    /// Follow-ups start from what last applied: the step ("encore", "pareil", "plus gros") and the
+    /// table edit ("les autres aussi"). A table spec that names no value (a clear, a highlight)
+    /// keeps the value of the fill before it.
+    private func remember(_ intent: EditIntent) {
+        guard !intent.action.isMeta, intent.action != .revert, intent.action != .export, intent.action != .share else { return }
+        lastIntent = intent
+        guard Self.tableActions.contains(intent.action), var spec = intent.table else { return }
+        if spec.value == nil {
+            spec.value = lastTableEdit?.value
+            spec.alternative = spec.alternative ?? lastTableEdit?.alternative
+        }
+        lastTableEdit = spec
     }
 
     /// A command's result replayed onto what was committed while it ran. Only the
@@ -1787,8 +2109,31 @@ public final class PhotoEditorSession {
         }
     }
 
-    private func processingLabel(for intent: EditIntent) -> String {
+    /// How many cells a table step is about to touch, on the table as the editor shows it (nil when
+    /// the table is not read yet or the step names nothing there: the executor answers that itself).
+    private func plannedCellWork(_ intent: EditIntent) -> LiveCellWork? {
+        guard Self.tableActions.contains(intent.action) else { return nil }
+        guard let spec = intent.table, let grid = liveTable else { return LiveCellWork(action: intent.action, count: nil) }
+        let count: Int?
         switch intent.action {
+        case .fillCells:
+            count = (try? TableSelection.cells(for: spec, in: grid))?.count
+        case .clearCells:
+            count = (try? TableSelection.scope(for: spec, in: grid))?.filter { $0.state == .printed || $0.state == .layer }.count
+        default:
+            count = nil
+        }
+        return LiveCellWork(action: intent.action, count: count.flatMap { $0 > 0 ? $0 : nil })
+    }
+
+    private func processingLabel(for intent: EditIntent, cells: Int? = nil) -> String {
+        switch intent.action {
+        case .fillCells:
+            guard let cells else { return L("Filling the table…") }
+            return cells == 1 ? L("Filling 1 cell…") : String(format: L("Filling %d cells…"), cells)
+        case .clearCells:
+            guard let cells else { return L("Clearing cells…") }
+            return cells == 1 ? L("Clearing 1 cell…") : String(format: L("Clearing %d cells…"), cells)
         case .removeObject: return String(format: L("Finding %@…"), intent.target?.originalPhrase ?? L("object"))
         case .generativeFill: return String(format: L("Generating “%@”…"), intent.text ?? "")
         case .recolor: return L("Recolouring…")
@@ -1803,6 +2148,10 @@ public final class PhotoEditorSession {
         case .autoCrop: return L("Trying framings…")
         case .blurObject: return String(format: L("Finding %@…"), intent.target?.originalPhrase ?? L("object"))
         case .straighten: return L("Levelling…")
+        case .highlightCells: return L("Highlighting…")
+        case .eraseRegion, .removeText: return L("Erasing…")
+        case .moveText: return L("Moving the text…")
+        case .editText: return L("Rewriting the text…")
         default: return L("Working…")
         }
     }
@@ -1835,7 +2184,10 @@ public final class PhotoEditorSession {
             if changed {
                 commit(resultDocument, label: label)
             }
-            if !label.isEmpty, !isQuiet { showToast(toastText(for: label), undoable: changed) }
+            // A table step says how many cells it changed; its cells flash on the canvas, in Live too.
+            let report = result.tableReport
+            if !label.isEmpty, !isQuiet { showToast(report.map { tableToast($0) } ?? toastText(for: label), undoable: changed) }
+            if changed, let group = report?.groupID { pulse(group: group) }
             // The new title is ready to be rewritten or moved.
             if intent.action == .textBehind, changed { activeTool = .text }
             if !isQuiet { Haptics.success() }
@@ -1844,17 +2196,19 @@ public final class PhotoEditorSession {
             candidateOverlays = request.candidates
             // Live asks the question itself (and shows the numbered choices).
             if !isQuiet {
-                if !isRunningVoiceCommand { showToast(request.question) }
-                speak(request.question, language: language.rawValue)
+                let question = LiveSpeechSanitizer.clean(request.question, language: language)
+                if !isRunningVoiceCommand { showToast(question) }
+                speak(question, language: language.rawValue)
                 Haptics.warning()
             }
         case .info(let message):
             lastOutcomeNeedsHand = result.effects.contains(.message("tapToErase")) || result.effects.contains(.message("selectRegion"))
-            if !isRunningVoiceCommand, !isQuiet { showToast(message) }
+            if !isRunningVoiceCommand, !isQuiet { showToast(LiveSpeechSanitizer.clean(message, language: language)) }
             if result.effects.contains(.message("tapToErase")) { activeTool = .erase }
             if result.effects.contains(.message("crop")) { activeTool = .crop }
         case .failed(let message):
-            if !isRunningVoiceCommand, !isQuiet { showToast(message, isError: true) }
+            // Executor text on screen never carries an internal word (D11).
+            if !isRunningVoiceCommand, !isQuiet { showToast(LiveSpeechSanitizer.clean(message, language: language), isError: true) }
             if !isQuiet { Haptics.error() }
         case .ignored:
             break
@@ -1878,7 +2232,8 @@ public final class PhotoEditorSession {
                 var document = updatedDocument
                 document.selectedLayerID = id
                 if document != self.document { history.commit(document, label: "Select") }
-                activeTool = .text
+                // A table step never opens the text tool over its cells.
+                if !Self.tableActions.contains(intent.action) { activeTool = .text }
             case .pickBackground: activeTool = .cutout
             case .pickColorReference:
                 activeTool = .magic
