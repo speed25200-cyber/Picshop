@@ -403,4 +403,17 @@ final class TableDetectionTests: XCTestCase {
         XCTAssertEqual(median.weight, .regular)
         XCTAssertNil(TableGridRefiner.medianStyle([]))
     }
+
+    /// Hairline separators as light as #E3E3E3 on white are rules (the reported table's style).
+    func testHairlineRulesAreFound() {
+        let width = 1709, height = 2048
+        var gray = [UInt8](repeating: 255, count: width * height)
+        for index in 0..<10 {
+            let y = 390 + index * 150
+            for x in 80..<1625 { gray[y * width + x] = 227 }
+        }
+        let lines = RulingLineDetector.detect(gray: gray, width: width, height: height).lines
+        XCTAssertEqual(lines.filter { $0.axis == .horizontal }.count, 10)
+        XCTAssertTrue(lines.filter { $0.axis == .vertical }.isEmpty)
+    }
 }

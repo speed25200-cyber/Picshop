@@ -15,7 +15,8 @@ import CoreGraphics
 ///
 /// How (contract §6, behaviour 1): a picture whose median luminance is under 110 is inverted first
 /// (dark mode), then the gray bytes are min-pooled 2× so 1-px rules survive; ink is a pixel darker than
-/// its 31-px box mean by at least max(18, 0.1 × that mean); each row keeps its longest ink run (gaps of
+/// its 31-px box mean by at least max(8, 0.035 × that mean), so hairline separators as light as #E3E3E3
+/// on white count (only long straight runs become rules); each row keeps its longest ink run (gaps of
 /// at most 2 px bridged); a rule is a run of consecutive rows whose runs are at least 0.15 × the width
 /// and overlap by 80 %, at most max(3 px, 0.006 × the height) thick; vertical rules are the transpose;
 /// bands are stretches whose per-row (per-column) median luminance steps at least 6 levels away from
@@ -33,9 +34,13 @@ public enum RulingLineDetector {
 
     /// Radius of the box mean ink is measured against (a 31-px box on the pooled picture).
     static let boxRadius = 15
-    /// Ink is darker than its box mean by at least max(this, `relativeContrast` × the mean).
-    static let minimumContrast = 18
-    static let relativeContrast = 0.1
+    /// Rule ink is darker than its box mean by at least max(this, `relativeContrast` × the mean): low,
+    /// because only long straight runs become rules, so hairline separators count.
+    static let minimumContrast = 8
+    static let relativeContrast = 0.035
+    /// Glyph ink in a cell must stand out more (a smudge or a JPEG ripple is not a value).
+    static let glyphMinimumContrast = 18
+    static let glyphRelativeContrast = 0.1
     /// Pictures with a darker median are dark mode: inverted before anything else.
     static let darkMedian = 110
     /// Gaps of at most this many pooled pixels do not break a run.
@@ -127,7 +132,7 @@ public enum RulingLineDetector {
             }
         }
         var ink = [UInt8](repeating: 0, count: width * height)
-        let radius = boxRadius, inverse = Int((1 / relativeContrast).rounded())
+        let radius = boxRadius, inverse = 1 / relativeContrast
         let lefts = (0..<width).map { max(0, $0 - radius) }, rights = (0..<width).map { min(width, $0 + radius + 1) }
         gray.withUnsafeBufferPointer { source in
             integral.withUnsafeBufferPointer { sums in
@@ -141,7 +146,7 @@ public enum RulingLineDetector {
                             let area = rows * (x1 - x0)
                             // mean − value ≥ max(minimumContrast, relativeContrast × mean), times the area.
                             let darker = total - Int(source[y * width + x]) * area
-                            if darker >= minimumContrast * area, darker * inverse >= total {
+                            if darker >= minimumContrast * area, Double(darker) * inverse >= Double(total) {
                                 target[y * width + x] = UInt8(min(255, darker / area))
                             }
                         }
@@ -637,7 +642,7 @@ public enum TableGridRefiner {
         let median = level(at: 0.5)
         let darkPaper = median < RulingLineDetector.darkMedian
         let paper = darkPaper ? level(at: 0.25) : level(at: 0.75)
-        let step = max(RulingLineDetector.minimumContrast, Int(RulingLineDetector.relativeContrast * Double(darkPaper ? 255 - paper : paper)))
+        let step = max(RulingLineDetector.glyphMinimumContrast, Int(RulingLineDetector.glyphRelativeContrast * Double(darkPaper ? 255 - paper : paper)))
         var ink = 0
         for value in 0..<256 where darkPaper ? value - paper >= step : paper - value >= step { ink += histogram[value] }
         return Double(ink) / Double(total)

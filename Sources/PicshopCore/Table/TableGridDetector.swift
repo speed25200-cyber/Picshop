@@ -304,8 +304,16 @@ extension TableGridBuilder {
             let gutter = max(h, Self.median(gutters) ?? 2 * h)
             let labelRight = blocks.flatMap(\.labels).map { phrases[$0].box.maxX }.max()
             var columnEdges: [Double] = []
+            // The first data column is as wide as its neighbour's pitch, centred on its values, so values
+            // centred in their cells read as centred and a fill lands in the middle; the labels only move
+            // the edge when they would reach into that cell.
+            let symmetricLeft = spans.count >= 2 ? spans[0].contentMidX - (spans[1].contentMidX - spans[0].contentMidX) / 2 : nil
             if labelled, let labelRight {
-                columnEdges.append(labelRight < spans[0].minX ? (labelRight + spans[0].minX) / 2 : spans[0].minX - 0.25 * gutter)
+                if let symmetricLeft, symmetricLeft > labelRight, symmetricLeft <= spans[0].minX {
+                    columnEdges.append(symmetricLeft)
+                } else {
+                    columnEdges.append(labelRight < spans[0].minX ? (labelRight + spans[0].minX) / 2 : spans[0].minX - 0.25 * gutter)
+                }
             } else if spans.count >= 2 {
                 columnEdges.append(min(spans[0].minX - 0.25 * gutter, spans[0].contentMidX - (spans[1].contentMidX - spans[0].contentMidX) / 2))
             } else {
