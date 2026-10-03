@@ -407,16 +407,26 @@ final class LocalModelLiveBrainTests: XCTestCase {
         XCTAssertEqual(events.kinds, ["started"])
     }
 
+    /// Warm and cold first-token deadlines far apart (100 ms and 1 s at a 0.05 clock), so a 450 ms
+    /// event lands clearly on one side of each even on a loaded runner.
+    private static var farApartDeadlines: LocalModelLiveBrain.Limits {
+        var limits = LocalModelLiveBrain.Limits()
+        limits.firstTokenTimeout = 2
+        limits.coldFirstTokenTimeout = 20
+        limits.turnTimeout = 60
+        return limits
+    }
+
     func testColdCacheGetsTheLongerFirstTokenDeadline() async throws {
-        // 450 ms per event: inside the cold deadline (12 s → 600 ms), past the warm one (6 s → 300 ms).
+        // 450 ms per event: inside the cold deadline (20 → 1 s), past the warm one (2 → 100 ms).
         let answer: [LocalChatEvent] = [.text("Ok."), Say.done()]
         let factory = FakeEngineFactory(scripts: [[answer, answer, answer]], eventDelay: 0.45)
-        let brain = brain(factory, clock: BrainTestClock(scale: 0.05))
+        let brain = brain(factory, limits: Self.farApartDeadlines, clock: BrainTestClock(scale: 0.05))
         let handler = ScriptedToolHandler()
         let first = await drain(brain.respond(to: BrainTurns.speech("salut", id: 1), tools: handler))
         XCTAssertNil(first.error, "a new conversation prefills everything first")
         let second = await drain(brain.respond(to: BrainTurns.speech("encore", id: 2), tools: handler))
-        XCTAssertEqual(second.error as? LiveBrainError, .timeout(stage: "first_token"), "a warm turn keeps the 6 s deadline")
+        XCTAssertEqual(second.error as? LiveBrainError, .timeout(stage: "first_token"), "a warm turn keeps the short deadline")
         let third = await drain(brain.respond(to: BrainTurns.speech("encore", id: 3), tools: handler))
         XCTAssertNil(third.error, "after a cut-off turn the cache is rebuilt: cold again")
         XCTAssertEqual(LocalModelLiveBrain.Limits().coldFirstTokenTimeout, 12)
@@ -427,7 +437,7 @@ final class LocalModelLiveBrainTests: XCTestCase {
         let rebuilt = LiveGenerationStats(model: "Qwen3.5 4B", promptTokens: 3_000, cachedTokens: 0, generatedTokens: 12, firstTokenMs: 900, tokensPerSecond: 22)
         let answer: [LocalChatEvent] = [.text("Ok."), .finished(rebuilt, .endOfTurn)]
         let factory = FakeEngineFactory(scripts: [[answer, answer]], eventDelay: 0.45)
-        let brain = brain(factory, clock: BrainTestClock(scale: 0.05))
+        let brain = brain(factory, limits: Self.farApartDeadlines, clock: BrainTestClock(scale: 0.05))
         let handler = ScriptedToolHandler()
         let first = await drain(brain.respond(to: BrainTurns.speech("salut", id: 1), tools: handler))
         XCTAssertNil(first.error)
@@ -439,7 +449,7 @@ final class LocalModelLiveBrainTests: XCTestCase {
     func testATurnWithAFreshPictureGetsTheColdDeadline() async throws {
         let answer: [LocalChatEvent] = [.text("Ok."), Say.done()]
         let factory = FakeEngineFactory(scripts: [[answer, answer, answer]], eventDelay: 0.45)
-        let brain = brain(factory, clock: BrainTestClock(scale: 0.05))
+        let brain = brain(factory, limits: Self.farApartDeadlines, clock: BrainTestClock(scale: 0.05))
         let handler = ScriptedToolHandler()
         let first = await drain(brain.respond(to: BrainTurns.speech("salut", id: 1, version: 10, image: BrainTurns.image(version: 10)), tools: handler))
         XCTAssertNil(first.error)
@@ -447,7 +457,7 @@ final class LocalModelLiveBrainTests: XCTestCase {
         let second = await drain(brain.respond(to: warm, tools: handler))
         let engine = try XCTUnwrap(factory.engines.first)
         XCTAssertEqual(engine.sent.last?.last?.hasImage, true, "a new version and a question: a fresh look")
-        XCTAssertNil(second.error, "the picture turn gets 12 s, not the warm 6 s")
+        XCTAssertNil(second.error, "the picture turn gets the cold deadline, not the warm one")
     }
 
     /// The runtime unloaded the weights (the engine was closed) and loaded them again: the
