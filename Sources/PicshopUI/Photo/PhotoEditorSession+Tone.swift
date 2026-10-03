@@ -82,7 +82,7 @@ extension PhotoEditorSession {
         }
     }
 
-    func setLayerBlend(_ mode: BlendMode, layerID: UUID) {
+    func setLayerBlend(_ mode: PicshopCore.BlendMode, layerID: UUID) {
         guard let layer = document.layer(id: layerID), layer.blendMode != mode else { return }
         interactiveEdit(label: "Blend") { document in
             document.update(layerID: layerID) { $0.blendMode = mode }
@@ -91,8 +91,8 @@ extension PhotoEditorSession {
     }
 
     /// The blend modes the menu offers: all 27 with pro tone on, else the 12 before W1.
-    static var offeredBlendModes: [BlendMode] {
-        FeatureFlags.isOn(.proTone) ? BlendMode.allCases : Array(BlendMode.allCases.prefix(12))
+    static var offeredBlendModes: [PicshopCore.BlendMode] {
+        FeatureFlags.isOn(.proTone) ? PicshopCore.BlendMode.allCases : Array(PicshopCore.BlendMode.allCases.prefix(12))
     }
 }
 #endif

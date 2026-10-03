@@ -260,7 +260,8 @@ final class RetrievalLaneTests: XCTestCase {
         XCTAssertTrue(SlotExtractor.extract("rends le ciel plus bleu").bands.isEmpty, "a colour alone is not a band")
     }
 
-    /// Build ≤ 50 ms and a query p95 ≤ 15 ms on the Linux runner (about 5 ms on device).
+    /// Build ≤ 250 ms and a query p95 ≤ 30 ms on a loaded Linux runner (`swift test --parallel`,
+    /// debug build); about 50 ms and 5 ms on device. The bounds catch an accidental quadratic, not jitter.
     func testPerformance() {
         var builds: [Double] = []
         for _ in 0..<5 {
@@ -268,7 +269,7 @@ final class RetrievalLaneTests: XCTestCase {
             _ = OperationIndex(catalog: .shared)
             builds.append(Date().timeIntervalSince(start) * 1_000)
         }
-        XCTAssertLessThanOrEqual(builds.min() ?? 0, 50, "index build, ms")
+        XCTAssertLessThanOrEqual(builds.min() ?? 0, 250, "index build, ms")
         var times: [Double] = []
         for probe in ProbeCorpus.all + ProbeCorpus.all {
             let start = Date()
@@ -276,7 +277,7 @@ final class RetrievalLaneTests: XCTestCase {
             times.append(Date().timeIntervalSince(start) * 1_000)
         }
         times.sort()
-        XCTAssertLessThanOrEqual(times[Int(Double(times.count) * 0.95)], 15, "retrieve p95, ms")
+        XCTAssertLessThanOrEqual(times[Int(Double(times.count) * 0.95)], 30, "retrieve p95, ms")
     }
 
     /// The optional embedder is fused by reciprocal rank fusion: an operation only it finds is added

@@ -35,17 +35,17 @@ struct LayerBlendControls: View {
 
 /// The blend mode as a chip that opens the menu of modes, a check on the current one.
 struct BlendModeMenu: View {
-    let selection: BlendMode
-    let onSelect: (BlendMode) -> Void
+    let selection: PicshopCore.BlendMode
+    let onSelect: (PicshopCore.BlendMode) -> Void
 
-    static func name(_ mode: BlendMode) -> String {
+    static func name(_ mode: PicshopCore.BlendMode) -> String {
         psPrefersFrench ? mode.frenchName : mode.displayName
     }
 
     var body: some View {
         Menu {
             if FeatureFlags.isOn(.proTone) {
-                ForEach(BlendMode.Group.allCases) { group in
+                ForEach(PicshopCore.BlendMode.Group.allCases) { group in
                     Section {
                         ForEach(group.modes) { mode in item(mode) }
                     }
@@ -72,7 +72,7 @@ struct BlendModeMenu: View {
     }
 
     @ViewBuilder
-    private func item(_ mode: BlendMode) -> some View {
+    private func item(_ mode: PicshopCore.BlendMode) -> some View {
         Button {
             onSelect(mode)
         } label: {

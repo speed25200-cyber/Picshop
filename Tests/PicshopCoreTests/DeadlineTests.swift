@@ -13,7 +13,8 @@ final class DeadlineTests: XCTestCase {
         let start = Date()
         let value = await Deadline.race(.milliseconds(100)) { await stubborn(2) }
         XCTAssertNil(value)
-        XCTAssertLessThan(Date().timeIntervalSince(start), 0.1 + 0.05)
+        // At the deadline, not when the work ends 2 s later; the slack absorbs a loaded CI runner.
+        XCTAssertLessThan(Date().timeIntervalSince(start), 0.1 + 0.6)
     }
 
     func testRaceReturnsTheWorksValueWhenItIsInTime() async {

@@ -78,8 +78,12 @@ public struct PDFAssembler {
             guard let composed = composedPages[index] else { continue }
             switch plan.pages[index] {
             case .keep:
+                // A copied page's links may point at nothing (the copy left its document):
+                // the same link on the original page knows its target.
+                let source = mapper.originalPage(at: index)
                 for link in written.annotations where Self.isLink(link) {
-                    if !mapper.repoint(link) { written.removeAnnotation(link) }
+                    let twin = source?.annotations.first { Self.isLink($0) && $0.bounds == link.bounds }
+                    if !mapper.repoint(link, twin: twin) { written.removeAnnotation(link) }
                 }
             case .flatten:
                 Self.copyLinks(from: composed, to: written, excluded: [], redacted: redactedWords, mapper: mapper)
@@ -219,7 +223,7 @@ public struct PDFAssembler {
             guard rect.width > 0.5, rect.height > 0.5 else { continue }
             let font = CTFontCreateWithName("Helvetica" as CFString, rect.height * 0.9, nil)
             let attributes = [NSAttributedString.Key(kCTFontAttributeName as String): font]
-            let line = CTLineCreateWithAttributedString(NSAttributedString(string: word.text, attributes: attributes))
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: word.text, attributes: attributes) as CFAttributedString)
             let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
             context.saveGState()
             context.textMatrix = .identity
@@ -324,11 +328,22 @@ struct DestinationMapper {
         return PDFDestination(page: written, at: point)
     }
 
-    /// Re-points a kept page's link at the new order; false when its page is gone.
-    func repoint(_ link: PDFAnnotation) -> Bool {
+    /// The original page a model page shows, when it comes from the original document.
+    func originalPage(at index: Int) -> PDFPage? {
+        guard model.pages.indices.contains(index), case .original(let source) = model.pages[index].source else { return nil }
+        return original.page(at: source)
+    }
+
+    /// Re-points a kept page's link at the new order, reading the target from its `twin` on the
+    /// original page when the copy lost it; false when the target page is gone.
+    func repoint(_ link: PDFAnnotation, twin: PDFAnnotation? = nil) -> Bool {
         if link.url != nil || link.action is PDFActionURL { return true }
-        guard let destination = link.destination ?? (link.action as? PDFActionGoTo)?.destination else { return true }
-        guard let mapped = self.destination(for: destination) else { return false }
+        let own = link.destination ?? (link.action as? PDFActionGoTo)?.destination
+        let original = twin?.destination ?? (twin?.action as? PDFActionGoTo)?.destination
+        let candidates = [original, own].compactMap { $0 }
+        guard !candidates.isEmpty else { return true }
+        guard let mapped = candidates.lazy.compactMap({ self.destination(for: $0) }).first else { return false }
+        link.action = nil
         link.destination = mapped
         return true
     }

@@ -483,9 +483,11 @@ final class LocalModelLiveBrainTests: XCTestCase {
 
     func testTurnDeadline() async throws {
         var limits = LocalModelLiveBrain.Limits()
-        limits.turnTimeout = 10
+        // 0.3 s of turn against 0.8 s of speech, 20 ms a word: the first words land well inside
+        // the deadline even on a loaded parallel runner, the last ones well after it.
+        limits.turnTimeout = 30
         let events = (0..<40).map { _ in LocalChatEvent.text("bla ") } + [Say.done()]
-        let factory = FakeEngineFactory(scripts: [[events]], eventDelay: 0.01)
+        let factory = FakeEngineFactory(scripts: [[events]], eventDelay: 0.02)
         let (seen, error) = await drain(brain(factory, limits: limits).respond(to: BrainTurns.speech("raconte"), tools: ScriptedToolHandler()))
         XCTAssertEqual(error as? LiveBrainError, .timeout(stage: "turn"))
         XCTAssertFalse(seen.said.isEmpty)

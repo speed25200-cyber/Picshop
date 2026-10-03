@@ -181,18 +181,27 @@ public final class MetalCanvasView: MTKView {
             PSLog.error("canvas render failed: \(error)", category: .imaging)
         }
         let generation = displayedGeneration
+        #if targetEnvironment(simulator)
+        // The simulator's drawables have no presented handler: the GPU completion stands in.
+        let presentsOnCompletion = onPresented != nil
+        #else
         if onPresented != nil {
             drawable.addPresentedHandler { [weak self] presented in
                 let time = presented.presentedTime
                 Task { @MainActor [weak self] in self?.onPresented?(generation, time) }
             }
         }
+        let presentsOnCompletion = false
+        #endif
         let budget = frameBudget
         commandBuffer.addCompletedHandler { [weak self] buffer in
             budget.release()
             let gpu = buffer.gpuEndTime - buffer.gpuStartTime
             PSSignpost.event("canvas.gpu", String(format: "%.2f ms", gpu * 1000))
-            Task { @MainActor [weak self] in self?.redrawSkippedFrame() }
+            Task { @MainActor [weak self] in
+                self?.redrawSkippedFrame()
+                if presentsOnCompletion { self?.onPresented?(generation, CACurrentMediaTime()) }
+            }
         }
         commandBuffer.present(drawable)
         commandBuffer.commit()

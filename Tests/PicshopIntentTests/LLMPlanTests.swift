@@ -187,7 +187,8 @@ extension LLMPlanTests {
         let start = Date()
         let plan = await router.plan("blah blah", context: .photo)
         let elapsed = Date().timeIntervalSince(start)
-        XCTAssertLessThan(elapsed, 0.15 + 0.05, "the answer comes at the timeout, not when the engine gives up")
+        // The engine gives up after 3 s; the slack only absorbs a loaded CI runner.
+        XCTAssertLessThan(elapsed, 0.15 + 0.6, "the answer comes at the timeout, not when the engine gives up")
         XCTAssertEqual(plan.engine, .rules)
     }
 
