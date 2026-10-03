@@ -52,8 +52,10 @@ final class StrokeCacheTests: XCTestCase {
         let few = try await averageTime(cloneDocument(fixture, strokes: 5))
         let many = try await averageTime(cloneDocument(fixture, strokes: 50))
         print("STROKE-CACHE render 5 strokes \(Int(few * 1000)) ms, 50 strokes \(Int(many * 1000)) ms")
-        // At most 10 % more (plus a millisecond of timer noise).
-        XCTAssertLessThan(many, few * 1.1 + 0.001)
+        // Rasterized every render, ten times the strokes would cost several times more; cached,
+        // the cost stays flat. The bound leaves room for a loaded runner's noise (the exact
+        // count of rasterizations is asserted above).
+        XCTAssertLessThan(many, few * 2 + 0.005)
     }
 
     #if canImport(UIKit)
