@@ -63,7 +63,9 @@ struct IdeaChipModel: Identifiable, Equatable {
 /// Tap applies an idea; a long press shows why it is proposed; a swipe up
 /// hides it. One row when it fits, a scrolling row when it does not, three
 /// full-width chips at accessibility text sizes. Glass chips, or flat ones
-/// (`flat(true)`) while the Live console keeps the glass budget.
+/// (`flat(true)`) while the Live console keeps the glass budget. The glass chips
+/// are one union in their own container: one glass shape on the screen's budget,
+/// however many ideas show.
 struct IdeaChipsRow: View {
     let items: [IdeaChipModel]?
     var isEnabled: Bool
@@ -73,8 +75,11 @@ struct IdeaChipsRow: View {
 
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.picshop) private var app
+    @Namespace private var glass
 
     private static let skeletonWidths: [CGFloat] = [112, 96, 128]
+    static let glassUnion = "ideas"
 
     init(items: [IdeaChipModel]?, isEnabled: Bool = true, onChoose: @escaping (String) -> Void, onDismiss: ((String) -> Void)? = nil) {
         self.items = items
@@ -91,7 +96,7 @@ struct IdeaChipsRow: View {
     }
 
     var body: some View {
-        Group {
+        PSGlassContainer(spacing: 8) {
             if let items {
                 let shown = Array(items.prefix(3))
                 if typeSize.isAccessibilitySize {
@@ -118,7 +123,7 @@ struct IdeaChipsRow: View {
                     }
                 }
             } else {
-                IdeaSkeleton(widths: Self.skeletonWidths, animated: !reduceMotion)
+                IdeaSkeleton(widths: Self.skeletonWidths, animated: !reduceMotion && (app?.performance.allowsContinuousAnimation ?? true))
             }
         }
         .frame(maxWidth: .infinity, minHeight: PSMetrics.ideaChip, alignment: .leading)
@@ -133,6 +138,7 @@ struct IdeaChipsRow: View {
         IdeaChip(item: item, isFlat: isFlat, fullWidth: fullWidth,
                  onChoose: { onChoose(item.id) },
                  onDismiss: onDismiss.map { dismiss in { dismiss(item.id) } })
+            .glassEffectUnion(id: isFlat ? nil : Self.glassUnion, namespace: glass)
             // Arrivals are staggered by 60 ms; Reduce Motion cross-fades only.
             .transition(reduceMotion
                         ? AnyTransition.opacity

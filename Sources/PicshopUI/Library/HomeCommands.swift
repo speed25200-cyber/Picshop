@@ -70,6 +70,22 @@ enum HomeCommands {
         return .reply(french ? "Ouvre une photo ou une vidéo, puis parle-moi." : "Open a photo or a video, then talk to me.", isProblem: false)
     }
 
+    // MARK: Searching
+
+    /// Home's search field: the projects whose title holds every word typed
+    /// (lowercase, no accents; a word of four letters or more may be a prefix
+    /// or a plural), newest first as given. An empty query keeps them all.
+    static func search(_ query: String, in projects: [ProjectSummary]) -> [ProjectSummary] {
+        let words = NormalizedUtterance(query).tokens
+        guard !words.isEmpty else { return projects }
+        return projects.filter { project in
+            let title = NormalizedUtterance(project.title).tokens
+            return words.allSatisfy { word in
+                title.contains { $0 == word || $0.hasPrefix(word) || same($0, word) }
+            }
+        }
+    }
+
     // MARK: Opening
 
     static let openVerbs: Set<String> = ["ouvre", "ouvrir", "ouvrez", "rouvre", "reouvre", "reprends", "reprendre", "open", "reopen", "resume", "continue", "continuer"]

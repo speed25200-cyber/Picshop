@@ -11,12 +11,18 @@ struct AdvancedSettingsView: View {
     @Environment(\.picshop) private var app
     /// The diagnostics text file, written when the screen opens.
     @State private var reportURL: URL?
+    /// MetricKit's days, read from the device when the screen opens.
+    @State private var measuredDays: [PerformanceDay] = []
+    /// Bumped when a flag changes, so its row redraws (flags live in UserDefaults).
+    @State private var flagsRevision = 0
 
     var body: some View {
         Form {
             if let app {
                 modelsSection(app)
                 performanceSection(app)
+                measuredSection
+                experimentalSection
                 diagnosticsSection(app)
                 buildSection
             }
@@ -154,6 +160,73 @@ struct AdvancedSettingsView: View {
             Text(L("Performance"))
         } footer: {
             Text(L("Automatic follows the iPhone's temperature: previews shrink and glow effects pause before the frame rate drops, and heavy AI work waits until the phone cools down. Exports are always full quality."))
+        }
+    }
+
+    /// What iOS measured in daily use (MetricKit), kept on the iPhone: launch, hangs,
+    /// scroll hitches, peak memory. The newest day first.
+    private var measuredSection: some View {
+        Section {
+            if measuredDays.isEmpty {
+                Text(L("iOS reports these once a day, after a day of use.")).font(PSFont.caption(13)).foregroundStyle(PSTheme.textSecondary)
+            } else {
+                ForEach(measuredDays.reversed(), id: \.date) { day in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(day.date, format: .dateTime.day().month().year()).font(PSFont.headline(14))
+                        Text(verbatim: Self.summary(of: day)).font(PSFont.mono(11)).foregroundStyle(PSTheme.textSecondary)
+                    }
+                }
+            }
+        } header: {
+            Text(L("Measured performance"))
+        } footer: {
+            Text(L("Launch time (median and 90th percentile), hangs, scroll hitches in milliseconds per second, and peak memory. These numbers never leave your iPhone."))
+        }
+        .task { measuredDays = await Task.detached(priority: .utility) { Diagnostics.shared.performanceLog().days }.value }
+    }
+
+    /// 'launch 310/520 ms · 2 hangs (p90 340 ms) · hitches 3.1 ms/s · 1 840 MB'.
+    static func summary(of day: PerformanceDay) -> String {
+        var parts: [String] = []
+        if let p50 = day.launchP50, let p90 = day.launchP90 { parts.append("launch \(Int(p50.rounded()))/\(Int(p90.rounded())) ms") }
+        if let count = day.hangCount {
+            parts.append(count == 0 ? "0 hangs" : "\(count) hangs" + (day.hangP90.map { " (p90 \(Int($0.rounded())) ms)" } ?? ""))
+        }
+        if let ratio = day.hitchRatio { parts.append(String(format: "hitches %.1f ms/s", ratio)) }
+        if let peak = day.peakMemoryMB { parts.append("\(Int(peak.rounded())) MB") }
+        return parts.isEmpty ? "—" : parts.joined(separator: " · ")
+    }
+
+    /// Réglages › Avancé › Expérimental: the W1 kill switches. Each new part of the app can
+    /// be turned off here if it misbehaves; Default follows the build.
+    private var experimentalSection: some View {
+        Section {
+            ForEach(FeatureFlag.allCases, id: \.self) { flag in
+                let _ = flagsRevision
+                Toggle(isOn: Binding(get: { FeatureFlags.isOn(flag) }, set: { value in
+                    Haptics.tick()
+                    FeatureFlags.set(flag, value == FeatureFlags.defaultValue(flag) ? nil : value)
+                    flagsRevision += 1
+                })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(Self.title(of: flag)).font(PSFont.headline(15))
+                        Text(L("Takes effect in the next editor you open.")).font(PSFont.caption(11)).foregroundStyle(PSTheme.textTertiary)
+                    }
+                }
+            }
+        } header: {
+            Text(L("Experimental"))
+        }
+    }
+
+    static func title(of flag: FeatureFlag) -> String {
+        switch flag {
+        case .catalogOps: return L("New voice operations")
+        case .retrievalCards: return L("Shorter Live prompt")
+        case .displayLinkCanvas: return L("120 Hz canvas")
+        case .proTone: return L("Curves, Levels and blend modes")
+        case .studioWorkspace: return L("Studio workspace")
+        case .psBackdrop: return L("New Home and backdrop")
         }
     }
 

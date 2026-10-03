@@ -58,6 +58,15 @@ public struct PhotoDocument: Hashable, Codable, Sendable, Identifiable {
         layers.first(where: { $0.id == id })
     }
 
+    /// A LUT was imported on the active image layer, at any intensity (one taken off can come back).
+    public var activeLayerHasLUT: Bool {
+        guard let id = activeImageLayerID, let layer = layer(id: id) else { return false }
+        return layer.edits.operations.contains { operation in
+            if case .lut = operation.kind { return true }
+            return false
+        }
+    }
+
     public func index(of layerID: UUID) -> Int? {
         layers.firstIndex(where: { $0.id == layerID })
     }

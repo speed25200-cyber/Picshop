@@ -21,6 +21,8 @@ import PicshopSpeech
 public final class PhotoEditorSession {
     public enum Tool: String, CaseIterable, Identifiable {
         case magic, focus, adjust, looks, color, erase, precise, cutout, crop, text, shapes, layers
+        /// W1 (proTone): in PhotoToolCatalog.layout only once their panels land.
+        case curves, levels
         public var id: String { rawValue }
         var title: String {
             switch self {
@@ -36,6 +38,8 @@ public final class PhotoEditorSession {
             case .text: return L("Text")
             case .shapes: return L("Shapes")
             case .layers: return L("Layers")
+            case .curves: return L("Curves")
+            case .levels: return L("Levels")
             }
         }
         var symbol: String {
@@ -52,6 +56,8 @@ public final class PhotoEditorSession {
             case .text: return "textformat"
             case .shapes: return "square.on.circle"
             case .layers: return "square.3.layers.3d"
+            case .curves: return "chart.xyaxis.line"
+            case .levels: return "chart.bar.xaxis"
             }
         }
     }
@@ -117,6 +123,10 @@ public final class PhotoEditorSession {
     public private(set) var modifiedTools: Set<Tool>
     /// The value of the dial being dragged; only the dial reads it.
     public let dial: DialValue
+    /// Curves, Levels and histogram state (E3): the histogram of the last settled frame and its clipping overlay.
+    let tone: PhotoToneState
+    /// Where the frame pump presents frames directly (E4's MetalCanvasView), bypassing `preview`.
+    @ObservationIgnored weak var canvasSink: (any CanvasSink)?
     /// Picshop Live in this editor, attached at the end of init.
     public let live: LiveSession
     /// True for the whole of a Live session: no toast for Live steps, no spoken reply, no recogniser start.
@@ -154,12 +164,26 @@ public final class PhotoEditorSession {
     private var executor: PhotoCommandExecutor?
 
     public private(set) var preview: CIImage?
-    @ObservationIgnored public private(set) var isRendering = false
+    /// A frame is rendering or the sharp frame is still due (the pump and the loop set it).
+    @ObservationIgnored public internal(set) var isRendering = false
+    /// Generation of `preview`: the canvas never goes back to an older frame than one the pump presented.
+    @ObservationIgnored private(set) var previewGeneration = 0
+    /// The display-link pump (`displayLinkCanvas`); nil runs the sleep-paced loop.
+    @ObservationIgnored private var framePump: CanvasFramePump?
     public var showsOriginal = false { didSet { requestPreview() } }
-    /// Split before/after: the original shows left of this point (0…1), nil when off.
+    /// Split before/after: the original shows left of this point (0…1), nil when off. The split
+    /// line writes it at touch rate: only the canvas leaves read it; chrome reads `isSplitComparing`.
     public var compareSplit: Double? {
-        didSet { if (oldValue == nil) != (compareSplit == nil) { Task { await loadOriginalPreview() } } }
+        didSet {
+            let isSplit = compareSplit != nil
+            guard isSplitComparing != isSplit else { return }
+            isSplitComparing = isSplit
+            Task { await loadOriginalPreview() }
+        }
     }
+    /// Coarse mirror of `compareSplit != nil`, written only when that changes, so a drag of the
+    /// split line never re-evaluates the editor's body (the compare button, the rail, the dock).
+    public private(set) var isSplitComparing = false
     /// The untouched photo at preview size, for the split compare.
     public private(set) var originalPreview: CIImage?
     /// The split compare lines pixels up, so it is offered only while the frame is the original one.
@@ -316,6 +340,7 @@ public final class PhotoEditorSession {
         openedDocument = document
         previewAspectRatio = document.aspectRatio
         dial = DialValue()
+        tone = PhotoToneState()
         live = LiveSession(app: app, mode: .photo, canGoLive: true)
         live.attach(self)
     }
@@ -340,6 +365,11 @@ public final class PhotoEditorSession {
         lastSavedDocument = document
         canRevertToImport = differsFromImport()
         observeLifecycle()
+        if FeatureFlags.isOn(.displayLinkCanvas) {
+            let pump = CanvasFramePump(session: self)
+            framePump = pump
+            pump.start()
+        }
         requestPreview()
         // Upside down with the reading order kept is never a look anyone chose, and a flip
         // made in an earlier session is out of Undo's reach: offer the way back.
@@ -381,6 +411,8 @@ public final class PhotoEditorSession {
         live.teardown()
         app.voice.cancel()
         renderTask?.cancel()
+        framePump?.stop()
+        framePump = nil
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers = []
         save()
@@ -479,11 +511,16 @@ public final class PhotoEditorSession {
     }
 
     var intentContext: IntentContext {
-        IntentContext(mode: .photo, currentAdjustments: document.activeAdjustments, hasSelection: document.selectedLayer?.isText == true,
-                      selectedIndex: document.selectedLayerID.flatMap { document.index(of: $0) }, clipCount: 0, textLayerCount: document.textLayers.count,
-                      pendingClarification: pendingClarification, lastTapPoint: lastTapPoint, canUndo: history.canUndo, canRedo: history.canRedo,
-                      preferredLanguage: app.settings.languageHint, lastParameter: lastAdjustment?.parameter, lastAdjustmentDirection: lastAdjustment?.direction ?? 0,
-                      selectionMask: selectionMask, table: liveTable, lastTableEdit: lastTableEdit, scene: liveSceneMap, lastIntent: lastIntent)
+        var context = IntentContext(mode: .photo, currentAdjustments: document.activeAdjustments, hasSelection: document.selectedLayer?.isText == true,
+                                    selectedIndex: document.selectedLayerID.flatMap { document.index(of: $0) }, clipCount: 0,
+                                    textLayerCount: document.textLayers.count, pendingClarification: pendingClarification, lastTapPoint: lastTapPoint,
+                                    canUndo: history.canUndo, canRedo: history.canRedo, preferredLanguage: app.settings.languageHint,
+                                    lastParameter: lastAdjustment?.parameter, lastAdjustmentDirection: lastAdjustment?.direction ?? 0,
+                                    selectionMask: selectionMask, table: liveTable, lastTableEdit: lastTableEdit, scene: liveSceneMap, lastIntent: lastIntent)
+        // The planner's operation cards: the layer and LUT operations are runnable only with these.
+        context.layerCount = document.layers.count
+        context.hasImportedLUT = document.activeLayerHasLUT
+        return context
     }
 
     // MARK: - Rendering
@@ -497,6 +534,12 @@ public final class PhotoEditorSession {
     /// hot phone renders smaller previews before it drops frames.
     public func requestPreview(interactive: Bool = false) {
         guard renderer != nil else { return }
+        if let framePump {
+            // The display link renders on the next vsync, one frame in flight at most.
+            isRendering = true
+            framePump.markDirty(interactive: interactive)
+            return
+        }
         if interactive {
             dirtyInteractive = true
             if isRendering { return }
@@ -542,6 +585,7 @@ public final class PhotoEditorSession {
                     let ratio = image.extent.height > 0 ? Double(image.extent.width / image.extent.height) : document.aspectRatio
                     if abs(ratio - previewAspectRatio) > 0.0005 { previewAspectRatio = ratio }
                     if !hasRenderedPreview { hasRenderedPreview = true }
+                    if !interactive { tone.didSettle(image) }
                 } catch {
                     PSLog.error("preview failed: \(error)", category: .ui)
                 }
@@ -562,6 +606,51 @@ public final class PhotoEditorSession {
                 }
             }
         }
+    }
+
+    // MARK: - Frame pump
+
+    /// The canvas view appeared: frames under the finger go to it directly, and its
+    /// presented frames close the touch-to-photon intervals.
+    func attachCanvas(_ view: MetalCanvasView) {
+        canvasSink = view
+        view.onPresented = { [weak self] generation, time in
+            self?.framePump?.framePresented(generation: generation, at: time)
+        }
+    }
+
+    /// One frame for the pump: at the governor's drag size with no expensive work while
+    /// the finger moves (a dial never starts an erase), at the sharp size once settled.
+    func renderFrame(interactive: Bool) async -> CIImage? {
+        guard let renderer else { return nil }
+        let governor = app.performance
+        let document = previewDocument()
+        let side = interactive ? governor.interactivePreviewSide : governor.previewLongestSide
+        let options = PhotoRenderer.Options(targetLongestSide: side, showOriginal: showsOriginal, allowExpensiveWork: !interactive, isDisplayed: true)
+        let signpost = PSSignpost.begin(interactive ? "photo.render" : "photo.settle")
+        defer { PSSignpost.end(signpost) }
+        do {
+            return try await renderer.render(document, options: options)
+        } catch {
+            PSLog.error("preview failed: \(error)", category: .ui)
+            return nil
+        }
+    }
+
+    /// A frame from the pump. Under the finger it goes straight to the canvas, with no
+    /// SwiftUI pass; the sharp one is published (the canvas, the histogram, Live, compare).
+    func frameRendered(_ image: CIImage, interactive: Bool, generation: Int) {
+        let ratio = image.extent.height > 0 ? Double(image.extent.width / image.extent.height) : document.aspectRatio
+        if abs(ratio - previewAspectRatio) > 0.0005 { previewAspectRatio = ratio }
+        if interactive, compareSplit == nil, let sink = canvasSink {
+            sink.present(image, generation: generation)
+        } else {
+            previewGeneration = generation
+            preview = image
+            if compareSplit == nil { canvasSink?.present(image, generation: generation) }
+        }
+        if !hasRenderedPreview { hasRenderedPreview = true }
+        if !interactive { tone.didSettle(image) }
     }
 
     // MARK: - History
@@ -635,14 +724,15 @@ public final class PhotoEditorSession {
     static func lookThumbnailKey(for document: PhotoDocument, thumbnailSide: Double) -> String {
         let operations = document.baseLayer?.edits.operations.filter { operation in
             switch operation.kind {
-            case .adjust, .adjustments, .toneCurve, .look, .autoEnhance: return false
+            case .adjust, .adjustments, .toneCurve, .levels, .look, .autoEnhance: return false
             default: return true
             }
         } ?? []
         return operations.map(\.id.uuidString).joined(separator: "|") + "@\(Int(thumbnailSide))"
     }
 
-    private func commit(_ newDocument: PhotoDocument, label: String) {
+    /// One undo step for `newDocument` (internal: the tone and layer panels commit through it).
+    func commit(_ newDocument: PhotoDocument, label: String) {
         Diagnostics.shared.note("commit \(label)")
         magicSelection = nil
         var updated = newDocument
@@ -754,7 +844,7 @@ public final class PhotoEditorSession {
     // MARK: - Dial drags
 
     /// Starts a drag: the document stays as it is until the drag ends.
-    private func beginInteraction(label: String) {
+    func beginInteraction(label: String) {
         if interaction != nil, interactiveDocument != document { endInteraction() }
         interaction = (label, nil)
         interactiveDocument = document
@@ -762,7 +852,7 @@ public final class PhotoEditorSession {
 
     /// Applies a dial's latest value: to the dragged copy during a drag (the
     /// renderer and the dial see it, nothing else), else as one committed step.
-    private func interactiveEdit(label: String, _ edit: @escaping (inout PhotoDocument) -> Void) {
+    func interactiveEdit(label: String, _ edit: @escaping (inout PhotoDocument) -> Void) {
         guard interaction != nil else {
             var updated = document
             edit(&updated)
@@ -778,7 +868,7 @@ public final class PhotoEditorSession {
     }
 
     /// Ends a drag: one commit (one undo step, one revision, one note to Live).
-    private func endInteraction() {
+    func endInteraction() {
         guard let current = interaction else {
             setDial(parameter: nil, group: nil, value: dial.value)
             requestPreview()
@@ -1040,7 +1130,9 @@ public final class PhotoEditorSession {
     public private(set) var previewAspectRatio: Double = 1
     /// False until the first frame has been drawn, so the canvas can show that
     /// it is loading without reading the preview itself.
-    public private(set) var hasRenderedPreview = false
+    public private(set) var hasRenderedPreview = false {
+        didSet { if hasRenderedPreview, !oldValue { app.noteEditorFirstPixels() } }
+    }
 
     public var isCropping: Bool { cropRect != nil }
 
@@ -2104,7 +2196,7 @@ public final class PhotoEditorSession {
 
     private static func isTonal(_ kind: EditOperation.Kind) -> Bool {
         switch kind {
-        case .adjust, .adjustments, .toneCurve, .look, .autoEnhance, .colorMixer, .colorGrade, .colorMatch, .lut: return true
+        case .adjust, .adjustments, .toneCurve, .levels, .look, .autoEnhance, .colorMixer, .colorGrade, .colorMatch, .lut: return true
         default: return false
         }
     }
@@ -2377,6 +2469,11 @@ public final class PhotoEditorSession {
 
     // MARK: - Export
 
+    /// The original photo's file: its camera data, date, place and HDR gain map go into exports.
+    var exportSourceURL: URL? {
+        document.baseLayer?.imageAsset.map { app.store.url(for: $0.relativePath, in: projectID) }
+    }
+
     /// True once the file is written (and saved to Photos when asked).
     @discardableResult
     public func export(options: ExportOptions) async -> Bool {
@@ -2384,7 +2481,7 @@ public final class PhotoEditorSession {
         exportProgress = 0.05
         defer { exportProgress = nil }
         do {
-            let url = try await PhotoExporter.export(document, renderer: renderer, options: options)
+            let url = try await PhotoExporter.export(document, renderer: renderer, options: options, source: exportSourceURL)
             exportedURL = url
             Haptics.success()
             showToast(options.saveToPhotos ? L("Saved to Photos") : L("Exported"))

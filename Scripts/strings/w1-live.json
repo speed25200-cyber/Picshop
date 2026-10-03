@@ -1,0 +1,16 @@
+{
+  "Every mark is burned into the page: nobody can move or delete it.": "Chaque annotation est incrustée dans la page : personne ne peut la déplacer ni la supprimer.",
+  "Flatten annotations": "Aplatir les annotations",
+  "Flatten modified pages": "Aplatir les pages modifiées",
+  "Open": "Ouvrir",
+  "PDF ready: the redacted text is gone from the file.": "PDF prêt : le texte caviardé a disparu du fichier.",
+  "Pages whose words you replaced become images, so the old words leave the file.": "Les pages dont tu as remplacé des mots deviennent des images : les anciens mots quittent le fichier.",
+  "Password": "Mot de passe",
+  "Protected PDF": "PDF protégé",
+  "Redact": "Caviarder",
+  "Tap a word to black it out, or drag a box over what must go. It leaves the exported file for good.": "Touche un mot pour le noircir, ou trace un cadre sur ce qui doit disparaître. Il quitte le fichier exporté pour de bon.",
+  "The replaced words stay in the file, where they can be copied or found. Turn on “Flatten modified pages” to remove them.": "Les mots remplacés restent dans le fichier, où on peut les copier ou les rechercher. Active « Aplatir les pages modifiées » pour les supprimer.",
+  "This PDF is protected. Enter its password to edit it.": "Ce PDF est protégé. Saisis son mot de passe pour le modifier.",
+  "Wrong password. Try again.": "Mot de passe incorrect. Réessaie.",
+  "“%@” is protected. Enter its password to open it.": "« %@ » est protégé. Saisis son mot de passe pour l'ouvrir."
+}

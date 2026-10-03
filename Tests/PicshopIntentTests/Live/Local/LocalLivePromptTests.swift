@@ -11,13 +11,15 @@ final class LocalLivePromptTests: XCTestCase {
 
     /// The examples as the engine's history, the way the model brain replays them (a recovery's
     /// afterResult included).
-    static func history(mode: EditorMode, size: LocalPromptSize) -> [LocalChatMessage] {
-        LocalModelLiveBrain.exampleHistory(mode: mode, size: size)
+    /// These tests describe the legacy layout (the hand-written guide and its 15 examples), kept for one
+    /// wave behind the retrievalCards switch; PromptBudgetTests covers the catalog layout.
+    static func history(mode: EditorMode, size: LocalPromptSize, layout: LocalPromptLayout = .legacy) -> [LocalChatMessage] {
+        LocalModelLiveBrain.exampleHistory(mode: mode, size: size, layout: layout)
     }
 
-    static func setup(mode: EditorMode, size: LocalPromptSize) -> LocalChatSetup {
-        LocalChatSetup(system: LocalLivePrompt.system(mode: mode, size: size), tools: LocalLivePrompt.toolSpecs(mode: mode),
-                       history: history(mode: mode, size: size), imageMaxPixels: 196_608)
+    static func setup(mode: EditorMode, size: LocalPromptSize, layout: LocalPromptLayout = .legacy) -> LocalChatSetup {
+        LocalChatSetup(system: LocalLivePrompt.system(mode: mode, size: size, layout: layout), tools: LocalLivePrompt.toolSpecs(mode: mode),
+                       history: history(mode: mode, size: size, layout: layout), imageMaxPixels: 196_608)
     }
 
     // MARK: Budgets and words
@@ -27,7 +29,7 @@ final class LocalLivePromptTests: XCTestCase {
             let specs = LocalLivePrompt.toolSpecs(mode: mode).map { $0.serialized() }.joined()
             XCTAssertLessThanOrEqual(specs.count, LocalLivePrompt.toolSpecsBudget, "\(mode) tool specs")
             for size in Self.sizes {
-                let system = LocalLivePrompt.system(mode: mode, size: size)
+                let system = LocalLivePrompt.system(mode: mode, size: size, layout: .legacy)
                 XCTAssertLessThanOrEqual(system.count, size == .full ? LocalLivePrompt.Budgets.systemFull : LocalLivePrompt.Budgets.systemCompact)
                 let ledger = LocalContextLedger(setup: Self.setup(mode: mode, size: size))
                 // The cached prefix, estimated at 3.2 characters a token (conservative): about 4.9K for the 4B's
@@ -37,7 +39,7 @@ final class LocalLivePromptTests: XCTestCase {
                 XCTAssertLessThanOrEqual(ledger.prefixTokens, size == .full ? 5_000 : 3_000, "\(mode) \(size)")
                 XCTAssertGreaterThan(ledger.prefixTokens, 1_000)
             }
-            XCTAssertLessThan(LocalLivePrompt.system(mode: mode, size: .compact).count, LocalLivePrompt.system(mode: mode, size: .full).count)
+            XCTAssertLessThan(LocalLivePrompt.system(mode: mode, size: .compact, layout: .legacy).count, LocalLivePrompt.system(mode: mode, size: .full, layout: .legacy).count)
         }
     }
 
@@ -45,8 +47,8 @@ final class LocalLivePromptTests: XCTestCase {
         var texts: [String] = []
         for mode in Self.modes {
             for size in Self.sizes {
-                XCTAssertEqual(LocalLivePrompt.system(mode: mode, size: size), LocalLivePrompt.system(mode: mode, size: size))
-                XCTAssertEqual(LocalLivePrompt.examples(mode: mode, size: size), LocalLivePrompt.examples(mode: mode, size: size))
+                XCTAssertEqual(LocalLivePrompt.system(mode: mode, size: size, layout: .legacy), LocalLivePrompt.system(mode: mode, size: size, layout: .legacy))
+                XCTAssertEqual(LocalLivePrompt.examples(mode: mode, size: size, layout: .legacy), LocalLivePrompt.examples(mode: mode, size: size, layout: .legacy))
                 texts.append(QwenChatTemplate.render(Self.setup(mode: mode, size: size)))
             }
         }
@@ -63,7 +65,7 @@ final class LocalLivePromptTests: XCTestCase {
     }
 
     func testPersonaRules() {
-        let full = LocalLivePrompt.system(mode: .photo, size: .full)
+        let full = LocalLivePrompt.system(mode: .photo, size: .full, layout: .legacy)
         for rule in ["tutoie", "moins de 20 mots", "apply_edits", "undo", "compare_before_after", "propose_ideas", "un peu 10", "beaucoup 40",
                      "<editor_state>", "<media_text>", "N'identifie jamais", "langue", "You are Picshop Live"] {
             XCTAssertTrue(full.contains(rule), rule)
@@ -82,12 +84,12 @@ final class LocalLivePromptTests: XCTestCase {
         }
         XCTAssertFalse(full.contains("behind the subject"), "textBehind is worded for a person")
         XCTAssertTrue(full.contains("textBehind: a title behind a PERSON only"))
-        XCTAssertFalse(LocalLivePrompt.system(mode: .video, size: .full).contains("fillCells"), "tables are photo-only")
-        let compact = LocalLivePrompt.system(mode: .photo, size: .compact)
+        XCTAssertFalse(LocalLivePrompt.system(mode: .video, size: .full, layout: .legacy).contains("fillCells"), "tables are photo-only")
+        let compact = LocalLivePrompt.system(mode: .photo, size: .compact, layout: .legacy)
         for rule in ["tutoie", "apply_edits", "undo", "propose_ideas", "<editor_state>", "N'identifie jamais"] {
             XCTAssertTrue(compact.contains(rule), "compact: \(rule)")
         }
-        XCTAssertTrue(LocalLivePrompt.system(mode: .video, size: .full).contains("vidéos"))
+        XCTAssertTrue(LocalLivePrompt.system(mode: .video, size: .full, layout: .legacy).contains("vidéos"))
     }
 
     /// The action list names only real actions and values, allowed in its editor, about 20 for photos and 15 for videos.
@@ -129,7 +131,7 @@ final class LocalLivePromptTests: XCTestCase {
     // MARK: Examples
 
     func testTheExamplesTeachWhatASmallModelMustDo() {
-        let photo = LocalLivePrompt.examples(mode: .photo, size: .full)
+        let photo = LocalLivePrompt.examples(mode: .photo, size: .full, layout: .legacy)
         XCTAssertEqual(photo.count, 15, "10 to 20 targeted examples for the 4B")
         XCTAssertEqual(photo.map(\.toolName), [.applyEdits, .undo, .proposeIdeas, .applyEdits, .applyEdits, .applyEdits, .applyEdits, .applyEdits,
                                                 .applyEdits, .applyEdits, .applyEdits, .applyEdits, nil, .applyEdits, nil])
@@ -177,7 +179,7 @@ final class LocalLivePromptTests: XCTestCase {
         // And every ref, match, row and column a call names is in that example's own user text (or, for the repair
         // round, in the result it just read): no example teaches an id the model could not have seen.
         for size in Self.sizes {
-            for example in LocalLivePrompt.examples(mode: .photo, size: size) {
+            for example in LocalLivePrompt.examples(mode: .photo, size: size, layout: .legacy) {
                 let calls: [(JSONValue?, String)] = [(example.arguments, example.user)] + [example.repair.map { ($0.arguments, example.user + (example.toolResult ?? "")) }].compactMap { $0 }
                 for (arguments, visible) in calls {
                     for step in arguments?["steps"]?.array ?? [] {
@@ -189,16 +191,16 @@ final class LocalLivePromptTests: XCTestCase {
                 }
             }
         }
-        XCTAssertEqual(LocalLivePrompt.examples(mode: .video, size: .full).count, 6)
-        XCTAssertEqual(LocalLivePrompt.examples(mode: .video, size: .compact).count, 4)
-        let compact = LocalLivePrompt.examples(mode: .photo, size: .compact)
+        XCTAssertEqual(LocalLivePrompt.examples(mode: .video, size: .full, layout: .legacy).count, 6)
+        XCTAssertEqual(LocalLivePrompt.examples(mode: .video, size: .compact, layout: .legacy).count, 4)
+        let compact = LocalLivePrompt.examples(mode: .photo, size: .compact, layout: .legacy)
         XCTAssertEqual(compact.map(\.toolName), [.applyEdits, .undo, .proposeIdeas, nil, .applyEdits, .applyEdits, .applyEdits, nil])
         XCTAssertFalse(compact.contains { $0.repair != nil }, "the repair example is the 4B's")
         XCTAssertTrue(compact.contains { calls($0).contains("fillCells") }, "the 2B learns fillCells too")
         XCTAssertFalse(compact.contains { $0.user.hasSuffix("make it pop") }, "the 2B drops pop")
         for mode in Self.modes {
             for size in Self.sizes {
-                for example in LocalLivePrompt.examples(mode: mode, size: size) {
+                for example in LocalLivePrompt.examples(mode: mode, size: size, layout: .legacy) {
                     for said in [example.assistant] + [example.afterResult].compactMap({ $0 }) {
                         XCTAssertLessThan(said.split(whereSeparator: \.isWhitespace).count, 20, said)
                         XCTAssertEqual(FilteredOutput.run([said]).speech, said, "speakable as written")
@@ -216,9 +218,10 @@ final class LocalLivePromptTests: XCTestCase {
     /// Every example's call is one the validator accepts in its editor: the model learns only valid calls.
     func testEveryExampleCallValidates() throws {
         let grounding = ToolInputValidator.Grounding(imageAspect: 4.0 / 3.0, canvasAspect: 4.0 / 3.0)
+        for layout in LocalPromptLayout.allCases {
         for mode in Self.modes {
             for size in Self.sizes {
-                for example in LocalLivePrompt.examples(mode: mode, size: size) {
+                for example in LocalLivePrompt.examples(mode: mode, size: size, layout: layout) {
                     guard let tool = example.toolName else { continue }
                     let use = ToolArgumentCoercer.rawToolUse(id: "e", name: tool.rawValue, arguments: example.arguments ?? [:])
                     var context = IntentContext(mode: mode)
@@ -227,13 +230,14 @@ final class LocalLivePromptTests: XCTestCase {
                     let call = try ToolInputValidator(mode: mode).validate(use, context: context, grounding: grounding).get()
                     if case .proposeIdeas(let ideas) = call.tool {
                         XCTAssertTrue(ideas.allSatisfy { !$0.steps.isEmpty }, "\(mode) \(size)")
-                        XCTAssertEqual(ideas.count, mode == .video && size == .full ? 3 : 2)
+                        XCTAssertEqual(ideas.count, layout == .catalog && size == .compact ? 1 : (mode == .video && size == .full ? 3 : 2))
                     }
                     if case .applyEdits(let intents) = call.tool, intents.first?.action == .removeObject, intents.first?.target?.point != nil {
                         XCTAssertEqual(use.rawInput.contains("0.82"), true, "the 0-1000 point reaches the validator in 0-1")
                     }
                 }
             }
+        }
         }
     }
 
@@ -392,8 +396,9 @@ final class LocalLivePromptTests: XCTestCase {
             // spoken, the corner/size/restyle guide lines, and the 15 photo examples (8 for the 2B) with a repair.
             (.photo, .full, 15728, "d13f8c6129ce6d95"),
             (.photo, .compact, 9457, "4e1e3119c40b9196"),
-            (.video, .full, 8868, "d7ec0a13801f42d1"),
-            (.video, .compact, 6822, "ac1d4d10810c4fc5"),
+            // Video re-baselined in W1: its opinion idea adjusts the whole clip (selectiveAdjust is photo-only).
+            (.video, .full, 8854, "2d857863af4c5d2"),
+            (.video, .compact, 6808, "7533f9ab44e5e920"),
         ]
         for (mode, size, length, hash) in golden {
             let text = QwenChatTemplate.render(Self.setup(mode: mode, size: size), addGenerationPrompt: false)

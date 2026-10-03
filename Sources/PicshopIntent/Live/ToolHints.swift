@@ -33,7 +33,8 @@ public enum ToolHints {
         case .needsSelection:
             return "Ask the user to tap or circle the area, or give a box."
         case .unsupported:
-            return hasTable ? "For table cells use fillCells, clearCells or highlightCells." : nil
+            if hasTable { return "For table cells use fillCells, clearCells or highlightCells." }
+            return action == .operation ? "Tell the user why in one sentence and offer the nearest operation from your cards." : nil
         case .unknownRef:
             return "Use an id printed in the texts, objects or free lines of the editor state."
         case .badRegion:
@@ -45,6 +46,7 @@ public enum ToolHints {
             case .fillCells: return "Fill only the failing cells again with cells all, or tell the user which cells did not come out."
             case .addText, .editText, .moveText: return "Try once with a larger size or a clearer spot (a free area), or tell the user."
             case .removeObject, .eraseRegion, .removeText, .clearCells: return "Erase a slightly larger box once, or tell the user what is left."
+            case .operation: return "Call the operation once more with the value the check expects, or tell the user what did not change."
             default: return "Tell the user in one sentence what did not come out."
             }
         }

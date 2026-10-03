@@ -8,7 +8,11 @@ import PicshopIntent
 /// escape, closes it. At most 46 % of the screen tall; the controls scroll
 /// beyond that.
 ///
-/// Controls inside use `PSTheme.fill` / `psChipFill`, and the white actions
+/// In the W1 workspace (StudioChrome provides `studioInspector`) the same
+/// panel is an InspectorPanel with three heights, so every editor's panels
+/// get it without edits. The signature does not change.
+///
+/// Controls inside use `psFillControl` / `psChipFill`, and the white actions
 /// are flat: never glass on glass.
 struct ToolPanel<Accessory: View, Content: View>: View {
     let title: String
@@ -21,6 +25,7 @@ struct ToolPanel<Accessory: View, Content: View>: View {
     /// The controls' own height, measured: the scroll view is exactly that tall up to the cap.
     @State private var contentHeight: CGFloat?
     @Environment(\.studioPanelMaxHeight) private var maxHeight
+    @Environment(\.studioInspector) private var inspector
 
     init(title: String, live: LiveSession?, onDone: @escaping () -> Void, @ViewBuilder accessory: () -> Accessory, @ViewBuilder content: () -> Content) {
         self.title = title
@@ -34,6 +39,24 @@ struct ToolPanel<Accessory: View, Content: View>: View {
     private var contentCap: CGFloat { max(120, maxHeight - PSMetrics.barButton - 12 - 32) }
 
     var body: some View {
+        if let inspector {
+            InspectorPanel(title: title, detent: Binding(get: { inspector.detent }, set: { inspector.detent = $0 }), onDone: onDone) {
+                accessory
+            } content: {
+                content
+            }
+            .leading(Group { if let live { LiveMiniOrb(live: live) } })
+            .onDisappear {
+                // The next tool opens at its own height, not over the whole picture.
+                if inspector.detent == .full { inspector.detent = .medium }
+            }
+        } else {
+            card
+        }
+    }
+
+    /// W0: the card sized to its controls, up to 46 % of the screen.
+    private var card: some View {
         VStack(spacing: 12) {
             header
             // One copy of the controls (two, as ViewThatFits keeps, would swap and lose their
@@ -49,7 +72,7 @@ struct ToolPanel<Accessory: View, Content: View>: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .psCard(cornerRadius: PSRadius.toolPanel)
+        .psCard(cornerRadius: PSRadius.floating)
         .padding(.horizontal, 10)
         .frame(maxWidth: 620)
         .offset(y: dragOffset * 0.5)
@@ -66,7 +89,7 @@ struct ToolPanel<Accessory: View, Content: View>: View {
             }
             Text(title)
                 .font(.headline)
-                .foregroundStyle(PSTheme.textPrimary)
+                .foregroundStyle(Color.psTextPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
                 .accessibilityAddTraits(.isHeader)
@@ -85,7 +108,7 @@ struct ToolPanel<Accessory: View, Content: View>: View {
                 .onEnded { value in
                     let vertical = abs(value.translation.height) > abs(value.translation.width)
                     let shouldClose = vertical && (value.translation.height > 48 || value.predictedEndTranslation.height > 140)
-                    withAnimation(PSMotion.standard) { dragOffset = 0 }
+                    withAnimation(PSSpring.release(velocity: -value.velocity.height, distance: max(1, dragOffset))) { dragOffset = 0 }
                     if shouldClose {
                         Haptics.tap()
                         onDone()
@@ -122,9 +145,9 @@ struct LiveMiniOrb: View {
             .overlay {
                 if differentiate, let symbol = Self.phaseSymbol(state) {
                     Image(systemName: symbol)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color.white)
-                        .shadow(color: .black.opacity(0.5), radius: 2)
+                        .font(PSFont.glyph(.micro, weight: .bold))
+                        .foregroundStyle(Color.psTextPrimary)
+                        .shadow(color: Color.psBadgeGround, radius: 2)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
@@ -152,18 +175,18 @@ private struct ToolPanelPreview: View {
             ToolPanel(title: "Recadrer", live: live, onDone: {}) {
                 PSPanelPrimaryButton("OK") {}
             } content: {
-                Text(verbatim: "Contenu du panneau").foregroundStyle(PSTheme.textSecondary).frame(height: 120)
+                Text(verbatim: "Contenu du panneau").foregroundStyle(Color.psTextSecondary).frame(height: 120)
             }
             ToolPanel(title: "Réglages", live: nil, onDone: {}) {
                 VStack(spacing: 12) {
                     ForEach(0..<12, id: \.self) { index in
-                        Text(verbatim: "Ligne \(index + 1)").foregroundStyle(PSTheme.textSecondary).frame(maxWidth: .infinity, minHeight: 32)
+                        Text(verbatim: "Ligne \(index + 1)").foregroundStyle(Color.psTextSecondary).frame(maxWidth: .infinity, minHeight: 32)
                     }
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(PSTheme.canvas)
+        .background(Color.psCanvas)
         .environment(\.studioPanelMaxHeight, 360)
         .onAppear { if live == nil { live = LiveSession.preview(.acting) } }
         .onDisappear { live?.teardown() }

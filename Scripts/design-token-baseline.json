@@ -1,0 +1,154 @@
+{
+  "files": {
+    "Sources/PicshopUI/App/OnboardingPages.swift": {
+      "font": 1,
+      "opacity": 0,
+      "radius": 0
+    },
+    "Sources/PicshopUI/App/OnboardingView.swift": {
+      "font": 0,
+      "opacity": 1,
+      "radius": 0
+    },
+    "Sources/PicshopUI/Common/ColorControls.swift": {
+      "font": 4,
+      "opacity": 7,
+      "radius": 2
+    },
+    "Sources/PicshopUI/Common/IdeaChips.swift": {
+      "font": 0,
+      "opacity": 1,
+      "radius": 1
+    },
+    "Sources/PicshopUI/Common/LiveCaptions.swift": {
+      "font": 2,
+      "opacity": 3,
+      "radius": 1
+    },
+    "Sources/PicshopUI/Common/LiveOrb.swift": {
+      "font": 0,
+      "opacity": 8,
+      "radius": 0
+    },
+    "Sources/PicshopUI/Common/PanelControls.swift": {
+      "font": 2,
+      "opacity": 7,
+      "radius": 1
+    },
+    "Sources/PicshopUI/Library/MagicMovieBuilder.swift": {
+      "font": 5,
+      "opacity": 2,
+      "radius": 0
+    },
+    "Sources/PicshopUI/PDF/PDFEditorView.swift": {
+      "font": 7,
+      "opacity": 7,
+      "radius": 15
+    },
+    "Sources/PicshopUI/Photo/AdjustPanel.swift": {
+      "font": 2,
+      "opacity": 2,
+      "radius": 0
+    },
+    "Sources/PicshopUI/Photo/CurvesPanel.swift": {
+      "font": 0,
+      "opacity": 2,
+      "radius": 2
+    },
+    "Sources/PicshopUI/Photo/FocusPanel.swift": {
+      "font": 1,
+      "opacity": 0,
+      "radius": 0
+    },
+    "Sources/PicshopUI/Photo/HistogramView.swift": {
+      "font": 0,
+      "opacity": 3,
+      "radius": 3
+    },
+    "Sources/PicshopUI/Photo/LayerBlendControls.swift": {
+      "font": 2,
+      "opacity": 0,
+      "radius": 0
+    },
+    "Sources/PicshopUI/Photo/LevelsPanel.swift": {
+      "font": 0,
+      "opacity": 3,
+      "radius": 2
+    },
+    "Sources/PicshopUI/Photo/PhotoCanvasView.swift": {
+      "font": 3,
+      "opacity": 15,
+      "radius": 7
+    },
+    "Sources/PicshopUI/Photo/PhotoExportSheet.swift": {
+      "font": 0,
+      "opacity": 4,
+      "radius": 9
+    },
+    "Sources/PicshopUI/Photo/PhotoPanels.swift": {
+      "font": 7,
+      "opacity": 6,
+      "radius": 8
+    },
+    "Sources/PicshopUI/Settings/AdvancedSettingsView.swift": {
+      "font": 1,
+      "opacity": 0,
+      "radius": 0
+    },
+    "Sources/PicshopUI/Settings/SettingsView.swift": {
+      "font": 2,
+      "opacity": 1,
+      "radius": 3
+    },
+    "Sources/PicshopUI/Settings/VoicePickerView.swift": {
+      "font": 2,
+      "opacity": 0,
+      "radius": 0
+    },
+    "Sources/PicshopUI/Video/FilmstripScrubber.swift": {
+      "font": 0,
+      "opacity": 2,
+      "radius": 2
+    },
+    "Sources/PicshopUI/Video/MotionPanel.swift": {
+      "font": 0,
+      "opacity": 0,
+      "radius": 1
+    },
+    "Sources/PicshopUI/Video/TimelineView.swift": {
+      "font": 9,
+      "opacity": 9,
+      "radius": 5
+    },
+    "Sources/PicshopUI/Video/TranscriptPanel.swift": {
+      "font": 1,
+      "opacity": 3,
+      "radius": 2
+    },
+    "Sources/PicshopUI/Video/VideoEditorView.swift": {
+      "font": 7,
+      "opacity": 7,
+      "radius": 10
+    },
+    "Sources/PicshopUI/Video/VideoMagicPanel.swift": {
+      "font": 0,
+      "opacity": 1,
+      "radius": 1
+    },
+    "Sources/PicshopUI/Video/VideoOverlayPanel.swift": {
+      "font": 1,
+      "opacity": 1,
+      "radius": 2
+    },
+    "Sources/PicshopUI/Video/VideoPanels.swift": {
+      "font": 6,
+      "opacity": 2,
+      "radius": 4
+    }
+  },
+  "totals": {
+    "font": 65,
+    "opacity": 97,
+    "radius": 81
+  }
+}

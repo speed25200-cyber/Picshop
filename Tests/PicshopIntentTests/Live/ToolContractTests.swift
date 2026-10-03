@@ -169,7 +169,10 @@ final class ToolInputValidatorTests: XCTestCase {
     func testEnumsMatchExactly() {
         XCTAssertEqual(problems(edits(#"{"action":"adjust","parameter":"warmth","amount":10}"#)).first, "steps[0].parameter: 'warmth' is not a valid value")
         XCTAssertEqual(problems(edits(#"{"action":"applyLook","look":"noir et blanc"}"#)).first, "steps[0].look: 'noir et blanc' is not a valid value")
-        XCTAssertEqual(problems(edits(#"{"action":"remove","target":"dog"}"#)), ["steps[0].action: 'remove' is not a valid action"])
+        // W1: an unknown action lists the nearest operations for the repair round.
+        let unknown = problems(edits(#"{"action":"remove","target":"dog"}"#))
+        XCTAssertEqual(unknown.count, 1)
+        XCTAssertTrue(unknown.first?.hasPrefix("steps[0].action: 'remove' is not a valid action") ?? false, "\(unknown)")
         XCTAssertEqual(problems(edits(#"{"action":"removeObject","target":"dog","spatialHint":"gauche"}"#)).first, "steps[0].spatialHint: 'gauche' is not a valid value")
         XCTAssertEqual(problems(edits(#"{"action":"adjust","parameter":"contrast","amountMode":"more","amount":10}"#)).first, "steps[0].amountMode: 'more' is not a valid value")
         XCTAssertEqual(problems(edits(#"{"action":"flip","flipAxis":"diagonal"}"#)).first, "steps[0].flipAxis: 'diagonal' is not a valid value")

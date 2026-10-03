@@ -81,6 +81,12 @@ public actor LocalModelLiveBrain: LiveBrain {
     /// The next generation starts from a cold cache (see `Limits.coldFirstTokenTimeout`):
     /// true until a turn actually reused cached tokens.
     private var cacheIsCold = true
+    /// The prompt the open conversation was started with (the retrievalCards switch, read when it opens:
+    /// the prefix never changes under a conversation).
+    private var promptLayout: LocalPromptLayout = .current
+    /// The operation cards each of the last user messages carried, newest last: a card shown in the last
+    /// three is not printed again.
+    private var recentCards: [[OpID]] = []
 
     /// The engine answered `.modelNotReady` before any output of the turn's first
     /// generation (it was closed when the weights were unloaded): `run` opens a fresh one, once.
@@ -311,7 +317,8 @@ public actor LocalModelLiveBrain: LiveBrain {
             text = LocalLivePrompt.sessionStartMessage(turn, imageAttached: imageJPEG != nil)
             if thermalSerious { text += "\n" + Self.hotSessionStartLine(turn.language) }
         } else {
-            text = LocalLivePrompt.userMessage(turn, previous: lastSentState, imageAttached: imageJPEG != nil)
+            let cards = promptLayout == .catalog ? turnCards(turn) : ""
+            text = LocalLivePrompt.userMessage(turn, previous: lastSentState, imageAttached: imageJPEG != nil, cards: cards)
         }
         var messages = owedResults + [LocalChatMessage.user(text, imageJPEG: imageJPEG)]
         owedResults = []
@@ -521,8 +528,12 @@ public actor LocalModelLiveBrain: LiveBrain {
             var result: LiveToolResult
             var intents: [EditIntent] = []
             if case .applyEdits(let all) = call.tool {
-                intents = all
-                result = await runSkippingRepeats(call, intents: all, tools: tools, progress: progress, canUndo: context.canUndo)
+                // After validation, before execution: the plan in a sensible order, duplicate settings merged.
+                let linted = FeatureFlags.isOn(.catalogOps) ? PlanLinter.lint(all, utterance: turn.text) : (steps: all, notes: [])
+                if !linted.notes.isEmpty { note("model.lint", ["turn": String(turn.id), "notes": linted.notes.joined(separator: "; ")]) }
+                intents = linted.steps
+                let ordered = LiveToolCall(id: call.id, tool: .applyEdits(linted.steps))
+                result = await runSkippingRepeats(ordered, intents: linted.steps, tools: tools, progress: progress, canUndo: context.canUndo)
             } else {
                 result = await tools.perform(call)
             }
@@ -719,12 +730,15 @@ public actor LocalModelLiveBrain: LiveBrain {
     /// A fresh conversation: the system prompt, the tool specs, the few-shot
     /// examples as real history, then the recap after a compaction.
     private func openEngine(recap: String?) async throws -> any LocalChatEngine {
-        var history = Self.exampleHistory(mode: mode, size: info.promptSize)
+        promptLayout = .current
+        recentCards = []
+        var history = Self.exampleHistory(mode: mode, size: info.promptSize, layout: promptLayout)
         if let recap {
             history.append(.user(recap, imageJPEG: nil))
             history.append(.assistant(Self.recapAcknowledgement(recap), toolCalls: []))
         }
-        let setup = LocalChatSetup(system: LocalLivePrompt.system(mode: mode, size: info.promptSize), tools: LocalLivePrompt.toolSpecs(mode: mode),
+        let setup = LocalChatSetup(system: LocalLivePrompt.system(mode: mode, size: info.promptSize, layout: promptLayout),
+                                   tools: LocalLivePrompt.toolSpecs(mode: mode, layout: promptLayout),
                                    history: history, imageMaxPixels: LocalModelCatalog.imageMaxPixels)
         let made: any LocalChatEngine
         do {
@@ -772,6 +786,7 @@ public actor LocalModelLiveBrain: LiveBrain {
     }
 
     private func clearConversation() {
+        recentCards = []
         lastSentState = nil
         lastLook = nil
         lastImageAspect = nil
@@ -820,6 +835,58 @@ public actor LocalModelLiveBrain: LiveBrain {
         }
     }
 
+    // MARK: - Operation cards
+
+    /// The turn's retrieved operation cards (`<ops>…</ops>`): the operations its words are about, the last
+    /// two used ones first, none shown in the last three messages; 8 within 1,000 characters for the 4B,
+    /// 5 within 600 for the 2B. Empty when nothing clears the threshold (small talk).
+    private func turnCards(_ turn: LiveUserTurn) -> String {
+        let full = info.promptSize == .full
+        let query = OperationQuery(text: turn.text, domain: mode.opDomain, language: turn.language,
+                                   hints: Self.stateHints(turn.editorState), sticky: Self.stickyOperations(turn.recentActions))
+        let retrieved = OperationIndex.shared.retrieve(query, limit: full ? 8 : 5)
+        let shown = Set(recentCards.flatMap { $0 })
+        let fresh = retrieved.filter { !shown.contains($0.id) }
+        let block = OperationCards.turnBlock(fresh, language: turn.language == .english ? .en : .fr, budget: full ? 1_000 : 600)
+        let printed = block.isEmpty ? [] : fresh.map(\.id).filter { id in
+            guard let spec = OperationCatalog.shared.spec(id) else { return false }
+            return block.contains(OperationCards.card(spec, language: turn.language == .english ? .en : .fr))
+                || block.contains(spec.id.raw)
+        }
+        recentCards.append(printed)
+        if recentCards.count > 3 { recentCards.removeFirst(recentCards.count - 3) }
+        if !printed.isEmpty { note("model.cards", ["turn": String(turn.id), "ops": printed.map(\.raw).joined(separator: ",")]) }
+        return block
+    }
+
+    /// What the editor holds that makes some operations likelier.
+    static func stateHints(_ state: LiveEditorState) -> Set<OpStateHint> {
+        var hints: Set<OpStateHint> = []
+        if state.table != nil { hints.insert(.table) }
+        if let map = state.sceneMap {
+            if !map.texts.isEmpty { hints.insert(.sceneText) }
+            if map.objects.contains(where: { $0.kind == .person || $0.kind == .face || $0.kind == .animal }) { hints.insert(.subject) }
+            if map.texts.filter({ $0.isLayer }).count > 0 { hints.insert(.multipleLayers) }
+        }
+        if state.layerCount > 1 { hints.insert(.multipleLayers) }
+        if state.hasImportedLUT { hints.insert(.importedLUT) }
+        if state.video?.hasCaptions == true { hints.insert(.captions) }
+        if state.selection?.contains("layer") == true { hints.insert(.selection) }
+        return hints
+    }
+
+    /// The last two operations run (newest first), kept on the cards for "encore", "pareil sur l'autre".
+    static func stickyOperations(_ records: [LiveActionRecord]) -> [OpID] {
+        var result: [OpID] = []
+        for record in records.reversed() {
+            for step in record.steps.reversed() where !result.contains(OpID(step.action)) {
+                result.append(OpID(step.action))
+                if result.count == 2 { return result }
+            }
+        }
+        return result
+    }
+
     // MARK: - Helpers
 
     private func deservesLook(_ turn: LiveUserTurn, image: LiveImage) -> Bool {
@@ -842,9 +909,9 @@ public actor LocalModelLiveBrain: LiveBrain {
 
     /// The few-shot examples as the conversation's first exchanges (also the
     /// self-test's probe history). Additive to the contract (phase 1).
-    public static func exampleHistory(mode: EditorMode, size: LocalPromptSize) -> [LocalChatMessage] {
+    public static func exampleHistory(mode: EditorMode, size: LocalPromptSize, layout: LocalPromptLayout = .current) -> [LocalChatMessage] {
         var history: [LocalChatMessage] = []
-        for (index, example) in LocalLivePrompt.examples(mode: mode, size: size).enumerated() {
+        for (index, example) in LocalLivePrompt.examples(mode: mode, size: size, layout: layout).enumerated() {
             history.append(.user(example.user, imageJPEG: nil))
             guard let tool = example.toolName else {
                 history.append(.assistant(example.assistant, toolCalls: []))

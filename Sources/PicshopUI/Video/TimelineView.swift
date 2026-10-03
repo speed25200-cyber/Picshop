@@ -77,6 +77,7 @@ struct TimelineView: View {
                 // every tick, so the observation lives in a leaf view.
                 PlayheadFollower(player: session.player, pixelsPerSecond: pixelsPerSecond, position: $position)
             }
+            .overlay(alignment: .topTrailing) { AddClipsButton(session: session).padding(6) }
         }
         // Flat: the timeline sits on the panel's glass.
         .background(PSTheme.fill, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -207,6 +208,27 @@ struct TimelineView: View {
     }
 }
 
+/// Adds clips from Photos, at the playhead (the clip there is split) or after the last one.
+private struct AddClipsButton: View {
+    let session: VideoEditorSession
+
+    var body: some View {
+        Menu {
+            Button { session.pickClips(atPlayhead: true) } label: { Label(L("At the playhead"), systemImage: "arrow.down.to.line") }
+            Button { session.pickClips(atPlayhead: false) } label: { Label(L("At the end"), systemImage: "arrow.right.to.line") }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: PSGlyph.micro.rawValue, weight: .bold))
+                .foregroundStyle(.psOnAction)
+                .frame(width: 28, height: 28)
+                .background(.psActionPrimary, in: Circle())
+                .contentShape(Circle())
+        }
+        .disabled(session.isProcessing)
+        .accessibilityLabel(L("Add clips"))
+    }
+}
+
 /// A sound track on its lane: name, fades drawn as ramps at each end, its
 /// waveform, dimmed when muted.
 private struct SoundLaneBar: View {
@@ -314,7 +336,8 @@ private struct PlayheadFollower: View {
         Color.clear
             .frame(width: 0, height: 0)
             .allowsHitTesting(false)
-            .onChange(of: player.currentTime) { _, time in
+            // The display-rate playhead: the timeline glides with the video at up to 120 Hz.
+            .onChange(of: player.displayTime) { _, time in
                 guard player.isPlaying else { return }
                 position.scrollTo(x: CGFloat(time) * pixelsPerSecond)
             }

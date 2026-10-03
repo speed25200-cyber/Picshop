@@ -70,7 +70,7 @@ struct LiveCaptions: View {
                         .lineLimit(speaksNow || typeSize.isAccessibilitySize ? 1 : 2)
                         .truncationMode(.head)
                     if transcript.userPaused, !transcript.userIsFinal {
-                        BreathingEllipsis(color: secondary, animated: !reduceMotion)
+                        BreathingEllipsis(color: secondary, animated: !reduceMotion && (app?.performance.allowsContinuousAnimation ?? true))
                     }
                 }
                 .animation(.easeOut(duration: 0.2), value: transcript.userIsFinal)

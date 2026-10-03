@@ -31,7 +31,9 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
     private let queue = DispatchQueue(label: "com.picshop.compositor", qos: .userInteractive)
     private var overlayCache: [String: CIImage] = [:]
     private var captionCache: [String: CIImage] = [:]
-    private var cancelled = false
+    /// Bumped by every cancel: a request issued under an older generation is
+    /// finished as cancelled instead of drawn (a scrub leaves no queue of stale frames).
+    private let generation = CompositorGeneration()
 
     public var sourcePixelBufferAttributes: [String: any Sendable]? {
         [kCVPixelBufferPixelFormatTypeKey as String: [kCVPixelFormatType_32BGRA, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange],
@@ -45,13 +47,18 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
 
     public func renderContextChanged(_ newRenderContext: AVVideoCompositionRenderContext) {}
 
+    /// Never blocks: AVFoundation calls this on its own thread while a frame may be rendering.
     public func cancelAllPendingVideoCompositionRequests() {
-        queue.sync { cancelled = true }
+        generation.cancelAll()
     }
 
     public func startRequest(_ request: AVAsynchronousVideoCompositionRequest) {
+        let issued = generation.current
         queue.async { [self] in
-            cancelled = false
+            guard generation.isCurrent(issued) else {
+                request.finishCancelledRequest()
+                return
+            }
             guard let instruction = request.videoCompositionInstruction as? PicshopCompositionInstruction else {
                 request.finish(with: PicshopError.renderFailed("unexpected instruction"))
                 return
@@ -63,6 +70,11 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
             let time = CMTimeGetSeconds(request.compositionTime)
             let renderSize = request.renderContext.size
             let image = compose(instruction, request: request, time: time, renderSize: renderSize)
+            // Cancelled while the graph was built: the GPU work is skipped too.
+            guard generation.isCurrent(issued) else {
+                request.finishCancelledRequest()
+                return
+            }
             context.render(image, to: output, bounds: CGRect(origin: .zero, size: renderSize), colorSpace: RenderContext.colorSpace)
             request.finish(withComposedVideoFrame: output)
         }
@@ -219,10 +231,22 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
             }
         }
         if clip.rotation != 0 {
+            let upright = image.extent.size
             let radians = -clip.rotation * .pi / 180
             let center = CGPoint(x: image.extent.midX, y: image.extent.midY)
             let transform = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: CGFloat(radians)).translatedBy(x: -center.x, y: -center.y)
             image = image.transformed(by: transform)
+            // A straightened tilt (what is left past the quarter turns): the largest frame of
+            // the same shape inside the turned picture, so no corner shows the background.
+            let quarter = VideoClip.quarterTurns(of: clip.rotation)
+            let tilt = abs(clip.rotation - quarter) * .pi / 180
+            if tilt > 0.0001 {
+                let turned = Int(quarter / 90) % 2 != 0
+                let w = turned ? upright.height : upright.width, h = turned ? upright.width : upright.height
+                let shrink = cos(tilt) + max(w / max(1, h), h / max(1, w)) * sin(tilt)
+                let size = CGSize(width: w / shrink, height: h / shrink)
+                image = image.cropped(to: CGRect(x: image.extent.midX - size.width / 2, y: image.extent.midY - size.height / 2, width: size.width, height: size.height))
+            }
             image = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
         }
         if clip.flipHorizontal {
@@ -378,5 +402,27 @@ public final class PicshopCompositor: NSObject, AVVideoCompositing {
         if let image { overlayCache[key] = image }
         return image
     }
+}
+/// The compositor's cancel counter: requests carry the value they were issued
+/// under, and a cancel makes every earlier one stale. Lock-protected, never blocks for long.
+public final class CompositorGeneration: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    public init() {}
+
+    public var current: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+
+    public func cancelAll() {
+        lock.lock()
+        value &+= 1
+        lock.unlock()
+    }
+
+    public func isCurrent(_ issued: Int) -> Bool { issued == current }
 }
 #endif

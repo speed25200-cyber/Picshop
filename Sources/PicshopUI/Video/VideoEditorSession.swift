@@ -93,6 +93,12 @@ public final class VideoEditorSession {
     /// Revision at the last thumbnail handed to the library.
     @ObservationIgnored private var thumbnailRevision = 0
     @ObservationIgnored private var lastSavedTimeline: VideoTimeline?
+    @ObservationIgnored private var autosaveTask: Task<Void, Never>?
+    @ObservationIgnored private var autosaveDeadline = ContinuousClock.now
+    @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    /// The timeline as a trim drag found it: every step of the drag starts from it,
+    /// so titles over a handle dragged in and back out return to their place.
+    @ObservationIgnored private var interactionBase: VideoTimeline?
 
     private var services: AVVideoServices?
     private var executor: VideoCommandExecutor?
@@ -131,6 +137,10 @@ public final class VideoEditorSession {
     /// Look thumbnails rendered from one frame of a clip, kept per clip.
     public var lookThumbnails: (clipID: UUID, images: [FilterPreset: UIImage])?
     public var showsOriginal = false
+    /// The Photos picker for new clips is up.
+    public var showsClipPicker = false
+    /// Where picked clips go: a timeline second (split there), or nil for the end.
+    public var pendingClipPlacement: Double?
 
     @ObservationIgnored private var toastTask: Task<Void, Never>?
     @ObservationIgnored private var isConfigured = false
@@ -164,6 +174,19 @@ public final class VideoEditorSession {
         lastSavedTimeline = timeline
         player.load(timeline)
         watchPlayhead()
+        observeLifecycle()
+        player.maxFrameRate = app.performance.maxFrameRate
+        // The first frame is up: the local model may start loading (never before it).
+        Task { [weak self] in
+            for _ in 0..<80 {
+                guard let self else { return }
+                if self.player.isReady {
+                    self.app.noteEditorFirstPixels()
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(25))
+            }
+        }
         let load = Task { [weak self] in
             guard let self else { return }
             await app.attachEngines(to: pipeline)
@@ -180,6 +203,8 @@ public final class VideoEditorSession {
         guard !isTornDown else { return }
         isTornDown = true
         Diagnostics.shared.note("video editor teardown")
+        for observer in observers { NotificationCenter.default.removeObserver(observer) }
+        observers = []
         live.teardown()
         playheadWatch?.cancel()
         player.pause()
@@ -190,6 +215,8 @@ public final class VideoEditorSession {
     /// Saves off the main thread (the library orders the writes) and hands the
     /// library a thumbnail from the first frame, decoded off the main thread.
     public func save() {
+        autosaveTask?.cancel()
+        autosaveTask = nil
         let modifiedAt = Date()
         let library = app.library
         if timeline != lastSavedTimeline {
@@ -206,6 +233,54 @@ public final class VideoEditorSession {
             guard let poster = await thumbnailer.poster(for: saved) else { return }
             library.setThumbnail(UIImage(cgImage: poster), for: id, modifiedAt: modifiedAt)
         }
+    }
+
+    // MARK: - Autosave
+
+    /// Saves ~0.8 s after the last change, so a crash or a kill loses at most that
+    /// much. Written off the main actor; the library orders it with every other write.
+    private func scheduleAutosave() {
+        guard isConfigured, !isTornDown else { return }
+        autosaveDeadline = ContinuousClock.now.advanced(by: .milliseconds(800))
+        guard autosaveTask == nil else { return }
+        autosaveTask = Task { [weak self] in
+            while let self {
+                let deadline = self.autosaveDeadline
+                try? await Task.sleep(until: deadline, clock: .continuous)
+                guard !Task.isCancelled else { return }
+                if self.autosaveDeadline <= ContinuousClock.now {
+                    self.autosaveTask = nil
+                    self.autosave(synchronously: false)
+                    return
+                }
+            }
+        }
+    }
+
+    private func autosave(synchronously: Bool) {
+        let timeline = self.timeline
+        guard timeline != lastSavedTimeline else { return }
+        lastSavedTimeline = timeline
+        let project = Project(id: projectID, content: .video(timeline), createdAt: timeline.createdAt, modifiedAt: Date())
+        let library = app.library
+        if synchronously {
+            // Going to the background: this must land before the app is suspended.
+            library.saveNow(project)
+        } else {
+            Task { await library.persist(project) }
+        }
+    }
+
+    private func observeLifecycle() {
+        // Synchronous on the main queue: a hop through a task could run after the app is suspended.
+        observers.append(NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.autosaveTask?.cancel()
+                self.autosaveTask = nil
+                self.autosave(synchronously: true)
+            }
+        })
     }
 
     /// Live hears of a new clip under the playhead, at most once a second.
@@ -266,6 +341,7 @@ public final class VideoEditorSession {
         if timelineChanged {
             timeline = present
             revision += 1
+            scheduleAutosave()
         }
         if canUndo != history.canUndo { canUndo = history.canUndo; changed = true }
         if canRedo != history.canRedo { canRedo = history.canRedo; changed = true }
@@ -422,8 +498,16 @@ public final class VideoEditorSession {
         Haptics.success()
     }
 
-    public func beginSliderInteraction(_ label: String) { history.beginTransaction(label: label) }
-    public func endSliderInteraction() { history.endTransaction(); player.load(timeline) }
+    public func beginSliderInteraction(_ label: String) {
+        interactionBase = timeline
+        history.beginTransaction(label: label)
+    }
+
+    public func endSliderInteraction() {
+        interactionBase = nil
+        history.endTransaction()
+        player.load(timeline)
+    }
 
     public func setAdjustment(_ parameter: AdjustmentParameter, value: Double) {
         guard let id = selectedClip?.id else { return }
@@ -447,9 +531,52 @@ public final class VideoEditorSession {
         update(L("Trim")) { $0.trim(clipID: id, startOffset: startOffset, endOffset: endOffset) }
     }
 
+    /// A trim handle's range. During a drag each step starts from the timeline the
+    /// drag found, so overlays, sounds and captions follow the clip edge both ways.
     public func setClipSourceRange(_ id: UUID, _ range: TimeSpan) {
-        update(L("Trim")) { timeline in
-            timeline.update(clipID: id) { $0.sourceRange = range }
+        var updated = interactionBase ?? timeline
+        updated.update(clipID: id) { $0.sourceRange = range }
+        commit(updated, label: L("Trim"))
+    }
+
+    // MARK: - Adding clips
+
+    /// Opens Photos to add clips at the playhead (`atPlayhead`) or after the last one.
+    public func pickClips(atPlayhead: Bool) {
+        player.pause()
+        pendingClipPlacement = atPlayhead ? player.currentTime : nil
+        showsClipPicker = true
+    }
+
+    /// Lays picked movies into the project: at the playhead (the clip there is split)
+    /// or at the end. Each file is moved into the project, never copied twice.
+    func addClips(_ movies: [URL]) async {
+        guard !movies.isEmpty else { return }
+        let store = app.store
+        let projectID = projectID
+        let placement = pendingClipPlacement
+        pendingClipPlacement = nil
+        do {
+            try store.createPackage(for: projectID)
+            var clips: [VideoClip] = []
+            for movie in movies {
+                let relative = "\(Project.mediaDirectory)/clip-\(UUID().uuidString).\(movie.pathExtension.isEmpty ? "mov" : movie.pathExtension)"
+                let destination = store.url(for: relative, in: projectID)
+                try FileManager.default.moveItem(at: movie, to: destination)
+                let metadata = try await VideoThumbnailer.metadata(for: destination)
+                let asset = MediaAsset(kind: .video, relativePath: relative, pixelSize: metadata.size, duration: metadata.duration,
+                                       origin: .photoLibrary(localIdentifier: ""), frameRate: metadata.frameRate)
+                clips.append(VideoClip(asset: asset, name: String(format: L("Clip %d"), timeline.clips.count + clips.count + 1)))
+            }
+            guard let first = clips.first else { return }
+            let label = clips.count == 1 ? L("Add Clip") : String(format: L("Add %d Clips"), clips.count)
+            update(label) { $0.insert(clips, at: placement) }
+            selectedClipID = first.id
+            showToast(label, undoable: true)
+            Haptics.success()
+        } catch {
+            for movie in movies { try? FileManager.default.removeItem(at: movie) }
+            showToast((error as? PicshopError)?.message ?? error.localizedDescription, isError: true)
         }
     }
 

@@ -3,8 +3,10 @@
 # comes back where it must not be.
 #   1. "anthropic", "claude" or "sk-ant" (any case) in Sources, App, Scripts/strings,
 #      README.md or docs;
-#   2. URLSession, URLRequest, NWConnection or NWPathMonitor in Sources/PicshopIntent,
-#      Sources/PicshopSpeech or Sources/PicshopUI/Live.
+#   2. URLSession, URLRequest, NWConnection or NWPathMonitor in Sources/PicshopIntent
+#      (the operation catalog's retrieval included), Sources/PicshopSpeech or Sources/PicshopUI/Live;
+#   3. NLContextualEmbedding anywhere in Sources or App: it downloads its assets
+#      (NLEmbedding, part of iOS, is allowed).
 # Lines listed in Scripts/no-cloud-allowlist.txt are allowed.
 #
 #   Scripts/check-no-cloud.sh            exit 1 on any finding
@@ -53,6 +55,7 @@ scan() {
 
 scan "cloud  " "-i" "anthropic|claude|sk-ant|api\.anthropic" Sources App Scripts/strings README.md docs
 scan "network" "" "URLSession|URLRequest|NWConnection|NWPathMonitor" Sources/PicshopIntent Sources/PicshopSpeech Sources/PicshopUI/Live
+scan "assets " "" "NLContextualEmbedding" Sources App
 
 count=$(printf '%s\n' $files | grep -c . || true)
 if [ "$findings" -eq 0 ]; then

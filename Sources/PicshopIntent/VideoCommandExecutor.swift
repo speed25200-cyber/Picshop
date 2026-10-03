@@ -44,16 +44,23 @@ public struct VideoCommandExecutor: Sendable {
             return timeline.clips.first.map { [$0.id] } ?? []
         }
 
-        /// Reverses each clip, or plays a reversed one forwards again, from a new render.
+        /// Reverses each clip from a new render (sound included), or plays a reversed one
+        /// forwards again: the media it played before comes back, untouched.
         func toggleReverse(_ ids: [UUID]) async throws {
             for id in ids {
                 guard let clip = timeline.clip(id: id) else { continue }
+                if clip.isReversed, let forwards = clip.beforeReverse {
+                    timeline.update(clipID: id) { $0.restoreForwards(forwards) }
+                    continue
+                }
                 let rendered = try await services.reverse(clip: clip, timeline: timeline, progress: progress)
                 timeline.update(clipID: id) { clip in
+                    if !clip.isReversed { clip.beforeReverse = VideoClip.ForwardState(clip) }
                     clip.isReversed.toggle()
                     clip.processedAsset = rendered
                     clip.processedLabel = clip.isReversed ? "Reversed" : nil
                     clip.sourceRange = TimeSpan(start: 0, duration: rendered.duration)
+                    if !clip.isReversed { clip.beforeReverse = nil }
                 }
             }
         }
@@ -213,7 +220,8 @@ public struct VideoCommandExecutor: Sendable {
                 guard let index = timeline.clipIndex(at: time) else { return (timeline, .failed("No clip")) }
                 let insertAt = abs(timeline.clipStartTimes[index] - time) < 0.01 ? index : index + 1
                 let clip = VideoClip(asset: still, name: "Freeze")
-                timeline.clips.insert(clip, at: min(insertAt, timeline.clips.count))
+                // Titles and sounds after the hold move later with their shots.
+                timeline.ripple { $0.clips.insert(clip, at: min(insertAt, $0.clips.count)) }
                 timeline.touch()
                 return (timeline, .applied("Freeze Frame"))
             } catch {
@@ -312,6 +320,47 @@ public struct VideoCommandExecutor: Sendable {
         case .flip:
             for id in targetClipIDs() { timeline.update(clipID: id) { $0.flipHorizontal.toggle() } }
             return (timeline, .applied("Flip"))
+
+        case .straighten:
+            let ids = targetClipIDs()
+            guard !ids.isEmpty else { return (timeline, .failed(fr ? "Clip introuvable." : "Clip not found.")) }
+            let degrees: Double
+            if let given = intent.degrees {
+                degrees = given
+            } else {
+                // Levelled from the horizon in the frame under the playhead, like a photo.
+                guard let detector = services as? VideoHorizonDetecting else {
+                    return (timeline, .failed(PicshopError.unsupportedOperation(intent.summary).message(french: fr)))
+                }
+                do {
+                    guard let angle = try await detector.horizonAngle(at: playhead, timeline: timeline), abs(angle) > 0.05 else {
+                        return (timeline, ExecutionResult(outcome: .info(message: fr ? "L'horizon est déjà droit." : "The horizon already looks level.")))
+                    }
+                    degrees = -angle
+                } catch {
+                    return (timeline, .failed(errorMessage(error)))
+                }
+            }
+            let tilt = degrees.clamped(to: -45...45)
+            for id in ids { timeline.update(clipID: id) { $0.rotation = VideoClip.quarterTurns(of: $0.rotation) + tilt } }
+            return (timeline, .applied("Straighten"))
+
+        case .denoise:
+            // Video denoise is the noise-reduction adjustment, as in the Adjust panel.
+            for id in targetClipIDs() {
+                timeline.update(clipID: id) { clip in
+                    clip.adjustments[.noiseReduction] = (intent.amount ?? .absolute(0.5)).resolve(current: clip.adjustments[.noiseReduction], range: 0...1)
+                }
+            }
+            return (timeline, .applied("Denoise"))
+
+        case .sharpen:
+            for id in targetClipIDs() {
+                timeline.update(clipID: id) { clip in
+                    clip.adjustments[.sharpness] = (intent.amount ?? .relative(0.25)).resolve(current: clip.adjustments[.sharpness], range: 0...1)
+                }
+            }
+            return (timeline, .applied("Sharpen"))
 
         case .resetOrientation:
             let ids = targetClipIDs()
@@ -757,7 +806,9 @@ public struct VideoCommandExecutor: Sendable {
                 }
                 let beats = BeatSync.timelineBeats(grid, track: track)
                 let (snapped, moved) = BeatSync.snap(timeline, to: beats)
+                let before = timeline.clips
                 timeline = snapped
+                timeline.carryAttachments(from: before)
                 return (timeline, .applied(fr ? "Coupes sur le rythme (\(Int(grid.bpm.rounded())) BPM, \(moved))" : "Cuts on the beat (\(Int(grid.bpm.rounded())) BPM, \(moved))"))
             } catch {
                 return (timeline, .failed(errorMessage(error)))
@@ -772,7 +823,7 @@ public struct VideoCommandExecutor: Sendable {
                 for id in ids {
                     guard let clip = timeline.clip(id: id) else { continue }
                     let size = clip.renderAsset.pixelSize
-                    let rotated = Int(clip.rotation.rounded()) % 180 != 0
+                    let rotated = Int(VideoClip.quarterTurns(of: clip.rotation)) % 180 != 0
                     let sourceAspect = size.isEmpty ? 16.0 / 9.0 : (rotated ? size.height / size.width : size.aspectRatio)
                     let samples = try await services.focusSamples(for: clip, timeline: timeline, progress: progress)
                     let path = SmartReframe().path(samples: samples, duration: clip.timelineDuration, sourceAspect: sourceAspect, outputAspect: outputAspect)
@@ -898,4 +949,11 @@ public struct VideoCommandExecutor: Sendable {
 
 public extension VideoTimeline {
     func clip(id: UUID) -> VideoClip? { clips.first { $0.id == id } }
+}
+
+/// Video services that can tell how tilted the horizon is, for "redresse la vidéo".
+public protocol VideoHorizonDetecting: Sendable {
+    /// Degrees the horizon is tilted in the picture at a timeline second (counter-clockwise
+    /// positive, as Vision reports it); nil when no horizon is found.
+    func horizonAngle(at time: Double, timeline: VideoTimeline) async throws -> Double?
 }

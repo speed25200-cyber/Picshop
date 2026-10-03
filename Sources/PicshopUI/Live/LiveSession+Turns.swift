@@ -82,7 +82,7 @@ extension LiveSession {
         // While a choice is pending its chips replace the ideas: "la dernière" is a candidate, not a chip.
         let choicePending = choices != nil
         let lane = LiveTurnRouter.route(text, grammar: grammar, brain: currentKind, ideasOnScreen: choicePending ? 0 : shownIdeas.count,
-                                        jobRunning: jobRunning, fastLane: app?.settings.liveFastLane ?? true)
+                                        jobRunning: jobRunning, fastLane: app?.settings.liveFastLane ?? true, mode: mode)
         var dismissesChoice = false
         if choicePending, LiveTurnRouter.dismissesPendingChoice(grammar) {
             if case .control = lane {} else { dismissesChoice = true }

@@ -1,0 +1,21 @@
+{
+  "Black point": "Point noir",
+  "Blue": "Bleu",
+  "Curve point %d": "Point de courbe %d",
+  "Double-tap to switch between colour, luminance and hidden.": "Touchez deux fois pour passer de la couleur à la luminance, puis masquer.",
+  "Green": "Vert",
+  "Histogram": "Histogramme",
+  "Input": "Entrée",
+  "Input %d, output %d": "Entrée %d, sortie %d",
+  "No histogram yet": "Pas encore d'histogramme",
+  "Output black": "Noir de sortie",
+  "Output white": "Blanc de sortie",
+  "RGB": "RVB",
+  "Red": "Rouge",
+  "Shadows clipped %@, highlights clipped %@": "Ombres écrêtées %@, hautes lumières écrêtées %@",
+  "Show clipping": "Montrer l'écrêtage",
+  "Tap the curve to add a point, drag it to shape the tones.": "Touchez la courbe pour ajouter un point, faites-le glisser pour modeler les tons.",
+  "The histogram is not ready yet. Try again in a moment.": "L'histogramme n'est pas encore prêt. Réessayez dans un instant.",
+  "The photo already uses the whole tonal range.": "La photo utilise déjà toute la plage de tons.",
+  "White point": "Point blanc"
+}

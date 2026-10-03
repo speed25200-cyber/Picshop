@@ -3,6 +3,10 @@ import Foundation
 /// A single non-destructive edit recorded on a layer. Operations are replayed in
 /// order by the renderer; the history stack stores whole documents so undo is
 /// trivially correct.
+///
+/// Forward compatible: an operation kind this build does not know (one written by
+/// a newer build) decodes as `.unsupported` with its JSON kept, renders as a
+/// no-op and is written back as it was read.
 public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
     public var id: UUID
     public var kind: Kind
@@ -15,6 +19,36 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
         self.kind = kind
         self.createdAt = createdAt
         self.label = label ?? kind.defaultLabel
+    }
+
+    // MARK: Codable — the synthesized layout, plus unknown kinds kept as JSON.
+
+    private enum CodingKeys: String, CodingKey { case id, kind, createdAt, label }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        label = try container.decode(String.self, forKey: .label)
+        do {
+            kind = try container.decode(Kind.self, forKey: .kind)
+        } catch let error as DecodingError {
+            // A kind from a newer build: kept as JSON. Anything else is a broken document.
+            guard let raw = try? container.decode(OpaqueJSON.self, forKey: .kind), case .object = raw, let text = raw.text else { throw error }
+            kind = .unsupported(text)
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        if case .unsupported(let text) = kind, let raw = OpaqueJSON(text: text) {
+            try container.encode(raw, forKey: .kind)
+        } else {
+            try container.encode(kind, forKey: .kind)
+        }
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(label, forKey: .label)
     }
 
     public enum Kind: Hashable, Codable, Sendable {
@@ -69,6 +103,11 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
         /// Lens blur with the focus on a point: the camera's depth map when the
         /// photo has one, else the subject mask (last one wins).
         case lensBlur(focus: PSPoint, aperture: Double, mask: MaskReference?)
+        /// Levels per channel (last one wins; resolved with the tone curve into one tone table).
+        case levels(Levels)
+        /// A kind a newer build wrote: its JSON (sorted keys), kept as read and written back
+        /// unchanged. Renders as a no-op.
+        case unsupported(String)
 
         public var defaultLabel: String {
             switch self {
@@ -106,6 +145,8 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
             case .expand: return "Expand"
             case .moveObject(let mask, _): return "Move \(mask.displayName)"
             case .blurRegion(let mask, _): return "Blur \(mask.displayName)"
+            case .levels: return "Levels"
+            case .unsupported: return "Unsupported Edit"
             }
         }
 
@@ -177,6 +218,8 @@ public struct EditStack: Hashable, Codable, Sendable {
         return nil
     }
 
+    /// The person's curve, else the look's (what a curve probe compares). The renderer draws
+    /// both: `resolvedLookToneCurve` with the adjustments, `resolvedUserToneCurve` in `resolvedToneLUT`.
     public var resolvedToneCurve: ToneCurve {
         for operation in operations.reversed() {
             if case .toneCurve(let curve) = operation.kind { return curve }
@@ -212,6 +255,51 @@ public struct EditStack: Hashable, Codable, Sendable {
         return nil
     }
 
+    /// The last Levels, else identity.
+    public var resolvedLevels: Levels {
+        for operation in operations.reversed() {
+            if case .levels(let levels) = operation.kind { return levels }
+        }
+        return .identity
+    }
+
+    /// The curve the person set (the last `.toneCurve`), nil when none: never the look's built-in curve.
+    public var resolvedUserToneCurve: ToneCurve? {
+        for operation in operations.reversed() {
+            if case .toneCurve(let curve) = operation.kind { return curve }
+        }
+        return nil
+    }
+
+    /// The look's built-in 5-point curve (identity without a look). It renders with the
+    /// adjustments through Core Image's tone curve, as before W1; the person's curve stacks on it.
+    public var resolvedLookToneCurve: ToneCurve {
+        resolvedLook?.preset.toneCurve ?? .identity
+    }
+
+    /// Levels and the person's curve baked into one table (levels first), nil when it would
+    /// change nothing. Applied after the adjustments and the look, before colour.
+    public var resolvedToneLUT: ToneLUT? {
+        let levels = resolvedLevels
+        let curve = resolvedUserToneCurve ?? .identity
+        guard !levels.isIdentity || !curve.isIdentity else { return nil }
+        let table = ToneLUT.make(levels: levels, curve: curve)
+        return table.isIdentity ? nil : table
+    }
+
+    /// The stack without its tone table (no Levels, no curve of the person's): what Auto
+    /// Levels and the Levels and Curves histograms read, so Auto is the same however often it runs.
+    public func removingToneTable() -> EditStack {
+        var stack = self
+        stack.operations.removeAll {
+            switch $0.kind {
+            case .levels, .toneCurve: return true
+            default: return false
+            }
+        }
+        return stack
+    }
+
     public var resolvedLensBlur: (focus: PSPoint, aperture: Double, mask: MaskReference?)? {
         for operation in operations.reversed() {
             if case .lensBlur(let focus, let aperture, let mask) = operation.kind { return aperture > 0.001 ? (focus, aperture, mask) : nil }
@@ -228,6 +316,20 @@ public struct EditStack: Hashable, Codable, Sendable {
         if let last = operations.last {
             switch (last.kind, kind) {
             case (.colorMixer, .colorMixer), (.colorGrade, .colorGrade), (.colorMatch, .colorMatch), (.lensBlur, .lensBlur), (.lut, .lut):
+                operations[operations.count - 1] = EditOperation(id: last.id, kind: kind, createdAt: last.createdAt)
+                return
+            default: break
+            }
+        }
+        append(kind)
+    }
+
+    /// Replaces the last curve or levels when it is the most recent operation, so
+    /// dragging a curve point or a levels handle makes one undo step (like setColor).
+    public mutating func setTone(_ kind: EditOperation.Kind) {
+        if let last = operations.last {
+            switch (last.kind, kind) {
+            case (.toneCurve, .toneCurve), (.levels, .levels):
                 operations[operations.count - 1] = EditOperation(id: last.id, kind: kind, createdAt: last.createdAt)
                 return
             default: break
@@ -325,5 +427,80 @@ public struct EditStack: Hashable, Codable, Sendable {
         } else {
             append(.adjust(parameter, value: value))
         }
+    }
+}
+
+/// Any JSON value, as decoded: the payload of an operation kind this build does not know.
+enum OpaqueJSON: Hashable, Sendable, Codable {
+    case null, bool(Bool), integer(Int64), number(Double), string(String), array([OpaqueJSON]), object([String: OpaqueJSON])
+
+    private struct AnyKey: CodingKey {
+        var stringValue: String
+        var intValue: Int? { nil }
+        init(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
+    }
+
+    init(from decoder: Decoder) throws {
+        if let container = try? decoder.container(keyedBy: AnyKey.self) {
+            var object: [String: OpaqueJSON] = [:]
+            for key in container.allKeys { object[key.stringValue] = try container.decode(OpaqueJSON.self, forKey: key) }
+            self = .object(object)
+        } else if var container = try? decoder.unkeyedContainer() {
+            var array: [OpaqueJSON] = []
+            while !container.isAtEnd { array.append(try container.decode(OpaqueJSON.self)) }
+            self = .array(array)
+        } else {
+            let container = try decoder.singleValueContainer()
+            if container.decodeNil() {
+                self = .null
+            } else if let value = try? container.decode(Bool.self) {
+                self = .bool(value)
+            } else if let value = try? container.decode(Int64.self) {
+                self = .integer(value)
+            } else if let value = try? container.decode(Double.self) {
+                self = .number(value)
+            } else {
+                self = .string(try container.decode(String.self))
+            }
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        switch self {
+        case .object(let object):
+            var container = encoder.container(keyedBy: AnyKey.self)
+            for (key, value) in object { try container.encode(value, forKey: AnyKey(stringValue: key)) }
+        case .array(let array):
+            var container = encoder.unkeyedContainer()
+            for value in array { try container.encode(value) }
+        case .null:
+            var container = encoder.singleValueContainer()
+            try container.encodeNil()
+        case .bool(let value):
+            var container = encoder.singleValueContainer()
+            try container.encode(value)
+        case .integer(let value):
+            var container = encoder.singleValueContainer()
+            try container.encode(value)
+        case .number(let value):
+            var container = encoder.singleValueContainer()
+            try container.encode(value)
+        case .string(let value):
+            var container = encoder.singleValueContainer()
+            try container.encode(value)
+        }
+    }
+
+    /// Compact JSON with sorted keys.
+    var text: String? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        return (try? encoder.encode(self)).map { String(decoding: $0, as: UTF8.self) }
+    }
+
+    init?(text: String) {
+        guard let value = try? JSONDecoder().decode(OpaqueJSON.self, from: Data(text.utf8)) else { return nil }
+        self = value
     }
 }

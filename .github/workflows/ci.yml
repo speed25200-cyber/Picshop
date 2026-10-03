@@ -40,6 +40,16 @@ jobs:
       # The string catalog matches the sources and every key has its French.
       - name: Strings check
         run: python3 Scripts/generate_strings.py --check
+      # Literal radii, opacities and font sizes may only shrink: failing once the baseline
+      # (Scripts/design-token-baseline.json) has landed, a report before.
+      - name: Design-token lint
+        run: |
+          if [ -f Scripts/design-token-baseline.json ]; then python3 Scripts/lint-design-tokens.py
+          elif [ -f Scripts/lint-design-tokens.py ]; then python3 Scripts/lint-design-tokens.py --report || true
+          else echo "lint-design-tokens.py not landed yet"; fi
+      # No findString(, PDFComposer.compose( or createCGImage( on the main actor (allowlist in Scripts/).
+      - name: Main-thread lint
+        run: bash Scripts/lint-main-thread.sh
 
   package-macos:
     name: Package tests (macOS, Xcode 26)
@@ -65,7 +75,7 @@ jobs:
       - name: swift test
         run: |
           set -o pipefail
-          swift test --filter 'PicshopCoreTests|PicshopIntentTests|PicshopImagingTests' 2>&1 | tee swift-test.log
+          swift test --filter 'PicshopCoreTests|PicshopIntentTests|PicshopImagingTests|PicshopPDFTests|PicshopVideoTests' 2>&1 | tee swift-test.log
       - name: Errors
         if: failure()
         run: grep -hE "error:" swift-test.log build-*.log | sort -u || true

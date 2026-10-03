@@ -143,8 +143,17 @@ public enum ToolArgumentCoercer {
     static func coerceStep(_ input: [String: JSONValue]) -> [String: JSONValue] {
         var step = dropNulls(input)
         if let action = step["action"]?.string {
-            // The exact name first ("FillCells", "fill_cells"), then the names small models use ("fill_table").
+            // The exact name first ("FillCells", "fill_cells"), then a catalog operation ("Curves", "layer_blend"),
+            // then the names small models use ("fill_table").
             let exact = canonical(action, among: IntentAction.allCases.map(\.rawValue), field: "action")
+            if IntentAction(rawValue: exact) == nil, let id = catalogOperation(action) {
+                // Its own arguments, coerced from its params (key and value aliases, types, units).
+                var arguments = step
+                arguments["action"] = nil
+                var coerced = OperationArguments.coerce(arguments, for: id)
+                coerced["action"] = .string(id.raw)
+                return coerced
+            }
             step["action"] = .string(IntentAction(rawValue: exact) != nil ? exact : actionAliases[foldedKey(action)]?.rawValue ?? action)
         }
         let action = step["action"]?.string.flatMap(IntentAction.init(rawValue:))
@@ -191,6 +200,14 @@ public enum ToolArgumentCoercer {
         }
         if step["point"] != nil, !keepsBox { for key in ["bbox_2d", "bbox", "box"] { step[key] = nil } }
         return step
+    }
+
+    /// The catalog operation run by a handler that `name` names, by its exact id or folded ("layer_blend").
+    static func catalogOperation(_ name: String) -> OpID? {
+        guard FeatureFlags.isOn(.catalogOps) else { return nil }
+        if let spec = OperationCatalog.shared.spec(OpID(name)), spec.lowering == .handler { return spec.id }
+        let folded = foldedKey(name)
+        return OperationCatalog.shared.specs.first { $0.lowering == .handler && foldedKey($0.id.raw) == folded }?.id
     }
 
     /// A size written as a bare number between 0.25 and 4 (1.5, "2", "1,5"): a factor. A number with an "x", a

@@ -75,8 +75,9 @@ public final class FoundationModelsIntentEngine: IntentEngine, @unchecked Sendab
             sessions[mode] = (existing.session, existing.requests + 1)
             return existing.session
         }
-        let instructions = IntentPrompt.systemInstructions(mode: mode)
-            + "\n\nExamples:\n" + IntentPrompt.fewShotExamples.map { "Request: \"\($0.0)\" → \($0.1)" }.joined(separator: "\n")
+        // Its @Generable step has no room for a catalog operation's keys (W2: dynamic schema).
+        let instructions = IntentPrompt.systemInstructions(mode: mode, includesOperations: false)
+            + "\n\nExamples:\n" + IntentPrompt.fewShotExamples(for: mode).map { "Request: \"\($0.0)\" → \($0.1)" }.joined(separator: "\n")
         let session = LanguageModelSession(instructions: instructions)
         sessions[mode] = (session, 1)
         return session

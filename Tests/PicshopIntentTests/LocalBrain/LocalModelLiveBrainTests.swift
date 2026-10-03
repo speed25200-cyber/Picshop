@@ -41,7 +41,7 @@ final class LocalModelLiveBrainTests: XCTestCase {
         let engine = try XCTUnwrap(factory.engines.first)
         XCTAssertEqual(engine.prepareCount, 1)
         XCTAssertEqual(engine.setup.system, LocalLivePrompt.system(mode: .photo, size: .full))
-        XCTAssertEqual(engine.setup.tools, LocalLivePrompt.toolSpecs(mode: .photo))
+        XCTAssertEqual(engine.setup.tools, LocalLivePrompt.toolSpecs(mode: .photo, layout: .current))
         XCTAssertEqual(engine.setup.history, LocalModelLiveBrain.exampleHistory(mode: .photo, size: .full))
         XCTAssertEqual(engine.setup.imageMaxPixels, 196_608)
         XCTAssertEqual(engine.sent.count, 2)
@@ -567,6 +567,58 @@ final class LocalModelLiveBrainTests: XCTestCase {
         XCTAssertTrue(LocalModelLiveBrain.expectsIdeas(BrainTurns.speech("t'as une idée ?")))
         XCTAssertTrue(LocalModelLiveBrain.expectsIdeas(BrainTurns.speech("Tu en penses quoi")))
         XCTAssertFalse(LocalModelLiveBrain.expectsIdeas(BrainTurns.speech("plus chaud")))
+    }
+}
+
+extension LocalModelLiveBrainTests {
+    /// A photo with a shape layer and an imported LUT: the retrieved cards offer the layer and LUT
+    /// operations as runnable, never "(unavailable: …)".
+    func testCardsOfferLayerAndLUTOperationsTheDocumentCanRun() async throws {
+        try XCTSkipUnless(LocalPromptLayout.current == .catalog, "retrieval cards are off")
+        var state = BrainTurns.state()
+        state.layerCount = 2
+        state.hasImportedLUT = true
+        XCTAssertEqual(LocalModelLiveBrain.stateHints(state), [.multipleLayers, .importedLUT])
+        let factory = FakeEngineFactory(scripts: [[[.text("D'accord."), Say.done()]], [[.text("D'accord."), Say.done()]]])
+        let brain = brain(factory)
+        let handler = ScriptedToolHandler()
+        let blend = LiveUserTurn(id: 1, kind: .speech, text: "mets le calque en mode produit", language: .french, image: nil, editorState: state)
+        _ = await drain(brain.respond(to: blend, tools: handler))
+        let lut = LiveUserTurn(id: 2, kind: .speech, text: "baisse l'intensité du LUT à 40 %", language: .french, image: nil, editorState: state)
+        _ = await drain(brain.respond(to: lut, tools: handler))
+        let engine = try XCTUnwrap(factory.engines.first)
+        let sent = engine.sent.flatMap { $0 }.compactMap(\.userText).joined(separator: "\n")
+        XCTAssertTrue(sent.contains("layerBlend"), sent)
+        XCTAssertTrue(sent.contains("lutIntensity"), sent)
+        XCTAssertFalse(sent.contains("(unavailable"), sent)
+    }
+
+    /// The same words on a lone photo: the cards say why the operation cannot run.
+    func testCardsMarkLayerOperationsUnavailableOnALonePhoto() {
+        let state = BrainTurns.state()
+        XCTAssertEqual(LocalModelLiveBrain.stateHints(state), [])
+        let query = OperationQuery(text: "mets le calque en mode produit", domain: .photo, language: .french, hints: LocalModelLiveBrain.stateHints(state))
+        let blend = OperationIndex.shared.retrieve(query, limit: 8).first { $0.id == OpID("layerBlend") }
+        XCTAssertEqual(blend?.unavailable, "only the photo layer")
+    }
+
+    /// The planner lane derives the same hints from the intent context, and holds nothing the
+    /// context does not report against an operation.
+    func testPlannerCardsReadTheIntentContext() {
+        var known = IntentContext.photo
+        known.layerCount = 3
+        known.hasImportedLUT = true
+        XCTAssertFalse(IntentPrompt.requestCards(for: "mets le calque en mode produit", context: known).contains("(unavailable"))
+        XCTAssertFalse(IntentPrompt.requestCards(for: "retire le LUT", context: known).contains("(unavailable"))
+        XCTAssertFalse(IntentPrompt.requestCards(for: "mets le calque en mode produit", context: .photo).contains("(unavailable"),
+                       "a context that does not report layers marks nothing unavailable")
+        var lone = IntentContext.photo
+        lone.layerCount = 1
+        lone.hasImportedLUT = false
+        XCTAssertTrue(IntentPrompt.requestCards(for: "mets le calque en mode produit", context: lone).contains("(unavailable: only the photo layer)"))
+        var text = IntentContext.photo
+        text.textLayerCount = 1
+        XCTAssertFalse(IntentPrompt.requestCards(for: "mets le calque en mode produit", context: text).contains("(unavailable"))
     }
 }
 

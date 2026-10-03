@@ -2,18 +2,30 @@
 import SwiftUI
 import PicshopCore
 
-/// 'Récents': every project as a square picture, three to a row, newest
-/// first. A filter appears only once the library is large.
+/// 'Récents': every project as a square picture, newest first.
+///
+/// - `.studio` (W1): an adaptive grid (cells from 108 points, 4 apart, 14-point
+///   corners) and, from 6 projects, a Tout / Photos / Vidéos / PDF filter that
+///   sticks under the status bar while the grid scrolls (the section header of
+///   Home's pinned LazyVStack).
+/// - `.legacy` (W0): three columns 8 apart, a filter menu above 12 projects.
+///
+/// While Home searches, `searchQuery` titles the section and the summaries
+/// arrive already filtered.
 struct HomeRecentsGrid: View {
+    enum Style { case legacy, studio }
+
     let summaries: [ProjectSummary]
     let library: ProjectLibrary
     let namespace: Namespace.ID
     let actions: HomeProjectActions
+    var style: Style = .legacy
+    var searchQuery: String?
     @State private var filter: LibraryFilter = .all
 
-    /// The filter menu appears above this many projects.
-    static let filterThreshold = 12
-    private static let spacing: CGFloat = 8
+    /// The filter appears from this many projects.
+    static func filterThreshold(_ style: Style) -> Int { style == .studio ? 6 : 13 }
+    private static let legacySpacing: CGFloat = 8
 
     enum LibraryFilter: String, CaseIterable, Identifiable {
         case all, photos, videos, pdfs
@@ -36,26 +48,61 @@ struct HomeRecentsGrid: View {
         }
     }
 
+    private var isFilterable: Bool { searchQuery == nil && summaries.count >= Self.filterThreshold(style) }
+
     var body: some View {
-        let filterable = summaries.count > Self.filterThreshold
-        let active = filterable ? filter : .all
+        let active = isFilterable ? filter : .all
         let shown = active == .all ? summaries : summaries.filter(active.matches)
-        VStack(alignment: .leading, spacing: PSSpacing.medium) {
-            HStack(alignment: .center, spacing: PSSpacing.small) {
-                SectionTitle(title: active == .all ? L("Recent") : active.title, count: shown.count)
-                if filterable { filterMenu }
+        switch style {
+        case .legacy:
+            VStack(alignment: .leading, spacing: PSSpacing.medium) {
+                HStack(alignment: .center, spacing: PSSpacing.small) {
+                    SectionTitle(title: active == .all ? L("Recent") : active.title, count: shown.count)
+                    if isFilterable { filterMenu }
+                }
+                .padding(.horizontal, PSSpacing.page)
+                content(shown)
             }
-            .padding(.horizontal, PSSpacing.page)
-            if shown.isEmpty {
-                filterEmptyState
-            } else {
-                grid(shown)
+        case .studio:
+            // The title scrolls away; the filter (the section header) stays.
+            SectionTitle(title: title(active), count: shown.count)
+                .padding(.horizontal, PSSpacing.page)
+                .padding(.bottom, -PSSpacing.medium)
+            Section {
+                content(shown)
+            } header: {
+                if isFilterable {
+                    HomeFilterBar(selection: $filter)
+                        .padding(.horizontal, PSSpacing.page)
+                        .padding(.vertical, PSSpacing.small)
+                }
             }
         }
     }
 
+    private func title(_ active: LibraryFilter) -> String {
+        if let searchQuery { return searchQuery.isEmpty ? L("All projects") : L("Results") }
+        return active == .all ? L("Recent") : active.title
+    }
+
+    @ViewBuilder
+    private func content(_ shown: [ProjectSummary]) -> some View {
+        if shown.isEmpty {
+            filterEmptyState
+        } else {
+            grid(shown)
+        }
+    }
+
+    private var columns: [GridItem] {
+        switch style {
+        case .legacy: return Array(repeating: GridItem(.flexible(), spacing: Self.legacySpacing), count: 3)
+        case .studio: return [GridItem(.adaptive(minimum: PSMetrics.gridCellMinimum), spacing: PSMetrics.gridSpacing)]
+        }
+    }
+
     private func grid(_ shown: [ProjectSummary]) -> some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Self.spacing), count: 3), spacing: Self.spacing) {
+        LazyVGrid(columns: columns, spacing: style == .studio ? PSMetrics.gridSpacing : Self.legacySpacing) {
             ForEach(shown) { summary in
                 Button {
                     actions.open(summary)
@@ -73,21 +120,21 @@ struct HomeRecentsGrid: View {
             }
         }
         .padding(.horizontal, PSSpacing.page)
-        .animation(PSMotion.standard, value: shown.map(\.id))
+        .animation(PSSpring.standard, value: shown.map(\.id))
     }
 
-    /// Shown once the library is large enough to need it.
+    /// W0: shown once the library is large enough to need it.
     private var filterMenu: some View {
         Menu {
-            Picker(L("Recent"), selection: $filter.animation(PSMotion.standard)) {
+            Picker(L("Recent"), selection: $filter.animation(PSSpring.standard)) {
                 ForEach(LibraryFilter.allCases) { item in
                     Text(item.title).tag(item)
                 }
             }
         } label: {
             Image(systemName: "line.3.horizontal.decrease")
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(filter == .all ? PSTheme.textPrimary : PSTheme.onPrimary)
+                .font(PSFont.glyph(.bar))
+                .foregroundStyle(filter == .all ? Color.psTextPrimary : Color.psOnAction)
                 .frame(width: PSMetrics.barButton, height: PSMetrics.barButton)
                 .modifier(HomeCircleSurface(isSelected: filter != .all))
                 .contentShape(Circle())
@@ -99,15 +146,64 @@ struct HomeRecentsGrid: View {
 
     private var filterEmptyState: some View {
         VStack(spacing: PSSpacing.small) {
-            Image(systemName: filter == .videos ? "film" : (filter == .pdfs ? "doc.text" : "photo.on.rectangle"))
-                .font(.system(size: 28, weight: .light))
-                .foregroundStyle(PSTheme.textTertiary)
-            Text(L("Nothing here yet.")).font(PSFont.control(selected: true)).foregroundStyle(PSTheme.textSecondary)
+            Image(systemName: searchQuery != nil ? "magnifyingglass" : (filter == .videos ? "film" : (filter == .pdfs ? "doc.text" : "photo.on.rectangle")))
+                .font(.title.weight(.light))
+                .foregroundStyle(Color.psTextTertiary)
+            Text(searchQuery != nil ? L("No project has that name.") : L("Nothing here yet."))
+                .font(PSFont.control(selected: true))
+                .foregroundStyle(Color.psTextSecondary)
+                .multilineTextAlignment(.center)
+            if searchQuery == nil, filter != .all {
+                Button(L("Show all")) {
+                    Haptics.tick()
+                    withAnimation(PSSpring.standard) { filter = .all }
+                }
+                .font(PSFont.control(selected: true))
+                .foregroundStyle(Color.psTextPrimary)
+                .frame(minHeight: PSMetrics.control)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, PSSpacing.xxLarge)
         .padding(.horizontal, PSSpacing.page)
         .transition(.opacity)
+    }
+}
+
+/// The sticky Tout / Photos / Vidéos / PDF filter: one regular-glass capsule,
+/// the selected segment white with a black label (flat fills inside glass).
+struct HomeFilterBar: View {
+    @Binding var selection: HomeRecentsGrid.LibraryFilter
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(HomeRecentsGrid.LibraryFilter.allCases) { item in
+                let isSelected = item == selection
+                Button {
+                    guard item != selection else { return }
+                    withAnimation(PSSpring.quick) { selection = item }
+                } label: {
+                    Text(item.title)
+                        .font(PSFont.control(selected: isSelected))
+                        .foregroundStyle(isSelected ? Color.psOnAction : Color.psTextPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity, minHeight: PSMetrics.control - 8)
+                        .background { if isSelected { Capsule().fill(Color.psActionPrimary) } }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(PSPressStyle(scale: 0.97))
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+            }
+        }
+        .padding(4)
+        .frame(maxWidth: 420)
+        .psGlass()
+        .frame(maxWidth: .infinity)
+        .sensoryFeedback(.selection, trigger: selection)
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(L("Filter"))
     }
 }
 
@@ -118,7 +214,7 @@ struct HomeProjectCell: View {
     let library: ProjectLibrary
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: PSRadius.projectCell, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: PSRadius.tile, style: .continuous)
         Color.clear
             .aspectRatio(1, contentMode: .fit)
             .overlay { ThumbnailImage(slot: slot, kind: summary.kind) }
@@ -140,18 +236,18 @@ struct HomeProjectCell: View {
         case .video:
             Text(Self.duration(summary.duration ?? 0))
                 .font(.caption2.weight(.semibold).monospacedDigit())
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.psTextPrimary)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(Capsule().fill(Color.black.opacity(0.45)))
+                .background(Capsule().fill(Color.psBadgeGround))
                 .padding(6)
         case .pdf:
             Image(systemName: "doc.text.fill")
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.psTextPrimary)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
-                .background(Capsule().fill(Color.black.opacity(0.45)))
+                .background(Capsule().fill(Color.psBadgeGround))
                 .padding(6)
         }
     }
@@ -183,14 +279,14 @@ private struct HomeProjectPreview: View {
                 .overlay { ThumbnailImage(slot: slot, kind: summary.kind, glyphSize: 34) }
                 .clipShape(RoundedRectangle(cornerRadius: PSRadius.card, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
-                Text(summary.title).font(PSFont.control(selected: true)).foregroundStyle(PSTheme.textPrimary)
-                Text(summary.modifiedAt, format: .relative(presentation: .named)).font(PSFont.footnote()).foregroundStyle(PSTheme.textSecondary)
+                Text(summary.title).font(PSFont.control(selected: true)).foregroundStyle(Color.psTextPrimary)
+                Text(summary.modifiedAt, format: .relative(presentation: .named)).font(PSFont.footnote()).foregroundStyle(Color.psTextSecondary)
             }
             .lineLimit(1)
         }
         .frame(width: 280)
         .padding(PSSpacing.medium)
-        .background(PSTheme.ink)
+        .background(Color.psBase)
         .preferredColorScheme(.dark)
     }
 }
@@ -204,9 +300,9 @@ struct HomeCircleSurface: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if effects == .minimal {
-            content.background(Circle().fill(isSelected ? PSTheme.primary : PSTheme.surfaceFlat))
+            content.background(Circle().fill(isSelected ? Color.psActionPrimary : Color.psElevated))
         } else {
-            content.glassEffect(isSelected ? Glass.regular.tint(PSTheme.primary).interactive() : Glass.regular.interactive(), in: .circle)
+            content.glassEffect(isSelected ? Glass.regular.tint(Color.psActionPrimary).interactive() : Glass.regular.interactive(), in: .circle)
         }
     }
 }

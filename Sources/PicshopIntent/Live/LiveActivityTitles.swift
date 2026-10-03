@@ -53,6 +53,10 @@ public enum LiveActivityTitles {
         case .enhanceVoice: return fr ? "Je nettoie la voix…" : "Cleaning the voice…"
         case .syncToBeat, .fitMusic, .addMusic, .autoDuck: return fr ? "Je cale la musique…" : "Fitting the music…"
         case .trim, .split, .deleteRange, .deleteClip: return fr ? "Je coupe…" : "Cutting…"
+        case .operation:
+            // The catalog operation's own title: « Courbes… », "Blend mode…".
+            guard let title = Replies.operationTitle(intent.operation, french: fr) else { return fr ? "Je m'en occupe…" : "On it…" }
+            return "\(title)…"
         default: return fr ? "Je m'en occupe…" : "On it…"
         }
     }

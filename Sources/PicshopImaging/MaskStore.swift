@@ -106,38 +106,10 @@ public struct MaskStore: Sendable {
             ?? [UInt8](repeating: 0, count: width * height)
     }
 
-    /// Draws brush strokes into a mask.
+    /// Draws brush strokes into a mask (top-down bytes, 255 = selected). Hardness is honoured:
+    /// full inside `hardness × radius`, a smoothstep falloff to the radius (BrushRaster, in Core).
     public static func rasterize(strokes: [BrushStroke], width: Int, height: Int, into bytes: inout [UInt8]) {
-        guard width > 0, height > 0 else { return }
-        bytes.withUnsafeMutableBytes { buffer in
-            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width,
-                                          space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return }
-            // CoreGraphics draws bottom-up; flip so normalised (top-left) coordinates map correctly.
-            context.translateBy(x: 0, y: CGFloat(height))
-            context.scaleBy(x: 1, y: -1)
-            context.setLineCap(.round)
-            context.setLineJoin(.round)
-            let longest = CGFloat(max(width, height))
-            for stroke in strokes {
-                let radius = CGFloat(stroke.radius) * longest
-                let gray: CGFloat = stroke.mode == .add ? 1 : 0
-                context.setStrokeColor(gray: gray, alpha: 1)
-                context.setFillColor(gray: gray, alpha: 1)
-                context.setLineWidth(radius * 2)
-                guard let first = stroke.points.first else { continue }
-                if stroke.points.count == 1 {
-                    let center = CGPoint(x: first.x * Double(width), y: first.y * Double(height))
-                    context.fillEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
-                    continue
-                }
-                context.beginPath()
-                context.move(to: CGPoint(x: first.x * Double(width), y: first.y * Double(height)))
-                for point in stroke.points.dropFirst() {
-                    context.addLine(to: CGPoint(x: point.x * Double(width), y: point.y * Double(height)))
-                }
-                context.strokePath()
-            }
-        }
+        BrushRaster.draw(strokes, width: width, height: height, into: &bytes)
     }
 
     /// Grows the selection by `radius` pixels (max filter) and optionally softens the edge.

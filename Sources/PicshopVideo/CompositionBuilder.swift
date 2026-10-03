@@ -124,6 +124,25 @@ public enum VideoTime {
     public static func range(_ span: TimeSpan) -> CMTimeRange {
         CMTimeRange(start: cm(span.start), duration: cm(span.duration))
     }
+
+    /// One frame at a nominal rate, exactly: 1001/30000 s at 29.97, never a rounded 1/30.
+    public static func frameDuration(_ fps: Double) -> CMTime {
+        let exact = FrameRate.frameDuration(fps)
+        return CMTime(value: CMTimeValue(exact.value), timescale: exact.timescale)
+    }
+
+    /// Frame `index` of a stream starting at zero, at the exact rate.
+    public static func frameTime(_ index: Int, fps: Double) -> CMTime {
+        let exact = FrameRate.frameDuration(fps)
+        return CMTime(value: CMTimeValue(exact.value) * CMTimeValue(index), timescale: exact.timescale)
+    }
+
+    /// A render size that fits `limit` on its longest side, in even pixels; unchanged when it already fits.
+    public static func fitted(_ size: CGSize, longestSide limit: CGFloat?) -> CGSize {
+        guard let limit, limit > 0, max(size.width, size.height) > limit else { return size }
+        let scale = limit / max(size.width, size.height)
+        return CGSize(width: max(2, (size.width * scale / 2).rounded() * 2), height: max(2, (size.height * scale / 2).rounded() * 2))
+    }
 }
 
 /// Builds `AVMutableComposition` + `AVMutableVideoComposition` + `AVMutableAudioMix`
@@ -138,9 +157,16 @@ public struct CompositionBuilder: Sendable {
         self.projectID = projectID
     }
 
-    public func build(_ timeline: VideoTimeline) async throws -> BuiltComposition {
+    /// - Parameter maxRenderDimension: the longest side the frames are drawn at. The
+    ///   player passes the preview cap (a 4K source previews at 1920 px); export passes
+    ///   nil and keeps the full size.
+    public func build(_ timeline: VideoTimeline, maxRenderDimension: CGFloat? = nil) async throws -> BuiltComposition {
         let timer = PSTimer("composition.build")
-        defer { timer.log(category: .video) }
+        let signpost = PSSignpost.begin("video.compositionBuild", "\(timeline.clips.count) clips")
+        defer {
+            PSSignpost.end(signpost)
+            timer.log(category: .video)
+        }
         let composition = AVMutableComposition()
         guard !timeline.clips.isEmpty else { throw PicshopError.renderFailed("empty timeline") }
 
@@ -154,7 +180,7 @@ public struct CompositionBuilder: Sendable {
         ].compactMap { $0 }
         guard videoTracks.count == 2, audioTracks.count == 2 else { throw PicshopError.renderFailed("composition tracks") }
 
-        let renderSize = timeline.renderSize.cgSize
+        let renderSize = VideoTime.fitted(timeline.renderSize.cgSize, longestSide: maxRenderDimension)
         let starts = timeline.clipStartTimes
         var parameters: [ClipRenderParameters] = []
         var audioParameters: [AVMutableAudioMixInputParameters] = []
@@ -324,8 +350,7 @@ public struct CompositionBuilder: Sendable {
         let videoComposition = AVMutableVideoComposition()
         videoComposition.customVideoCompositorClass = PicshopCompositor.self
         videoComposition.renderSize = renderSize
-        let fps = timeline.frameRate > 0 ? timeline.frameRate : 30
-        videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(fps.rounded()))
+        videoComposition.frameDuration = VideoTime.frameDuration(timeline.frameRate)
         videoComposition.instructions = instructions
         if #available(iOS 17.0, *) {
             videoComposition.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2

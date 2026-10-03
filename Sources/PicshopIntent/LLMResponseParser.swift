@@ -12,11 +12,44 @@ public enum LLMResponseParser {
         json = repair(json)
         let decoder = JSONDecoder()
         if let data = json.data(using: .utf8) {
-            if let plan = try? decoder.decode(RawPlan.self, from: data) { return plan }
-            if let step = try? decoder.decode(RawIntentStep.self, from: data) { return RawPlan(steps: [step]) }
+            if let plan = try? decoder.decode(RawPlan.self, from: data) { return withExtras(plan, json: json) }
+            if let step = try? decoder.decode(RawIntentStep.self, from: data) { return withExtras(RawPlan(steps: [step]), json: json) }
             if let loose = try? JSONSerialization.jsonObject(with: data) as? [String: Any] { return fromLoose(loose) }
         }
         return nil
+    }
+
+    /// Catalog operations ("curves", "layerBlend") carry their own arguments, which RawIntentStep has no
+    /// field for: they are kept in `extra` (every key but action; nested arguments lifted) for the normalizer.
+    static func withExtras(_ plan: RawPlan, json: String) -> RawPlan {
+        guard plan.steps.contains(where: { IntentAction(rawValue: $0.action) == nil }), let value = try? JSONValue.parse(json),
+              case .object(let top) = value else { return plan }
+        let items: [JSONValue]
+        if case .array(let steps)? = top["steps"] ?? top["actions"] ?? top["intents"] {
+            items = steps
+        } else if top["action"] != nil {
+            items = [value]
+        } else {
+            return plan
+        }
+        var result = plan
+        for index in result.steps.indices where index < items.count && IntentAction(rawValue: result.steps[index].action) == nil {
+            guard case .object(let object) = items[index] else { continue }
+            result.steps[index].extra = arguments(of: object)
+        }
+        return result
+    }
+
+    /// A step object's arguments: nested "arguments"/"params"/"parameters" lifted, "action" left out.
+    static func arguments(of step: [String: JSONValue]) -> [String: JSONValue]? {
+        var object = step
+        for key in ["arguments", "params", "parameters"] {
+            guard case .object(let nested)? = object[key] else { continue }
+            for (name, value) in nested where object[name] == nil { object[name] = value }
+            object[key] = nil
+        }
+        object["action"] = nil
+        return object.isEmpty ? nil : object
     }
 
     static func extractFenced(_ text: String) -> String? {
@@ -68,6 +101,14 @@ public enum LLMResponseParser {
                 if let value = merged[key] as? Bool { return value }
                 if let value = merged[key] as? String { return value.lowercased() == "true" }
                 return nil
+            }
+            if IntentAction(rawValue: action) == nil, OperationCatalog.shared.spec(OpID(action))?.lowering == .handler,
+               let data = try? JSONSerialization.data(withJSONObject: dict),
+               let text = String(data: data, encoding: .utf8), case .object(let object)? = try? JSONValue.parse(text) {
+                // A catalog operation: its arguments as given.
+                var step = RawIntentStep(action: action)
+                step.extra = arguments(of: object)
+                return step
             }
             return RawIntentStep(action: action, target: string("target") ?? string("object"), spatialHint: string("spatialHint") ?? string("position"),
                                  ordinal: int("ordinal"), all: bool("all"), parameter: string("parameter") ?? string("param"),

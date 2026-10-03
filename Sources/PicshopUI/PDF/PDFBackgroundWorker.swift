@@ -3,13 +3,16 @@ import Foundation
 import UIKit
 import PDFKit
 import PicshopCore
+import PicshopIntent
 import PicshopPDF
+import PicshopImaging
 
 /// PDFKit off the main thread. PDFKit is not thread-safe, so this actor owns a
 /// service of its own, and with it its own copies of the source documents and
 /// of the composed document: nothing here is ever touched by the viewer.
 /// Page thumbnails (cached by page hash), the library thumbnail, the export,
-/// and the words under a tap all go through it.
+/// the words under a tap, the password, and every PDFKit read of the command
+/// executor (it is the executor's PDFAIServices) go through it.
 actor PDFBackgroundWorker {
     private let services: PDFEditingService
     /// The composed document for the last model (page navigation aside).
@@ -51,9 +54,21 @@ actor PDFBackgroundWorker {
         return image
     }
 
-    /// The flattened PDF, written to a temporary file.
-    func export(_ model: PDFDocumentModel) throws -> URL {
-        try services.export(model)
+    /// The exported PDF, written to a temporary file.
+    func export(_ model: PDFDocumentModel, options: PDFExportOptions? = nil) throws -> URL {
+        try services.export(model, options: options)
+    }
+
+    /// Whether the source PDF still needs its password (the worker's own copy of it).
+    func isLocked(_ model: PDFDocumentModel) -> Bool {
+        services.isLocked(model)
+    }
+
+    /// Opens the worker's copy of the source with the password: its page sizes, nil when wrong.
+    func unlock(_ model: PDFDocumentModel, password: String) -> [PSSize]? {
+        let sizes = services.unlock(model, password: password)
+        if sizes != nil { composed = nil; thumbnails = [:]; thumbnailOrder = [] }
+        return sizes
     }
 
     func word(at point: PSPoint, pageIndex: Int, in model: PDFDocumentModel) -> PDFEditingService.WordHit? {
@@ -62,6 +77,25 @@ actor PDFBackgroundWorker {
 
     func pageText(pageIndex: Int, in model: PDFDocumentModel) -> String {
         services.pageText(pageIndex: pageIndex, in: model)
+    }
+}
+
+/// The PDF command executor's services: every PDFKit call runs on the worker's executor,
+/// on its own documents (the synchronous variants, so nothing hops to another thread);
+/// only saving a page to Photos happens after.
+extension PDFBackgroundWorker: PDFAIServices {
+    func findText(_ query: String, in document: PDFDocumentModel, pageIndex: Int?) async throws -> [PDFTextHit] {
+        try services.findTextNow(query, in: document, pageIndex: pageIndex, composed: composedDocument(for: document))
+    }
+
+    func extractPage(_ pageIndex: Int, from document: PDFDocumentModel) async throws -> MediaAsset {
+        let (asset, url) = try services.renderPageFile(pageIndex, from: document, composed: composedDocument(for: document))
+        try await PhotoLibrary.save(imageAt: url)
+        return asset
+    }
+
+    func signatureAsset() async -> MediaAsset? {
+        SignatureStore.currentAsset()
     }
 }
 #endif

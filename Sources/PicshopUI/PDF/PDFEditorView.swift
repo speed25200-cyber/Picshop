@@ -201,6 +201,15 @@ private struct PDFToolContent: View {
                 }
                 Text(L("Tap a word to highlight it, or say “surligne « total »”.")).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
             }
+        case .redact:
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Spacer()
+                    PanelChip(title: L("Undo"), symbol: "arrow.uturn.backward") { session.removeLastMarkup(onPage: session.document.currentPageIndex) }
+                }
+                Text(L("Tap a word to black it out, or drag a box over what must go. It leaves the exported file for good."))
+                    .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+            }
         case .text:
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
@@ -383,7 +392,8 @@ struct PagesStrip: View {
         VStack(spacing: 10) {
             ScrollViewReader { reader in
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
+                    // Lazy: a 200-page document lays out (and renders) only the pages in view.
+                    LazyHStack(spacing: 10) {
                         ForEach(Array(session.document.pages.enumerated()), id: \.element.id) { index, page in
                             let selected = index == session.document.currentPageIndex
                             VStack(spacing: 5) {
@@ -504,16 +514,12 @@ struct PDFViewerRepresentable: UIViewRepresentable {
         }
         if session.searchQuery != context.coordinator.appliedQuery {
             context.coordinator.appliedQuery = session.searchQuery
-            if let query = session.searchQuery, let document = view.document {
-                let selections = document.findString(query, withOptions: [.caseInsensitive])
-                view.highlightedSelections = selections
-                if let first = selections.first { view.go(to: first) }
-            } else {
-                view.highlightedSelections = nil
-            }
+            // PDFKit searches off the main thread; matches arrive as it finds them.
+            context.coordinator.search(session.searchQuery, in: view)
         }
-        // Pan is only for drawing; otherwise let the scroll view scroll.
-        context.coordinator.pan?.isEnabled = session.activeTool == .draw
+        if view.document != nil { session.app.noteEditorFirstPixels() }
+        // Pan is only for drawing and redaction boxes; otherwise let the scroll view scroll.
+        context.coordinator.pan?.isEnabled = session.activeTool == .draw || session.activeTool == .redact
         context.coordinator.session = session
         context.coordinator.activity = activity
         context.coordinator.observeScrolling(in: view)
@@ -529,6 +535,44 @@ struct PDFViewerRepresentable: UIViewRepresentable {
         var isSyncing = false
         var appliedQuery: String?
         private var scrollObservation: NSKeyValueObservation?
+        /// The running search: its matches so far, and the document it runs in.
+        private var matches: [PDFSelection] = []
+        private weak var searchedDocument: PDFDocument?
+        private weak var searchedView: PDFView?
+        private var searchObservers: [NSObjectProtocol] = []
+
+        /// Starts an asynchronous search (`beginFindString`), cancelling the previous one.
+        /// The first match is shown as soon as it is found; highlights grow in batches.
+        func search(_ query: String?, in view: PDFView) {
+            if let document = searchedDocument, document.isFinding { document.cancelFindString() }
+            for observer in searchObservers { NotificationCenter.default.removeObserver(observer) }
+            searchObservers = []
+            matches = []
+            view.highlightedSelections = nil
+            guard let query, !query.isEmpty, let document = view.document else { return }
+            searchedDocument = document
+            searchedView = view
+            let signpost = PSSignpost.begin("pdf.find")
+            let center = NotificationCenter.default
+            searchObservers.append(center.addObserver(forName: .PDFDocumentDidFindMatch, object: document, queue: .main) { [weak self] note in
+                let selection = note.userInfo?["PDFDocumentFoundSelection"] as? PDFSelection
+                MainActor.assumeIsolated { if let selection { self?.found(selection) } }
+            })
+            searchObservers.append(center.addObserver(forName: .PDFDocumentDidEndFind, object: document, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    PSSignpost.end(signpost)
+                    self?.searchedView?.highlightedSelections = self?.matches.isEmpty == false ? self?.matches : nil
+                }
+            })
+            document.beginFindString(query, withOptions: [.caseInsensitive])
+        }
+
+        private func found(_ selection: PDFSelection) {
+            matches.append(selection)
+            guard let view = searchedView else { return }
+            if matches.count == 1 { view.go(to: selection) }
+            if matches.count == 1 || matches.count % 25 == 0 { view.highlightedSelections = matches }
+        }
 
         /// Watches PDFKit's own scroll view (found once the document is shown) for the page pill.
         func observeScrolling(in view: PDFView) {
@@ -587,6 +631,8 @@ struct PDFViewerRepresentable: UIViewRepresentable {
                         self.session.update(L("Highlight")) { $0.addMarkup(PDFMarkup(kind: .highlight(rects: [base], color: self.session.highlightColor)), toPageAt: index) }
                         Haptics.tick()
                     }
+                case .redact:
+                    self.session.redactWord(at: point, pageIndex: index)
                 case .signature:
                     self.session.placeSignature(at: point, pageIndex: index)
                 case .text:
@@ -600,25 +646,68 @@ struct PDFViewerRepresentable: UIViewRepresentable {
         @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
             guard let view = recognizer.view as? PDFView else { return }
             let location = recognizer.location(in: view)
+            let isRedacting = session.activeTool == .redact
             switch recognizer.state {
             case .began:
                 currentPoints = []
                 drawingPage = view.page(for: location, nearest: true)
+                boxStart = isRedacting ? location : nil
                 fallthrough
             case .changed:
                 if let (page, point) = normalized(location, in: view), page === drawingPage { currentPoints.append(point) }
+                if let boxStart { showBox(from: boxStart, to: location, in: view) }
             case .ended, .cancelled:
+                hideBox()
                 guard let page = drawingPage, let document = view.document, currentPoints.count > 1 else { return }
                 let index = document.index(for: page)
                 let points = currentPoints
+                currentPoints = []
+                if isRedacting {
+                    // The box from where the finger went down to where it lifted, in displayed page space.
+                    guard recognizer.state == .ended, let first = points.first, let last = points.last else { return }
+                    let box = PSRect(x: min(first.x, last.x), y: min(first.y, last.y), width: abs(last.x - first.x), height: abs(last.y - first.y))
+                    Task { @MainActor in self.session.addRedaction(displayedRects: [box], pageIndex: index) }
+                    return
+                }
                 let width = session.inkWidth
                 Task { @MainActor in
                     self.session.addInk(strokes: [BrushStroke(points: points, radius: width, hardness: 1)], pageIndex: index)
                 }
-                currentPoints = []
             default:
                 break
             }
+        }
+
+        // MARK: Redaction box
+
+        private var boxStart: CGPoint?
+        private var boxLayer: CAShapeLayer?
+
+        /// The box being dragged, black over the page with a dashed edge, until the finger lifts.
+        private func showBox(from start: CGPoint, to end: CGPoint, in view: UIView) {
+            let layer: CAShapeLayer
+            if let boxLayer {
+                layer = boxLayer
+            } else {
+                layer = CAShapeLayer()
+                layer.fillColor = UIColor.black.withAlphaComponent(0.6).cgColor
+                layer.strokeColor = UIColor.white.withAlphaComponent(0.9).cgColor
+                layer.lineWidth = 1
+                layer.lineDashPattern = [4, 3]
+                view.layer.addSublayer(layer)
+                boxLayer = layer
+            }
+            let rect = CGRect(x: min(start.x, end.x), y: min(start.y, end.y), width: abs(end.x - start.x), height: abs(end.y - start.y))
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer.path = UIBezierPath(rect: rect).cgPath
+            CATransaction.commit()
+        }
+
+        private func hideBox() {
+            boxLayer?.removeFromSuperlayer()
+            boxLayer = nil
+            boxStart = nil
         }
     }
 }
@@ -725,11 +814,20 @@ struct PDFExportSheet: View {
                         .buttonStyle(PSPressStyle(scale: 0.99))
                     }
                     .psCard(cornerRadius: 18, shadow: false)
+                    flattenOptions
+                    if let warning = session.exportWarning {
+                        Label(warning, systemImage: "exclamationmark.triangle.fill")
+                            .font(PSFont.caption(12))
+                            .foregroundStyle(PSTheme.warning)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 4)
+                    }
                 }
                 .padding(.horizontal, PSSpacing.page)
                 .padding(.top, 8)
                 .padding(.bottom, 96)
                 .animation(PSMotion.standard, value: session.exportedURL)
+                .animation(PSMotion.standard, value: session.exportWarning)
             }
             .scrollIndicators(.hidden)
             .background(AmbientBackground().ignoresSafeArea())
@@ -757,12 +855,39 @@ struct PDFExportSheet: View {
             .navigationTitle(L("Export"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("Done")) { dismiss() } } }
-            // Always re-export on open, so the shared file carries the latest edits.
-            .task { await session.export() }
+            // Always re-export on open, so the shared file carries the latest edits, and again
+            // (the previous run cancelled) whenever a flatten choice changes.
+            .task(id: session.exportOptions) { await session.export() }
         }
         .preferredColorScheme(.dark)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+    }
+
+    /// 'Aplatir' and 'Aplatir les pages modifiées' (on by default when words were replaced).
+    private var flattenOptions: some View {
+        VStack(spacing: 0) {
+            Toggle(isOn: $session.exportFlattensAnnotations) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("Flatten annotations")).font(PSFont.headline(15))
+                    Text(L("Every mark is burned into the page: nobody can move or delete it."))
+                        .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 12)
+            Divider().overlay(PSTheme.hairline).padding(.leading, 16)
+            Toggle(isOn: Binding(get: { session.exportOptions.flattenModifiedPages },
+                                 set: { session.exportFlattensModifiedPages = $0 })) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("Flatten modified pages")).font(PSFont.headline(15))
+                    Text(L("Pages whose words you replaced become images, so the old words leave the file."))
+                        .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 12)
+        }
+        .tint(PSTheme.primary)
+        .psCard(cornerRadius: PSRadius.card, shadow: false)
     }
 
     /// The current page as a sheet of paper, with its position in the document.

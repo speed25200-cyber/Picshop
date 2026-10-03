@@ -47,6 +47,7 @@ public struct VideoEditorView: View {
         .fileImporter(isPresented: $session.showsMusicPicker, allowedContentTypes: [.audio, .mp3, .mpeg4Audio, .wav, .aiff]) { result in
             if case .success(let url) = result { Task { await session.addMusic(from: url) } }
         }
+        .modifier(ClipPicker(session: session))
         .preferredColorScheme(.dark)
         .persistentSystemOverlays(.hidden)
     }

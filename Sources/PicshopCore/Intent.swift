@@ -162,6 +162,9 @@ public enum IntentAction: String, Codable, Sendable, CaseIterable {
     /// Moves a text block (`ref`: a printed block is erased and rewritten in its own style; a layer
     /// moves) to `target.point`, into `region`, to `placement`, or `degrees` + `amount` away.
     case moveText
+    /// A catalog operation (`EditIntent.operation`): never meta, in no mode by its flags; the catalog
+    /// gates each call by the operation's domains (`EditIntent.operationDomains`).
+    case operation
 
     public var isVideoOnly: Bool {
         switch self {
@@ -347,13 +350,16 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
     public var region: PSRect?
     /// Photo primitives: size, weight, design, alignment and style matching of addText, editText, moveText.
     public var textStyle: TextStyleSpec?
+    /// `.operation`: the catalog operation, its typed arguments and where the call came from.
+    public var operation: OperationCall?
 
     public init(id: UUID = UUID(), action: IntentAction, target: ObjectTarget? = nil, parameter: AdjustmentParameter? = nil,
                 amount: AmountSpec? = nil, look: FilterPreset? = nil, aspect: AspectPreset? = nil, degrees: Double? = nil,
                 flipAxis: FlipAxis? = nil, text: String? = nil, placement: TextElement.Placement? = nil, color: PSColor? = nil,
                 background: BackgroundSpec? = nil, timeRange: TimeSpan? = nil, time: Double? = nil, clipIndex: Int? = nil,
                 transition: TransitionKind? = nil, index: Int? = nil, scope: TargetScope = .current, confidence: Double = 1, replacement: String? = nil,
-                table: TableEditSpec? = nil, ref: SceneRef? = nil, region: PSRect? = nil, textStyle: TextStyleSpec? = nil) {
+                table: TableEditSpec? = nil, ref: SceneRef? = nil, region: PSRect? = nil, textStyle: TextStyleSpec? = nil,
+                operation: OperationCall? = nil) {
         self.id = id
         self.action = action
         self.target = target
@@ -379,6 +385,7 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         self.ref = ref
         self.region = region
         self.textStyle = textStyle
+        self.operation = operation
     }
 
     /// Short human description shown in the command feedback chip.
@@ -504,7 +511,20 @@ public struct EditIntent: Hashable, Codable, Sendable, Identifiable {
         case .highlightCells: return "Highlight cells"
         case .eraseRegion: return "Erase area"
         case .moveText: return "Move text"
+        case .operation:
+            guard let operation else { return "Operation" }
+            return OperationCatalog.shared.spec(operation.id)?.title.en ?? operation.id.raw
         }
+    }
+}
+
+public extension EditIntent {
+    /// The domains the catalog operation exists in: nil unless the action is `.operation`
+    /// (empty when the operation is missing or not in the catalog, so it is allowed nowhere).
+    var operationDomains: Set<OpDomain>? {
+        guard action == .operation else { return nil }
+        guard let operation else { return [] }
+        return OperationCatalog.shared.spec(operation.id)?.domains ?? []
     }
 }
 

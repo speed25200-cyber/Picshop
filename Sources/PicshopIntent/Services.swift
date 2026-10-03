@@ -31,6 +31,9 @@ public protocol PhotoAIServices: Sendable {
     /// regions, the detector for removed objects), with one render and one text pass for all of them.
     /// One report per request, in order. The default checks the document alone (`EditVerifier.structural`).
     func verify(_ requests: [VerificationRequest], in document: PhotoDocument) async throws -> [VerificationReport]
+    /// The rendered document's 256-bin histogram (gamma-encoded, on a small proxy), or nil when it
+    /// cannot be computed. Auto Tone and Levels' Auto read it.
+    func histogram(of document: PhotoDocument) async -> Histogram?
 }
 
 public extension PhotoAIServices {
@@ -41,6 +44,7 @@ public extension PhotoAIServices {
     func verify(_ requests: [VerificationRequest], in document: PhotoDocument) async throws -> [VerificationReport] {
         requests.map { EditVerifier.structural($0, in: document) }
     }
+    func histogram(of document: PhotoDocument) async -> Histogram? { nil }
 }
 
 /// Facts about a photo, assembled into a sentence by the executor.

@@ -53,12 +53,25 @@ final class LLMPlanTests: XCTestCase {
         XCTAssertEqual(intent.amount, .absolute(0.55))
     }
 
-    func testPromptMentionsEveryAction() {
-        let prompt = IntentPrompt.systemInstructions(mode: .video)
-        for action in IntentAction.allCases {
-            XCTAssertTrue(prompt.contains(action.rawValue), "prompt is missing \(action.rawValue)")
+    /// Each planner names every action its editor can run, and none of another editor's (W1: a PDF
+    /// planner no longer reads photo and video actions).
+    func testPromptMentionsEveryActionOfItsEditor() {
+        // `.operation` is never written by a model: catalog operations go by their own ids.
+        XCTAssertFalse(IntentPrompt.actionList.contains("operation"))
+        for mode in [EditorMode.photo, .video, .pdf] {
+            let prompt = IntentPrompt.systemInstructions(mode: mode)
+            let listed = Set(IntentPrompt.actionList(for: mode).split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+            XCTAssertFalse(listed.contains("operation"))
+            for action in IntentAction.allCases where action != .operation {
+                if action.isAllowed(in: mode) {
+                    XCTAssertTrue(prompt.contains(action.rawValue), "\(mode) prompt is missing \(action.rawValue)")
+                    XCTAssertTrue(listed.contains(action.rawValue), "\(mode) list is missing \(action.rawValue)")
+                } else if action != .unknown {
+                    XCTAssertFalse(listed.contains(action.rawValue), "\(mode) lists \(action.rawValue)")
+                }
+            }
         }
-        XCTAssertTrue(prompt.contains("VIDEO"))
+        XCTAssertTrue(IntentPrompt.systemInstructions(mode: .video).contains("VIDEO"))
     }
 
     /// The model session is reused across commands, so anything that changes
@@ -147,6 +160,91 @@ final class LLMPlanTests: XCTestCase {
         let plan = await router.plan("blah blah", context: .photo)
         XCTAssertLessThan(Date().timeIntervalSince(start), 2)
         XCTAssertEqual(plan.engine, .rules)
+    }
+}
+
+extension LLMPlanTests {
+    /// W0: the timeout is hard. An engine that never checks for cancellation (a task group
+    /// would wait for it) still leaves the caller on time, with the grammar's plan.
+    func testRouterTimeoutHoldsAgainstAnEngineThatIgnoresCancellation() async {
+        struct StubbornEngine: IntentEngine {
+            let kind: IntentEngineKind = .proLocal
+            func isAvailable() async -> Bool { true }
+            func plan(_ utterance: String, context: IntentContext, hint: EditPlan?) async throws -> EditPlan {
+                // Not cancellable: resumes only when the queue fires, 3 s later.
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 3) { continuation.resume() }
+                }
+                return EditPlan(utterance: utterance, intents: [EditIntent(action: .autoEnhance)], engine: .proLocal)
+            }
+        }
+        let router = HybridIntentRouter(preferredEngine: .proLocal, configuration: .init(llmTimeout: .milliseconds(150)))
+        await router.register(StubbornEngine())
+        // The lazy catalog and index are built before the deadline race (the app prewarms them);
+        // in a test process of its own (swift test --parallel) they must not count against it.
+        OperationAbstention.prewarm()
+        _ = OperationAbstention.capped(EditPlan.unknown("blah blah"), utterance: "blah blah", domain: .photo)
+        let start = Date()
+        let plan = await router.plan("blah blah", context: .photo)
+        let elapsed = Date().timeIntervalSince(start)
+        XCTAssertLessThan(elapsed, 0.15 + 0.05, "the answer comes at the timeout, not when the engine gives up")
+        XCTAssertEqual(plan.engine, .rules)
+    }
+
+    /// W0: the cache keys on the document revision. A repeat in the same state is served from the
+    /// cache; the same words after a change, and follow-ups ("encore"), are planned again.
+    func testRouterCacheKeysOnTheDocumentRevision() async {
+        actor CallCounter {
+            private(set) var value = 0
+            func bump() { value += 1 }
+        }
+        struct CountingEngine: IntentEngine {
+            let kind: IntentEngineKind = .proLocal
+            let counter: CallCounter
+            func isAvailable() async -> Bool { true }
+            func plan(_ utterance: String, context: IntentContext, hint: EditPlan?) async throws -> EditPlan {
+                await counter.bump()
+                return EditPlan(utterance: utterance, intents: [EditIntent(action: .removeObject, target: ObjectTarget(label: "surfboard"))], confidence: 0.9, engine: .proLocal)
+            }
+        }
+        let counter = CallCounter()
+        let router = HybridIntentRouter(preferredEngine: .proLocal)
+        await router.register(CountingEngine(counter: counter))
+        var context = IntentContext.photo
+        context.documentRevision = 3
+        _ = await router.plan("get rid of the surfboard", context: context)
+        _ = await router.plan("get rid of the surfboard", context: context)
+        var calls = await counter.value
+        XCTAssertEqual(calls, 1, "same words, same revision: served from the cache")
+        context.documentRevision = 4
+        _ = await router.plan("get rid of the surfboard", context: context)
+        calls = await counter.value
+        XCTAssertEqual(calls, 2, "after a change the request is planned again")
+        _ = await router.plan("get rid of the surfboard again", context: context)
+        _ = await router.plan("get rid of the surfboard again", context: context)
+        calls = await counter.value
+        XCTAssertEqual(calls, 4, "a follow-up is never cached")
+    }
+
+    func testPlansThatUseRefsOrTapsAreNeverCached() {
+        var tapped = EditIntent(action: .removeObject, target: ObjectTarget(label: "object"))
+        tapped.target?.point = PSPoint(x: 0.4, y: 0.5)
+        XCTAssertFalse(HybridIntentRouter.isCacheable(EditPlan(utterance: "efface ça", intents: [tapped])))
+        XCTAssertFalse(HybridIntentRouter.isCacheable(EditPlan(utterance: "efface t3", intents: [EditIntent(action: .removeText, ref: .text(3))])))
+        let layerCall = OperationCall("layerOpacity", args: ["ref": .string("l2"), "opacity": .number(50)])
+        XCTAssertFalse(HybridIntentRouter.isCacheable(EditPlan(utterance: "calque 2 à 50 %", intents: [EditIntent(action: .operation, operation: layerCall)])))
+        XCTAssertTrue(HybridIntentRouter.isCacheable(EditPlan(utterance: "plus chaud", intents: [EditIntent(action: .adjust, parameter: .temperature, amount: .relative(0.2))])))
+        XCTAssertTrue(HybridIntentRouter.isFollowUp("encore un peu"))
+        XCTAssertTrue(HybridIntentRouter.isFollowUp("pareil pour les autres"))
+        XCTAssertTrue(HybridIntentRouter.isFollowUp("a bit more"))
+        XCTAssertFalse(HybridIntentRouter.isFollowUp("efface le chien"))
+    }
+
+    /// W0: 'seek' is a timeline action and never a PDF step; movePage reads clipNumber = source, choiceIndex = destination.
+    func testSeekIsNotAPDFAction() {
+        XCTAssertFalse(IntentAction.seek.isAllowed(in: .pdf))
+        XCTAssertTrue(IntentAction.seek.isAllowed(in: .video))
+        XCTAssertFalse(IntentAction.operation.isAllowed(in: .photo), "operations are gated per call by the catalog")
     }
 }
 

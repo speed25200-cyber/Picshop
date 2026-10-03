@@ -429,11 +429,26 @@ public struct PhotoCommandExecutor: Sendable {
         case .cancel: return (document, .effect(.cancel, label: ""))
         case .unknown:
             return (document, ExecutionResult(outcome: .info(message: Replies.reply(for: intent, language: language))))
+        case .operation:
+            guard let call = intent.operation, FeatureFlags.isOn(.catalogOps) else { return (document, unsupported(intent.summary)) }
+            let run = OperationRunContext(intent: context, language: language, services: services)
+            var (updated, result) = await PhotoOperationHandlers.run(call, on: document, context: run)
+            // Structural postconditions, read off the two documents; Live's verify step reads them.
+            if result.outcome.isSuccess {
+                let report = OperationPostconditions.check(call, before: document, after: updated)
+                if !report.isEmpty { result.effects.append(OperationPostconditions.effect(report)) }
+            }
+            return (updated, result)
         default:
-            // In French the English action name never goes inside « ».
-            let message = fr ? "Ça, je ne peux pas le faire sur une photo." : PicshopError.unsupportedOperation(intent.summary).message(french: false)
-            return (document, ExecutionResult(outcome: .failed(message: message), effects: [ExecutionReason.unsupported.effect]))
+            return (document, unsupported(intent.summary))
         }
+    }
+
+    /// "Not on a photo": the failure of an action with no photo executor.
+    func unsupported(_ summary: String) -> ExecutionResult {
+        // In French the English action name never goes inside « ».
+        let message = language == .french ? "Ça, je ne peux pas le faire sur une photo." : PicshopError.unsupportedOperation(summary).message(french: false)
+        return ExecutionResult(outcome: .failed(message: message), effects: [ExecutionReason.unsupported.effect])
     }
 
     // MARK: - Object removal

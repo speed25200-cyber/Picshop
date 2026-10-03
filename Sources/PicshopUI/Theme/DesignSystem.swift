@@ -3,95 +3,103 @@ import SwiftUI
 import UIKit
 import PicshopIntent
 
-/// Design tokens.
+/// The older token names, kept so screens owned by other lanes compile
+/// unchanged. Each one is an alias of a W1 token in PSTokens.swift, so the
+/// whole app moves to the new values at once; new code uses the ShapeStyle
+/// roles (`.psTextSecondary`, `.psFillControl` …), PSRadius, PSFontRole and
+/// PSSpring directly.
 ///
-/// Three colour roles, and only three, so the picture is always the most
-/// vivid thing on screen:
-/// - **Neutral**: black ground, white text in four strengths, glass chrome.
-/// - **Edit accent** (warm yellow, like Photos): a value that differs from
-///   neutral, the playhead, the primary "Done" or "Export". Never decoration.
-/// - **Intelligence** (a soft blue → violet → pink → amber spectrum): only
-///   for AI moments — the edge glow, the listening mic, Magic glyphs,
-///   shimmering status text and the Magic Movie card.
+/// The colour roles, one meaning each:
+/// - **Neutral**: black canvas, near-black base, white text in four strengths, glass chrome.
+/// - **Action** (white, black label): the only "do it" colour (Export, Done, Apply, Send).
+/// - **Value** (yellow #FFD60A, black label): a value off neutral, the playhead,
+///   modified dots, active handles. Never an action fill, never white text on it.
+/// - **Intelligence** (blue → violet → pink → amber): only the orb, the Magic
+///   glyph, the AI caption lane and the working shimmer.
 ///
 /// Status colours (success, warning, danger) only ever report a status.
 public enum PSTheme {
-    // MARK: Edit accent
-    /// Photos' edit yellow (#FFCC0A).
-    public static let accent = Color(red: 1.0, green: 0.80, blue: 0.04)
-    public static let accentSoft = Color(red: 1.0, green: 0.80, blue: 0.04).opacity(0.18)
+    // MARK: Value accent
+    /// The value yellow (#FFD60A): values off neutral, never an action.
+    public static let accent = Color.psValueAccent
+    public static let accentSoft = Color.psValueAccentSoft
     /// Text and glyphs drawn on an accent fill.
-    public static let onAccent = Color.black
-    /// Kept for existing fills; nearly flat, as Photos' Done is.
-    public static let accentGradient = LinearGradient(colors: [Color(red: 1.0, green: 0.82, blue: 0.10), Color(red: 1.0, green: 0.78, blue: 0.0)], startPoint: .top, endPoint: .bottom)
-    /// Highlight laid on top of accent fills (light from above).
-    public static let accentHighlight = LinearGradient(colors: [Color.white.opacity(0.18), .clear], startPoint: .top, endPoint: .center)
+    public static let onAccent = Color.psOnValueAccent
+    @available(*, deprecated, message: "Yellow is never an action fill: use psActionPrimary, or psValueAccent for a value.")
+    public static let accentGradient = LinearGradient(colors: [Color.psValueAccent, Color.psValueAccent], startPoint: .top, endPoint: .bottom)
+    @available(*, deprecated, message: "Flat fills only.")
+    public static let accentHighlight = LinearGradient(colors: [Color.clear, Color.clear], startPoint: .top, endPoint: .center)
 
     // MARK: Intelligence
-    /// #3D8BFF, #9B6BFF, #F2609E, #FF9A4D.
+    /// #4285FF, #996BFF, #F5619E, #FF9E4D (Display P3): the spectrum.
     public static let intelligence: [Color] = [
-        Color(red: 0.24, green: 0.55, blue: 1.0),
-        Color(red: 0.61, green: 0.42, blue: 1.0),
-        Color(red: 0.95, green: 0.38, blue: 0.62),
-        Color(red: 1.0, green: 0.60, blue: 0.30),
+        Color(.displayP3, red: 0.26, green: 0.52, blue: 1.0),
+        Color(.displayP3, red: 0.60, green: 0.42, blue: 1.0),
+        Color(.displayP3, red: 0.96, green: 0.38, blue: 0.62),
+        Color(.displayP3, red: 1.0, green: 0.62, blue: 0.30),
     ]
     /// The voice and Magic colour when a single colour is needed.
-    public static let voice = Color(red: 0.61, green: 0.42, blue: 1.0)
+    public static let voice = Color(.displayP3, red: 0.60, green: 0.42, blue: 1.0)
     public static let voiceGradient = LinearGradient(colors: intelligence, startPoint: .topLeading, endPoint: .bottomTrailing)
     public static let intelligenceAngular = AngularGradient(colors: intelligence + [intelligence[0]], center: .center)
 
     // MARK: Status
-    public static let success = Color(red: 0.19, green: 0.82, blue: 0.35)
-    public static let warning = Color(red: 1.0, green: 0.62, blue: 0.04)
-    public static let danger = Color(red: 1.0, green: 0.27, blue: 0.23)
+    public static let success = Color.psSuccess
+    public static let warning = Color.psWarning
+    public static let danger = Color.psDanger
 
     // MARK: Neutrals
-    /// Behind the photo: true black, as in Photos.
-    public static let canvas = Color.black
-    /// Ground behind non-canvas screens (library, settings, onboarding): #0B0B0D.
-    public static let ink = Color(red: 0.043, green: 0.043, blue: 0.051)
-    /// #161618.
-    public static let surface = Color(red: 0.086, green: 0.086, blue: 0.094)
-    /// #1F1F22.
-    public static let surfaceElevated = Color(red: 0.122, green: 0.122, blue: 0.133)
-    /// Flat fill used where glass is too expensive (thermal minimal level).
-    public static let surfaceFlat = Color(red: 0.11, green: 0.11, blue: 0.12)
-    public static let textPrimary = Color.white.opacity(0.95)
-    public static let textSecondary = Color.white.opacity(0.60)
-    public static let textTertiary = Color.white.opacity(0.38)
-    public static let textQuaternary = Color.white.opacity(0.22)
+    /// Behind the photo: true black.
+    public static let canvas = Color.psCanvas
+    /// Home, Settings, sheets, launch: #0A0A0C (psBase).
+    public static let ink = Color.psBase
+    /// #141417 (psRaised).
+    public static let surface = Color.psRaised
+    /// #1C1C20 (psElevated).
+    public static let surfaceElevated = Color.psElevated
+    /// Flat fill used where glass is too expensive (thermal minimal level): psElevated.
+    public static let surfaceFlat = Color.psElevated
+    public static let textPrimary = Color.psTextPrimary
+    public static let textSecondary = Color.psTextSecondary
+    /// 48 % (was 38 %, which failed AA at 13 points).
+    public static let textTertiary = Color.psTextTertiary
+    public static let textQuaternary = Color.psTextDisabled
     /// Separators on flat surfaces. Never on glass.
-    public static let hairline = Color.white.opacity(0.09)
+    public static let hairline = Color.psHairline
     /// Fill of a control that sits inside glass (chips, wells): no glass on glass.
-    public static let fill = Color.white.opacity(0.10)
+    public static let fill = Color.psFillControl
     /// `fill` while pressed.
-    public static let fillPressed = Color.white.opacity(0.16)
+    public static let fillPressed = Color.psFillPressed
     /// The selected state of neutral controls: a lit thumb, not a colour.
-    public static let selection = Color.white.opacity(0.16)
-    /// Edge light for flat (non-glass) cards: brighter at the top, fading down.
-    public static let strokeGradient = LinearGradient(colors: [Color.white.opacity(0.14), Color.white.opacity(0.03)], startPoint: .top, endPoint: .bottom)
-    /// Sheen laid over flat card surfaces.
-    public static let sheen = LinearGradient(colors: [Color.white.opacity(0.05), Color.white.opacity(0.0)], startPoint: .top, endPoint: .bottom)
+    public static let selection = Color.psFillPressed
+    @available(*, deprecated, message: "No edge-light gradients: flat surfaces take psHairline.")
+    public static let strokeGradient = LinearGradient(colors: [Color.psHairline, Color.psHairline], startPoint: .top, endPoint: .bottom)
+    @available(*, deprecated, message: "No sheens on cards.")
+    public static let sheen = LinearGradient(colors: [Color.clear, Color.clear], startPoint: .top, endPoint: .bottom)
 
-    // MARK: Studio (Live and the editor shell)
-    /// Primary actions (Export, Send, Done): white prominent glass with a black label.
-    public static let primary = Color.white
+    // MARK: Action
+    /// The one action colour (Export, Send, Done): white with a black label.
+    public static let primary = Color.psActionPrimary
     /// Text and glyphs drawn on `primary`.
-    public static let onPrimary = Color.black
+    public static let onPrimary = Color.psOnAction
     /// The Live console's End button (#FF453A).
-    public static let liveEnd = Color(red: 1.0, green: 0.271, blue: 0.227)
+    public static let liveEnd = Color.psDanger
     /// The assistant's caption line.
-    public static let captionPrimary = Color.white.opacity(0.96)
+    public static let captionPrimary = Color.psTextPrimary
     /// The user's settled words (0.80 with Increase Contrast, applied in views).
-    public static let captionSecondary = Color.white.opacity(0.62)
+    public static let captionSecondary = Color.psTextSecondary
     /// The user's still-changing words (0.60 with Increase Contrast, applied in views).
-    public static let captionVolatile = Color.white.opacity(0.40)
+    public static let captionVolatile = Color(.sRGB, white: 1, opacity: 0.40)
 
-    public static let cornerRadius: CGFloat = PSRadius.large
-    public static let panelRadius: CGFloat = PSRadius.panel
-    public static let spacing: CGFloat = PSSpacing.medium
+    @available(*, deprecated, message: "Use PSRadius.")
+    public static let cornerRadius: CGFloat = 22
+    @available(*, deprecated, message: "Use PSRadius.floating.")
+    public static let panelRadius: CGFloat = 30
+    @available(*, deprecated, message: "Use PSSpacing.")
+    public static let spacing: CGFloat = 12
 
     /// Colours of the mesh behind hero surfaces: the spectrum at 70 % saturation.
+    @available(*, deprecated, message: "Use PSBackdrop.")
     public static let heroMesh: [Color] = [
         Color(red: 0.26, green: 0.34, blue: 0.62), Color(red: 0.35, green: 0.34, blue: 0.66), Color(red: 0.48, green: 0.31, blue: 0.62),
         Color(red: 0.34, green: 0.50, blue: 0.86), Color(red: 0.60, green: 0.51, blue: 0.96), Color(red: 0.80, green: 0.44, blue: 0.67),
@@ -99,47 +107,28 @@ public enum PSTheme {
     ]
 }
 
-/// Corner radii. Only five fixed values; everything else is a capsule or
-/// concentric (a child radius is the parent radius minus the padding
-/// between them).
-public enum PSRadius {
-    /// Tiny thumbnails.
-    public static let tiny: CGFloat = 6
-    /// Small thumbnails.
-    public static let thumb: CGFloat = 10
-    /// Tiles inside panels.
-    public static let tile: CGFloat = 14
-    /// Project cards.
-    public static let card: CGFloat = 20
-    /// Hero cards (the resume card, the Magic Movie card).
-    public static let hero: CGFloat = 28
-    /// A panel floating near the display edge: roughly concentric with the
-    /// iPhone corners at a 10-point inset.
-    public static let floating: CGFloat = 34
-    /// The processing HUD tile and two-line strips.
-    public static let hud: CGFloat = 24
-
-    // Older names, kept for existing call sites.
-    public static let small: CGFloat = 12
-    public static let medium: CGFloat = 16
-    public static let large: CGFloat = 22
-    public static let panel: CGFloat = 30
-    public static let sheet: CGFloat = 36
-    /// iPhone display corners, for the intelligence glow.
-    public static let display: CGFloat = 58
-
-    // Studio.
-    /// Tiles in the Outils sheet.
-    public static let toolTile: CGFloat = 20
-    /// Project cells on Home.
-    public static let projectCell: CGFloat = 14
+/// The older radius names (the scale itself is in PSTokens.swift).
+public extension PSRadius {
+    /// The processing HUD tile and two-line strips: a card.
+    static let hud: CGFloat = PSRadius.card
     /// The inline ToolPanel card, concentric with the display at a 10-point inset.
-    public static let toolPanel: CGFloat = 34
-    /// Onboarding cards.
-    public static let onboardingCard: CGFloat = 24
-
-    /// The radius of a shape nested `inset` points inside one of `radius`.
-    public static func concentric(_ radius: CGFloat, inset: CGFloat) -> CGFloat { max(0, radius - inset) }
+    static let toolPanel: CGFloat = PSRadius.floating
+    @available(*, deprecated, renamed: "thumb")
+    static let small: CGFloat = 12
+    @available(*, deprecated, renamed: "tile")
+    static let medium: CGFloat = 16
+    @available(*, deprecated, renamed: "card")
+    static let large: CGFloat = 22
+    @available(*, deprecated, renamed: "floating")
+    static let panel: CGFloat = 30
+    @available(*, deprecated, renamed: "floating")
+    static let sheet: CGFloat = 36
+    @available(*, deprecated, renamed: "tile")
+    static let toolTile: CGFloat = 14
+    @available(*, deprecated, renamed: "tile")
+    static let projectCell: CGFloat = 14
+    @available(*, deprecated, renamed: "card")
+    static let onboardingCard: CGFloat = 20
 }
 
 /// Spacing scale on a 4-point grid: 4, 8, 12, 16, 20, 24, 32.
@@ -180,7 +169,9 @@ public enum PSMetrics {
     public static let control: CGFloat = 44
     /// Full-width buttons.
     public static let largeButton: CGFloat = 52
+    @available(*, deprecated, message: "Unused: dock buttons are dockButton.")
     public static let mic: CGFloat = 56
+    @available(*, deprecated, message: "Unused: the dock is sized by its content.")
     public static let dock: CGFloat = 64
     /// Horizontal padding of a chip (12 with a leading glyph).
     public static let chipPadding: CGFloat = 14
@@ -210,25 +201,25 @@ public enum PSMetrics {
     public static let orbOnboarding: CGFloat = 160
     /// The Live console row.
     public static let consoleHeight: CGFloat = 76
-    /// Tiles in the Outils sheet.
+    /// Tiles in the Outils sheet (76 × 84, the symbol on a 76 × 60 plate).
     public static let toolTile: CGFloat = 76
     /// Small pills over media (the Live brain pill).
     public static let badge: CGFloat = 30
 }
 
-/// Motion vocabulary. Calm, short and nearly bounce-free, as a pro tool
-/// should be; bounce is kept for the few hero moments.
+/// Motion vocabulary: the older names, now the PSSpring values (PSTokens.swift),
+/// plus the orb's and the captions' own timings.
 public enum PSMotion {
     /// Taps, toggles, colour changes.
-    public static let quick = Animation.snappy(duration: 0.2)
+    public static let quick = PSSpring.quick
     /// Panels, docks, layout changes.
-    public static let standard = Animation.smooth(duration: 0.35)
+    public static let standard = PSSpring.standard
     /// Hero moments: a sheet arriving, a card expanding, a mode morphing.
-    public static let emphasized = Animation.spring(duration: 0.5, bounce: 0.12)
+    public static let emphasized = PSSpring.emphasized
     /// Follows the finger.
-    public static let interactive = Animation.interactiveSpring(response: 0.24, dampingFraction: 0.86, blendDuration: 0.1)
+    public static let interactive = PSSpring.follow
     /// Numbers ticking.
-    public static let numeric = Animation.snappy(duration: 0.16)
+    public static let numeric = PSSpring.numeric
     /// Things that appear from nothing (toasts, badges).
     public static let appear = Animation.spring(duration: 0.4, bounce: 0.1)
     /// A result dissolving in over the previous picture.
@@ -236,7 +227,7 @@ public enum PSMotion {
 
     // Studio.
     /// The dock morphing between the composer and the Live console.
-    public static let morph = Animation.spring(duration: 0.42, bounce: 0.16)
+    public static let morph = PSSpring.morph
     /// The orb leaving `.off` (0.6 to 1).
     public static let bloom = Animation.spring(duration: 0.55, bounce: 0.22)
     /// The orb's palette and scale moving between Live states.

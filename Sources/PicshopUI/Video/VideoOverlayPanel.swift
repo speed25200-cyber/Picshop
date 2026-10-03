@@ -66,6 +66,44 @@ extension VideoEditorSession {
         update("Remove Overlay") { $0.removeOverlay(id: id) }
         if selectedOverlayID == id { selectedOverlayID = mediaOverlays.last?.id }
     }
+
+    /// Movies picked in Photos become clips: received as files (never loaded in
+    /// memory), then moved into the project.
+    func importClips(_ items: [PhotosPickerItem]) async {
+        guard !items.isEmpty, !isProcessing else { return }
+        player.pause()
+        isProcessing = true
+        processingTitle = L("Adding clips…")
+        processingProgress = 0
+        defer { isProcessing = false; processingProgress = nil }
+        var movies: [URL] = []
+        for (number, item) in items.enumerated() {
+            let file = try? await item.loadTransferable(type: ImportedMovie.self)
+            if let file { movies.append(file.url) }
+            processingProgress = Double(number + 1) / Double(items.count)
+        }
+        guard !movies.isEmpty else {
+            showToast(L("Those videos could not be opened."), isError: true)
+            return
+        }
+        await addClips(movies)
+    }
+}
+
+/// The Photos picker for new clips, in the order they were picked.
+struct ClipPicker: ViewModifier {
+    @Bindable var session: VideoEditorSession
+    @State private var items: [PhotosPickerItem] = []
+
+    func body(content: Content) -> some View {
+        content
+            .photosPicker(isPresented: $session.showsClipPicker, selection: $items, maxSelectionCount: 12, selectionBehavior: .ordered, matching: .videos)
+            .onChange(of: items) { _, picked in
+                guard !picked.isEmpty else { return }
+                items = []
+                Task { await session.importClips(picked) }
+            }
+    }
 }
 
 /// Picture-in-picture, B-roll and green screen: add a video or a photo over

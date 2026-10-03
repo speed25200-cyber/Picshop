@@ -87,5 +87,17 @@ let package = Package(
             dependencies: ["PicshopIntent", "PicshopCore"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        // Apple-only: their sources sit under `#if canImport(PDFKit)` / `#if canImport(AVFoundation)`,
+        // so on Linux they build empty. Swift 5 mode like the modules they test.
+        .testTarget(
+            name: "PicshopPDFTests",
+            dependencies: ["PicshopPDF", "PicshopCore"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
+            name: "PicshopVideoTests",
+            dependencies: ["PicshopVideo", "PicshopCore"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
     ]
 )

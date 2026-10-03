@@ -107,7 +107,8 @@ private struct ScrubberAccessibility: View {
             .accessibilityElement()
             .accessibilityLabel(L("Timeline"))
             .accessibilityHint(L("Swipe up or down to move by a second. Double-tap to open the timeline."))
-            .accessibilityValue(Text(verbatim: psClock(session.player.currentTime)))
+            // Read only while VoiceOver runs: otherwise the playhead would re-evaluate this every frame.
+            .accessibilityValue(Text(verbatim: UIAccessibility.isVoiceOverRunning ? psClock(session.player.currentTime) : ""))
             .accessibilityAdjustableAction { direction in
                 let player = session.player
                 let step: Double = direction == .increment ? 1 : -1
@@ -118,14 +119,15 @@ private struct ScrubberAccessibility: View {
 }
 
 /// Slides the strip so the playhead's time sits under the centre line. A leaf
-/// modifier: the playhead re-evaluates this, not the frames.
+/// modifier: the playhead re-evaluates this, not the frames. It reads the
+/// display-rate playhead, so the strip glides at 120 Hz while the video plays.
 private struct PlayheadOffset: ViewModifier {
     let player: TimelinePlayer
     let pixelsPerSecond: CGFloat
     let centerX: CGFloat
 
     func body(content: Content) -> some View {
-        content.offset(x: centerX - CGFloat(player.currentTime) * pixelsPerSecond)
+        content.offset(x: centerX - CGFloat(player.displayTime) * pixelsPerSecond)
     }
 }
 

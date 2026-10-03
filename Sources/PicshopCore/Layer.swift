@@ -1,7 +1,11 @@
 import Foundation
 
+/// How a layer composites over what is beneath it: the 12 original modes, then
+/// the 15 added in W1 (27, Photoshop's set). New modes go at the end.
 public enum BlendMode: String, Codable, Sendable, CaseIterable, Identifiable {
     case normal, multiply, screen, overlay, softLight, hardLight, darken, lighten, difference, luminosity, color, hue
+    case colorBurn, colorDodge, linearBurn, linearDodge, linearLight, vividLight, pinLight, hardMix
+    case exclusion, subtract, divide, saturation, darkerColor, lighterColor, dissolve
 
     public var id: String { rawValue }
 
@@ -19,6 +23,54 @@ public enum BlendMode: String, Codable, Sendable, CaseIterable, Identifiable {
         case .luminosity: return "Luminosity"
         case .color: return "Color"
         case .hue: return "Hue"
+        case .colorBurn: return "Color Burn"
+        case .colorDodge: return "Color Dodge"
+        case .linearBurn: return "Linear Burn"
+        case .linearDodge: return "Linear Dodge (Add)"
+        case .linearLight: return "Linear Light"
+        case .vividLight: return "Vivid Light"
+        case .pinLight: return "Pin Light"
+        case .hardMix: return "Hard Mix"
+        case .exclusion: return "Exclusion"
+        case .subtract: return "Subtract"
+        case .divide: return "Divide"
+        case .saturation: return "Saturation"
+        case .darkerColor: return "Darker Color"
+        case .lighterColor: return "Lighter Color"
+        case .dissolve: return "Dissolve"
+        }
+    }
+
+    /// Generic French names, the same words the voice aliases accept.
+    public var frenchName: String {
+        switch self {
+        case .normal: return "Normal"
+        case .multiply: return "Produit"
+        case .screen: return "Écran"
+        case .overlay: return "Incrustation"
+        case .softLight: return "Lumière tamisée"
+        case .hardLight: return "Lumière crue"
+        case .darken: return "Obscurcir"
+        case .lighten: return "Éclaircir"
+        case .difference: return "Différence"
+        case .luminosity: return "Luminosité"
+        case .color: return "Couleur"
+        case .hue: return "Teinte"
+        case .colorBurn: return "Densité couleur moins"
+        case .colorDodge: return "Densité couleur plus"
+        case .linearBurn: return "Densité linéaire moins"
+        case .linearDodge: return "Densité linéaire plus"
+        case .linearLight: return "Lumière linéaire"
+        case .vividLight: return "Lumière vive"
+        case .pinLight: return "Lumière ponctuelle"
+        case .hardMix: return "Mélange maximal"
+        case .exclusion: return "Exclusion"
+        case .subtract: return "Soustraction"
+        case .divide: return "Division"
+        case .saturation: return "Saturation"
+        case .darkerColor: return "Couleur plus foncée"
+        case .lighterColor: return "Couleur plus claire"
+        case .dissolve: return "Fondu"
         }
     }
 }
@@ -145,6 +197,23 @@ public struct Layer: Hashable, Codable, Sendable, Identifiable {
         case .shape: return "square.on.circle"
         case .adjustment: return "slider.horizontal.3"
         case .fill: return "paintbrush.fill"
+        }
+    }
+
+    /// What a text or shape layer's raster depends on, for the renderer's overlay cache: the
+    /// content without where it sits. A text element's centre and rotation (and a layer's
+    /// transform) only place the raster, so dragging or turning a title never draws it again;
+    /// the text, its font, size, colour and style do. Nil for other layers.
+    public var overlayRasterKey: String? {
+        switch content {
+        case .text(var element):
+            element.center = PSPoint(x: 0.5, y: 0.5)
+            element.rotation = 0
+            return "text-\(id.uuidString)-\(element.hashValue)"
+        case .shape(let shape):
+            return "shape-\(id.uuidString)-\(shape.hashValue)"
+        default:
+            return nil
         }
     }
 }

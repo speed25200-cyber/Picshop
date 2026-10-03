@@ -489,7 +489,8 @@ extension RuleBasedIntentEngine {
             intent.scope = u.contains(["all", "tous", "toutes", "every", "chaque", "partout", "everywhere"]) ? .all : .current
             return [intent]
         }
-        if u.contains(["isole la voix", "isoler la voix", "voix plus claire", "voix claire", "nettoie le son", "nettoie l audio", "nettoie la voix", "enleve le bruit de fond", "supprime le bruit de fond", "retire le bruit de fond",
+        if u.contains(["isole la voix", "isoler la voix", "voix plus claire", "voix claire", "ameliore la voix", "ameliorer la voix", "ameliore ma voix",
+                       "ameliore le son de la voix", "improve the voice", "improve my voice", "nettoie le son", "nettoie l audio", "nettoie la voix", "enleve le bruit de fond", "supprime le bruit de fond", "retire le bruit de fond",
                        "reduis le bruit du son", "bruit de fond", "clean up the audio", "clean the audio", "clean up the voice", "clean the voice", "isolate the voice", "voice isolation", "isolate voice",
                        "remove background noise", "background noise", "enhance the voice", "enhance voice", "enhance speech", "clearer voice", "clearer audio", "denoise the audio", "studio sound", "son studio", "micro studio"]) {
             var intent = EditIntent(action: .enhanceVoice)

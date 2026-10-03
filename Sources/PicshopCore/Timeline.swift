@@ -132,6 +132,22 @@ public struct VideoClip: Hashable, Codable, Sendable, Identifiable {
     /// voice. Kept in source time so trims, splits, moves and speed changes
     /// never put it out of step. Nil until analysed.
     public var speech: [TimeSpan]?
+    /// What a reversed clip played before it was reversed, so playing it
+    /// forwards again restores it exactly (sound and quality included).
+    public var beforeReverse: ForwardState?
+
+    /// The media and range a clip played forwards.
+    public struct ForwardState: Hashable, Codable, Sendable {
+        public var processedAsset: MediaAsset?
+        public var processedLabel: String?
+        public var sourceRange: TimeSpan
+
+        public init(_ clip: VideoClip) {
+            processedAsset = clip.processedAsset
+            processedLabel = clip.processedLabel
+            sourceRange = clip.sourceRange
+        }
+    }
 
     public init(id: UUID = UUID(), asset: MediaAsset, sourceRange: TimeSpan? = nil, speed: Double = 1, volume: Double = 1,
                 isMuted: Bool = false, isReversed: Bool = false, adjustments: Adjustments = .neutral, look: FilterPreset = .original,
@@ -169,6 +185,31 @@ public struct VideoClip: Hashable, Codable, Sendable, Identifiable {
     public func sourceTime(forClipOffset offset: Double) -> Double {
         let clamped = offset.clamped(to: 0...timelineDuration)
         return isReversed ? sourceRange.end - clamped * speed : sourceRange.start + clamped * speed
+    }
+
+    /// Plays forwards again from the media it had before it was reversed.
+    public mutating func restoreForwards(_ state: ForwardState) {
+        isReversed = false
+        processedAsset = state.processedAsset
+        processedLabel = state.processedLabel
+        sourceRange = state.sourceRange
+        beforeReverse = nil
+    }
+
+    /// The whole quarter turns in a rotation: what is left once a tilt is levelled.
+    public static func quarterTurns(of degrees: Double) -> Double {
+        (degrees / 90).rounded() * 90
+    }
+
+    /// What decides where this clip's frames fall on the timeline.
+    var timing: Timing { Timing(media: renderAsset, sourceRange: sourceRange, speed: speed, isReversed: isReversed, transitionOut: transitionOut) }
+
+    struct Timing: Equatable {
+        var media: MediaAsset
+        var sourceRange: TimeSpan
+        var speed: Double
+        var isReversed: Bool
+        var transitionOut: Transition?
     }
 }
 
@@ -468,15 +509,34 @@ public struct VideoTimeline: Hashable, Codable, Sendable, Identifiable {
     // MARK: Time mapping
 
     /// Total duration on the timeline, accounting for overlapping transitions.
-    public var duration: Double {
+    public var duration: Double { Self.duration(of: clips) }
+
+    /// Length of these clips laid end to end, transitions overlapping.
+    public static func duration(of clips: [VideoClip]) -> Double {
         var total = 0.0
         for (index, clip) in clips.enumerated() {
             total += clip.timelineDuration
-            if index < clips.count - 1, let transition = clip.transitionOut, transition.kind != .none {
-                total -= min(transition.duration, clip.timelineDuration / 2, clips[index + 1].timelineDuration / 2)
-            }
+            if index < clips.count - 1 { total -= overlap(after: index, in: clips) }
         }
         return max(0, total)
+    }
+
+    /// Where each of these clips starts when laid end to end.
+    public static func startTimes(of clips: [VideoClip]) -> [Double] {
+        var starts: [Double] = []
+        var cursor = 0.0
+        for (index, clip) in clips.enumerated() {
+            starts.append(cursor)
+            cursor += clip.timelineDuration
+            if index < clips.count - 1 { cursor -= overlap(after: index, in: clips) }
+        }
+        return starts
+    }
+
+    /// Seconds a clip's transition overlaps the next clip.
+    static func overlap(after index: Int, in clips: [VideoClip]) -> Double {
+        guard index + 1 < clips.count, let transition = clips[index].transitionOut, transition.kind != .none else { return 0 }
+        return min(transition.duration, clips[index].timelineDuration / 2, clips[index + 1].timelineDuration / 2)
     }
 
     /// Where someone speaks on the timeline, from the clips' voice analysis;
@@ -515,18 +575,7 @@ public struct VideoTimeline: Hashable, Codable, Sendable, Identifiable {
     }
 
     /// Start time of each clip on the timeline (parallel array to `clips`).
-    public var clipStartTimes: [Double] {
-        var starts: [Double] = []
-        var cursor = 0.0
-        for (index, clip) in clips.enumerated() {
-            starts.append(cursor)
-            cursor += clip.timelineDuration
-            if index < clips.count - 1, let transition = clip.transitionOut, transition.kind != .none {
-                cursor -= min(transition.duration, clip.timelineDuration / 2, clips[index + 1].timelineDuration / 2)
-            }
-        }
-        return starts
-    }
+    public var clipStartTimes: [Double] { Self.startTimes(of: clips) }
 
     public func span(of clipID: UUID) -> TimeSpan? {
         guard let index = clips.firstIndex(where: { $0.id == clipID }) else { return nil }
@@ -564,9 +613,13 @@ public struct VideoTimeline: Hashable, Codable, Sendable, Identifiable {
 
     public func index(of clipID: UUID) -> Int? { clips.firstIndex(where: { $0.id == clipID }) }
 
+    /// Changes one clip. A change of its timing (range, speed, transition, media)
+    /// carries overlays, sound tracks and captions along with the clips.
     public mutating func update(clipID: UUID, _ body: (inout VideoClip) -> Void) {
         guard let index = index(of: clipID) else { return }
+        let before = clips
         body(&clips[index])
+        if clips[index].timing != before[index].timing { carryAttachments(from: before) }
         touch()
     }
 
@@ -602,26 +655,28 @@ public struct VideoTimeline: Hashable, Codable, Sendable, Identifiable {
         let bounded = TimeSpan(start: sourceStart, end: min(sourceEnd, clip.asset.duration > 0 ? clip.asset.duration : sourceEnd))
         guard bounded.duration >= 0.1 else { return }
         clip.sourceRange = bounded
-        clips[index] = clip
+        ripple { $0.clips[index] = clip }
         touch()
     }
 
-    /// Removes the timeline range, splitting clips as required.
+    /// Removes the timeline range, splitting clips as required. Titles, pictures,
+    /// sounds and captions after it move earlier with the shots they sit on.
     public mutating func removeRange(_ range: TimeSpan) {
         guard !range.isEmpty, !clips.isEmpty else { return }
-        split(at: range.end)
-        split(at: range.start)
-        let starts = clipStartTimes
-        var survivors: [VideoClip] = []
-        for (index, clip) in clips.enumerated() {
-            let span = TimeSpan(start: starts[index], duration: clip.timelineDuration)
-            let overlap = TimeSpan(start: max(span.start, range.start), end: min(span.end, range.end))
-            if overlap.duration <= 0.001 || overlap.duration < span.duration - 0.001 {
-                survivors.append(clip)
+        ripple { timeline in
+            timeline.split(at: range.end)
+            timeline.split(at: range.start)
+            let starts = timeline.clipStartTimes
+            var survivors: [VideoClip] = []
+            for (index, clip) in timeline.clips.enumerated() {
+                let span = TimeSpan(start: starts[index], duration: clip.timelineDuration)
+                let overlap = TimeSpan(start: max(span.start, range.start), end: min(span.end, range.end))
+                if overlap.duration <= 0.001 || overlap.duration < span.duration - 0.001 {
+                    survivors.append(clip)
+                }
             }
+            timeline.clips = survivors
         }
-        clips = survivors
-        captions = captions?.removing(range)
         touch()
     }
 
@@ -635,15 +690,18 @@ public struct VideoTimeline: Hashable, Codable, Sendable, Identifiable {
     @discardableResult
     public mutating func removeClip(id: UUID) -> VideoClip? {
         guard let index = index(of: id) else { return nil }
-        let removed = clips.remove(at: index)
+        var removed: VideoClip?
+        ripple { removed = $0.clips.remove(at: index) }
         touch()
         return removed
     }
 
     public mutating func moveClip(id: UUID, to newIndex: Int) {
         guard let index = index(of: id), newIndex >= 0, newIndex < clips.count, index != newIndex else { return }
-        let clip = clips.remove(at: index)
-        clips.insert(clip, at: newIndex)
+        ripple { timeline in
+            let clip = timeline.clips.remove(at: index)
+            timeline.clips.insert(clip, at: newIndex)
+        }
         touch()
     }
 
@@ -651,8 +709,32 @@ public struct VideoTimeline: Hashable, Codable, Sendable, Identifiable {
         guard let index = index(of: id) else { return }
         var copy = clips[index]
         copy.id = UUID()
-        clips.insert(copy, at: index + 1)
+        ripple { $0.clips.insert(copy, at: index + 1) }
         touch()
+    }
+
+    /// Inserts clips at a timeline second, splitting the clip there when it falls
+    /// inside one; nil appends them. What comes after moves later with its shots.
+    /// Returns the index of the first inserted clip.
+    @discardableResult
+    public mutating func insert(_ newClips: [VideoClip], at time: Double?) -> Int {
+        guard !newClips.isEmpty else { return clips.count }
+        var position = clips.count
+        ripple { timeline in
+            if let time, time > 0.05, time < timeline.duration - 0.05 {
+                timeline.split(at: time)
+                let starts = timeline.clipStartTimes
+                // The first clip starting at (or just after) the insertion point.
+                position = starts.firstIndex { $0 >= time - 0.05 } ?? timeline.clips.count
+            } else if let time, time <= 0.05 {
+                position = 0
+            } else {
+                position = timeline.clips.count
+            }
+            timeline.clips.insert(contentsOf: newClips, at: position)
+        }
+        touch()
+        return position
     }
 
     public mutating func setTransition(_ transition: Transition?, afterClipID: UUID) {
@@ -688,6 +770,27 @@ public struct VideoTimeline: Hashable, Codable, Sendable, Identifiable {
     /// Overlays visible at a timeline time.
     public func overlays(at time: Double) -> [TimelineOverlay] {
         overlays.filter { $0.span.contains(time) }
+    }
+}
+
+/// Exact frame durations: an NTSC frame lasts 1001/30000 s, not 1/30 s, or
+/// frames are dropped or doubled over a long clip.
+public enum FrameRate {
+    /// One frame's duration as `value / timescale` seconds, for a nominal rate such as 29.97.
+    public static func frameDuration(_ fps: Double) -> (value: Int64, timescale: Int32) {
+        let rate = fps.isFinite && fps > 0 ? fps : 30
+        for base in [24.0, 30, 48, 60, 120, 240] where abs(rate - base * 1000 / 1001) < 0.01 {
+            return (1001, Int32(base * 1000))
+        }
+        let whole = rate.rounded()
+        if abs(rate - whole) < 0.01 { return (1, Int32(whole)) }
+        return (1000, Int32((rate * 1000).rounded()))
+    }
+
+    /// The exact rate for a nominal one (29.97 → 30000/1001).
+    public static func exact(_ fps: Double) -> Double {
+        let duration = frameDuration(fps)
+        return Double(duration.timescale) / Double(duration.value)
     }
 }
 

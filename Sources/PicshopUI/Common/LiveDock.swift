@@ -13,6 +13,10 @@ struct ComposerField: View {
     let onSubmit: (String) -> Void
     private var focus: FocusState<Bool>.Binding?
     private var height: CGFloat = PSMetrics.composerHeight
+    private var showsOnDeviceCue = false
+    /// W1: the local brain's offer, download or load at the field's end (else the on-device cue).
+    private var brainLive: LiveSession?
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     init(text: Binding<String>, placeholder: String, isEnabled: Bool = true, onSubmit: @escaping (String) -> Void) {
         _text = text
@@ -35,12 +39,50 @@ struct ComposerField: View {
         return copy
     }
 
+    /// W1: 'Sur l'iPhone' at the field's end while it is empty: what is typed stays on the device.
+    func onDeviceCue(_ shows: Bool) -> ComposerField {
+        var copy = self
+        copy.showsOnDeviceCue = shows
+        return copy
+    }
+
+    /// W1: the local brain's pill in place of the cue while it has something to offer or show
+    /// (a leaf that alone reads the hub), so it adds no glass shape over the picture.
+    func brainPill(_ live: LiveSession?) -> ComposerField {
+        var copy = self
+        copy.brainLive = live
+        return copy
+    }
+
     var body: some View {
+        HStack(spacing: PSSpacing.small) {
+            styledField
+            if showsOnDeviceCue, text.isEmpty {
+                if let brainLive {
+                    LocalBrainPill(live: brainLive, showsWhileLive: false, inField: true)
+                } else if !typeSize.isAccessibilitySize {
+                    OnDeviceCue()
+                        .transition(.opacity)
+                }
+            }
+        }
+        .padding(.leading, 18)
+        .padding(.trailing, showsOnDeviceCue && text.isEmpty ? 14 : 8)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, minHeight: height, alignment: .leading)
+        .contentShape(Capsule())
+        .psGlassField()
+        .disabled(!isEnabled)
+        .animation(PSSpring.fade, value: text.isEmpty)
+    }
+
+    private var styledField: some View {
         field
+            .accessibilityLabel(placeholder)
             .lineLimit(1...4)
             .font(.body)
-            .foregroundStyle(PSTheme.textPrimary)
-            .tint(PSTheme.textPrimary)
+            .foregroundStyle(Color.psTextPrimary)
+            .tint(Color.psTextPrimary)
             .submitLabel(.send)
             .onSubmit(submit)
             .onChange(of: text) { _, new in
@@ -49,19 +91,11 @@ struct ComposerField: View {
                 text = String(new.dropLast())
                 submit()
             }
-            .padding(.leading, 18)
-            .padding(.trailing, 8)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, minHeight: height, alignment: .leading)
-            .contentShape(Capsule())
-            .psGlassField()
-            .disabled(!isEnabled)
-            .accessibilityLabel(placeholder)
     }
 
     @ViewBuilder
     private var field: some View {
-        let input = TextField(text: $text, prompt: Text(placeholder).foregroundStyle(PSTheme.textTertiary), axis: .vertical) {
+        let input = TextField(text: $text, prompt: Text(placeholder).foregroundStyle(Color.psTextTertiary), axis: .vertical) {
             Text(placeholder)
         }
         if let focus {
@@ -87,20 +121,30 @@ struct ComposerField: View {
 ///
 /// The body reads only `live.state`, `isLive`, `isMuted`, `choices != nil`
 /// and `ideas`: captions, replies, activity and levels are read by leaves.
+///
+/// W1: with the tool rail above it, the dock drops its Outils button (the
+/// rail's last item opens Outils); the Ask field says 'Sur l'iPhone' while
+/// empty; during Live a long press on the orb names the brain answering.
 struct LiveDock: View {
     let live: LiveSession
     let onTools: () -> Void
     var candidateThumbnail: ((Int) async -> UIImage?)?
+    var showsToolsButton: Bool
+    var showsOnDeviceCue: Bool
 
     @Namespace private var glass
     @State private var keyboardOpen = false
+    @State private var showsBrain = false
     @Environment(\.studioCompact) private var isCompact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(live: LiveSession, onTools: @escaping () -> Void, candidateThumbnail: ((Int) async -> UIImage?)? = nil) {
+    init(live: LiveSession, onTools: @escaping () -> Void, candidateThumbnail: ((Int) async -> UIImage?)? = nil,
+         showsToolsButton: Bool = true, showsOnDeviceCue: Bool = false) {
         self.live = live
         self.onTools = onTools
         self.candidateThumbnail = candidateThumbnail
+        self.showsToolsButton = showsToolsButton
+        self.showsOnDeviceCue = showsOnDeviceCue
     }
 
     var body: some View {
@@ -131,7 +175,7 @@ struct LiveDock: View {
                     }
                 } else {
                     ComposerRow(live: live, glass: glass, height: isCompact ? PSMetrics.composerHeightCompact : PSMetrics.composerHeight,
-                                onTools: onTools)
+                                onTools: showsToolsButton ? onTools : nil, showsOnDeviceCue: showsOnDeviceCue)
                 }
             }
         }
@@ -143,11 +187,22 @@ struct LiveDock: View {
                 LiveReplyCapsule(live: live)
                     .padding(.horizontal, PSSpacing.editorSide)
                     .alignmentGuide(.top) { $0[.bottom] + 8 }
+            } else if showsBrain {
+                LiveBrainCapsule(live: live)
+                    .padding(.horizontal, PSSpacing.editorSide)
+                    .alignmentGuide(.top) { $0[.bottom] + 8 }
+                    .transition(.opacity.combined(with: .offset(y: 6)))
             }
         }
-        .animation(reduceMotion ? .easeInOut(duration: 0.25) : PSMotion.morph, value: isLive)
-        .animation(PSMotion.standard, value: keyboardOpen)
-        .onChange(of: isLive) { _, running in if !running { keyboardOpen = false } }
+        .animation(reduceMotion ? PSSpring.fade : PSSpring.morph, value: isLive)
+        .animation(PSSpring.standard, value: keyboardOpen)
+        .animation(PSSpring.quick, value: showsBrain)
+        .onChange(of: isLive) { _, running in
+            if !running {
+                keyboardOpen = false
+                showsBrain = false
+            }
+        }
     }
 
     /// No empty band: PDF has no ideas (its choices still show), and every idea may be dismissed.
@@ -176,8 +231,10 @@ struct LiveDock: View {
         let isMuted = live.isMuted
         let orbSize = isCompact ? PSMetrics.orbConsoleCompact : PSMetrics.orbConsole
         return HStack(spacing: 0) {
-            ToolsButton(glass: glass, action: onTools)
-            Spacer(minLength: 8)
+            if showsToolsButton {
+                ToolsButton(glass: glass, action: onTools)
+                Spacer(minLength: 8)
+            }
             PSCircleButton(systemImage: isMuted ? "mic.slash.fill" : "mic.fill", size: PSMetrics.dockButton,
                            kind: isMuted ? .prominent : .glass,
                            accessibilityLabel: isMuted ? L("Unmute microphone") : L("Mute microphone")) {
@@ -185,7 +242,8 @@ struct LiveDock: View {
             }
             .glassEffectID("mute", in: glass)
             Spacer(minLength: 8)
-            DockOrb(live: live, size: orbSize, allowsHold: false)
+            DockOrb(live: live, size: orbSize, allowsHold: false,
+                    onRevealBrain: showsOnDeviceCue ? { shows in showsBrain = shows } : nil)
             Spacer(minLength: 8)
             PSCircleButton(systemImage: keyboardOpen ? "keyboard.chevron.compact.down" : "keyboard", size: PSMetrics.dockButton,
                            accessibilityLabel: L("Keyboard")) {
@@ -228,8 +286,9 @@ private struct ToolsButton: View {
     }
 }
 
-/// The source of the Outils sheet's zoom transition, when StudioChrome provides one.
-private struct ToolsTransitionSource: ViewModifier {
+/// The source of the Outils sheet's zoom transition, when StudioChrome provides one
+/// (the dock's Outils button, or the rail's 'Tous les outils').
+struct ToolsTransitionSource: ViewModifier {
     let namespace: Namespace.ID?
 
     func body(content: Content) -> some View {
@@ -247,19 +306,25 @@ private struct ComposerRow: View {
     let live: LiveSession
     let glass: Namespace.ID
     let height: CGFloat
-    let onTools: () -> Void
+    /// Nil when the tool rail opens Outils instead.
+    let onTools: (() -> Void)?
+    var showsOnDeviceCue = false
 
     @State private var draft = ""
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         HStack(spacing: 8) {
-            ToolsButton(glass: glass, action: onTools)
+            if let onTools {
+                ToolsButton(glass: glass, action: onTools)
+            }
             ComposerField(text: $draft, placeholder: typeSize.isAccessibilitySize ? L("Ask…") : L("Ask PicShop…"),
                           isEnabled: live.state != .acting) { text in
                 live.send(text: text)
             }
             .composerHeight(height)
+            .onDeviceCue(showsOnDeviceCue)
+            .brainPill(showsOnDeviceCue ? live : nil)
             .glassEffectID("field", in: glass)
             ZStack {
                 if draft.isEmpty {
@@ -277,7 +342,7 @@ private struct ComposerRow: View {
                 }
             }
             .frame(width: PSMetrics.dockButton, height: PSMetrics.dockButton)
-            .animation(.easeInOut(duration: 0.2), value: draft.isEmpty)
+            .animation(PSSpring.fade, value: draft.isEmpty)
         }
         .frame(minHeight: height)
     }
@@ -310,7 +375,7 @@ private struct ConsoleKeyboardField: View {
                 .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: draft.isEmpty)
+        .animation(PSSpring.fade, value: draft.isEmpty)
         .task { focused = true }
         .onChange(of: focused) { _, isFocused in
             if !isFocused { isOpen = false }
@@ -323,8 +388,10 @@ private struct ConsoleKeyboardField: View {
 private struct DockOrb: View {
     let live: LiveSession
     let size: CGFloat
-    /// Push-to-talk (resting only: a hold during Live does nothing).
+    /// Push-to-talk (resting only).
     let allowsHold: Bool
+    /// W1, during Live: a hold names the brain answering until the finger lifts.
+    var onRevealBrain: ((Bool) -> Void)? = nil
 
     var body: some View {
         let state = live.state
@@ -337,8 +404,8 @@ private struct DockOrb: View {
                       onHoldStart: allowsHold ? {
                           LiveTips.orbUsed()
                           live.beginDictation()
-                      } : nil,
-                      onHoldEnd: allowsHold ? { live.endDictation() } : nil)
+                      } : onRevealBrain.map { reveal in { Haptics.soft(0.5); reveal(true) } },
+                      onHoldEnd: allowsHold ? { live.endDictation() } : onRevealBrain.map { reveal in { reveal(false) } })
             .actingProgress(activity?.progress)
             .liveAccessibility(activity: activity?.title, actions: live.isLive ? orbActions : nil)
     }
@@ -371,6 +438,43 @@ private struct LiveChoicesLeaf: View {
             .onCancel { live.dismissChoice() }
             .flat(flat)
         }
+    }
+}
+
+/// W1's on-device reassurance in the Ask field: a lock and 'Sur l'iPhone', in tertiary.
+struct OnDeviceCue: View {
+    var body: some View {
+        Label(L("On the iPhone"), systemImage: "lock.fill")
+            .labelStyle(.titleAndIcon)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(Color.psTextTertiary)
+            .lineLimit(1)
+            .fixedSize()
+            .accessibilityLabel(L("Everything stays on the iPhone."))
+    }
+}
+
+/// During Live, while the orb is held: which brain answers, on the iPhone.
+private struct LiveBrainCapsule: View {
+    let live: LiveSession
+
+    var body: some View {
+        let route = live.route
+        HStack(spacing: PSSpacing.small) {
+            Image(systemName: LocalBrainPill.symbol(route.brain))
+                .font(PSFont.glyph(.micro, weight: .semibold))
+                .foregroundStyle(Color.psTextSecondary)
+            Text(String(format: L("%@ · on the iPhone"), LocalBrainPill.title(route)))
+                .font(.subheadline)
+                .foregroundStyle(Color.psTextPrimary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 36)
+        .psGlass()
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.updatesFrequently)
     }
 }
 
@@ -447,15 +551,15 @@ struct LiveReplyCapsule: View {
         HStack(spacing: 8) {
             if let symbol = message.symbol {
                 Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(message.isProblem ? PSTheme.warning : PSTheme.textSecondary)
+                    .font(PSFont.glyph(.micro, weight: .semibold))
+                    .foregroundStyle(message.isProblem ? Color.psWarning : Color.psTextSecondary)
             }
             if message.shimmers {
                 ShimmerText(message.text, font: .subheadline).lineLimit(1)
             } else {
                 Text(message.text)
                     .font(.subheadline)
-                    .foregroundStyle(PSTheme.textPrimary)
+                    .foregroundStyle(Color.psTextPrimary)
                     .lineLimit(1)
                     .truncationMode(message.truncatesHead ? .head : .tail)
             }
@@ -466,10 +570,10 @@ struct LiveReplyCapsule: View {
                 } label: {
                     Text(title)
                         .font(.footnote.weight(.semibold))
-                        .foregroundStyle(PSTheme.onPrimary)
+                        .foregroundStyle(Color.psOnAction)
                         .padding(.horizontal, 10)
                         .frame(height: 28)
-                        .background(Capsule().fill(PSTheme.primary))
+                        .background(Capsule().fill(Color.psActionPrimary))
                         .contentShape(Capsule())
                 }
                 .buttonStyle(PSPressStyle(scale: 0.95))
@@ -480,7 +584,7 @@ struct LiveReplyCapsule: View {
                 } label: {
                     Label(L("Undo"), systemImage: "arrow.uturn.backward")
                         .font(.footnote.weight(.medium))
-                        .foregroundStyle(PSTheme.textPrimary)
+                        .foregroundStyle(Color.psTextPrimary)
                         .padding(.horizontal, 10)
                         .frame(height: 28)
                         .psChipFill(Capsule())
@@ -520,7 +624,7 @@ private struct LiveDockPreview: View {
         }
         .padding(.bottom, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(PSTheme.canvas)
+        .background(Color.psCanvas)
         .environment(\.studioCompact, compact)
         .onAppear { if live == nil { live = LiveSession.preview(scenario) } }
         .onDisappear { live?.teardown() }

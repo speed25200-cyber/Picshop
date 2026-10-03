@@ -10,7 +10,8 @@ import PicshopIntent
 ///   Flou portrait (the focus panel) where the portrait blur ranks, and
 ///   Objets (tap an object to erase, move or blur it).
 /// - Retoucher: Effacer, Précis, Détourage.
-/// - Lumière et couleur: Réglages, Couleur, Filtres.
+/// - Lumière et couleur: Réglages, Courbes, Niveaux, Couleur, Filtres (Courbes
+///   and Niveaux with the proTone flag on).
 /// - Cadrer: Recadrer, which opens straight away.
 /// - Ajouter: Texte, Formes, Calques.
 /// Footer: the side-by-side before/after, 'Que puis-je dire ?' (and
@@ -20,16 +21,20 @@ enum PhotoToolCatalog {
     typealias Tool = PhotoEditorSession.Tool
 
     /// Category ids, symbols and the panels each one holds, in order.
-    static let layout: [(id: String, symbol: String, panels: [Tool])] = [
-        ("magic", "sparkles", [.focus, .magic]),
-        ("retouch", "wand.and.rays", [.erase, .precise, .cutout]),
-        ("light", "dial.medium", [.adjust, .color, .looks]),
-        ("crop", "crop.rotate", [.crop]),
-        ("add", "plus.square.on.square", [.text, .shapes, .layers]),
-    ]
+    static var layout: [(id: String, symbol: String, panels: [Tool])] {
+        [
+            ("magic", "sparkles", [.focus, .magic]),
+            ("retouch", "wand.and.rays", [.erase, .precise, .cutout]),
+            ("light", "dial.medium", FeatureFlags.isOn(.proTone) ? [.adjust, .curves, .levels, .color, .looks] : [.adjust, .color, .looks]),
+            ("crop", "crop.rotate", [.crop]),
+            ("add", "plus.square.on.square", [.text, .shapes, .layers]),
+        ]
+    }
 
-    static func make(session: PhotoEditorSession) -> ToolCatalog {
-        let modified = session.modifiedTools
+    /// `railOnly`: the panels and their dots alone, for the tool rail, which the editor's chrome
+    /// rebuilds on each of its passes: no Magic ranking, actions or footer.
+    static func make(session: PhotoEditorSession, railOnly: Bool = false) -> ToolCatalog {
+        let modified = session.modifiedTools.union(toneTools(session.document))
         func panel(_ tool: Tool) -> ToolItem {
             .panel(id: tool.rawValue, title: title(for: tool), symbol: symbol(for: tool), isModified: modified.contains(tool),
                    open: { session.activeTool = tool })
@@ -37,7 +42,9 @@ enum PhotoToolCatalog {
         var categories: [ToolCategory] = []
         for entry in layout {
             var items: [ToolItem]
-            if entry.id == "magic" {
+            if entry.id == "magic", railOnly {
+                items = [panel(.focus), panel(.magic)]
+            } else if entry.id == "magic" {
                 items = magicItems(session: session, focus: panel(.focus))
                 items.append(panel(.magic))
             } else {
@@ -46,14 +53,24 @@ enum PhotoToolCatalog {
             categories.append(ToolCategory(id: entry.id, title: categoryTitle(entry.id), symbol: entry.symbol, items: items))
         }
         var footer: [ToolFooterItem] = []
+        guard !railOnly else { return ToolCatalog(editorKind: "photo", categories: categories, footer: footer) }
         if PhotoCanvasView.canSplitCompare(session) {
             footer.append(.toggle(id: "split", title: L("Before and after, side by side"),
-                                  isOn: Binding(get: { session.compareSplit != nil },
+                                  isOn: Binding(get: { session.isSplitComparing },
                                                 set: { session.compareSplit = $0 ? 0.5 : nil })))
         }
         footer.append(.button(id: "help", title: L("What can I say?"), systemImage: "questionmark.bubble",
                               action: { session.showsHelp = true }))
         return ToolCatalog(editorKind: "photo", categories: categories, footer: footer)
+    }
+
+    /// Curves and Levels carry the yellow dot when the active image layer has its own curve or levels.
+    static func toneTools(_ document: PhotoDocument) -> Set<Tool> {
+        guard let edits = document.activeImageLayerID.flatMap({ document.layer(id: $0)?.edits }) else { return [] }
+        var tools: Set<Tool> = []
+        if let curve = edits.resolvedUserToneCurve, !curve.isIdentity { tools.insert(.curves) }
+        if !edits.resolvedLevels.isIdentity { tools.insert(.levels) }
+        return tools
     }
 
     /// The Magie actions in the order MagicSuggestions ranks them for this

@@ -14,6 +14,59 @@ extension LocalLivePrompt {
     /// a refusal the picture explains (no subject on a table). The last two come last (recency). The 2B
     /// gets 8 of them; video keeps its 6 and 4.
     public static func examples(mode: EditorMode, size: LocalPromptSize) -> [LocalPromptExample] {
+        examples(mode: mode, size: size, layout: .current)
+    }
+
+    public static func examples(mode: EditorMode, size: LocalPromptSize, layout: LocalPromptLayout) -> [LocalPromptExample] {
+        layout == .catalog ? catalogExamples(mode: mode, size: size) : legacyExamples(mode: mode, size: size)
+    }
+
+    /// The catalog layout's behavioural examples (the cards teach the actions): act, a catalog operation
+    /// from the turn's <ops> card, undo, ideas, a follow-up on last:, the repair after a failed check, and
+    /// an honest refusal with the nearest operation. Photo: 7 for the 4B, 4 for the 2B; video: 4 and 3;
+    /// PDF: 2.
+    static func catalogExamples(mode: EditorMode, size: LocalPromptSize) -> [LocalPromptExample] {
+        let source: EditorMode = mode == .pdf ? .photo : mode
+        let sized = legacyExamples(mode: source, size: size), full = legacyExamples(mode: source, size: .full)
+        func named(_ user: String) -> LocalPromptExample? { (sized + full).first { $0.user.hasSuffix(user) } }
+        guard let warmer = named("rends-la plus chaude"), let tooMuch = named("c'est trop"), var opinion = named("tu en penses quoi ?") else { return [] }
+        if size == .compact, case .object(var arguments)? = opinion.arguments, let ideas = arguments["ideas"]?.array, ideas.count > 1 {
+            // The 2B's prefix budget: one idea shows the call.
+            arguments["ideas"] = .array([ideas[0]])
+            opinion.arguments = .object(arguments)
+            opinion.toolResult = ToolResultEncoder.compactText(ToolResultEncoder.ideas(shown: 1, replaced: 0))
+        }
+        // A follow-up on the last: line (« encore »): the same step again.
+        let warmed = LiveActionRecord(source: .model, steps: [RawIntentStep(action: "adjust", parameter: "temperature", amount: 15)],
+                                      results: [LiveStepResult(index: 0, action: .adjust, status: .applied, label: "Warmth +15")], version: 2)
+        let again = LocalPromptExample(
+            user: Examples.state(2, [warmed.line()]) + "\nlangue: fr\nencore un peu",
+            assistant: "Encore un peu plus chaude.", toolName: .applyEdits,
+            arguments: ["steps": [["action": "adjust", "parameter": "temperature", "amount": 10]]],
+            toolResult: Examples.applied([(.adjust, "Warmth +10")], version: 3))
+        switch mode {
+        case .video:
+            let precise = named("coupe les trois premières secondes")
+            return size == .full ? [warmer, tooMuch, opinion, precise].compactMap { $0 } : [warmer, tooMuch, opinion]
+        case .pdf:
+            return Examples.pdfSet()
+        case .photo:
+            let refusal = LocalPromptExample(
+                user: Examples.state(6, ["applied: Warmth +15"]) + "\nlangue: fr\ndessine une moustache au chat",
+                assistant: "Je ne sais pas dessiner sur la photo. Je peux ajouter un texte ou flouter le fond ?")
+            let curves = Examples.catalogCall(
+                user: "applique une courbe en S légère", language: .french, version: 4, id: "curves",
+                arguments: ["preset": "sCurve", "amount": 30], said: "Je pose une courbe en S légère.", label: "Curves")
+            guard size == .full else { return [warmer, tooMuch, opinion] }
+            let repair = named("écris « Merci » dans le ciel")
+            // The catalog operation's call is taught by its card; the budget keeps the six behaviours.
+            _ = curves
+            return [warmer, tooMuch, opinion, again, repair, refusal].compactMap { $0 }
+        }
+    }
+
+    /// The fifteen hand-written examples of the legacy layout.
+    static func legacyExamples(mode: EditorMode, size: LocalPromptSize) -> [LocalPromptExample] {
         let video = mode == .video
         let warmer = LocalPromptExample(
             user: Examples.state(1, ["applied: nothing yet"]) + "\nlangue: fr\nrends-la plus chaude",
@@ -24,9 +77,14 @@ extension LocalLivePrompt {
             user: Examples.state(2, ["applied: Warmth +15"]) + "\nlangue: fr\nc'est trop",
             assistant: "Je reviens en arrière.", toolName: .undo, arguments: [:],
             toolResult: ToolResultEncoder.compactText(ToolResultEncoder.undo(labels: ["Warmth +15"], redo: false, version: 3)))
+        // A clip has no regions (selectiveAdjust is photo-only): the video idea is the whole picture.
+        let denser: JSONValue = video
+            ? ["title": "Couleurs plus denses", "why": "Les couleurs sont un peu pâles.", "symbol": "cloud.sun",
+               "steps": [["action": "adjust", "parameter": "saturation", "amount": 25]]]
+            : ["title": "Ciel plus dense", "why": "Le ciel est un peu pâle.", "symbol": "cloud.sun",
+               "steps": [["action": "selectiveAdjust", "target": "sky", "parameter": "saturation", "amount": 25]]]
         let opinionIdeas: JSONValue = [
-            ["title": "Ciel plus dense", "why": "Le ciel est un peu pâle.", "symbol": "cloud.sun",
-             "steps": [["action": "selectiveAdjust", "target": "sky", "parameter": "saturation", "amount": 25]]],
+            denser,
             ["title": "Lumière dorée", "why": "Pour une ambiance de fin de journée.", "symbol": "sun.max",
              "steps": [["action": "applyLook", "look": "goldenHour", "amount": 50]]],
             ["title": "Noir et blanc", "why": "Les contrastes s'y prêtent bien.", "symbol": "circle.lefthalf.filled",
@@ -156,6 +214,31 @@ extension LocalLivePrompt {
 
 /// The pictures and state lines the examples are written on.
 enum Examples {
+    /// A catalog operation called from the card the turn carries (`<ops>`), with its applied result.
+    static func catalogCall(user: String, language: NormalizedUtterance.Language, version: Int, id: OpID, arguments: [String: JSONValue],
+                            said: String, label: String) -> LocalPromptExample {
+        let cards = OperationCards.turnBlock([RetrievedOperation(id: id, score: 1)], language: language == .french ? .fr : .en, budget: 400)
+        var call = arguments
+        call["action"] = .string(id.raw)
+        let text = state(version, ["unchanged"]) + (cards.isEmpty ? "" : "\n" + cards) + "\nlangue: \(language.rawValue)\n" + user
+        let result = ToolResultEncoder.compactText(ToolResultEncoder.applyEdits(LiveExecution(steps: [
+            LiveStepResult(index: 0, action: .operation, status: .applied, label: label),
+        ], version: version + 1, canUndo: true)))
+        return LocalPromptExample(user: text, assistant: said, toolName: .applyEdits, arguments: ["steps": [.object(call)]], toolResult: result)
+    }
+
+    /// PDF (Live does not converse there yet; the planner lane has its own PDF set in IntentPrompt):
+    /// a question answered without a tool, and an honest refusal with the nearest operation.
+    static func pdfSet() -> [LocalPromptExample] {
+        let question = LocalPromptExample(
+            user: state(1, ["mode: pdf", "selection: page 2 of 6"]) + "\nlangue: fr\ncombien de pages il y a ?",
+            assistant: "Le document a 6 pages ; tu es sur la page 2.")
+        let refusal = LocalPromptExample(
+            user: state(1, ["unchanged"]) + "\nlangue: fr\ntraduis tout le document en anglais",
+            assistant: "Je ne sais pas encore traduire un PDF. Je peux surligner ou remplacer des mots ?")
+        return [question, refusal]
+    }
+
     /// `<editor_state v=N>` with the given lines.
     static func state(_ version: Int, _ lines: [String]) -> String {
         (["<editor_state v=\(version)>"] + lines.filter { !$0.isEmpty } + ["</editor_state>"]).joined(separator: "\n")

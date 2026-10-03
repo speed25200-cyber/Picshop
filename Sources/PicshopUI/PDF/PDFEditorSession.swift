@@ -18,13 +18,14 @@ import PicshopSpeech
 @Observable
 public final class PDFEditorSession {
     public enum Tool: String, CaseIterable, Identifiable {
-        case pages, draw, highlight, text, signature, image
+        case pages, draw, highlight, redact, text, signature, image
         public var id: String { rawValue }
         var title: String {
             switch self {
             case .pages: return L("Pages")
             case .draw: return L("Draw")
             case .highlight: return L("Highlight")
+            case .redact: return L("Redact")
             case .text: return L("Text")
             case .signature: return L("Sign")
             case .image: return L("Image")
@@ -35,6 +36,7 @@ public final class PDFEditorSession {
             case .pages: return "doc.on.doc"
             case .draw: return "pencil.tip"
             case .highlight: return "highlighter"
+            case .redact: return "eye.slash"
             case .text: return "textformat"
             case .signature: return "signature"
             case .image: return "photo"
@@ -73,6 +75,15 @@ public final class PDFEditorSession {
     @ObservationIgnored private var lastSavedDocument: PDFDocumentModel?
     /// Revision at the last thumbnail handed to the library.
     @ObservationIgnored private var thumbnailRevision = 0
+    @ObservationIgnored private var autosaveTask: Task<Void, Never>?
+    @ObservationIgnored private var autosaveDeadline = ContinuousClock.now
+    @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    /// The source PDF is password-protected and not opened yet: nothing runs until it is.
+    public private(set) var isLocked = false
+    /// 'Aplatir' in the export: every mark burned into the pages.
+    public var exportFlattensAnnotations = false
+    /// 'Aplatir les pages modifiées' in the export; nil is the default (on when words were replaced).
+    public var exportFlattensModifiedPages: Bool?
 
     /// Composed PDFKit document shown by the viewer (rebuilt on every change).
     public private(set) var composed: PDFDocument?
@@ -128,7 +139,8 @@ public final class PDFEditorSession {
         self.document = document
         services = PDFEditingService(store: app.store, projectID: projectID)
         worker = PDFBackgroundWorker(store: app.store, projectID: projectID)
-        executor = PDFCommandExecutor(services: services)
+        // Every PDFKit read of a command runs on the worker, never on the viewer's documents.
+        executor = PDFCommandExecutor(services: worker)
         live = LiveSession(app: app, mode: .pdf, canGoLive: false)
         live.attach(self)
     }
@@ -138,6 +150,11 @@ public final class PDFEditorSession {
         isConfigured = true
         executor.language = language
         lastSavedDocument = document
+        observeLifecycle()
+        if services.isLocked(document) {
+            isLocked = true
+            requestPassword(retry: false, after: .milliseconds(600))
+        }
         recompose()
     }
 
@@ -146,6 +163,8 @@ public final class PDFEditorSession {
         guard !isTornDown else { return }
         isTornDown = true
         Diagnostics.shared.note("pdf editor teardown")
+        for observer in observers { NotificationCenter.default.removeObserver(observer) }
+        observers = []
         live.teardown()
         app.voice.cancel()
         save()
@@ -154,6 +173,8 @@ public final class PDFEditorSession {
     /// Saves off the main thread (the library orders the writes), and hands the
     /// library page 1 as composed and rendered by the worker.
     public func save() {
+        autosaveTask?.cancel()
+        autosaveTask = nil
         let modifiedAt = Date()
         let library = app.library
         if document != lastSavedDocument {
@@ -180,8 +201,99 @@ public final class PDFEditorSession {
     var intentContext: IntentContext {
         IntentContext(mode: .pdf, pendingClarification: pendingClarification, lastTapPoint: lastTapPoint, canUndo: history.canUndo, canRedo: history.canRedo,
                       preferredLanguage: app.settings.languageHint, pageCount: document.pageCount, currentPage: document.currentPageIndex + 1,
-                      hasSignature: FileManager.default.fileExists(atPath: SignatureStore.fileURL.path))
+                      hasSignature: FileManager.default.fileExists(atPath: SignatureStore.fileURL.path), documentRevision: revision)
     }
+
+    // MARK: Autosave
+
+    /// Saves ~0.8 s after the last change, so a crash or a kill loses at most that much.
+    private func scheduleAutosave() {
+        guard isConfigured, !isTornDown else { return }
+        autosaveDeadline = ContinuousClock.now.advanced(by: .milliseconds(800))
+        guard autosaveTask == nil else { return }
+        autosaveTask = Task { [weak self] in
+            while let self {
+                let deadline = self.autosaveDeadline
+                try? await Task.sleep(until: deadline, clock: .continuous)
+                guard !Task.isCancelled else { return }
+                if self.autosaveDeadline <= ContinuousClock.now {
+                    self.autosaveTask = nil
+                    self.autosave(synchronously: false)
+                    return
+                }
+            }
+        }
+    }
+
+    private func autosave(synchronously: Bool) {
+        let document = self.document
+        guard document != lastSavedDocument else { return }
+        lastSavedDocument = document
+        let project = Project(id: projectID, content: .pdf(document), createdAt: document.createdAt, modifiedAt: Date())
+        let library = app.library
+        if synchronously {
+            // Going to the background: this must land before the app is suspended.
+            library.saveNow(project)
+        } else {
+            Task { await library.persist(project) }
+        }
+    }
+
+    private func observeLifecycle() {
+        // Synchronous on the main queue: a hop through a task could run after the app is suspended.
+        observers.append(NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.autosaveTask?.cancel()
+                self.autosaveTask = nil
+                self.autosave(synchronously: true)
+            }
+        })
+    }
+
+    // MARK: Password
+
+    /// Asks for the password of a protected PDF (an alert over the editor). Live and every command wait for it.
+    public func requestPassword(retry: Bool = false, after delay: Duration = .zero) {
+        guard isLocked else { return }
+        Task { [weak self] in
+            if delay > .zero { try? await Task.sleep(for: delay) }
+            guard let self, self.isLocked, !self.isTornDown else { return }
+            PDFPasswordPrompt.present(title: self.document.title, retry: retry) { [weak self] password in
+                guard let password else { return }
+                self?.unlock(password: password)
+            }
+        }
+    }
+
+    /// Opens the protected source with `password`; asks again when it is wrong. The pages are read
+    /// then: an import that could not read them kept one placeholder page.
+    public func unlock(password: String) {
+        guard isLocked else { return }
+        guard let sizes = services.unlock(document, password: password) else {
+            Haptics.error()
+            requestPassword(retry: true)
+            return
+        }
+        isLocked = false
+        let worker = self.worker
+        let model = document
+        Task { _ = await worker.unlock(model, password: password) }
+        let isPlaceholder = document.allMarkups.isEmpty && document.pages.allSatisfy { if case .original = $0.source { return true } else { return false } }
+        if isPlaceholder, document.pages.map(\.size) != sizes {
+            var opened = document
+            opened.pages = sizes.enumerated().map { PDFPageModel(source: .original(index: $0.offset), size: $0.element) }
+            opened.currentPageIndex = 0
+            // How the document opens, not an edit: no undo step.
+            history = EditHistory(initial: opened)
+        }
+        recompose()
+        save()
+        Haptics.success()
+    }
+
+    /// The reply while the PDF waits for its password.
+    private var lockedMessage: String { L("This PDF is protected. Enter its password to edit it.") }
 
     /// Total rotation of the page as displayed (original + edits).
     public func displayRotation(of page: PDFPageModel) -> Int {
@@ -207,6 +319,7 @@ public final class PDFEditorSession {
         if canUndo != history.canUndo { canUndo = history.canUndo; changed = true }
         if canRedo != history.canRedo { canRedo = history.canRedo; changed = true }
         if labels != undoLabels { undoLabels = labels; changed = true }
+        if documentChanged { scheduleAutosave() }
         guard changed, !history.isInTransaction else { return }
         live.noteDocumentChanged(label: isNewStep ? history.undoLabel : nil)
     }
@@ -384,6 +497,34 @@ public final class PDFEditorSession {
         update(L("Image")) { $0.addMarkup(PDFMarkup(kind: .image(asset, frame: frame)), toPageAt: pageIndex) }
     }
 
+    /// Redact tool: boxes on the page (displayed space) become redactions, burned out of the export.
+    public func addRedaction(displayedRects: [PSRect], pageIndex: Int) {
+        guard let page = document.pages.indices.contains(pageIndex) ? document.pages[pageIndex] : nil else { return }
+        let rotation = displayRotation(of: page)
+        let base = displayedRects.filter { $0.width > 0.003 && $0.height > 0.003 }.map { PDFGeometry.baseRect(fromDisplayed: $0, rotation: rotation).clampedToUnit() }
+        guard !base.isEmpty else { return }
+        update(L("Redact")) { $0.addMarkup(PDFMarkup(kind: .redaction(rects: base)), toPageAt: pageIndex) }
+        Haptics.tick()
+    }
+
+    /// Redact tool: the word under a tap (text layer, or OCR on a scan).
+    public func redactWord(at displayedPoint: PSPoint, pageIndex: Int) {
+        lastTapPoint = displayedPoint
+        guard !isProcessing, !isLocked else { return }
+        isProcessing = true
+        processingTitle = L("Reading the page…")
+        let worker = self.worker
+        let document = self.document
+        Task { [weak self] in
+            let hit = await worker.word(at: displayedPoint, pageIndex: pageIndex, in: document)
+            guard let self else { return }
+            self.isProcessing = false
+            guard let hit else { Haptics.warning(); return }
+            self.update(L("Redact")) { $0.addMarkup(PDFMarkup(kind: .redaction(rects: [hit.rect])), toPageAt: pageIndex) }
+            Haptics.tick()
+        }
+    }
+
     public func removeLastMarkup(onPage pageIndex: Int) {
         guard let last = document.pages[pageIndex].markups.last else { return }
         update(L("Remove")) { $0.removeMarkup(id: last.id) }
@@ -418,6 +559,12 @@ public final class PDFEditorSession {
         transcript = text
         lastReplyIsProblem = false
         lastReplyIsError = false
+        if isLocked {
+            lastPlan = EditPlan(utterance: text, intents: [], confidence: 0, reply: lockedMessage)
+            lastReplyIsProblem = true
+            requestPassword()
+            return
+        }
         let plan = await app.router.plan(text, context: intentContext)
         lastPlan = plan
         if plan.isEmpty {
@@ -473,6 +620,10 @@ public final class PDFEditorSession {
     @discardableResult
     public func run(_ intent: EditIntent) async -> CommandOutcome {
         lastEffects = []
+        if isLocked {
+            requestPassword()
+            return .failed(message: lockedMessage)
+        }
         let isHeavy = intent.action == .extractPage || intent.action == .findText || intent.action == .highlightText || intent.action == .redactText || intent.action == .underlineText
         if isHeavy {
             guard !isProcessing else {
@@ -624,14 +775,40 @@ public final class PDFEditorSession {
 
     // MARK: Export
 
-    /// Writes the flattened PDF off the main thread, for the share sheet.
+    /// The export's choices: 'Aplatir' and 'Aplatir les pages modifiées' (on by default when words were replaced).
+    public var exportOptions: PDFExportOptions {
+        PDFExportOptions(flattenAnnotations: exportFlattensAnnotations,
+                         flattenModifiedPages: exportFlattensModifiedPages ?? PDFExportPlan.hasReplacements(document))
+    }
+
+    /// Said before sharing when the replaced words would stay readable in the file.
+    public var exportWarning: String? {
+        PDFExportPlan.keepsReplacedWords(document, options: exportOptions)
+            ? L("The replaced words stay in the file, where they can be copied or found. Turn on “Flatten modified pages” to remove them.")
+            : nil
+    }
+
+    /// Writes the PDF off the main thread, for the share sheet: structure kept, redactions burned out.
     public func export() async {
         exportedURL = nil
+        if isLocked {
+            showToast(lockedMessage, isError: true)
+            requestPassword()
+            return
+        }
         do {
-            let url = try await worker.export(document)
+            let url = try await worker.export(document, options: exportOptions)
+            // A newer export (a flatten choice changed) replaced this one: its file is not the one to share.
+            if Task.isCancelled { return }
             exportedURL = url
             Haptics.success()
-            showToast(L("PDF ready to share"))
+            if let warning = exportWarning {
+                showToast(warning, isError: true)
+            } else if document.allMarkups.contains(where: { if case .redaction = $0.markup.kind { return true } else { return false } }) {
+                showToast(L("PDF ready: the redacted text is gone from the file."))
+            } else {
+                showToast(L("PDF ready to share"))
+            }
         } catch {
             showToast((error as? PicshopError)?.message ?? error.localizedDescription, isError: true)
         }

@@ -50,6 +50,45 @@ public enum RenderContext {
         }
         return CIContext(options: options)
     }()
+
+    /// The canvas's context, and nothing else draws through it: its cached
+    /// intermediates (the settled picture) survive whatever runs in the background,
+    /// so a pan or a zoom replays nothing.
+    public static let interactive: CIContext = make(name: "Picshop.canvas", cacheIntermediates: true, lowPriority: false)
+
+    /// Readbacks and analysis off the canvas (masks, thumbnails, Vision inputs, the
+    /// ambient wash, the histogram): low GPU priority, so a canvas frame goes first,
+    /// and no intermediate cache, so they never evict the canvas's.
+    public static let background: CIContext = make(name: "Picshop.background", cacheIntermediates: false, lowPriority: true)
+
+    /// The options a context is made with, kept so tests can check them.
+    public static func options(name: String, cacheIntermediates: Bool, lowPriority: Bool) -> [CIContextOption: Any] {
+        var options: [CIContextOption: Any] = [
+            .workingColorSpace: workingColorSpace,
+            .outputColorSpace: colorSpace,
+            .cacheIntermediates: cacheIntermediates,
+            .highQualityDownsample: true,
+            .name: name,
+        ]
+        if lowPriority { options[.priorityRequestLow] = true }
+        return options
+    }
+
+    private static func make(name: String, cacheIntermediates: Bool, lowPriority: Bool) -> CIContext {
+        let settings = Self.options(name: name, cacheIntermediates: cacheIntermediates, lowPriority: lowPriority)
+        if let device = MTLCreateSystemDefaultDevice() {
+            return CIContext(mtlDevice: device, options: settings)
+        }
+        return CIContext(options: settings)
+    }
+
+    /// Drops every context's caches (memory warning, model load).
+    public static func clearAllCaches() {
+        shared.clearCaches()
+        interactive.clearCaches()
+        background.clearCaches()
+        export.clearCaches()
+    }
 }
 
 public enum ImageSupport {
@@ -85,6 +124,13 @@ public enum ImageSupport {
             || CGImageSourceCopyAuxiliaryDataInfoAtIndex(source, 0, kCGImageAuxiliaryDataTypeDepth) != nil
     }
 
+    /// Whether the file carries Apple's HDR gain map (iPhone HDR photos): exported as
+    /// HEIC, the edit keeps it and stays as bright as the original.
+    public static func hasHDRGainMap(at url: URL) -> Bool {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return false }
+        return CGImageSourceCopyAuxiliaryDataInfoAtIndex(source, 0, kCGImageAuxiliaryDataTypeHDRGainMap) != nil
+    }
+
     /// Reads pixel dimensions without decoding the image.
     public static func pixelSize(at url: URL) -> PSSize? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
@@ -104,20 +150,20 @@ public enum ImageSupport {
     ///
     /// Always `createCGImage`, rendered eagerly: upright by contract (the first row
     /// is the rect's top edge, maxY) at every size, with no runtime probe.
-    public static func cgImage(from image: CIImage, rect: CGRect? = nil, colorSpace: CGColorSpace = RenderContext.colorSpace, context: CIContext = RenderContext.shared) -> CGImage? {
+    public static func cgImage(from image: CIImage, rect: CGRect? = nil, colorSpace: CGColorSpace = RenderContext.colorSpace, context: CIContext = RenderContext.background) -> CGImage? {
         guard let bounds = pixelBounds(rect ?? image.extent) else { return nil }
         return context.createCGImage(image, from: bounds, format: .RGBA8, colorSpace: colorSpace, deferred: false)
     }
 
     /// Top-down RGBA8 bytes (premultiplied) of `rect` (default: the extent): row 0 is the
     /// top edge. Read in `colorSpace`; `ciImage(rgba:…)` in the same space gives the image back.
-    public static func rgbaBytes(of image: CIImage, rect: CGRect? = nil, colorSpace: CGColorSpace = RenderContext.colorSpace, context: CIContext = RenderContext.shared) -> [UInt8]? {
+    public static func rgbaBytes(of image: CIImage, rect: CGRect? = nil, colorSpace: CGColorSpace = RenderContext.colorSpace, context: CIContext = RenderContext.background) -> [UInt8]? {
         cgImage(from: image, rect: rect, colorSpace: colorSpace, context: context).map { rgbaBytes(from: $0, colorSpace: colorSpace) }
     }
 
     /// Top-down 8-bit gray bytes of `rect` (default: the extent): row 0 is the top edge.
     /// Read in `colorSpace`; `ciImage(gray:…)` in the same space gives the image back.
-    public static func grayBytes(of image: CIImage, rect: CGRect? = nil, colorSpace: CGColorSpace = CGColorSpaceCreateDeviceGray(), context: CIContext = RenderContext.shared) -> [UInt8]? {
+    public static func grayBytes(of image: CIImage, rect: CGRect? = nil, colorSpace: CGColorSpace = CGColorSpaceCreateDeviceGray(), context: CIContext = RenderContext.background) -> [UInt8]? {
         guard let bounds = pixelBounds(rect ?? image.extent),
               let cg = context.createCGImage(image, from: bounds, format: .L8, colorSpace: colorSpace, deferred: false) else { return nil }
         return grayBytes(from: cg, colorSpace: colorSpace)
@@ -139,24 +185,38 @@ public enum ImageSupport {
         return bounds
     }
 
-    /// Writes a CGImage as JPEG/PNG/HEIC.
-    public static func write(_ image: CGImage, to url: URL, type: UTType = .jpeg, quality: Double = 0.92) throws {
+    /// Writes a CGImage as JPEG/PNG/HEIC, with `properties` (EXIF, GPS, IPTC…) as its metadata.
+    public static func write(_ image: CGImage, to url: URL, type: UTType = .jpeg, quality: Double = 0.92, properties: [CFString: Any] = [:]) throws {
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, type.identifier as CFString, 1, nil) else {
             throw PicshopError.exportFailed("cannot create \(url.lastPathComponent)")
         }
-        let properties: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: quality]
-        CGImageDestinationAddImage(destination, image, properties as CFDictionary)
+        var options = properties
+        options[kCGImageDestinationLossyCompressionQuality] = quality
+        CGImageDestinationAddImage(destination, image, options as CFDictionary)
         guard CGImageDestinationFinalize(destination) else {
             throw PicshopError.exportFailed("cannot write \(url.lastPathComponent)")
         }
     }
 
-    /// Writes a CIImage, rasterised upright through `cgImage(from:)` in the display colour space.
-    public static func write(_ image: CIImage, to url: URL, type: UTType = .jpeg, quality: Double = 0.92, context: CIContext = RenderContext.export) throws {
-        guard let cg = cgImage(from: image, context: context) else {
+    /// Writes a CIImage, rasterised upright through `cgImage(from:)` in `colorSpace` (Display P3 by default).
+    public static func write(_ image: CIImage, to url: URL, type: UTType = .jpeg, quality: Double = 0.92, context: CIContext = RenderContext.export,
+                             colorSpace: CGColorSpace = RenderContext.colorSpace, properties: [CFString: Any] = [:]) throws {
+        guard let cg = cgImage(from: image, colorSpace: colorSpace, context: context) else {
             throw PicshopError.exportFailed("cannot rasterise \(url.lastPathComponent)")
         }
-        try write(cg, to: url, type: type, quality: quality)
+        try write(cg, to: url, type: type, quality: quality, properties: properties)
+    }
+
+    /// Writes a HEIC whose HDR gain map is `gainMap` (Apple's format), so an HDR photo
+    /// stays as bright as the original in Photos. `properties` become its metadata.
+    public static func writeHEIC(_ image: CIImage, gainMap: CIImage, to url: URL, quality: Double, colorSpace: CGColorSpace,
+                                 properties: [CFString: Any], context: CIContext = RenderContext.export) throws {
+        let metadata = ((properties as NSDictionary) as? [AnyHashable: Any]) ?? [:]
+        let tagged = image.settingProperties(metadata)
+        var options: [CIImageRepresentationOption: Any] = [.hdrGainMapImage: gainMap]
+        let qualityKey = CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String)
+        options[qualityKey] = quality
+        try context.writeHEIFRepresentation(of: tagged, to: url, format: .RGBA8, colorSpace: colorSpace, options: options)
     }
 
     /// Creates a single-channel 8-bit grayscale CGImage from top-down bytes.

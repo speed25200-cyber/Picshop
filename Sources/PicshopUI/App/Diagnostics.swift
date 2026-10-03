@@ -315,7 +315,10 @@ extension Diagnostics: MXMetricManagerSubscriber {
     }
 
     public func didReceive(_ payloads: [MXMetricPayload]) {
-        // Daily metrics: kept only when the system ended the app in the foreground (memory limit, bad access…).
+        // Every day's launch, hangs, hitches and memory, kept on the device for Réglages › Avancé › Performance.
+        let days = payloads.map(Self.performanceDay(from:))
+        if !days.isEmpty { recordPerformance(days) }
+        // The full payload is kept only when the system ended the app in the foreground (memory limit, bad access…).
         for payload in payloads {
             guard let exits = payload.applicationExitMetrics?.foregroundExitData else { continue }
             let abnormal = exits.cumulativeMemoryResourceLimitExitCount + exits.cumulativeAbnormalExitCount + exits.cumulativeBadAccessExitCount
@@ -324,6 +327,61 @@ extension Diagnostics: MXMetricManagerSubscriber {
             note("MetricKit: \(exits.cumulativeMemoryResourceLimitExitCount) memory-limit exit(s) in the foreground")
         }
     }
+
+    /// One day's numbers out of MetricKit's payload.
+    static func performanceDay(from payload: MXMetricPayload) -> PerformanceDay {
+        var day = PerformanceDay(date: payload.timeStampEnd)
+        if let launch = payload.applicationLaunchMetrics?.histogrammedTimeToFirstDraw {
+            let buckets = milliseconds(launch)
+            day.launchP50 = MetricHistogram.percentile(0.5, of: buckets)
+            day.launchP90 = MetricHistogram.percentile(0.9, of: buckets)
+        }
+        if let hangs = payload.applicationResponsivenessMetrics?.histogrammedApplicationHangTime {
+            let buckets = milliseconds(hangs)
+            day.hangCount = MetricHistogram.total(buckets)
+            day.hangP90 = MetricHistogram.percentile(0.9, of: buckets)
+        }
+        if let hitches = payload.animationMetrics?.scrollHitchTimeRatio {
+            day.hitchRatio = hitches.value
+        }
+        if let peak = payload.memoryMetrics?.peakMemoryUsage {
+            day.peakMemoryMB = peak.converted(to: .megabytes).value
+        }
+        return day
+    }
+
+    private static func milliseconds(_ histogram: MXHistogram<UnitDuration>) -> [MetricHistogram.Bucket] {
+        histogram.bucketEnumerator.allObjects.compactMap { item -> MetricHistogram.Bucket? in
+            guard let bucket = item as? MXHistogramBucket<UnitDuration> else { return nil }
+            return MetricHistogram.Bucket(start: bucket.bucketStart.converted(to: .milliseconds).value,
+                                          end: bucket.bucketEnd.converted(to: .milliseconds).value, count: bucket.bucketCount)
+        }
+    }
 }
 #endif
+
+// MARK: - Performance log
+
+public extension Diagnostics {
+    private var performanceURL: URL { directory.appendingPathComponent("performance.json") }
+
+    /// The days MetricKit reported, oldest first (at most a month), read from the device.
+    func performanceLog() -> PerformanceLog {
+        guard let data = try? Data(contentsOf: performanceURL), let log = try? JSONDecoder().decode(PerformanceLog.self, from: data) else { return PerformanceLog() }
+        return log
+    }
+
+    /// Adds days to the log on the diagnostics queue.
+    func recordPerformance(_ days: [PerformanceDay]) {
+        let url = performanceURL
+        let directory = self.directory
+        let current = performanceLog()
+        DispatchQueue.global(qos: .utility).async {
+            var log = current
+            for day in days { log.add(day) }
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            if let data = try? JSONEncoder().encode(log) { try? data.write(to: url, options: .atomic) }
+        }
+    }
+}
 #endif

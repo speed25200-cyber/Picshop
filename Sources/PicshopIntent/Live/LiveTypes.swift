@@ -281,6 +281,12 @@ public struct LiveEditorState: Sendable, Equatable {
     /// `IntentContext.scene`, so the ids the model reads ("t3", "o1") are the ids its steps resolve
     /// against. Nil until the picture was read.
     public var sceneMap: SceneMap? = nil
+    /// Photo: every layer, the photo included (text, shape and image layers count). Above 1, the
+    /// layer operations (opacity, blend mode, visibility, order) can run.
+    public var layerCount: Int = 1
+    /// Photo: a LUT was imported on the active image layer, at any intensity (one taken off can
+    /// come back), so the LUT intensity and remove operations can run.
+    public var hasImportedLUT: Bool = false
 
     public init(mode: EditorMode, version: Int) {
         self.mode = mode

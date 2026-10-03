@@ -283,8 +283,7 @@ public final class AppEnvironment {
     /// App-wide part of a memory warning: the shared Core Image caches. Editors drop
     /// their own renders and thumbnails on the same notification.
     static func relieveMemoryPressure() {
-        RenderContext.shared.clearCaches()
-        RenderContext.export.clearCaches()
+        RenderContext.clearAllCaches()
     }
 
     private func startAutoInstallIfDue() {
@@ -299,7 +298,13 @@ public final class AppEnvironment {
     public func prewarmIntentEngine(mode: EditorMode) {
         let hub = LocalBrainHub.shared
         lastEditorMode = mode
-        if settings.livePreparesOnOpen { hub.preload(reason: "editor") }
+        editorShowedFirstPixels = false
+        if let open = editorOpenSignpost { PSSignpost.end(open) }
+        editorOpenSignpost = PSSignpost.begin("editor.open", "\(mode)")
+        if settings.livePreparesOnOpen { preloadAfterFirstPixels() }
+        // The operation catalog and its retrieval index (about 60 ms cold) are read before the
+        // router's model deadline: build them now, off the main thread, not on the first command.
+        Task.detached(priority: .utility) { OperationAbstention.prewarm() }
         if activeEngine == .proLocal { hub.warmPlanner(mode: mode) }
         #if canImport(FoundationModels)
         // Push-to-talk plans with Apple's model whenever it is available, the local model loaded or not.
@@ -312,6 +317,42 @@ public final class AppEnvironment {
             }
         }
         #endif
+    }
+
+    // MARK: - Model load timing
+
+    /// The editor opening drew its first pixels (photo frame, video item, PDF page).
+    @ObservationIgnored private var editorShowedFirstPixels = false
+    @ObservationIgnored private var preloadTask: Task<Void, Never>?
+    /// From the editor's appearance to its first pixels (Instruments' Points of Interest).
+    @ObservationIgnored private var editorOpenSignpost: PSSignpost.Interval?
+
+    /// The local model's weights (2.5–3 GB) never compete with an editor's first
+    /// frame: they start loading 500 ms after it, or 2 s after the editor opened
+    /// when it never reports one.
+    private func preloadAfterFirstPixels() {
+        preloadTask?.cancel()
+        preloadTask = Task { [weak self] in
+            let opened = ContinuousClock.now
+            while let self, !self.editorShowedFirstPixels, ContinuousClock.now - opened < .seconds(2) {
+                try? await Task.sleep(for: .milliseconds(50))
+                if Task.isCancelled { return }
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+            guard let self, !Task.isCancelled, self.isEditorOpen else { return }
+            PSSignpost.event("llm.preload", "after first pixels")
+            LocalBrainHub.shared.preload(reason: "editor")
+        }
+    }
+
+    /// An editor's first frame is on screen: the model may load now (after a short breath).
+    public func noteEditorFirstPixels() {
+        guard !editorShowedFirstPixels else { return }
+        editorShowedFirstPixels = true
+        if let open = editorOpenSignpost {
+            PSSignpost.end(open)
+            editorOpenSignpost = nil
+        }
     }
 
     public func applyPerformanceSettings() {

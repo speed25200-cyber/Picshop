@@ -33,7 +33,8 @@ final class MLXPlanner: IntentEngine, @unchecked Sendable {
             throw LiveBrainError.modelNotReady
         }
         let (container, generation) = loaded
-        let prompt = IntentPrompt.userPrompt(for: utterance, context: context, hint: hint) + "\nJSON:"
+        // The request carries the cards of the catalog operations it is about (the instructions stay byte-stable).
+        let prompt = IntentPrompt.userPrompt(for: utterance, context: context, hint: hint, catalogCards: true) + "\nJSON:"
         let text = try await sessions.answer(prompt, mode: context.mode, container: container, generation: generation)
         guard let raw = LLMResponseParser.parse(text) else {
             throw PicshopError.renderFailed("the local model returned no plan")
@@ -64,7 +65,8 @@ final class MLXPlanner: IntentEngine, @unchecked Sendable {
     }
 }
 
-/// The planner's reused sessions, one command at a time.
+/// The planner's reused sessions, one command at a time, in the order they came (FIFO): a ChatSession
+/// is not reentrant, and an actor alone lets a second command start while the first awaits the model.
 private actor PlannerSessions {
     private struct Entry {
         var session: ChatSession
@@ -74,14 +76,21 @@ private actor PlannerSessions {
 
     private var entries: [EditorMode: Entry] = [:]
     private var running: Task<String, Error>?
+    /// FIFO gate: true while a command holds the session; the next ones wait their turn.
+    private var busy = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
 
     /// Commands a session answers before it is renewed.
     private static let commandsPerSession = 8
     private static var parameters: GenerateParameters { GenerateParameters(maxTokens: 300, temperature: 0.1, topP: 0.8, topK: 20) }
 
     func answer(_ prompt: String, mode: EditorMode, container: ModelContainer, generation: Int) async throws -> String {
-        // One command at a time: a command still running (the router gave up on it) finishes first.
-        if let running { _ = try? await running.value }
+        // One command at a time, first come first served: a command still running (the router gave up
+        // on it) finishes first, and two waiting commands never share the session.
+        await acquire()
+        defer { release() }
+        // The caller gave up while waiting (the router's deadline): nothing to run.
+        try Task.checkCancellation()
         let session = session(for: mode, container: container, generation: generation)
         let task = Task { () throws -> String in
             var text = ""
@@ -108,6 +117,22 @@ private actor PlannerSessions {
         }
     }
 
+    private func acquire() async {
+        guard busy else {
+            busy = true
+            return
+        }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    private func release() {
+        if waiters.isEmpty {
+            busy = false
+        } else {
+            waiters.removeFirst().resume()
+        }
+    }
+
     private func session(for mode: EditorMode, container: ModelContainer, generation: Int) -> ChatSession {
         if var entry = entries[mode], entry.generation == generation, entry.commands < Self.commandsPerSession {
             entry.commands += 1
@@ -115,7 +140,7 @@ private actor PlannerSessions {
             return entry.session
         }
         var history: [Chat.Message] = []
-        for (request, json) in IntentPrompt.fewShotExamples {
+        for (request, json) in IntentPrompt.fewShotExamples(for: mode) {
             history.append(.user("Request: \"\(request)\"\nJSON:"))
             history.append(.assistant(json))
         }

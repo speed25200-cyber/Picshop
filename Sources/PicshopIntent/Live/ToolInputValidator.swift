@@ -70,7 +70,7 @@ public struct ToolInputValidator: Sendable {
         for (index, step) in raw.enumerated() {
             if let intent = check(step, path: "steps[\(index)]", context: context, grounding: nil, problems: &problems) { intents.append(intent) }
         }
-        return problems.isEmpty ? .success(intents) : .failure(.problems(Array(problems.prefix(Self.maxProblems))))
+        return problems.isEmpty ? .success(intents) : .failure(.problems(Array(Self.unique(problems).prefix(Self.maxProblems))))
     }
 
     /// One tool call, checked once its arguments are complete. Ideas come back with source `.model`.
@@ -107,7 +107,7 @@ public struct ToolInputValidator: Sendable {
             unknownKeys(object, allowed: ["ideas"], path: "input", problems: &problems)
             tool = ideaList(object["ideas"], context: context, grounding: grounding, problems: &problems).map { .proposeIdeas($0) }
         }
-        guard problems.isEmpty, let tool else { return .failure(.problems(Array(problems.prefix(Self.maxProblems)))) }
+        guard problems.isEmpty, let tool else { return .failure(.problems(Array(Self.unique(problems).prefix(Self.maxProblems)))) }
         return .success(LiveToolCall(id: use.id, tool: tool))
     }
 
@@ -181,6 +181,24 @@ public struct ToolInputValidator: Sendable {
             problems.append("\(path): must be an object")
             return nil
         }
+        // A catalog operation ("curves", "layerBlend"): its own keys, the op's params and their aliases.
+        if case .string(let name)? = object["action"], IntentAction(rawValue: name) == nil,
+           let spec = IntentNormalizer.catalogOperation(named: name, mode: mode) {
+            var allowed: Set<String> = ["action"]
+            for param in spec.params {
+                allowed.insert(param.key)
+                allowed.formUnion(param.keyAliases)
+            }
+            unknownKeys(object, allowed: allowed, path: path, problems: &problems)
+            var arguments = object
+            arguments["action"] = nil
+            return RawIntentStep(action: spec.id.raw, extra: OperationArguments.coerce(arguments, for: spec.id))
+        }
+        // Another editor's catalog operation: one problem (not available here), not one per key.
+        if case .string(let name)? = object["action"], IntentAction(rawValue: name) == nil, FeatureFlags.isOn(.catalogOps),
+           OperationCatalog.shared.spec(OpID(name)) != nil {
+            return RawIntentStep(action: name)
+        }
         var allowed = Self.stepKeys
         if mode == .video { allowed.formUnion(LiveToolSchema.videoFields) }
         if mode == .photo { allowed.formUnion(LiveToolSchema.photoFields) }
@@ -243,9 +261,15 @@ public struct ToolInputValidator: Sendable {
         var step = original
         if let grounding, !grounding.keepsPoints { step.point = nil }
 
+        // A catalog operation: validated against its params (types, exact enums, ranges, groups).
+        if IntentAction(rawValue: step.action) == nil, let spec = IntentNormalizer.catalogOperation(named: step.action, mode: mode) {
+            let call = OperationArguments.validate(spec.id, step.extra ?? [:], domain: mode.opDomain, path: path, problems: &problems)
+            guard problems.count == before, let call else { return nil }
+            return EditIntent(action: .operation, confidence: 0.85, operation: call)
+        }
         // The action: exact, allowed in this editor, not a meta action.
         guard let action = IntentAction(rawValue: step.action) else {
-            problems.append("\(path).action: '\(step.action)' is not a valid action")
+            problems.append(Self.unknownActionProblem(step.action, path: path, mode: mode))
             return nil
         }
         if LiveToolSchema.excluded.contains(action) {
@@ -258,6 +282,11 @@ public struct ToolInputValidator: Sendable {
         }
         if !action.isAllowed(in: mode) {
             problems.append("\(path).action: \(action.rawValue) is not available for a \(mode.rawValue)")
+            return nil
+        }
+        if mode == .video, action == .selectiveAdjust {
+            // A clip has no regions: the whole clip, with adjust.
+            problems.append("\(path).action: selectiveAdjust is not available for a video; use adjust (the whole clip)")
             return nil
         }
         if mode != .video {
@@ -373,7 +402,9 @@ public struct ToolInputValidator: Sendable {
             if clip != -1, !(1...limit).contains(clip) { problems.append("\(path).clipNumber: \(clip) is outside 1...\(limit) (or -1 for the last)") }
         }
         if let choice = step.choiceIndex {
-            let limit = max(context.pendingClarification?.candidates.count ?? 0, context.clipCount, 1)
+            // A layer's number (selectLayer and its kin) is not a candidate: the document has its own count.
+            let layerSteps: Set<IntentAction> = [.selectLayer, .duplicateLayer, .deleteLayer]
+            let limit = layerSteps.contains(action) ? 30 : max(context.pendingClarification?.candidates.count ?? 0, context.clipCount, 1)
             if !(1...limit).contains(choice) { problems.append("\(path).choiceIndex: \(choice) is outside 1...\(limit)") }
         }
         if let ordinal = step.ordinal, !(1...20).contains(ordinal) { problems.append("\(path).ordinal: \(ordinal) is outside 1...20") }
@@ -445,6 +476,17 @@ public struct ToolInputValidator: Sendable {
             return nil
         }
         return intent
+    }
+
+    /// An action that is neither an IntentAction nor a catalog operation of this editor: the nearest
+    /// operations, so the single repair round can pick one.
+    static func unknownActionProblem(_ name: String, path: String, mode: EditorMode) -> String {
+        if FeatureFlags.isOn(.catalogOps), let spec = OperationCatalog.shared.spec(OpID(name)), !spec.domains.contains(mode.opDomain) {
+            return "\(path).action: \(name) is not available for a \(mode.rawValue)"
+        }
+        let nearest = OperationArguments.nearest(to: name, domain: mode.opDomain, limit: 5).map(\.raw)
+        guard !nearest.isEmpty else { return "\(path).action: '\(name)' is not a valid action" }
+        return "\(path).action: '\(name)' is not a valid action; nearest: \(nearest.joined(separator: ", "))"
     }
 
     /// "Novel problem sol…" -> "5" when it names no row as said but the start of exactly one (folded tokens, the
@@ -633,6 +675,12 @@ public struct ToolInputValidator: Sendable {
             return nil
         }
         return PSPoint(x: x, y: y)
+    }
+
+    /// The problems once each, in order (the catalog's checks and the validator's may name the same key).
+    static func unique(_ problems: [String]) -> [String] {
+        var seen: Set<String> = []
+        return problems.filter { seen.insert($0).inserted }
     }
 
     /// Numbers in problem lines read like the JSON they came from.

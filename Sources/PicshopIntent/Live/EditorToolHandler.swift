@@ -128,6 +128,7 @@ import PicshopCore
             var result = LiveStepResult(index: index, intent: intent, run: run)
             result.createdRef = createdRef(of: result, run: run)
             if result.status == .applied, let request = run.verificationRequest { checks.append((results.count, request)) }
+            Self.attachPostconditions(&result, intent: intent, run: run)
             if [.failed, .info, .needsUser].contains(result.status) { missed[LocalModelLiveBrain.StepSignature(intent)] = result }
             results.append(result)
             if result.stopsTheRun {
@@ -138,6 +139,16 @@ import PicshopCore
         }
         results = await verified(results, checks: checks)
         return finished(results)
+    }
+
+    /// A catalog operation's structural postconditions (`OperationPostconditions`, carried by the run's
+    /// effects) become the step's check when the host asked for no pixel check: 'verified n/m' or
+    /// 'verify failed n/m', and the repair round when it failed.
+    static func attachPostconditions(_ result: inout LiveStepResult, intent: EditIntent, run: LiveRunResult) {
+        guard result.status == .applied, result.verification == nil, run.verificationRequest == nil, intent.action == .operation,
+              let report = OperationPostconditions.report(in: run.effects),
+              let verification = OperationPostconditions.verification(report, intent: intent) else { return }
+        result.verification = verification
     }
 
     /// The scene id ("l2") of the text layer an applied text step selected (the layer it wrote), read from
@@ -196,6 +207,7 @@ import PicshopCore
             var first = LiveStepResult(index: index, intent: intents[index], run: firstRun)
             first.createdRef = self?.createdRef(of: first, run: firstRun)
             if first.status == .applied, let request = firstRun.verificationRequest { checks.append((results.count, request)) }
+            Self.attachPostconditions(&first, intent: intents[index], run: firstRun)
             results.append(first)
             var next = index + 1
             if first.stopsTheRun {
@@ -212,6 +224,7 @@ import PicshopCore
                 var result = LiveStepResult(index: next, intent: intents[next], run: run)
                 result.createdRef = self.createdRef(of: result, run: run)
                 if result.status == .applied, let request = run.verificationRequest { checks.append((results.count, request)) }
+                Self.attachPostconditions(&result, intent: intents[next], run: run)
                 results.append(result)
                 if result.stopsTheRun {
                     results += self.skipped(intents, after: next)

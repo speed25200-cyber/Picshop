@@ -198,7 +198,11 @@ public struct Adjustments: Hashable, Codable, Sendable {
     }
 }
 
-/// A tone curve defined by control points in unit space, per channel.
+/// A tone curve defined by control points in unit space, per channel: 2 to 16
+/// points each (the rgb master and red, green, blue), evaluated by CurveSpline.
+/// A look's built-in curve (5 points) goes through Core Image's tone curve with
+/// the adjustments; the person's own curve (`EditOperation.Kind.toneCurve`)
+/// is baked with Levels into one ToneLUT.
 public struct ToneCurve: Hashable, Codable, Sendable {
     public struct Point: Hashable, Codable, Sendable {
         public var input: Double
@@ -224,7 +228,8 @@ public struct ToneCurve: Hashable, Codable, Sendable {
     public static let linear: [Point] = [Point(0, 0), Point(0.25, 0.25), Point(0.5, 0.5), Point(0.75, 0.75), Point(1, 1)]
     public static let identity = ToneCurve()
 
-    public var isIdentity: Bool { rgb == Self.linear && red == Self.linear && green == Self.linear && blue == Self.linear }
+    /// Every channel leaves every value where it is, within 1/1024 (evaluated, not compared point by point).
+    public var isIdentity: Bool { Channel.allCases.allSatisfy { isIdentity($0) } }
 
     /// A gentle S-curve that adds punch without clipping.
     public static func sCurve(strength: Double) -> ToneCurve {
@@ -236,5 +241,58 @@ public struct ToneCurve: Hashable, Codable, Sendable {
     public static func matte(lift: Double) -> ToneCurve {
         let l = lift.clamped(to: 0...1) * 0.12
         return ToneCurve(rgb: [Point(0, l), Point(0.25, 0.25 + l * 0.6), Point(0.5, 0.5 + l * 0.3), Point(0.75, 0.75), Point(1, 1)])
+    }
+
+    /// The curves panel's presets row, and the catalog's `curves` presets (same shapes as the
+    /// operation handler's): control points for one channel at a strength 0…1.
+    public enum Preset: String, Codable, Sendable, CaseIterable, Identifiable {
+        case sCurve, strongS, matte, fade, invert, brighten, darken, linear
+
+        public var id: String { rawValue }
+
+        public var englishName: String {
+            switch self {
+            case .sCurve: return "S curve"
+            case .strongS: return "Strong S"
+            case .matte: return "Matte"
+            case .fade: return "Fade"
+            case .invert: return "Invert"
+            case .brighten: return "Brighten"
+            case .darken: return "Darken"
+            case .linear: return "Linear"
+            }
+        }
+
+        public var frenchName: String {
+            switch self {
+            case .sCurve: return "Courbe en S"
+            case .strongS: return "S marqué"
+            case .matte: return "Mat"
+            case .fade: return "Délavé"
+            case .invert: return "Inverser"
+            case .brighten: return "Éclaircir"
+            case .darken: return "Assombrir"
+            case .linear: return "Linéaire"
+            }
+        }
+
+        /// The points at `strength` (0…1); `invert` and `linear` ignore it.
+        public func points(strength: Double) -> [Point] {
+            let s = strength.clamped(to: 0...1)
+            switch self {
+            case .sCurve: return [Point(0, 0), Point(0.25, 0.25 - 0.12 * s), Point(0.5, 0.5), Point(0.75, 0.75 + 0.12 * s), Point(1, 1)]
+            case .strongS: return [Point(0, 0), Point(0.25, 0.25 - 0.22 * s), Point(0.5, 0.5), Point(0.75, 0.75 + 0.22 * s), Point(1, 1)]
+            case .matte:
+                let lift = 0.2 * s
+                return [Point(0, lift), Point(0.25, 0.25 + lift * 0.6), Point(0.5, 0.5 + lift * 0.3), Point(0.75, 0.75), Point(1, 1)]
+            case .fade:
+                let lift = 0.18 * s
+                return [Point(0, lift), Point(0.5, 0.5 + lift * 0.2), Point(1, 1 - lift * 0.6)]
+            case .invert: return [Point(0, 1), Point(1, 0)]
+            case .brighten: return [Point(0, 0), Point(0.5, 0.5 + 0.2 * s), Point(1, 1)]
+            case .darken: return [Point(0, 0), Point(0.5, 0.5 - 0.2 * s), Point(1, 1)]
+            case .linear: return ToneCurve.straight
+            }
+        }
     }
 }

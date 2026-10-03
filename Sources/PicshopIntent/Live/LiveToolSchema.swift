@@ -20,9 +20,10 @@ public struct LiveToolDefinition: Sendable, Equatable {
 /// per mode and deterministic, so a session's tool list never changes.
 public enum LiveToolSchema {
     /// Never apply_edits steps: meta and dialogue actions have tools of their own or no place in a conversation.
+    /// `.operation` neither: a catalog operation is named by its own id, never by that word.
     public static let excluded: Set<IntentAction> = [
         .unknown, .undo, .redo, .revert, .compare, .help, .confirm, .cancel, .describe, .summarizeEdits, .readPage, .export, .share,
-        .zoom, .play, .pause, .saveVersion, .restoreVersion, .saveStyle, .applyStyle, .chooseCandidate,
+        .zoom, .play, .pause, .saveVersion, .restoreVersion, .saveStyle, .applyStyle, .chooseCandidate, .operation,
     ]
 
     /// Fields only the video schema has.

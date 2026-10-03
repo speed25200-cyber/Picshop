@@ -49,6 +49,22 @@
         }
       }
     },
+    "%@ · on the iPhone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · on the iPhone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · sur l'iPhone"
+          }
+        }
+      }
+    },
     "%@ · −%.1f s": {
       "localizations": {
         "en": {
@@ -241,6 +257,22 @@
         }
       }
     },
+    "120 Hz canvas": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "120 Hz canvas"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Canevas 120 Hz"
+          }
+        }
+      }
+    },
     "A .cube look from Resolve, Premiere or a LUT pack.": {
       "localizations": {
         "en": {
@@ -385,6 +417,38 @@
         }
       }
     },
+    "Add %d Clips": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add %d Clips"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajout de %d clips"
+          }
+        }
+      }
+    },
+    "Add Clip": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Clip"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajout d'un clip"
+          }
+        }
+      }
+    },
     "Add Shape": {
       "localizations": {
         "en": {
@@ -449,6 +513,22 @@
         }
       }
     },
+    "Add clips": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add clips"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter des clips"
+          }
+        }
+      }
+    },
     "Add music, a voice-over or a sound effect: each one gets its own lane. Say “ajoute un son à 10 secondes”.": {
       "localizations": {
         "en": {
@@ -493,6 +573,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ajouter une vidéo ou une photo"
+          }
+        }
+      }
+    },
+    "Adding clips…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adding clips…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajout des clips…"
           }
         }
       }
@@ -573,6 +669,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tous"
+          }
+        }
+      }
+    },
+    "All projects": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All projects"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tous les projets"
+          }
+        }
+      }
+    },
+    "All tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All tools"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tous les outils"
           }
         }
       }
@@ -913,6 +1041,22 @@
         }
       }
     },
+    "Ask PicShop: “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask PicShop: “%@”"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demander à PicShop : « %@ »"
+          }
+        }
+      }
+    },
     "Ask PicShop…": {
       "localizations": {
         "en": {
@@ -941,6 +1085,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Demander…"
+          }
+        }
+      }
+    },
+    "At the end": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At the end"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À la fin"
+          }
+        }
+      }
+    },
+    "At the playhead": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At the playhead"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À la tête de lecture"
           }
         }
       }
@@ -1201,6 +1377,22 @@
         }
       }
     },
+    "Before/after": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before/after"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avant/après"
+          }
+        }
+      }
+    },
     "Best crop": {
       "localizations": {
         "en": {
@@ -1265,6 +1457,22 @@
         }
       }
     },
+    "Black point": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Black point"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Point noir"
+          }
+        }
+      }
+    },
     "Blank page": {
       "localizations": {
         "en": {
@@ -1309,6 +1517,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fusion"
+          }
+        }
+      }
+    },
+    "Blue": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blue"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bleu"
           }
         }
       }
@@ -1745,6 +1969,22 @@
         }
       }
     },
+    "Choose HEIC to keep the HDR.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose HEIC to keep the HDR."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez HEIC pour garder le HDR."
+          }
+        }
+      }
+    },
     "Choose clips and photos": {
       "localizations": {
         "en": {
@@ -1953,6 +2193,22 @@
         }
       }
     },
+    "Clip %d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clip %d"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clip %d"
+          }
+        }
+      }
+    },
     "Clip volume": {
       "localizations": {
         "en": {
@@ -2029,6 +2285,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couleur"
+          }
+        }
+      }
+    },
+    "Colour space": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colour space"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Espace colorimétrique"
           }
         }
       }
@@ -2237,6 +2509,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recadrer"
+          }
+        }
+      }
+    },
+    "Curve point %d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Curve point %d"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Point de courbe %d"
+          }
+        }
+      }
+    },
+    "Curves": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Curves"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Courbes"
+          }
+        }
+      }
+    },
+    "Curves, Levels and blend modes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Curves, Levels and blend modes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Courbes, niveaux et modes de fusion"
           }
         }
       }
@@ -2653,6 +2973,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Touchez deux fois le titre pour écrire le vôtre."
+          }
+        }
+      }
+    },
+    "Double-tap to split, hold for the original.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Double-tap to split, hold for the original."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez deux fois pour scinder, maintenez pour l'original."
+          }
+        }
+      }
+    },
+    "Double-tap to switch between colour, luminance and hidden.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Double-tap to switch between colour, luminance and hidden."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez deux fois pour passer de la couleur à la luminance, puis masquer."
           }
         }
       }
@@ -3617,6 +3969,22 @@
         }
       }
     },
+    "Every mark is burned into the page: nobody can move or delete it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every mark is burned into the page: nobody can move or delete it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaque annotation est incrustée dans la page : personne ne peut la déplacer ni la supprimer."
+          }
+        }
+      }
+    },
     "Everything stays on the iPhone.": {
       "localizations": {
         "en": {
@@ -3693,6 +4061,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Étendre l'image"
+          }
+        }
+      }
+    },
+    "Experimental": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Experimental"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expérimental"
           }
         }
       }
@@ -4177,6 +4561,54 @@
         }
       }
     },
+    "Fit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fit"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajuster"
+          }
+        }
+      }
+    },
+    "Flatten annotations": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flatten annotations"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aplatir les annotations"
+          }
+        }
+      }
+    },
+    "Flatten modified pages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flatten modified pages"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aplatir les pages modifiées"
+          }
+        }
+      }
+    },
     "Flip": {
       "localizations": {
         "en": {
@@ -4321,6 +4753,22 @@
         }
       }
     },
+    "For the web": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For the web"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pour le web"
+          }
+        }
+      }
+    },
     "Format": {
       "localizations": {
         "en": {
@@ -4429,6 +4877,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Français ou anglais. Touchez un exemple pour le lancer."
+          }
+        }
+      }
+    },
+    "From your library": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From your library"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Depuis la photothèque"
           }
         }
       }
@@ -4673,6 +5137,22 @@
         }
       }
     },
+    "Green": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Green"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vert"
+          }
+        }
+      }
+    },
     "Green screen": {
       "localizations": {
         "en": {
@@ -4701,6 +5181,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Voix HD dans les AirPods"
+          }
+        }
+      }
+    },
+    "HDR kept: as bright as the original in Photos.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HDR kept: as bright as the original in Photos."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HDR conservé : aussi lumineuse que l'originale dans Photos."
           }
         }
       }
@@ -4861,6 +5357,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hautes lumières"
+          }
+        }
+      }
+    },
+    "Histogram": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Histogram"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Histogramme"
           }
         }
       }
@@ -5117,6 +5629,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Inclus dans l'app"
+          }
+        }
+      }
+    },
+    "Input": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entrée"
+          }
+        }
+      }
+    },
+    "Input %d, output %d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input %d, output %d"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entrée %d, sortie %d"
           }
         }
       }
@@ -5521,6 +6065,22 @@
         }
       }
     },
+    "Launch time (median and 90th percentile), hangs, scroll hitches in milliseconds per second, and peak memory. These numbers never leave your iPhone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Launch time (median and 90th percentile), hangs, scroll hitches in milliseconds per second, and peak memory. These numbers never leave your iPhone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temps de lancement (médiane et 90e centile), blocages, saccades de défilement en millisecondes par seconde et pic de mémoire. Ces chiffres ne quittent jamais votre iPhone."
+          }
+        }
+      }
+    },
     "Lay a second video or a photo over yours: picture in picture, B-roll, green screen.": {
       "localizations": {
         "en": {
@@ -5597,6 +6157,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mise à niveau…"
+          }
+        }
+      }
+    },
+    "Levels": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Levels"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niveaux"
           }
         }
       }
@@ -6385,6 +6961,22 @@
         }
       }
     },
+    "Measured performance": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Measured performance"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Performances mesurées"
+          }
+        }
+      }
+    },
     "Median speed": {
       "localizations": {
         "en": {
@@ -6865,6 +7457,22 @@
         }
       }
     },
+    "New Home and backdrop": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Home and backdrop"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouvel accueil et nouveau fond"
+          }
+        }
+      }
+    },
     "New text": {
       "localizations": {
         "en": {
@@ -6893,6 +7501,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nouveau texte, puis touchez l'emplacement"
+          }
+        }
+      }
+    },
+    "New voice operations": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New voice operations"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouvelles opérations à la voix"
           }
         }
       }
@@ -6961,6 +7585,22 @@
         }
       }
     },
+    "No histogram yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No histogram yet"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas encore d'histogramme"
+          }
+        }
+      }
+    },
     "No local brain on this iPhone": {
       "localizations": {
         "en": {
@@ -6973,6 +7613,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pas de cerveau local sur cet iPhone"
+          }
+        }
+      }
+    },
+    "No project has that name.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No project has that name."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun projet ne porte ce nom."
           }
         }
       }
@@ -7053,6 +7709,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aucun style nommé « %@ »"
+          }
+        }
+      }
+    },
+    "No tool by that name.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No tool by that name."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun outil de ce nom."
           }
         }
       }
@@ -7393,6 +8065,22 @@
         }
       }
     },
+    "On the iPhone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On the iPhone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur l'iPhone"
+          }
+        }
+      }
+    },
     "On the loudspeaker, interrupt PicShop with a tap on the orb, by typing, or by saying “stop”. Everything stays on the iPhone.": {
       "localizations": {
         "en": {
@@ -7505,6 +8193,22 @@
         }
       }
     },
+    "Open": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir"
+          }
+        }
+      }
+    },
     "Open Settings": {
       "localizations": {
         "en": {
@@ -7549,6 +8253,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ouvre une photo, une vidéo ou un PDF, puis parle-moi : je m'occupe du reste."
+          }
+        }
+      }
+    },
+    "Opens the photo or the video you tap.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens the photo or the video you tap."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvre la photo ou la vidéo touchée."
           }
         }
       }
@@ -7617,6 +8337,22 @@
         }
       }
     },
+    "Output black": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Output black"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noir de sortie"
+          }
+        }
+      }
+    },
     "Output route": {
       "localizations": {
         "en": {
@@ -7629,6 +8365,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sortie audio"
+          }
+        }
+      }
+    },
+    "Output white": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Output white"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blanc de sortie"
           }
         }
       }
@@ -7677,6 +8429,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "PDF prêt à partager"
+          }
+        }
+      }
+    },
+    "PDF ready: the redacted text is gone from the file.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDF ready: the redacted text is gone from the file."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDF prêt : le texte caviardé a disparu du fichier."
           }
         }
       }
@@ -7761,6 +8529,22 @@
         }
       }
     },
+    "Pages whose words you replaced become images, so the old words leave the file.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pages whose words you replaced become images, so the old words leave the file."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les pages dont tu as remplacé des mots deviennent des images : les anciens mots quittent le fichier."
+          }
+        }
+      }
+    },
     "Paint": {
       "localizations": {
         "en": {
@@ -7837,6 +8621,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vers la droite"
+          }
+        }
+      }
+    },
+    "Password": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mot de passe"
           }
         }
       }
@@ -8465,6 +9265,22 @@
         }
       }
     },
+    "Protected PDF": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Protected PDF"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDF protégé"
+          }
+        }
+      }
+    },
     "Pull out": {
       "localizations": {
         "en": {
@@ -8525,6 +9341,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "La qualité pourra changer une fois le téléchargement ou le chargement terminé."
+          }
+        }
+      }
+    },
+    "RGB": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RGB"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RVB"
           }
         }
       }
@@ -8701,6 +9533,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rectangle"
+          }
+        }
+      }
+    },
+    "Red": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Red"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rouge"
+          }
+        }
+      }
+    },
+    "Redact": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redact"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caviarder"
           }
         }
       }
@@ -8913,6 +9777,22 @@
         }
       }
     },
+    "Remove location": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove location"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer la position"
+          }
+        }
+      }
+    },
     "Remove passers-by": {
       "localizations": {
         "en": {
@@ -9069,6 +9949,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Réinitialiser le zoom"
+          }
+        }
+      }
+    },
+    "Results": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Results"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Résultats"
           }
         }
       }
@@ -9441,6 +10337,38 @@
         }
       }
     },
+    "Search projects": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search projects"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher un projet"
+          }
+        }
+      }
+    },
+    "Search tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search tools"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher un outil"
+          }
+        }
+      }
+    },
     "Select a clip on the timeline.": {
       "localizations": {
         "en": {
@@ -9553,6 +10481,22 @@
         }
       }
     },
+    "Shadows clipped %@, highlights clipped %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shadows clipped %@, highlights clipped %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ombres écrêtées %@, hautes lumières écrêtées %@"
+          }
+        }
+      }
+    },
     "Shapes": {
       "localizations": {
         "en": {
@@ -9633,6 +10577,38 @@
         }
       }
     },
+    "Shorter Live prompt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shorter Live prompt"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompt Live plus court"
+          }
+        }
+      }
+    },
+    "Shorter panel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shorter panel"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Panneau plus bas"
+          }
+        }
+      }
+    },
     "Show Captions": {
       "localizations": {
         "en": {
@@ -9649,6 +10625,22 @@
         }
       }
     },
+    "Show all": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show all"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout afficher"
+          }
+        }
+      }
+    },
     "Show captions": {
       "localizations": {
         "en": {
@@ -9661,6 +10653,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Afficher les sous-titres"
+          }
+        }
+      }
+    },
+    "Show clipping": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show clipping"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Montrer l'écrêtage"
           }
         }
       }
@@ -9713,6 +10721,22 @@
         }
       }
     },
+    "Show the original": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show the original"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Montrer l'original"
+          }
+        }
+      }
+    },
     "Shows the local brain and its download.": {
       "localizations": {
         "en": {
@@ -9741,6 +10765,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Affiche les pages."
+          }
+        }
+      }
+    },
+    "Side by side": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Side by side"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Côte à côte"
           }
         }
       }
@@ -10401,6 +11441,22 @@
         }
       }
     },
+    "Studio workspace": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Studio workspace"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Espace de travail studio"
+          }
+        }
+      }
+    },
     "Style %d": {
       "localizations": {
         "en": {
@@ -10529,6 +11585,22 @@
         }
       }
     },
+    "Takes effect in the next editor you open.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Takes effect in the next editor you open."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "S'applique au prochain éditeur ouvert."
+          }
+        }
+      }
+    },
     "Talk to your photos.": {
       "localizations": {
         "en": {
@@ -10561,6 +11633,22 @@
         }
       }
     },
+    "Taller panel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taller panel"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Panneau plus haut"
+          }
+        }
+      }
+    },
     "Tap a clip on the timeline to change its speed.": {
       "localizations": {
         "en": {
@@ -10573,6 +11661,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Touchez un clip sur la timeline pour changer sa vitesse."
+          }
+        }
+      }
+    },
+    "Tap a word to black it out, or drag a box over what must go. It leaves the exported file for good.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap a word to black it out, or drag a box over what must go. It leaves the exported file for good."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touche un mot pour le noircir, ou trace un cadre sur ce qui doit disparaître. Il quitte le fichier exporté pour de bon."
           }
         }
       }
@@ -10669,6 +11773,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Touchez l'image pour placer une forme. Glissez pour déplacer, pincez pour redimensionner, tournez pour pivoter."
+          }
+        }
+      }
+    },
+    "Tap the curve to add a point, drag it to shape the tones.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the curve to add a point, drag it to shape the tones."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez la courbe pour ajouter un point, faites-le glisser pour modeler les tons."
           }
         }
       }
@@ -11233,6 +12353,22 @@
         }
       }
     },
+    "The histogram is not ready yet. Try again in a moment.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The histogram is not ready yet. Try again in a moment."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'histogramme n'est pas encore prêt. Réessayez dans un instant."
+          }
+        }
+      }
+    },
     "The iPhone is too hot for generation right now. Let it cool for a moment.": {
       "localizations": {
         "en": {
@@ -11457,6 +12593,22 @@
         }
       }
     },
+    "The photo already uses the whole tonal range.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The photo already uses the whole tonal range."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La photo utilise déjà toute la plage de tons."
+          }
+        }
+      }
+    },
     "The photo changed in the meantime. Try again.": {
       "localizations": {
         "en": {
@@ -11473,6 +12625,22 @@
         }
       }
     },
+    "The place the photo was taken stays out of the file and of Photos.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The place the photo was taken stays out of the file and of Photos."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le lieu de la prise de vue n'apparaît ni dans le fichier ni dans Photos."
+          }
+        }
+      }
+    },
     "The project and its edits are removed from this iPhone. The original in Photos stays.": {
       "localizations": {
         "en": {
@@ -11485,6 +12653,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Le projet et ses retouches sont retirés de cet iPhone. L'original dans Photos est conservé."
+          }
+        }
+      }
+    },
+    "The replaced words stay in the file, where they can be copied or found. Turn on “Flatten modified pages” to remove them.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The replaced words stay in the file, where they can be copied or found. Turn on “Flatten modified pages” to remove them."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les mots remplacés restent dans le fichier, où on peut les copier ou les rechercher. Active « Aplatir les pages modifiées » pour les supprimer."
           }
         }
       }
@@ -11665,6 +12849,22 @@
         }
       }
     },
+    "This PDF is protected. Enter its password to edit it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This PDF is protected. Enter its password to edit it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce PDF est protégé. Saisis son mot de passe pour le modifier."
+          }
+        }
+      }
+    },
     "This build has no local brain; Live uses Apple Intelligence or the commands.": {
       "localizations": {
         "en": {
@@ -11805,6 +13005,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossible d'ouvrir ce projet"
+          }
+        }
+      }
+    },
+    "Those videos could not be opened.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Those videos could not be opened."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d'ouvrir ces vidéos."
           }
         }
       }
@@ -12689,6 +13905,38 @@
         }
       }
     },
+    "White point": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "White point"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Point blanc"
+          }
+        }
+      }
+    },
+    "Widest on iPhone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Widest on iPhone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La plus large sur iPhone"
+          }
+        }
+      }
+    },
     "Will be cut": {
       "localizations": {
         "en": {
@@ -12765,6 +14013,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "En cours…"
+          }
+        }
+      }
+    },
+    "Wrong password. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrong password. Try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mot de passe incorrect. Réessaie."
           }
         }
       }
@@ -12849,6 +14113,22 @@
         }
       }
     },
+    "Zoom %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom %@"
+          }
+        }
+      }
+    },
     "Zoom cuts": {
       "localizations": {
         "en": {
@@ -12861,6 +14141,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zooms de coupe"
+          }
+        }
+      }
+    },
+    "Zoom options": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom options"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Options de zoom"
           }
         }
       }
@@ -12957,6 +14253,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "je t'écoute"
+          }
+        }
+      }
+    },
+    "iOS reports these once a day, after a day of use.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS reports these once a day, after a day of use."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS les fournit une fois par jour, après une journée d'utilisation."
           }
         }
       }
@@ -13213,6 +14525,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "les véhicules"
+          }
+        }
+      }
+    },
+    "“%@” is protected. Enter its password to open it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” is protected. Enter its password to open it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "« %@ » est protégé. Saisis son mot de passe pour l'ouvrir."
           }
         }
       }

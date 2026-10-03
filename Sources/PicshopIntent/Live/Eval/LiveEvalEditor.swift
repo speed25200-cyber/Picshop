@@ -98,6 +98,8 @@ import PicshopCore
         state.scene = description
         state.table = table
         state.sceneMap = scene
+        state.layerCount = document.layers.count
+        state.hasImportedLUT = document.activeLayerHasLUT
         state.mediaText = document.layers.compactMap { $0.group == nil ? $0.textElement?.text : nil }
         state.candidates = pending?.candidates.enumerated().map { "\($0.offset + 1): \($0.element.spokenDescription)" } ?? []
         state.pendingQuestion = pending?.question

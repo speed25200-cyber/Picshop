@@ -4,6 +4,16 @@ import PicshopCore
 /// How much prompt a local model gets: `full` for the 4B, `compact` for the 2B.
 public enum LocalPromptSize: String, Sendable { case full, compact }
 
+/// Which prompt the local model reads. `catalog` (the retrievalCards switch): persona and rules, the
+/// mode's core operation cards and six behavioural examples in a byte-stable prefix, and per turn the
+/// retrieved cards in the user message. `legacy`: the hand-written action guide and its fifteen
+/// examples, kept for one wave to compare.
+public enum LocalPromptLayout: String, Sendable, CaseIterable {
+    case legacy, catalog
+
+    public static var current: LocalPromptLayout { FeatureFlags.isOn(.retrievalCards) ? .catalog : .legacy }
+}
+
 /// One few-shot exchange, replayed as real chat history before the conversation.
 public struct LocalPromptExample: Sendable, Equatable {
     public var user: String
@@ -91,14 +101,44 @@ public enum LocalLivePrompt {
 
     // MARK: System
 
+    /// The system prompt of the current layout (the retrievalCards switch).
     public static func system(mode: EditorMode, size: LocalPromptSize) -> String {
-        let text = [persona(mode: mode, size: size), actionGuide(mode: mode, size: size)].joined(separator: "\n\n")
+        system(mode: mode, size: size, layout: .current)
+    }
+
+    public static func system(mode: EditorMode, size: LocalPromptSize, layout: LocalPromptLayout) -> String {
+        let guide = layout == .catalog ? catalogGuide(mode: mode, size: size) : actionGuide(mode: mode, size: size)
+        let text = [layout == .catalog ? catalogPersona(mode: mode, size: size) : persona(mode: mode, size: size), guide].joined(separator: "\n\n")
         return String(text.prefix(size == .full ? Budgets.systemFull : Budgets.systemCompact))
     }
 
+    /// The persona of the catalog layout: the same rules, less the lines its cards and guide say already
+    /// (text ids are on the editText card; "nothing fits" ends the guide).
+    static func catalogPersona(mode: EditorMode, size: LocalPromptSize) -> String {
+        persona(mode: mode, size: size).split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.hasPrefix("- Texte de l'image") && !$0.hasPrefix("- Impossible :") }
+            .joined(separator: "\n")
+    }
+
+    /// The catalog layout's action part: the core cards of the mode, and how the turn's cards are used.
+    /// Byte-stable for the whole conversation: nothing here depends on the document or the turn.
+    static func catalogGuide(mode: EditorMode, size: LocalPromptSize) -> String {
+        var lines: [String] = []
+        let core = OperationCards.coreBlock(for: mode.opDomain, size: size)
+        if !core.isEmpty { lines.append(core) }
+        lines.append("More actions come in a turn's <ops>: use their exact keys. Impossible: say why, offer the nearest.")
+        if mode == .photo { lines.append("point {x,y} and box [x1,y1,x2,y2]: 0-1000, top-left, in the last image.") }
+        return lines.joined(separator: "\n")
+    }
+
     static func persona(mode: EditorMode, size: LocalPromptSize) -> String {
-        let fr = mode == .video ? (noun: "vidéo", article: "ta vidéo", pronoun: "la") : (noun: "photo", article: "ta photo", pronoun: "la")
-        let en = mode == .video ? "video" : "photo"
+        let fr: (noun: String, article: String, pronoun: String)
+        let en: String
+        switch mode {
+        case .video: fr = ("vidéo", "ta vidéo", "la"); en = "video"
+        case .pdf: fr = ("document", "ton PDF", "le"); en = "PDF"
+        case .photo: fr = ("photo", "ta photo", "la"); en = "photo"
+        }
         let photo = mode == .photo
         if size == .compact {
             var rules = """
@@ -208,6 +248,24 @@ public enum LocalLivePrompt {
 
     /// `[{"type":"function","function":{"name","description","parameters"}}]`, one per Live tool,
     /// sorted by name; enums live in the system prompt's prose. At most 2,000 characters serialized.
+    /// The tool specs of a layout: the catalog layout's are lean (the cards and the examples teach the steps).
+    public static func toolSpecs(mode: EditorMode, layout: LocalPromptLayout) -> [JSONValue] {
+        guard layout == .catalog else { return toolSpecs(mode: mode) }
+        let medium = mode == .video ? "video" : (mode == .pdf ? "PDF" : "photo")
+        func function(_ name: LiveToolName, _ description: String, _ properties: [String: JSONValue], required: [String] = []) -> JSONValue {
+            var parameters: [String: JSONValue] = ["type": "object", "properties": .object(properties)]
+            if !required.isEmpty { parameters["required"] = .array(required.map { .string($0) }) }
+            return ["type": "function", "function": ["name": .string(name.rawValue), "description": .string(description), "parameters": .object(parameters)]]
+        }
+        let steps: JSONValue = ["type": "array", "description": "[{action, …its keys}], 6 max"]
+        return [
+            function(.applyEdits, "Change the \(medium).", ["steps": steps], required: ["steps"]),
+            function(.compareBeforeAfter, "Show the original.", ["seconds": ["type": "number"]]),
+            function(.proposeIdeas, "Up to 3 idea chips: title, why, steps.", ["ideas": ["type": "array"]], required: ["ideas"]),
+            function(.undo, "Undo, redo or back to the original.", ["count": ["type": "integer"], "direction": ["type": "string"], "to_original": ["type": "boolean"]]),
+        ]
+    }
+
     public static func toolSpecs(mode: EditorMode) -> [JSONValue] {
         let medium = mode == .video ? "video" : "photo"
         func function(_ name: LiveToolName, _ description: String, _ properties: [String: JSONValue], required: [String] = []) -> JSONValue {
@@ -245,9 +303,12 @@ public enum LocalLivePrompt {
 
     /// What changed in the editor since the model last read it, the reply language,
     /// the media text as data, then the words: at most 900 characters.
-    public static func userMessage(_ turn: LiveUserTurn, previous: LiveEditorState?, imageAttached: Bool) -> String {
-        let budget = isGrounded(turn.editorState) ? Budgets.userMessageGrounded : Budgets.userMessage
+    /// `cards`: the turn's retrieved operation cards (`<ops>…</ops>`, catalog layout), after the state;
+    /// the message grows by their size (they have their own budget).
+    public static func userMessage(_ turn: LiveUserTurn, previous: LiveEditorState?, imageAttached: Bool, cards: String = "") -> String {
+        let budget = (isGrounded(turn.editorState) ? Budgets.userMessageGrounded : Budgets.userMessage) + (cards.isEmpty ? 0 : cards.count + 1)
         var parts = [editorDelta(turn, previous: previous, imageAttached: imageAttached)]
+        if !cards.isEmpty { parts.append(cards) }
         parts.append("langue: \(turn.language.rawValue)")
         let words = trimmedWords(turn.text)
         let head = parts.joined(separator: "\n")

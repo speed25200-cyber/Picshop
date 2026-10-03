@@ -16,14 +16,15 @@ final class IntentPromptGoldenTests: XCTestCase {
 
     func testSystemInstructionsAreByteIdentical() {
         let golden: [(EditorMode, Int, String)] = [
-            // Re-baselined for the table and primitive actions (fillCells, clearCells, highlightCells,
-            // eraseRegion, moveText) that IntentPrompt.actionList now names.
-            (.photo, 11604, "18af3526a194c2f3"),
-            (.video, 9114, "b6e2cf970d3a5cd4"),
-            (.pdf, 9152, "5e87a86986d86af9"),
+            // Re-baselined in W1: each planner names its own editor's actions and meta lines only (the PDF
+            // planner no longer reads photo and video ones), and movePage's contract is clipNumber = the page.
+            (.photo, 7496, "8dcb703d97e44b64"),
+            (.video, 7119, "51fc4b977ad2356e"),
+            (.pdf, 2473, "474f6e9eb420b0cf"),
         ]
         for (mode, length, hash) in golden {
-            let text = IntentPrompt.systemInstructions(mode: mode)
+            // The legacy actions only: the catalog's operation names follow the catalog.
+            let text = IntentPrompt.systemInstructions(mode: mode, includesOperations: false)
             XCTAssertEqual(text.utf8.count, length, "\(mode)")
             XCTAssertEqual(Self.fnv1a(text), hash, "\(mode)")
         }

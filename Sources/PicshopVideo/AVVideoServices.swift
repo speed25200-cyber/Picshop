@@ -5,6 +5,7 @@ import Vision
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import CoreVideo
+import CoreMedia
 import PicshopCore
 import PicshopIntent
 import PicshopImaging
@@ -273,10 +274,16 @@ public final class AVVideoServices: VideoAIServices, @unchecked Sendable {
 
     // MARK: - Reverse
 
+    /// Sample rate of a reversed clip's sound.
+    static let reversedSampleRate: Double = 48_000
+    /// Longest sound reversed in memory (16-bit stereo: 2.3 MB a minute); longer clips reverse silent.
+    static let reversedAudioLimit: Double = 600
+
     public func reverse(clip: VideoClip, timeline: VideoTimeline, progress: @escaping @Sendable (Double) -> Void) async throws -> MediaAsset {
         let asset = asset(for: clip)
         let range = clip.sourceRange
         let info = try await VideoTranscoder.sourceInfo(for: asset, range: range)
+        let rate = FrameRate.exact(info.frameRate)
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.requestedTimeToleranceBefore = CMTime(value: 1, timescale: 120)
@@ -287,18 +294,23 @@ public final class AVVideoServices: VideoAIServices, @unchecked Sendable {
         try? FileManager.default.removeItem(at: outputURL)
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mov)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.hevc, AVVideoWidthKey: width, AVVideoHeightKey: height])
+        input.expectsMediaDataInRealTime = false
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA, kCVPixelBufferWidthKey as String: width, kCVPixelBufferHeightKey as String: height,
         ])
         writer.add(input)
+        // The sound played backwards too, so a reversed clip is never silent.
+        let sound: ReversedSound? = range.duration <= Self.reversedAudioLimit
+            ? try await ReversedSound.read(from: asset, range: range, sampleRate: Self.reversedSampleRate) : nil
+        if let sound { writer.add(sound.input) }
         guard writer.startWriting() else { throw PicshopError.renderFailed("reverse writer") }
         writer.startSession(atSourceTime: .zero)
-        let frameDuration = CMTime(value: 1, timescale: CMTimeScale(info.frameRate.rounded()))
         let canvas = CGRect(x: 0, y: 0, width: width, height: height)
-        let count = max(1, info.frameCount)
+        let count = max(1, Int((range.duration * rate).rounded()))
+        var written = 0
         for i in 0..<count {
             try Task.checkCancellation()
-            let sourceTime = range.end - Double(i + 1) / info.frameRate
+            let sourceTime = range.end - Double(i + 1) / rate
             let generated = try? await generator.image(at: VideoTime.cm(max(range.start, sourceTime)))
             guard let cg = generated?.image else { continue }
             while !input.isReadyForMoreMediaData { try await Task.sleep(for: .milliseconds(4)) }
@@ -310,14 +322,32 @@ public final class AVVideoServices: VideoAIServices, @unchecked Sendable {
             let scale = min(canvas.width / image.extent.width, canvas.height / image.extent.height)
             image = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
             RenderContext.export.render(image.cropped(to: canvas), to: buffer, bounds: canvas, colorSpace: RenderContext.colorSpace)
-            adaptor.append(buffer, withPresentationTime: CMTimeMultiply(frameDuration, multiplier: Int32(i)))
+            adaptor.append(buffer, withPresentationTime: VideoTime.frameTime(i, fps: info.frameRate))
+            written = i + 1
+            // Sound is written just ahead of the pictures: the writer interleaves the two.
+            try await sound?.feed(until: Double(i + 1) / rate + 0.5)
             progress(Double(i + 1) / Double(count))
         }
         input.markAsFinished()
+        try await sound?.feed(until: .infinity)
+        sound?.input.markAsFinished()
         await writer.finishWriting()
         if writer.status == .failed { throw PicshopError.renderFailed(writer.error?.localizedDescription ?? "reverse") }
         return relative(MediaAsset(kind: .video, relativePath: outputURL.lastPathComponent, pixelSize: PSSize(width: Double(width), height: Double(height)),
-                                   duration: Double(count) / info.frameRate, origin: .generated, frameRate: info.frameRate))
+                                   duration: Double(max(1, written)) / rate, origin: .generated, frameRate: info.frameRate))
+    }
+
+    // MARK: - Horizon
+
+    /// How tilted the horizon is in the clip's frame at a timeline second (Vision's
+    /// angle in degrees, counter-clockwise positive); nil when none is found.
+    public func horizonAngle(at time: Double, timeline: VideoTimeline) async throws -> Double? {
+        guard let clip = timeline.clip(at: time), let span = timeline.span(of: clip.id) else { return nil }
+        let frame = try await VideoTranscoder.frame(of: asset(for: clip), at: clip.sourceTime(forClipOffset: time - span.start))
+        let request = VNDetectHorizonRequest()
+        try VNImageRequestHandler(cgImage: frame, orientation: .up, options: [:]).perform([request])
+        guard let observation = request.results?.first else { return nil }
+        return Double(observation.angle) * 180 / .pi
     }
 
     // MARK: - Frames
@@ -375,4 +405,95 @@ public final class AVVideoServices: VideoAIServices, @unchecked Sendable {
     }
 }
 
+extension AVVideoServices: VideoHorizonDetecting {}
+
+/// A clip's sound, played backwards: read once as 16-bit stereo PCM, reversed
+/// frame by frame (channels stay in place), then handed to the writer in step
+/// with the reversed pictures.
+final class ReversedSound {
+    let input: AVAssetWriterInput
+    /// One element per stereo frame (two 16-bit samples).
+    private var frames: [UInt32]
+    private let format: CMAudioFormatDescription
+    private let sampleRate: Double
+    private var cursor = 0
+
+    private init(frames: [UInt32], format: CMAudioFormatDescription, sampleRate: Double) {
+        self.frames = frames
+        self.format = format
+        self.sampleRate = sampleRate
+        input = AVAssetWriterInput(mediaType: .audio, outputSettings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVNumberOfChannelsKey: 2,
+                                                                      AVSampleRateKey: sampleRate, AVEncoderBitRateKey: 192_000])
+        input.expectsMediaDataInRealTime = false
+    }
+
+    /// The sound of `range`, reversed; nil when the file has no sound.
+    static func read(from asset: AVURLAsset, range: TimeSpan, sampleRate: Double) async throws -> ReversedSound? {
+        guard let track = try await asset.loadTracks(withMediaType: .audio).first else { return nil }
+        let reader = try AVAssetReader(asset: asset)
+        reader.timeRange = VideoTime.range(range)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM, AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false, AVLinearPCMIsNonInterleaved: false,
+            AVSampleRateKey: sampleRate, AVNumberOfChannelsKey: 2,
+        ])
+        reader.add(output)
+        guard reader.startReading() else { throw PicshopError.renderFailed(reader.error?.localizedDescription ?? "sound reader") }
+        var frames: [UInt32] = []
+        frames.reserveCapacity(Int(range.duration * sampleRate) + 4096)
+        while let sample = output.copyNextSampleBuffer() {
+            try Task.checkCancellation()
+            guard let block = CMSampleBufferGetDataBuffer(sample) else { continue }
+            let count = CMBlockBufferGetDataLength(block) / 4
+            guard count > 0 else { continue }
+            var chunk = [UInt32](repeating: 0, count: count)
+            let status = chunk.withUnsafeMutableBytes { raw in
+                CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: count * 4, destination: raw.baseAddress!)
+            }
+            if status == kCMBlockBufferNoErr { frames.append(contentsOf: chunk) }
+        }
+        if reader.status == .failed { throw PicshopError.renderFailed(reader.error?.localizedDescription ?? "sound reader") }
+        guard !frames.isEmpty else { return nil }
+        frames.reverse()
+        var description = AudioStreamBasicDescription(mSampleRate: sampleRate, mFormatID: kAudioFormatLinearPCM,
+                                                      mFormatFlags: kLinearPCMFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked,
+                                                      mBytesPerPacket: 4, mFramesPerPacket: 1, mBytesPerFrame: 4, mChannelsPerFrame: 2,
+                                                      mBitsPerChannel: 16, mReserved: 0)
+        var format: CMAudioFormatDescription?
+        let created = CMAudioFormatDescriptionCreate(allocator: kCFAllocatorDefault, asbd: &description, layoutSize: 0, layout: nil,
+                                                     magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &format)
+        guard created == noErr, let format else { throw PicshopError.renderFailed("sound format") }
+        return ReversedSound(frames: frames, format: format, sampleRate: sampleRate)
+    }
+
+    /// Writes the reversed sound up to `seconds` into the output.
+    func feed(until seconds: Double) async throws {
+        while cursor < frames.count, Double(cursor) / sampleRate < seconds {
+            while !input.isReadyForMoreMediaData { try await Task.sleep(for: .milliseconds(4)) }
+            let count = min(4096, frames.count - cursor)
+            guard let buffer = sampleBuffer(start: cursor, count: count), input.append(buffer) else {
+                throw PicshopError.renderFailed("reversed sound")
+            }
+            cursor += count
+        }
+    }
+
+    /// `count` frames from `start`, stamped at their place in the output.
+    private func sampleBuffer(start: Int, count: Int) -> CMSampleBuffer? {
+        let bytes = count * 4
+        var block: CMBlockBuffer?
+        guard CMBlockBufferCreateWithMemoryBlock(allocator: kCFAllocatorDefault, memoryBlock: nil, blockLength: bytes, blockAllocator: kCFAllocatorDefault,
+                                                 customBlockSource: nil, offsetToData: 0, dataLength: bytes, flags: 0, blockBufferOut: &block) == kCMBlockBufferNoErr,
+              let block else { return nil }
+        let copied = frames.withUnsafeBytes { raw in
+            CMBlockBufferReplaceDataBytes(with: raw.baseAddress! + start * 4, blockBuffer: block, offsetIntoDestination: 0, dataLength: bytes)
+        }
+        guard copied == kCMBlockBufferNoErr else { return nil }
+        var sample: CMSampleBuffer?
+        let status = CMAudioSampleBufferCreateReadyWithPacketDescriptions(allocator: kCFAllocatorDefault, dataBuffer: block, formatDescription: format,
+                                                                          sampleCount: count, presentationTimeStamp: CMTime(value: CMTimeValue(start), timescale: CMTimeScale(sampleRate)),
+                                                                          packetDescriptions: nil, sampleBufferOut: &sample)
+        return status == noErr ? sample : nil
+    }
+}
 #endif

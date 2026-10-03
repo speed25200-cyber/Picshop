@@ -14,18 +14,24 @@ public enum PDFComposer {
     public static func compose(_ model: PDFDocumentModel, original: PDFDocument, sources: SourceProvider, resolveImage: (MediaAsset) -> UIImage?) -> PDFDocument {
         let output = PDFDocument()
         for (position, pageModel) in model.pages.enumerated() {
-            guard let page = makePage(pageModel, original: original, sources: sources, resolveImage: resolveImage) else { continue }
-            page.rotation = ((page.rotation + pageModel.rotation) % 360 + 360) % 360
-            let size = PSSize(page.bounds(for: .mediaBox).size)
-            let paper = PaperPatcher(page: page)
-            for markup in pageModel.markups {
-                for annotation in annotations(for: markup, pageSize: size, resolveImage: resolveImage, paper: paper) {
-                    page.addAnnotation(annotation)
-                }
-            }
-            output.insert(page, at: position)
+            guard let page = composedPage(pageModel, original: original, sources: sources, resolveImage: resolveImage) else { continue }
+            output.insert(page, at: min(position, output.pageCount))
         }
         return output
+    }
+
+    /// One page as the viewer shows it: its source, its rotation and every markup as an annotation.
+    public static func composedPage(_ pageModel: PDFPageModel, original: PDFDocument, sources: SourceProvider, resolveImage: (MediaAsset) -> UIImage?) -> PDFPage? {
+        guard let page = makePage(pageModel, original: original, sources: sources, resolveImage: resolveImage) else { return nil }
+        page.rotation = ((page.rotation + pageModel.rotation) % 360 + 360) % 360
+        let size = PSSize(page.bounds(for: .mediaBox).size)
+        let paper = PaperPatcher(page: page)
+        for markup in pageModel.markups {
+            for annotation in annotations(for: markup, pageSize: size, resolveImage: resolveImage, paper: paper) {
+                page.addAnnotation(annotation)
+            }
+        }
+        return page
     }
 
     static func makePage(_ model: PDFPageModel, original: PDFDocument, sources: SourceProvider, resolveImage: (MediaAsset) -> UIImage?) -> PDFPage? {

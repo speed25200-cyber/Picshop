@@ -12,17 +12,17 @@ public enum PSButtonKind: Sendable {
 
     var foreground: Color {
         switch self {
-        case .glass: return PSTheme.textPrimary
-        case .prominent: return PSTheme.onPrimary
+        case .glass: return Color.psTextPrimary
+        case .prominent: return Color.psOnAction
         case .danger: return .white
         }
     }
 
     var flatFill: Color {
         switch self {
-        case .glass: return PSTheme.surfaceFlat
-        case .prominent: return PSTheme.primary
-        case .danger: return PSTheme.liveEnd
+        case .glass: return Color.psElevated
+        case .prominent: return Color.psActionPrimary
+        case .danger: return Color.psDanger
         }
     }
 }
@@ -52,7 +52,7 @@ public struct PSCircleButton: View {
             if effects == .minimal || reduceTransparency {
                 Button(action: tap) {
                     glyph.background(Circle().fill(kind.flatFill))
-                        .overlay(Circle().strokeBorder(kind == .glass ? PSTheme.hairline : .clear, lineWidth: 1))
+                        .overlay(Circle().strokeBorder(kind == .glass ? Color.psHairline : .clear, lineWidth: 1))
                 }
                 .buttonStyle(PSPressStyle(scale: 0.9))
             } else {
@@ -63,11 +63,11 @@ public struct PSCircleButton: View {
                 case .prominent:
                     Button(action: tap) { glyph }
                         .buttonStyle(.glassProminent)
-                        .tint(PSTheme.primary)
+                        .tint(Color.psActionPrimary)
                 case .danger:
                     Button(action: tap) { glyph }
                         .buttonStyle(.glassProminent)
-                        .tint(PSTheme.liveEnd)
+                        .tint(Color.psDanger)
                 }
             }
         }
@@ -82,7 +82,7 @@ public struct PSCircleButton: View {
 
     private var glyph: some View {
         Image(systemName: systemImage)
-            .font(.system(size: (size * 0.39).rounded(), weight: kind == .glass ? .medium : .semibold))
+            .font(PSFont.glyph(diameter: size, weight: kind == .glass ? .medium : .semibold))
             .foregroundStyle(kind.foreground)
             .contentTransition(.symbolEffect(.replace))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -122,7 +122,7 @@ public struct PSCapsuleButton: View {
                         .padding(.horizontal, 16)
                         .frame(height: height)
                         .background(Capsule().fill(kind.flatFill))
-                        .overlay(Capsule().strokeBorder(kind == .glass ? PSTheme.hairline : .clear, lineWidth: 1))
+                        .overlay(Capsule().strokeBorder(kind == .glass ? Color.psHairline : .clear, lineWidth: 1))
                         .contentShape(Capsule())
                 }
                 .buttonStyle(PSPressStyle(scale: 0.96))
@@ -134,11 +134,11 @@ public struct PSCapsuleButton: View {
                 case .prominent:
                     Button(action: tap) { content.frame(maxHeight: .infinity) }
                         .buttonStyle(.glassProminent)
-                        .tint(PSTheme.primary)
+                        .tint(Color.psActionPrimary)
                 case .danger:
                     Button(action: tap) { content.frame(maxHeight: .infinity) }
                         .buttonStyle(.glassProminent)
-                        .tint(PSTheme.liveEnd)
+                        .tint(Color.psDanger)
                 }
             }
         }
@@ -214,22 +214,22 @@ struct PSPanelPrimaryButton: View {
     private var label: some View {
         if let title {
             HStack(spacing: 6) {
-                if let systemImage { Image(systemName: systemImage).font(.system(size: 14, weight: .semibold)) }
+                if let systemImage { Image(systemName: systemImage).font(.subheadline.weight(.semibold)) }
                 Text(title).lineLimit(1)
             }
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(PSTheme.onPrimary)
+            .foregroundStyle(Color.psOnAction)
             .padding(.horizontal, 14)
             .frame(minHeight: height)
-            .background(Capsule().fill(PSTheme.primary))
+            .background(Capsule().fill(Color.psActionPrimary))
             .contentShape(Capsule())
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         } else if let systemImage {
             Image(systemName: systemImage)
-                .font(.system(size: (height * 0.36).rounded(), weight: .bold))
-                .foregroundStyle(PSTheme.onPrimary)
+                .font(PSFont.glyph(diameter: height * 0.92, weight: .bold))
+                .foregroundStyle(Color.psOnAction)
                 .frame(width: height, height: height)
-                .background(Circle().fill(PSTheme.primary))
+                .background(Circle().fill(Color.psActionPrimary))
                 .contentShape(Circle())
         }
     }

@@ -215,6 +215,11 @@ public struct PDFCommandExecutor: Sendable {
         case .summarizeEdits: return (document, .effect(.message("summary"), label: ""))
         case .restoreVersion: return (document, .effect(.message("version:restore:" + (intent.text ?? "")), label: ""))
         case .unknown: return (document, ExecutionResult(outcome: .info(message: Replies.reply(for: intent, language: language))))
+        case .operation:
+            // No PDF operation table before W5: an honest refusal with the nearest PDF operations.
+            let name = intent.operation?.id.raw ?? "operation"
+            let nearest = OperationArguments.nearest(to: name, domain: .pdf, limit: 3)
+            return (document, ExecutionResult(outcome: .failed(message: Replies.unsupported(name, nearest: nearest, french: fr)), effects: [ExecutionReason.unsupported.effect]))
         default: return (document, .failed(PicshopError.unsupportedOperation(intent.summary).message(french: language == .french)))
         }
     }

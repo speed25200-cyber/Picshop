@@ -8,6 +8,8 @@ struct PicshopApp: App {
     @State private var environment: AppEnvironment
 
     init() {
+        let launch = PSSignpost.begin("app.init")
+        defer { PSSignpost.end(launch) }
         // First, so a crash or memory kill in this session leaves a report for the next one.
         Diagnostics.shared.start()
         // The local brain's runtime (MLX), before AppEnvironment attaches to the hub.

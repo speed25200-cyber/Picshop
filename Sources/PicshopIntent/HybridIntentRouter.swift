@@ -43,27 +43,86 @@ public actor HybridIntentRouter {
 
     /// Identifies a request completely: the same words in the same editor state
     /// must plan to the same thing, and anything the plan can depend on has to
-    /// be part of the key or a stale plan would be replayed.
-    private struct CacheKey: Hashable {
+    /// be part of the key or a stale plan would be replayed. The document revision
+    /// is the state: a repeat after any change (the first attempt applied) is
+    /// planned again, so "encore" never replays a plan made for an older document.
+    struct CacheKey: Hashable {
         let utterance: String
         let mode: EditorMode
+        let revision: Int
         let clipCount: Int
         let pageCount: Int
         let currentPage: Int
         let playheadTenths: Int
         let lastParameter: String
         let lastDirection: Int
+        let lastStep: String
+        let selectedIndex: Int
+        let adjustments: Adjustments
 
         init(utterance: String, context: IntentContext) {
             self.utterance = utterance.lowercased()
             mode = context.mode
+            revision = context.documentRevision ?? -1
             clipCount = context.clipCount
             pageCount = context.pageCount
             currentPage = context.currentPage
             playheadTenths = Int((context.playheadSeconds * 10).rounded())
             lastParameter = context.lastParameter?.rawValue ?? ""
             lastDirection = context.lastAdjustmentDirection
+            lastStep = context.lastIntent?.summary ?? ""
+            selectedIndex = context.selectedIndex ?? -1
+            adjustments = context.currentAdjustments
         }
+    }
+
+    /// Whether a request may be served from, or stored in, the plan cache. Never for a
+    /// pending question, a follow-up ("encore", "pareil", "the others"), a tap, a scene
+    /// ref or a selection: those plans depend on more than the words and the revision.
+    static func isCacheable(_ utterance: String, context: IntentContext) -> Bool {
+        guard context.pendingClarification == nil, !utterance.isEmpty else { return false }
+        guard context.selectionMask == nil, !context.hasSelection || context.mode != .photo else { return false }
+        return !isFollowUp(utterance)
+    }
+
+    /// Whether a planned result may be stored: plans that use refs, taps, regions or
+    /// a candidate choice are tied to what is on screen right now.
+    static func isCacheable(_ plan: EditPlan) -> Bool {
+        !plan.intents.contains { intent in
+            if intent.ref != nil || intent.region != nil || intent.target?.point != nil { return true }
+            if intent.action == .chooseCandidate || intent.action == .unknown { return true }
+            if let call = intent.operation, call.args.values.contains(where: Self.isPositional) { return true }
+            return false
+        }
+    }
+
+    private static func isPositional(_ value: OpValue) -> Bool {
+        switch value {
+        case .point, .box: return true
+        case .string(let text): return isRefLike(text)
+        case .list(let values): return values.contains(where: isPositional)
+        case .number, .bool: return false
+        }
+    }
+
+    /// "t3", "l2", "o1", "p4": a scene, layer, clip, page or markup id.
+    static func isRefLike(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespaces).lowercased()
+        guard trimmed.count >= 2, let first = trimmed.first, RefKind.allCases.contains(where: { $0.prefix == first }) else { return false }
+        return trimmed.dropFirst().allSatisfy(\.isNumber)
+    }
+
+    /// Words that make a request lean on the previous one.
+    static let followUpWords: [String] = [
+        "encore", "pareil", "pareille", "idem", "aussi", "egalement", "trop", "les autres", "le reste", "la meme chose", "de meme",
+        "refais", "recommence", "rebelote", "comme avant", "comme ca", "un peu plus", "un peu moins", "plus fort", "moins fort",
+        "again", "same", "too", "also", "as well", "the others", "the rest", "more", "less", "too much", "a bit more", "a bit less", "redo it",
+    ]
+
+    static func isFollowUp(_ utterance: String) -> Bool {
+        let folded = " " + utterance.lowercased().folding(options: [.diacriticInsensitive], locale: nil)
+            .map { $0.isLetter || $0.isNumber ? $0 : " " }.reduce(into: "") { $0.append($1) } + " "
+        return followUpWords.contains { folded.contains(" \($0) ") }
     }
 
     public init(preferredEngine: IntentEngineKind = .appleIntelligence, configuration: Configuration = Configuration()) {
@@ -100,7 +159,13 @@ public actor HybridIntentRouter {
         defer { timer.log(category: .intent) }
 
         let trimmed = utterance.trimmingCharacters(in: .whitespacesAndNewlines)
-        let fast = rules.parse(utterance, context: context)
+        let parsed = rules.parse(utterance, context: context)
+        // Abstention: a grammar plan for words that name an operation the grammar does
+        // not own ("mets le calque en mode produit") is capped below the fast path.
+        let abstains = FeatureFlags.isOn(.catalogOps)
+        let fast = abstains ? OperationAbstention.capped(parsed, utterance: trimmed, domain: context.mode.opDomain) : parsed
+        let wasCapped = fast.confidence < parsed.confidence
+        let unowned = abstains && wasCapped ? OperationAbstention.namesUnownedOp(trimmed, domain: context.mode.opDomain) : nil
         let fastIsGood = !fast.isEmpty && fast.confidence >= configuration.fastPathThreshold
         if fastIsGood && !configuration.alwaysUseLLM {
             lastResolvedEngine = .rules
@@ -109,55 +174,54 @@ public actor HybridIntentRouter {
 
         guard preferredEngine != .rules, let engine = llmEngines[preferredEngine], await engine.isAvailable() else {
             lastResolvedEngine = .rules
+            // No model: an operation only the model can reach gets an honest answer, not the grammar's guess.
+            if let unowned { return Self.notWithoutModel(unowned, utterance: trimmed, context: context, plan: fast) }
             return fast
         }
 
         // Repeating a command — said twice, or misheard the first time — must not
-        // pay for inference again. Only exact repeats in the same editor state hit.
+        // pay for inference again. Only exact repeats in the same editor state
+        // (same document revision) hit, and never follow-ups, taps or refs.
         let key = CacheKey(utterance: trimmed, context: context)
-        let cacheable = context.pendingClarification == nil && !trimmed.isEmpty
+        let cacheable = Self.isCacheable(trimmed, context: context)
         if cacheable, let cached = cache[key] {
             lastResolvedEngine = cached.engine
             return cached
         }
 
         // With a usable grammar plan in hand the model is only being asked to do
-        // better, so it gets a short slot; when the grammar came up empty it gets
-        // the full budget because it is the only thing that can answer.
+        // better, so it gets a short slot; when the grammar came up empty, or was
+        // capped by abstention, it gets the full budget because it is the only
+        // thing that can answer.
         // A grammar plan about a thing it has no word for ("efface le bidule") is a guess, not a plan.
         let namesUnknownThing = fast.intents.contains { intent in
             guard [.removeObject, .moveObject, .blurObject, .recolor].contains(intent.action), let label = intent.target?.label else { return false }
             return ObjectVocabulary.entry(forLabel: label) == nil
         }
-        let hasUsableFast = !fast.isEmpty && fast.confidence >= 0.5 && !namesUnknownThing
+        let hasUsableFast = !fast.isEmpty && fast.confidence >= 0.5 && !namesUnknownThing && !wasCapped
         let timeout = hasUsableFast ? configuration.improveTimeout : configuration.llmTimeout
-        let llmPlan: EditPlan? = await withTaskGroup(of: EditPlan?.self) { group in
-            group.addTask {
-                do {
-                    return try await engine.plan(utterance, context: context, hint: fast)
-                } catch {
-                    PSLog.error("LLM planning failed: \(error)", category: .intent)
-                    return nil
-                }
-            }
-            group.addTask {
-                try? await Task.sleep(for: timeout)
+        // A hard limit: Deadline answers on time even when the engine ignores cancellation
+        // (a task group would wait for it to finish).
+        let hint = fast
+        let llmPlan: EditPlan? = await Deadline.race(timeout) {
+            do {
+                return try await engine.plan(utterance, context: context, hint: hint)
+            } catch {
+                PSLog.error("LLM planning failed: \(error)", category: .intent)
                 return nil
             }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
         }
         if llmPlan == nil {
             PSLog.info("\(preferredEngine.rawValue) gave no plan within \(timeout); keeping the grammar's", category: .intent)
         }
 
         if let llmPlan {
-            let checked = Self.validated(llmPlan, for: context)
+            var checked = Self.validated(llmPlan, for: context)
+            if FeatureFlags.isOn(.catalogOps), checked.intents.count > 1 { checked.intents = PlanLinter.lint(checked.intents, utterance: trimmed).steps }
             if !checked.isEmpty || checked.needsClarification {
                 lastResolvedEngine = checked.engine
                 let merged = merge(fast: fast, llm: checked)
-                if cacheable { remember(merged, for: key) }
+                if cacheable, Self.isCacheable(merged) { remember(merged, for: key) }
                 return merged
             }
             // The model answered with something this editor cannot do: prefer the
@@ -168,7 +232,18 @@ public actor HybridIntentRouter {
             }
         }
         lastResolvedEngine = .rules
+        // The grammar's capped guess is not run in place of an operation it does not own.
+        if let unowned { return Self.notWithoutModel(unowned, utterance: trimmed, context: context, plan: fast, modelTried: true) }
         return fast
+    }
+
+    /// The honest answer for an operation only the model can reach: not done, and where to do it.
+    static func notWithoutModel(_ id: OpID, utterance: String, context: IntentContext, plan: EditPlan, modelTried: Bool = false) -> EditPlan {
+        let french = (plan.language ?? context.preferredLanguage ?? "").hasPrefix("fr")
+        var result = EditPlan.unknown(utterance)
+        result.language = plan.language ?? context.preferredLanguage
+        result.reply = Replies.notByVoice(id, french: french, modelTried: modelTried)
+        return result
     }
 
     private func remember(_ plan: EditPlan, for key: CacheKey) {
@@ -186,7 +261,7 @@ public actor HybridIntentRouter {
     /// a PDF, a timeline action on a photo…). Language models occasionally answer
     /// from the wrong mode; the executor must never see those steps.
     static func validated(_ plan: EditPlan, for context: IntentContext) -> EditPlan {
-        let allowed = plan.intents.filter { $0.action.isAllowed(in: context.mode) }
+        let allowed = plan.intents.filter { $0.isAllowed(in: context.mode) }
         guard allowed.count != plan.intents.count else { return plan }
         var result = plan
         result.intents = allowed
@@ -228,13 +303,27 @@ public actor HybridIntentRouter {
     }
 }
 
-extension IntentAction {
-    /// Whether an executor exists for this action in the given editor.
+extension EditIntent {
+    /// Whether the editor can execute this step: the action's mode flags, and for a
+    /// catalog operation the operation's domains (and the catalogOps kill switch).
     public func isAllowed(in mode: EditorMode) -> Bool {
+        guard action == .operation else { return action.isAllowed(in: mode) }
+        guard FeatureFlags.isOn(.catalogOps), let domains = operationDomains else { return false }
+        return domains.contains(mode.opDomain)
+    }
+}
+
+extension IntentAction {
+    /// Whether an executor exists for this action in the given editor. `.operation` is
+    /// allowed nowhere by its flags: `EditIntent.isAllowed(in:)` gates each call by the catalog.
+    public func isAllowed(in mode: EditorMode) -> Bool {
+        if self == .operation { return false }
         switch mode {
         case .photo: return !isVideoOnly && !isPDFOnly
         case .video: return !isPhotoOnly && !isPDFOnly
         case .pdf:
+            // Seek, play and pause are timeline actions: meta, but never PDF steps.
+            if isVideoOnly { return false }
             if isPDFOnly || isMeta { return true }
             switch self {
             case .addText, .removeText, .export, .share, .revert: return true

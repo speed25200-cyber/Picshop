@@ -58,7 +58,7 @@ extension PhotoDocument {
     /// Edits that change tones and colours only: nothing moves, appears or goes.
     static func isTonal(_ kind: EditOperation.Kind) -> Bool {
         switch kind {
-        case .adjust, .adjustments, .toneCurve, .look, .autoEnhance, .colorMixer, .colorGrade, .lut, .colorMatch, .denoise, .sharpen, .relight:
+        case .adjust, .adjustments, .toneCurve, .levels, .look, .autoEnhance, .colorMixer, .colorGrade, .lut, .colorMatch, .denoise, .sharpen, .relight:
             return true
         default:
             return false

@@ -49,13 +49,22 @@ public struct IntentContext: Sendable {
     /// The last step that applied, by any lane (the session sets it): "encore", "pareil pour le sous-titre",
     /// "plus gros" reuse it with a new scope or a new size.
     public var lastIntent: EditIntent?
+    /// The editor's document revision (bumped by every change), nil when the editor does not say.
+    /// The router's plan cache keys on it, so a repeat after a change is planned again.
+    public var documentRevision: Int?
+    /// Photo: every layer, the photo included; nil when the editor does not say. The planner's
+    /// operation cards mark the layer operations unavailable only when it says 1.
+    public var layerCount: Int? = nil
+    /// Photo: a LUT was imported on the active image layer; nil when the editor does not say.
+    public var hasImportedLUT: Bool? = nil
 
     public init(mode: EditorMode, currentAdjustments: Adjustments = .neutral, hasSelection: Bool = false, selectedIndex: Int? = nil,
                 clipCount: Int = 0, textLayerCount: Int = 0, playheadSeconds: Double = 0, timelineDuration: Double = 0, frameRate: Double = 30,
                 pendingClarification: ClarificationRequest? = nil, lastTapPoint: PSPoint? = nil, canUndo: Bool = false, canRedo: Bool = false,
                 preferredLanguage: String? = nil, pageCount: Int = 0, currentPage: Int = 1, hasSignature: Bool = false,
                 lastParameter: AdjustmentParameter? = nil, lastAdjustmentDirection: Int = 0, selectionMask: MaskReference? = nil,
-                table: TableGrid? = nil, lastTableEdit: TableEditSpec? = nil, scene: SceneMap? = nil, lastIntent: EditIntent? = nil) {
+                table: TableGrid? = nil, lastTableEdit: TableEditSpec? = nil, scene: SceneMap? = nil, lastIntent: EditIntent? = nil,
+                documentRevision: Int? = nil) {
         self.mode = mode
         self.currentAdjustments = currentAdjustments
         self.hasSelection = hasSelection
@@ -80,6 +89,7 @@ public struct IntentContext: Sendable {
         self.lastTableEdit = lastTableEdit
         self.scene = scene
         self.lastIntent = lastIntent
+        self.documentRevision = documentRevision
     }
 
     public static let photo = IntentContext(mode: .photo)

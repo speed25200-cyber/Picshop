@@ -1,5 +1,6 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
+import PicshopCore
 
 /// One tile of the Outils sheet: a panel to open, or an action to run.
 enum ToolItem: Identifiable {
@@ -35,7 +36,7 @@ enum ToolItem: Identifiable {
     }
 }
 
-/// A segment of the Outils sheet (at most 5 per editor).
+/// A segment of the Outils sheet.
 struct ToolCategory: Identifiable {
     var id: String
     var title: String
@@ -76,80 +77,173 @@ enum ToolsSheetPick {
 /// tile or a footer button closes the sheet, then runs. A category holding a
 /// single panel opens it straight away. At accessibility text sizes the tiles
 /// become a two-column list.
+///
+/// W1 (studioWorkspace): every category, in a bar that scrolls sideways, and a
+/// search field over the tool names and their synonyms, matched on the device
+/// and never sent to the model. A search that finds nothing offers to ask Live
+/// (`onAsk`), which only happens on that tap. Medium and large detents.
 struct ToolsSheet: View {
     let catalog: ToolCatalog
     let onPick: (ToolsSheetPick) -> Void
+    var onAsk: ((String) -> Void)?
     @AppStorage private var lastCategory: String
+    @State private var query = ""
+    @State private var isStudio = FeatureFlags.isOn(.studioWorkspace)
     @Environment(\.dynamicTypeSize) private var typeSize
 
-    init(catalog: ToolCatalog, onPick: @escaping (ToolsSheetPick) -> Void) {
+    init(catalog: ToolCatalog, onPick: @escaping (ToolsSheetPick) -> Void, onAsk: ((String) -> Void)? = nil) {
         self.catalog = catalog
         self.onPick = onPick
+        self.onAsk = onAsk
         _lastCategory = AppStorage(wrappedValue: "", "tools.lastCategory.\(catalog.editorKind)")
     }
 
-    private var categories: [ToolCategory] { Array(catalog.categories.prefix(5)) }
+    /// Every category: the W0 cap of five is gone (new categories would have vanished).
+    private var categories: [ToolCategory] { catalog.categories }
 
     private var selected: ToolCategory? {
         categories.first { $0.id == lastCategory && $0.items.count > 1 } ?? categories.first { $0.items.count > 1 } ?? categories.first
     }
 
     var body: some View {
+        if isStudio {
+            NavigationStack {
+                sheetContent
+                    .navigationTitle(L("Tools"))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: Text(L("Search tools")))
+                    .autocorrectionDisabled()
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .preferredColorScheme(.dark)
+        } else {
+            sheetContent
+                .presentationDetents([.height(360), .large])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(.dark)
+        }
+    }
+
+    private var sheetContent: some View {
         ScrollView {
-            VStack(spacing: 16) {
-                if categories.count > 1 {
-                    categoryBar
-                }
-                if let selected {
-                    if typeSize.isAccessibilitySize {
-                        list(selected.items)
-                    } else {
-                        grid(selected.items)
+            VStack(spacing: PSSpacing.large) {
+                let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+                if isStudio, !trimmed.isEmpty {
+                    searchResults(trimmed)
+                } else {
+                    if categories.count > 1 {
+                        categoryBar
+                    }
+                    if let selected {
+                        tiles(selected.items)
                     }
                 }
-                if !catalog.footer.isEmpty {
+                if !catalog.footer.isEmpty, query.isEmpty {
                     footer
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 20)
-            .animation(PSMotion.quick, value: selected?.id)
+            .padding(.horizontal, PSSpacing.page)
+            .padding(.top, PSSpacing.small)
+            .padding(.bottom, PSSpacing.page)
+            .animation(PSSpring.quick, value: selected?.id)
         }
         .scrollBounceBehavior(.basedOnSize)
-        .presentationDetents([.height(360), .large])
-        .presentationDragIndicator(.visible)
-        .preferredColorScheme(.dark)
+        .scrollDismissesKeyboard(.immediately)
+    }
+
+    @ViewBuilder
+    private func tiles(_ items: [ToolItem]) -> some View {
+        if typeSize.isAccessibilitySize {
+            list(items)
+        } else {
+            grid(items)
+        }
+    }
+
+    // MARK: Search
+
+    /// Every tile whose name or synonyms hold every word typed, once each, in catalog order.
+    @ViewBuilder
+    private func searchResults(_ text: String) -> some View {
+        let found = ToolSearch.matches(text, in: catalog)
+        if found.isEmpty {
+            VStack(spacing: PSSpacing.medium) {
+                Image(systemName: "magnifyingglass")
+                    .font(.title.weight(.light))
+                    .foregroundStyle(Color.psTextTertiary)
+                Text(L("No tool by that name."))
+                    .font(PSFont.control(selected: true))
+                    .foregroundStyle(Color.psTextSecondary)
+                    .multilineTextAlignment(.center)
+                if let onAsk {
+                    PSPanelPrimaryButton(String(format: L("Ask PicShop: “%@”"), text), systemImage: "arrow.up", height: PSMetrics.control) {
+                        onPick(.action({ onAsk(text) }))
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, PSSpacing.xLarge)
+        } else {
+            tiles(found)
+        }
     }
 
     // MARK: Categories
 
+    @ViewBuilder
     private var categoryBar: some View {
-        HStack(spacing: 4) {
-            ForEach(categories) { category in
-                let isSelected = category.id == selected?.id
-                Button {
-                    choose(category)
-                } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: category.symbol)
-                            .font(.system(size: 20, weight: .medium))
-                        Text(category.title)
-                            .font(.caption.weight(.medium))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+        if isStudio {
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: PSSpacing.xSmall) {
+                        ForEach(categories) { category in
+                            categoryButton(category)
+                                .frame(minWidth: PSMetrics.toolTile)
+                                .id(category.id)
+                        }
                     }
-                    .foregroundStyle(isSelected ? PSTheme.onPrimary : PSTheme.textSecondary)
-                    .frame(maxWidth: .infinity, minHeight: 60)
-                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(isSelected ? PSTheme.primary : Color.clear))
-                    .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .buttonStyle(PSPressStyle(scale: 0.96))
-                .accessibilityLabel(category.title)
-                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+                .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+                .onAppear {
+                    if let id = selected?.id { proxy.scrollTo(id, anchor: .center) }
+                }
             }
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        } else {
+            HStack(spacing: PSSpacing.xSmall) {
+                ForEach(categories) { category in
+                    categoryButton(category)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         }
-        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+    }
+
+    private func categoryButton(_ category: ToolCategory) -> some View {
+        let isSelected = category.id == selected?.id
+        let shape = RoundedRectangle(cornerRadius: PSRadius.tile, style: .continuous)
+        return Button {
+            choose(category)
+        } label: {
+            VStack(spacing: PSSpacing.xSmall) {
+                Image(systemName: category.symbol)
+                    .font(PSFont.glyph(.dock))
+                Text(category.title)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(isSelected ? Color.psOnAction : Color.psTextSecondary)
+            .padding(.horizontal, PSSpacing.small)
+            .frame(maxWidth: .infinity, minHeight: 60)
+            .background(shape.fill(isSelected ? Color.psActionPrimary : Color.clear))
+            .contentShape(shape)
+        }
+        .buttonStyle(PSPressStyle(scale: 0.96))
+        .accessibilityLabel(category.title)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
     /// A single-panel category opens its panel; the others show their tiles.
@@ -166,7 +260,7 @@ struct ToolsSheet: View {
     // MARK: Tiles
 
     private func grid(_ items: [ToolItem]) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: PSMetrics.toolTile), spacing: 12)], spacing: 12) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: PSMetrics.toolTile), spacing: PSSpacing.medium)], spacing: PSSpacing.medium) {
             ForEach(items) { item in
                 Button {
                     Haptics.tap()
@@ -182,25 +276,26 @@ struct ToolsSheet: View {
     }
 
     private func list(_ items: [ToolItem]) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+        let shape = RoundedRectangle(cornerRadius: PSRadius.tile, style: .continuous)
+        return LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
             ForEach(items) { item in
                 Button {
                     Haptics.tap()
                     pick(item)
                 } label: {
                     HStack(spacing: 10) {
-                        ToolGlyph(item: item, size: 20)
+                        ToolGlyph(item: item, size: .dock)
                         Text(item.title)
                             .font(.body)
-                            .foregroundStyle(PSTheme.textPrimary)
+                            .foregroundStyle(Color.psTextPrimary)
                             .multilineTextAlignment(.leading)
                         Spacer(minLength: 0)
                     }
-                    .padding(12)
+                    .padding(PSSpacing.medium)
                     .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: PSRadius.toolTile, style: .continuous).fill(PSTheme.fill))
+                    .background(shape.fill(Color.psFillControl))
                     .overlay(alignment: .topTrailing) { ModifiedDot(isOn: item.isModified) }
-                    .contentShape(RoundedRectangle(cornerRadius: PSRadius.toolTile, style: .continuous))
+                    .contentShape(shape)
                 }
                 .buttonStyle(PSPressStyle(scale: 0.97))
                 .accessibilityValue(item.isModified ? L("Edited") : "")
@@ -221,33 +316,33 @@ struct ToolsSheet: View {
         VStack(spacing: 0) {
             ForEach(Array(catalog.footer.enumerated()), id: \.element.id) { index, item in
                 if index > 0 {
-                    Rectangle().fill(PSTheme.hairline).frame(height: 1)
+                    Rectangle().fill(Color.psHairline).frame(height: 1)
                 }
                 switch item {
                 case .toggle(_, let title, let isOn):
                     Toggle(isOn: isOn) {
-                        Text(title).font(.body).foregroundStyle(PSTheme.textPrimary)
+                        Text(title).font(.body).foregroundStyle(Color.psTextPrimary)
                     }
-                    .tint(PSTheme.success)
-                    .frame(minHeight: 44)
+                    .tint(Color.psSuccess)
+                    .frame(minHeight: PSMetrics.control)
                     .sensoryFeedback(.selection, trigger: isOn.wrappedValue)
                 case .button(_, let title, let systemImage, let action):
                     Button {
                         Haptics.tap()
                         onPick(.action(action))
                     } label: {
-                        HStack(spacing: 12) {
+                        HStack(spacing: PSSpacing.medium) {
                             Image(systemName: systemImage)
-                                .font(.system(size: 17, weight: .medium))
-                                .foregroundStyle(PSTheme.textSecondary)
+                                .font(PSFont.glyph(.bar))
+                                .foregroundStyle(Color.psTextSecondary)
                                 .frame(width: 24)
-                            Text(title).font(.body).foregroundStyle(PSTheme.textPrimary)
+                            Text(title).font(.body).foregroundStyle(Color.psTextPrimary)
                             Spacer(minLength: 0)
                             Image(systemName: "chevron.right")
                                 .font(.footnote.weight(.semibold))
-                                .foregroundStyle(PSTheme.textTertiary)
+                                .foregroundStyle(Color.psTextTertiary)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .frame(maxWidth: .infinity, minHeight: PSMetrics.control, alignment: .leading)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(PSPressStyle(scale: 0.98))
@@ -256,7 +351,51 @@ struct ToolsSheet: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 2)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(PSTheme.fill.opacity(0.6)))
+        .background(RoundedRectangle(cornerRadius: PSRadius.card, style: .continuous).fill(Color.psFillWell))
+    }
+}
+
+/// The Outils search: tool names plus a few synonyms per tool, in both
+/// languages, folded (lowercase, no accents). Local only.
+enum ToolSearch {
+    /// Extra words by tool id (photo, video and PDF panels and actions).
+    static let synonyms: [String: [String]] = [
+        "adjust": ["exposition", "exposure", "luminosite", "brightness", "contraste", "contrast", "reglages", "lumiere", "light", "ombres", "shadows", "hautes lumieres", "highlights"],
+        "curves": ["courbe", "curve", "tone curve", "courbe de tonalite", "s curve"],
+        "levels": ["niveau", "level", "histogramme", "histogram", "noir", "blanc", "black point", "white point"],
+        "color": ["couleur", "colour", "teinte", "hue", "saturation", "tsl", "hsl", "etalonnage", "grade", "lut"],
+        "looks": ["filtre", "filter", "look", "preset", "style"],
+        "crop": ["recadrer", "cadrer", "rogner", "redresser", "straighten", "rotate", "pivoter", "perspective", "format"],
+        "erase": ["effacer", "gomme", "supprimer", "remove", "clean", "nettoyer"],
+        "precise": ["precis", "pinceau", "brush", "lasso"],
+        "cutout": ["detourage", "detourer", "fond", "background", "sujet", "subject"],
+        "text": ["texte", "titre", "title", "ecrire", "write", "typo", "font", "police"],
+        "shapes": ["forme", "shape", "rectangle", "cercle", "circle", "fleche", "arrow"],
+        "layers": ["calque", "layer", "fusion", "blend", "opacite", "opacity", "mode"],
+        "focus": ["flou", "blur", "portrait", "bokeh", "profondeur", "depth"],
+        "magic": ["objet", "object", "deplacer", "move"],
+    ]
+
+    static func fold(_ text: String) -> String {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).lowercased()
+    }
+
+    /// Tiles whose title, id or synonyms contain every word of `query`, once each, in catalog order.
+    static func matches(_ query: String, in catalog: ToolCatalog) -> [ToolItem] {
+        let words = fold(query).split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        guard !words.isEmpty else { return [] }
+        var seen = Set<String>()
+        var found: [ToolItem] = []
+        for category in catalog.categories {
+            for item in category.items where !seen.contains(item.id) {
+                let haystack = ([item.title, item.id, category.title] + (synonyms[item.id] ?? [])).map(fold).joined(separator: " ")
+                if words.allSatisfy({ haystack.contains($0) }) {
+                    seen.insert(item.id)
+                    found.append(item)
+                }
+            }
+        }
+        return found
     }
 }
 
@@ -265,15 +404,15 @@ private struct ToolTile: View {
     let item: ToolItem
 
     var body: some View {
-        let plate = RoundedRectangle(cornerRadius: PSRadius.toolTile, style: .continuous)
+        let plate = RoundedRectangle(cornerRadius: PSRadius.tile, style: .continuous)
         VStack(spacing: 6) {
-            ToolGlyph(item: item, size: 22)
+            ToolGlyph(item: item, size: .tile)
                 .frame(maxWidth: .infinity, minHeight: 60)
-                .background(plate.fill(PSTheme.fill))
+                .background(plate.fill(Color.psFillControl))
                 .overlay(alignment: .topTrailing) { ModifiedDot(isOn: item.isModified) }
             Text(item.title)
                 .font(.caption.weight(.medium))
-                .foregroundStyle(PSTheme.textSecondary)
+                .foregroundStyle(Color.psTextSecondary)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.85)
@@ -286,15 +425,15 @@ private struct ToolTile: View {
 /// A MagicGlyph for AI actions, a white symbol for manual tools.
 private struct ToolGlyph: View {
     let item: ToolItem
-    let size: CGFloat
+    let size: PSGlyph
 
     var body: some View {
         if item.isMagic {
-            MagicGlyph(size: size, symbol: item.symbol)
+            MagicGlyph(size: size.rawValue, symbol: item.symbol)
         } else {
             Image(systemName: item.symbol)
-                .font(.system(size: size, weight: .medium))
-                .foregroundStyle(PSTheme.textPrimary)
+                .font(PSFont.glyph(size))
+                .foregroundStyle(Color.psTextPrimary)
         }
     }
 }
@@ -305,8 +444,8 @@ private struct ModifiedDot: View {
 
     var body: some View {
         Circle()
-            .fill(PSTheme.accent)
-            .frame(width: 5, height: 5)
+            .fill(Color.psValueAccent)
+            .frame(width: PSMetrics.modifiedDot, height: PSMetrics.modifiedDot)
             .padding(8)
             .opacity(isOn ? 1 : 0)
             .accessibilityHidden(true)
@@ -342,7 +481,7 @@ extension ToolCatalog {
 
 private struct ToolsSheetPreview: View {
     var body: some View {
-        PSTheme.canvas
+        Color.psCanvas
             .sheet(isPresented: .constant(true)) {
                 ToolsSheet(catalog: .preview(open: {}), onPick: { _ in })
             }

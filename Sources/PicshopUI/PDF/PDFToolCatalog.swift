@@ -3,7 +3,7 @@ import SwiftUI
 import PicshopCore
 import PicshopPDF
 
-/// The PDF editor's Outils: Pages; Annoter (Surligner, Dessiner); Ajouter
+/// The PDF editor's Outils: Pages; Annoter (Surligner, Dessiner, Caviarder); Ajouter
 /// (Texte, Signature, Image). Footer: 'Que puis-je dire ?' (and Historique,
 /// which StudioChrome adds).
 @MainActor
@@ -13,7 +13,7 @@ enum PDFToolCatalog {
     /// Category ids, symbols and the panels each one holds, in order.
     static let layout: [(id: String, symbol: String, panels: [Tool])] = [
         ("pages", "doc.on.doc", [.pages]),
-        ("markup", "highlighter", [.highlight, .draw]),
+        ("markup", "highlighter", [.highlight, .draw, .redact]),
         ("add", "plus.square.on.square", [.text, .signature, .image]),
     ]
 
@@ -46,6 +46,7 @@ enum PDFToolCatalog {
             switch markup.kind {
             case .highlight, .underline: tools.insert(.highlight)
             case .ink: tools.insert(.draw)
+            case .redaction: tools.insert(.redact)
             case .text, .replacement: tools.insert(.text)
             case .signature: tools.insert(.signature)
             case .image: tools.insert(.image)

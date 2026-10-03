@@ -9,14 +9,20 @@ import PicshopImaging
 /// Metal-backed image view bridged into SwiftUI.
 struct MetalCanvasRepresentable: UIViewRepresentable {
     var image: CIImage?
+    /// The frame's generation: the view never goes back to an older frame than the
+    /// one the frame pump presented directly.
+    var generation: Int = 0
     var overlay: CIImage?
     var frame: CGRect
     var maxFrameRate: Int = 120
     var maxContentScale: CGFloat = UIScreen.main.scale
+    /// Hands the view to whoever presents frames directly (the session's canvas sink).
+    var attach: ((MetalCanvasView) -> Void)? = nil
 
     func makeUIView(context: Context) -> MetalCanvasView {
         let view = MetalCanvasView()
         view.isUserInteractionEnabled = false
+        attach?(view)
         return view
     }
 
@@ -24,7 +30,7 @@ struct MetalCanvasRepresentable: UIViewRepresentable {
     /// Metal view (and trigger a GPU pass) when something it draws changed.
     func updateUIView(_ view: MetalCanvasView, context: Context) {
         var dirty = false
-        if view.image !== image { view.image = image; dirty = true }
+        if view.image !== image, view.show(image, generation: generation) { dirty = true }
         if view.overlay !== overlay { view.overlay = overlay; dirty = true }
         if view.imageFrame != frame { view.imageFrame = frame; dirty = true }
         if view.maxFrameRate != maxFrameRate { view.maxFrameRate = maxFrameRate }
@@ -162,10 +168,22 @@ private struct CanvasSurface: View {
         return aligned.cropped(to: cut).composited(over: edited)
     }
 
+    /// The selection's tint and, when Levels asks for it, the clipping warning over the picture.
+    private var overlay: CIImage? {
+        let clipping = session.tone.showsClipping ? session.tone.clippingOverlay : nil
+        switch (clipping, session.selectionPreview) {
+        case (let clipping?, let selection?): return clipping.composited(over: selection)
+        case (let clipping?, nil): return clipping
+        case (nil, let selection): return selection
+        }
+    }
+
     var body: some View {
-        MetalCanvasRepresentable(image: displayed, overlay: session.selectionPreview, frame: frame,
+        let session = session
+        MetalCanvasRepresentable(image: displayed, generation: session.previewGeneration, overlay: overlay, frame: frame,
                                  maxFrameRate: session.app.performance.maxFrameRate,
-                                 maxContentScale: session.app.performance.maxContentScale)
+                                 maxContentScale: session.app.performance.maxContentScale,
+                                 attach: { view in session.attachCanvas(view) })
     }
 }
 
@@ -1241,55 +1259,61 @@ private struct CanvasLayoutAnimation<Result: View>: ViewModifier, Animatable {
 /// Work in progress drawn on the picture itself instead of a blocking HUD:
 /// the intelligence spectrum turning slowly over the area being changed —
 /// the selection (its mask pre-blurred off the main thread), the picked
-/// object, or a soft band sweeping the whole photo.
+/// object, or a soft band sweeping the whole photo. What moves is a transform
+/// (the spectrum's rotation, the band's offset): nothing is redrawn or blurred per frame.
 struct WorkingShimmer: View {
     /// The selection as an image; its alpha shapes the shimmer.
     var mask: UIImage?
     /// A normalised, top-left rectangle, when there is no mask.
     var region: PSRect?
     var animated: Bool
+    @State private var moving = false
 
     var body: some View {
-        if animated {
-            SwiftUI.TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-                layer(time: context.date.timeIntervalSinceReferenceDate)
-            }
-        } else {
-            layer(time: 0)
-        }
-    }
-
-    private func layer(time: Double) -> some View {
         GeometryReader { proxy in
+            let size = proxy.size
+            let diagonal = (size.width * size.width + size.height * size.height).squareRoot()
             // The spectrum wraps round without a seam, so it needs no blur; the
             // mask arrives already blurred from Core Image.
-            AngularGradient(colors: PSTheme.intelligence + [PSTheme.intelligence[0]], center: .center,
-                            angle: .degrees(time.truncatingRemainder(dividingBy: 4) * 90))
+            AngularGradient(colors: PSTheme.intelligence + [PSTheme.intelligence[0]], center: .center)
+                .frame(width: diagonal, height: diagonal)
+                .rotationEffect(.degrees(moving ? 360 : 0))
+                .frame(width: size.width, height: size.height)
                 .opacity(mask == nil && region == nil ? 0.5 : 0.85)
-                .mask { shape(size: proxy.size, time: time) }
+                .mask { shape(size: size) }
+        }
+        .onAppear {
+            guard animated, !moving else { return }
+            // A quarter turn a second, as before.
+            withAnimation(.linear(duration: 4).repeatForever(autoreverses: false)) { moving = true }
         }
         .accessibilityHidden(true)
     }
 
     @ViewBuilder
-    private func shape(size: CGSize, time: Double) -> some View {
+    private func shape(size: CGSize) -> some View {
         if let mask {
             Image(uiImage: mask).resizable()
         } else if let region {
             let rect = CGRect(x: region.minX * size.width, y: region.minY * size.height,
                               width: region.width * size.width, height: region.height * size.height)
+            // A soft edge from a gradient border rather than a blur.
             RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(RadialGradient(colors: [Color.white.opacity(0.6), Color.white.opacity(0.45)], center: .center,
+                                     startRadius: 0, endRadius: max(rect.width, rect.height) / 2))
                 .frame(width: rect.width, height: rect.height)
                 .position(x: rect.midX, y: rect.midY)
-                .blur(radius: 8)
-                .opacity(0.6)
         } else {
-            let phase = (time / 1.8).truncatingRemainder(dividingBy: 1) * 1.6 - 0.3
+            // A soft band sweeping the photo, moved by an offset.
+            let band = max(size.width, size.height) * 0.9
             LinearGradient(stops: [
-                .init(color: .clear, location: max(0, min(1, phase - 0.25))),
-                .init(color: .white, location: max(0, min(1, phase))),
-                .init(color: .clear, location: max(0, min(1, phase + 0.25))),
+                .init(color: .clear, location: 0),
+                .init(color: .white, location: 0.5),
+                .init(color: .clear, location: 1),
             ], startPoint: .topLeading, endPoint: .bottomTrailing)
+            .frame(width: band, height: band)
+            .offset(x: moving ? size.width : -band, y: moving ? size.height * 0.5 : -band * 0.5)
+            .animation(animated ? .linear(duration: 1.8).repeatForever(autoreverses: false) : nil, value: moving)
             .opacity(0.5)
         }
     }

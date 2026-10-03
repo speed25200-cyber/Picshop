@@ -94,8 +94,8 @@ struct HomeDock: View {
             Button { actions.magicMovie() } label: { Label(L("Magic Movie"), systemImage: "film.stack") }
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: 20, weight: .medium))
-                .foregroundStyle(PSTheme.textPrimary)
+                .font(PSFont.glyph(.dock))
+                .foregroundStyle(Color.psTextPrimary)
                 .frame(width: PSMetrics.dockButton, height: PSMetrics.dockButton)
                 .modifier(HomeCircleSurface())
                 .contentShape(Circle())
@@ -203,10 +203,10 @@ private struct HomeReplyLayer: View {
         ZStack {
             if voice.isListening {
                 capsule(voice.partialTranscript.isEmpty ? L("Listening…") : voice.partialTranscript,
-                        color: voice.partialTranscript.isEmpty ? PSTheme.captionVolatile : PSTheme.captionPrimary)
+                        color: voice.partialTranscript.isEmpty ? PSTheme.captionVolatile : Color.psTextPrimary)
                     .transition(.opacity)
             } else if let reply {
-                capsule(reply.text, color: reply.isProblem ? PSTheme.warning : PSTheme.captionPrimary)
+                capsule(reply.text, color: reply.isProblem ? Color.psWarning : Color.psTextPrimary)
                     .id(reply.id)
                     .transition(.opacity.combined(with: .offset(y: 6)))
             }

@@ -7,7 +7,21 @@ import PicshopCore
 /// how photographers talk, how vague wishes map to concrete parameters, and
 /// which everyday goals become which sequences of edits.
 public enum IntentPrompt {
-    public static let actionList: String = IntentAction.allCases.map(\.rawValue).joined(separator: ", ")
+    /// `.operation` is never written by a model: catalog operations are named by their own ids.
+    public static let actionList: String = IntentAction.allCases.filter { $0 != .operation }.map(\.rawValue).joined(separator: ", ")
+
+    /// The actions one editor can run (never another editor's), then its catalog operations.
+    public static func actionList(for mode: EditorMode, includesOperations: Bool = true) -> String {
+        var names = IntentAction.allCases.filter { $0 != .operation && ($0.isAllowed(in: mode) || $0 == .unknown) }.map(\.rawValue)
+        if includesOperations { names += catalogOperations(for: mode).map(\.id.raw) }
+        return names.joined(separator: ", ")
+    }
+
+    /// The editor's catalog operations run by a handler (curves, layerBlend…), when the catalogOps switch is on.
+    static func catalogOperations(for mode: EditorMode) -> [OperationSpec] {
+        guard FeatureFlags.isOn(.catalogOps) else { return [] }
+        return OperationCatalog.shared.specs(in: mode.opDomain).filter { $0.lowering == .handler }
+    }
     public static let parameterList: String = AdjustmentParameter.allCases.map(\.rawValue).joined(separator: ", ")
     public static let lookList: String = FilterPreset.allCases.map(\.rawValue).joined(separator: ", ")
     public static let aspectList: String = AspectPreset.allCases.map(\.rawValue).joined(separator: ", ")
@@ -23,7 +37,9 @@ public enum IntentPrompt {
     /// stale numbers. Those facts now travel with every request, and these
     /// instructions stay identical for the whole editing session so the model
     /// only has to read them once.
-    public static func systemInstructions(mode: EditorMode) -> String {
+    /// `includesOperations`: false for a planner whose output schema cannot carry a catalog operation's
+    /// keys (Foundation Models until its dynamic schema in W2).
+    public static func systemInstructions(mode: EditorMode, includesOperations: Bool = true) -> String {
         let modeDescription: String
         switch mode {
         case .photo: modeDescription = "The user is editing a PHOTO. Video-only actions are not allowed."
@@ -42,8 +58,8 @@ public enum IntentPrompt {
         Output format (JSON, no markdown):
         {"steps":[{...}, ...],"reply":"<one short sentence in the user's language>","clarification":null|"<question if the request is truly ambiguous>","language":"fr"|"en"}
 
-        Each step has "action" (one of: \(actionList)) plus only the fields it needs:
-        \(fieldGuide)
+        Each step has "action" (one of: \(actionList(for: mode, includesOperations: includesOperations))) plus only the fields it needs:
+        \(fieldGuide(for: mode, includesOperations: includesOperations))
         Several requests in one sentence become several steps, in order; "but"/"mais" separates two requests ("brighter but less saturated"). \
         Negations and corrections apply to the last thing said ("not the dog, the cat" → the cat). \
         If the request is not an editing command, output {"steps":[{"action":"unknown"}],"reply":"…"}.\(photoGuide)
@@ -67,12 +83,34 @@ public enum IntentPrompt {
     - textBehind (PHOTO: a title behind the person, the Lock Screen depth effect; text = the words, verbatim)
     - moveObject (PHOTO: target = the object; degrees = direction, 0 right, 90 up, 180 left, 270 down; amount = distance 0.05–0.5 of the frame; placement "center" to centre it): "déplace le chien vers la gauche"
     - generativeFill: target (region to replace, optional) + text (what to generate, in English); recolor: target + color ("make the car red")
-    - PDF ONLY: deletePage/rotatePage(degrees)/movePage(choiceIndex = destination)/duplicatePage/insertBlankPage/goToPage (clipNumber = page number, -1 = last), highlightText/underlineText/redactText/findText (text), replaceText (text = words to replace, replacement = new words, or "" to erase the words; "remplace monsieur par madame", "efface le mot brouillon"), addSignature, extractPage, addPageNumbers, mergeDocument
+    - PDF ONLY: deletePage/rotatePage(degrees)/duplicatePage/insertBlankPage/goToPage (clipNumber = page number, -1 = last), movePage (clipNumber = the page to move, omit for the current page; choiceIndex = its new position, -1 = the end: "mets la page 2 à la fin" → clipNumber 2, choiceIndex -1), highlightText/underlineText/redactText/findText (text), replaceText (text = words to replace, replacement = new words, or "" to erase the words; "remplace monsieur par madame", "efface le mot brouillon"), addSignature, extractPage, addPageNumbers, mergeDocument
     - undo, redo, revert, compare, zoom, export, share, help, confirm, cancel
     - saveVersion / restoreVersion (text = the version name; "enregistre cette version sous brouillon", "go back to version v1"); describe (PHOTO: what is in the picture); readPage (PDF: read the page aloud, clipNumber optional); saveStyle / applyStyle (PHOTO: text = style name, or "last" for the previous photo's look: "applique le même style que la dernière photo"); summarizeEdits (spoken recap of the edits)
     - VIDEO ONLY: split (seconds), trim (startSeconds,endSeconds = part to KEEP), deleteRange (startSeconds,endSeconds = part to REMOVE), deleteClip (clipNumber 1-based), setSpeed (speed multiplier: 0.5 slow motion, 2 fast), reverse, mute, unmute, setVolume (amount), addTransition (transition: \(transitionList), scope "all" for every cut), removeTransition, addMusic (adds ANOTHER sound track — music, voice-over, sound effect; text: what kind, seconds: where it starts, scope "selection" to REPLACE the existing music instead), removeMusic (clipNumber = track number, -1 last, omit for all), moveAudio (clipNumber, seconds), fadeAudio (clipNumber, amount = fade length in seconds, text "in"|"out" or omit for both), mute/unmute with scope "selection" for a sound track (clipNumber) instead of a clip, setVolume with scope "selection" for a sound track (clipNumber, amountMode absolute for "à 50 %"), extractFrame (seconds), seek (seconds), play, pause, duplicateClip, moveClip (clipNumber, choiceIndex = destination 1-based), stabilize, freezeFrame
     - VIDEO MAGIC: translateCaptions (text = target language code en|fr|es|de|it|pt|ja|zh|ko: "traduis les sous-titres en anglais"), autoCaptions (subtitles from the speech; text = style: classic|karaoke|reveal|boxed|minimal, also to restyle existing captions), removeCaptions, removeSilences (jump cuts: remove pauses in speech; amount 0.2 gentle … 0.45 tight), removeFillers (cut the "euh"/"um" hesitations and stutters), autoDuck (music dips under the voice, back up between sentences; amount = depth 0.3…0.9, 0 = off), animateText (how the latest title comes on: text = pop|rise|wipe|focus|drift, or "none"), punchIns (zoom cuts: after jump cuts every other segment framed tighter; amount = zoom like 1.2, 0 removes), speedRamp (ease into slow motion around the playhead or seconds, then back; amount = slowest speed, default 0.3), highlights (a recap made of the best moments; seconds = its length, default 30), splitScenes (split the clips at every shot change; scope "all" or the selected clip), trackSubject (a text/sticker/picture overlay follows the moving subject under it; target "text"|"image"|"video"|"shape"; amount 0 = stop following), cutWords (edit by text: text = the exact words to cut where they are spoken; scope "all" = every time; target "sentence" = the whole sentence around them), syncToBeat (move every cut onto the music's beat), fitMusic (the song ends with the video, cut on a bar with a fade), blurFaces (anonymise: every face blurred through the clips; scope "all"; amount 0 shows them again), smartReframe (aspect + follow the subject: "passe en vertical en suivant la personne"), kenBurns (slow camera move; scope "all"; amount 0 removes it), enhanceVoice (remove background noise from speech; scope "all"), matchColor (give every clip the colours of clipNumber)
     """
+
+    /// The field guide one editor's planner reads: its own bullets and its own meta actions, never
+    /// another editor's (a PDF planner sees no photo or video action).
+    static func fieldGuide(for mode: EditorMode, includesOperations: Bool = true) -> String {
+        var lines = [actionGuide(mode: mode)]
+        switch mode {
+        case .photo:
+            lines.append("- undo, redo, revert, compare, zoom, export, share, help, confirm, cancel")
+            lines.append("- saveVersion / restoreVersion (text = the version name; \"enregistre cette version sous brouillon\", \"go back to version v1\"); describe (what is in the picture); saveStyle / applyStyle (text = style name, or \"last\" for the previous photo's look: \"applique le même style que la dernière photo\"); summarizeEdits (spoken recap of the edits)")
+        case .video:
+            lines.append("- undo, redo, revert, compare, zoom, export, share, help, confirm, cancel")
+            lines.append("- saveVersion / restoreVersion (text = the version name); summarizeEdits (spoken recap of the edits)")
+        case .pdf:
+            lines.append("- undo, redo, revert, export, share, help, confirm, cancel")
+            lines.append("- saveVersion / restoreVersion (text = the version name); readPage (read the page aloud, clipNumber optional); summarizeEdits (spoken recap of the edits)")
+        }
+        let operations = includesOperations ? catalogOperations(for: mode) : []
+        if !operations.isEmpty {
+            lines.append("- Operations with their own keys (\(operations.map(\.id.raw).joined(separator: ", "))): a request that needs one comes with its card; write the card's keys and values exactly.")
+        }
+        return lines.joined(separator: "\n")
+    }
 
     /// The field guide for the editing actions of one editor: the bullets of
     /// the other editors and the meta/dialogue actions (undo, versions,
@@ -120,6 +158,28 @@ public enum IntentPrompt {
     Keep amounts modest unless the user says a lot / beaucoup / à fond.
     """
 
+    /// The planner's examples for one editor: photo and video their own, PDF a set of its own (it used
+    /// to read the photo and video ones).
+    public static func fewShotExamples(for mode: EditorMode) -> [(String, String)] {
+        let videoActions: Set<String> = ["deleteRange", "removeFillers", "cutWords", "addMusic"]
+        func isVideo(_ json: String) -> Bool { videoActions.contains { json.contains("\"action\":\"\($0)\"") } }
+        switch mode {
+        case .photo: return fewShotExamples.filter { !isVideo($0.1) }
+        case .video: return fewShotExamples.filter { isVideo($0.1) || $0.0 == "make it a bit brighter and warmer" || $0.0 == "brighter but less saturated" }
+        case .pdf: return pdfFewShotExamples
+        }
+    }
+
+    /// PDF only: pages, words, signature; movePage with the page moved in clipNumber and its new place in choiceIndex.
+    public static let pdfFewShotExamples: [(String, String)] = [
+        ("supprime la page 3", #"{"steps":[{"action":"deletePage","clipNumber":3}],"reply":"Je supprime la page 3.","clarification":null,"language":"fr"}"#),
+        ("mets la page 2 à la fin", #"{"steps":[{"action":"movePage","clipNumber":2,"choiceIndex":-1}],"reply":"Je mets la page 2 à la fin.","clarification":null,"language":"fr"}"#),
+        ("remplace monsieur par madame", #"{"steps":[{"action":"replaceText","text":"monsieur","replacement":"madame"}],"reply":"Je remplace « monsieur » par « madame ».","clarification":null,"language":"fr"}"#),
+        ("highlight total in yellow", #"{"steps":[{"action":"highlightText","text":"total","color":"yellow"}],"reply":"Highlighting “total”.","clarification":null,"language":"en"}"#),
+        ("caviarde le numéro de compte", #"{"steps":[{"action":"redactText","text":"numéro de compte"}],"reply":"Je caviarde le numéro de compte.","clarification":null,"language":"fr"}"#),
+        ("signe en bas à droite de la dernière page", #"{"steps":[{"action":"goToPage","clipNumber":-1},{"action":"addSignature","placement":"bottomTrailing"}],"reply":"Je signe en bas à droite de la dernière page.","clarification":null,"language":"fr"}"#),
+    ]
+
     public static let fewShotExamples: [(String, String)] = [
         ("efface le chien à gauche", #"{"steps":[{"action":"removeObject","target":"dog","spatialHint":"left"}],"reply":"J'efface le chien à gauche.","clarification":null,"language":"fr"}"#),
         ("make it a bit brighter and warmer", #"{"steps":[{"action":"adjust","parameter":"brightness","amountMode":"relative","amount":10},{"action":"adjust","parameter":"temperature","amountMode":"relative","amount":20}],"reply":"A touch brighter and warmer.","clarification":null,"language":"en"}"#),
@@ -139,6 +199,45 @@ public enum IntentPrompt {
         ("ajoute un deuxième son à 10 secondes et baisse la musique à 30 %", #"{"steps":[{"action":"addMusic","seconds":10},{"action":"setVolume","scope":"selection","clipNumber":1,"amountMode":"absolute","amount":30}],"reply":"Deuxième piste à 10 s, musique à 30 %.","clarification":null,"language":"fr"}"#),
     ]
 
+    /// The cards of the operations a request is about, and one example call for the first two.
+    static func requestCards(for utterance: String, context: IntentContext) -> String {
+        let language = NormalizedUtterance(utterance).language
+        let (hints, unknown) = stateHints(context)
+        let query = OperationQuery(text: utterance, domain: context.mode.opDomain, language: language, hints: hints, unknownState: unknown)
+        let retrieved = OperationIndex.shared.retrieve(query, limit: 5)
+        let opLanguage: OpLanguage = language == .english ? .en : .fr
+        let block = OperationCards.turnBlock(retrieved, language: opLanguage, budget: 800)
+        guard !block.isEmpty else { return "" }
+        var lines = [block]
+        for operation in retrieved.prefix(2) {
+            guard let spec = OperationCatalog.shared.spec(operation.id),
+                  let example = spec.examples.first(where: { $0.role == .positive && $0.language == opLanguage }) ?? spec.examples.first(where: { $0.role == .positive }) else { continue }
+            let step = OperationArguments.json(OperationCall(spec.id, args: example.args)).serialized()
+            lines.append("e.g. \"\(example.say)\" → {\"steps\":[\(step)]}")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// What the editor holds, as retrieval reads it, and what it does not report: an operation is
+    /// marked unavailable only for state the context says is missing.
+    static func stateHints(_ context: IntentContext) -> (hints: Set<OpStateHint>, unknown: Set<OpStateHint>) {
+        var hints: Set<OpStateHint> = []
+        var unknown: Set<OpStateHint> = [.captions, .selection]
+        if context.table != nil { hints.insert(.table) }
+        if let scene = context.scene, !scene.texts.isEmpty { hints.insert(.sceneText) }
+        if context.textLayerCount > 0 || (context.layerCount ?? 1) > 1 {
+            hints.insert(.multipleLayers)
+        } else if context.layerCount == nil {
+            unknown.insert(.multipleLayers)
+        }
+        switch context.hasImportedLUT {
+        case true?: hints.insert(.importedLUT)
+        case false?: break
+        case nil: unknown.insert(.importedLUT)
+        }
+        return (hints, unknown)
+    }
+
     /// The facts that change between two requests, sent with each one so a
     /// reused session never answers from a stale playhead or page number.
     public static func stateSummary(context: IntentContext) -> String {
@@ -152,8 +251,14 @@ public enum IntentPrompt {
         }
     }
 
-    public static func userPrompt(for utterance: String, context: IntentContext, hint: EditPlan?) -> String {
+    /// `catalogCards`: the operation cards the request is about (and one example each), for a planner that
+    /// writes catalog operations (the MLX planner; the Foundation Models schema cannot until W2).
+    public static func userPrompt(for utterance: String, context: IntentContext, hint: EditPlan?, catalogCards: Bool = false) -> String {
         var lines: [String] = []
+        if catalogCards, FeatureFlags.isOn(.retrievalCards) {
+            let cards = requestCards(for: utterance, context: context)
+            if !cards.isEmpty { lines.append(cards) }
+        }
         let state = stateSummary(context: context)
         if !state.isEmpty { lines.append(state) }
         if let clarification = context.pendingClarification {

@@ -62,6 +62,9 @@ public struct RawIntentStep: Codable, Sendable, Equatable {
     public var font: String?
     /// Copy the style of: "nearby" (the text next to it) or a scene-map id ("t3").
     public var match: String?
+    /// A catalog operation's arguments (`action` is its id): every key but `action`, coerced.
+    /// `IntentNormalizer.normalize` lowers the step to `EditIntent(.operation)`.
+    public var extra: [String: JSONValue]?
 
     public init(action: String, target: String? = nil, spatialHint: String? = nil, ordinal: Int? = nil, all: Bool? = nil, parameter: String? = nil,
                 amountMode: String? = nil, amount: Double? = nil, look: String? = nil, aspect: String? = nil, degrees: Double? = nil, flipAxis: String? = nil,
@@ -70,7 +73,7 @@ public struct RawIntentStep: Codable, Sendable, Equatable {
                 choiceIndex: Int? = nil, scope: String? = nil, replacement: String? = nil, point: PSPoint? = nil, attributes: [String]? = nil,
                 cells: String? = nil, row: String? = nil, column: String? = nil, values: String? = nil, min: Double? = nil, max: Double? = nil,
                 decimals: Int? = nil, ref: String? = nil, box: PSRect? = nil, size: String? = nil, weight: String? = nil, align: String? = nil,
-                font: String? = nil, match: String? = nil) {
+                font: String? = nil, match: String? = nil, extra: [String: JSONValue]? = nil) {
         self.action = action
         self.target = target
         self.spatialHint = spatialHint
@@ -112,6 +115,7 @@ public struct RawIntentStep: Codable, Sendable, Equatable {
         self.align = align
         self.font = font
         self.match = match
+        self.extra = extra
     }
 }
 
@@ -213,6 +217,13 @@ public enum IntentNormalizer {
     }
 
     public static func normalize(_ step: RawIntentStep, context: IntentContext) -> EditIntent? {
+        // A catalog operation (not an IntentAction name): its arguments, checked against its params.
+        if IntentAction(rawValue: step.action.trimmingCharacters(in: .whitespaces)) == nil, let spec = catalogOperation(named: step.action, mode: context.mode) {
+            var problems: [String] = []
+            let arguments = OperationArguments.coerce(step.extra ?? [:], for: spec.id)
+            guard let call = OperationArguments.validate(spec.id, arguments, domain: context.mode.opDomain, path: "step", problems: &problems), problems.isEmpty else { return nil }
+            return EditIntent(action: .operation, confidence: 0.85, operation: call)
+        }
         guard var action = action(named: step.action) else { return nil }
         // On a photo, "replace this text" is an edit of the text block, never the PDF action.
         let replacesPhotoText = action == .replaceText && context.mode == .photo
@@ -316,8 +327,39 @@ public enum IntentNormalizer {
         if action.isVideoOnly, context.mode != .video { return nil }
         if action.isPhotoOnly, context.mode != .photo { return nil }
         if action.isPDFOnly, context.mode != .pdf { return nil }
-        if action.isPDFOnly, intent.index == nil, let page = intent.clipIndex { intent.index = page }
+        if context.mode == .video {
+            // A clip has no denoise or sharpen of its own: they are its noise reduction and sharpness
+            // (the prompts advertised them, the video executor never ran them). A straighten stays one:
+            // the executor levels the clip from its horizon, or by the angle given, over its quarter turns.
+            switch action {
+            case .denoise, .sharpen:
+                let amount = intent.amount ?? .relative(action == .denoise ? 0.4 : 0.3)
+                intent.action = .adjust
+                intent.parameter = action == .denoise ? .noiseReduction : .sharpness
+                intent.amount = amount.mode == .multiplier ? .relative(0.3) : amount
+            default:
+                break
+            }
+        }
+        if action == .movePage {
+            // The contract the planner guide teaches: clipNumber = the page to move (omitted: the
+            // current page), choiceIndex = where it goes (1-based, -1 = the end). The executor reads
+            // index as the source and clipIndex as the destination.
+            intent.index = step.clipNumber.flatMap { $0 == 0 ? nil : $0 }
+            intent.clipIndex = step.choiceIndex.flatMap { $0 == 0 ? nil : $0 }
+        } else if action.isPDFOnly, intent.index == nil, let page = intent.clipIndex {
+            intent.index = page
+        }
         return intent
+    }
+
+    /// The catalog operation run by a domain handler (IntentAction.operation) that `name` names in this
+    /// editor, when the catalogOps switch is on. Operations that lower to an IntentAction keep its name.
+    public static func catalogOperation(named name: String, mode: EditorMode) -> OperationSpec? {
+        guard FeatureFlags.isOn(.catalogOps) else { return nil }
+        let id = OpID(name.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard let spec = OperationCatalog.shared.spec(id), spec.lowering == .handler, spec.domains.contains(mode.opDomain) else { return nil }
+        return spec
     }
 
     public static func action(named name: String) -> IntentAction? {
@@ -535,6 +577,15 @@ extension RawIntentStep {
     /// The inverse of `IntentNormalizer.normalize`, in the model's own vocabulary: what the action memory
     /// ("last: fillCells text=1 cells=empty") and the ideas show the model.
     public init(intent: EditIntent) {
+        if intent.action == .operation, let call = intent.operation {
+            // A catalog operation reads as the model writes it: its id and its arguments.
+            self.init(action: call.id.raw)
+            if case .object(var object) = OperationArguments.json(call) {
+                object["action"] = nil
+                extra = object.isEmpty ? nil : object
+            }
+            return
+        }
         self.init(action: intent.action.rawValue)
         if let target = intent.target {
             if !(target.label == "object" && target.point != nil) { self.target = target.label }
@@ -578,6 +629,11 @@ extension RawIntentStep {
         clipNumber = intent.clipIndex
         transition = intent.transition?.rawValue
         choiceIndex = intent.index
+        if intent.action == .movePage {
+            // movePage: clipNumber = the page moved, choiceIndex = its new position (see normalize).
+            clipNumber = intent.index
+            choiceIndex = intent.clipIndex
+        }
         scope = intent.scope == .current ? nil : intent.scope.rawValue
         replacement = intent.replacement
         if let table = intent.table {

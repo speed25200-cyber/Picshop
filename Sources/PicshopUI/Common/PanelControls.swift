@@ -80,7 +80,8 @@ struct DialSlider: View {
                 let width = proxy.size.width
                 let centerX = width / 2
                 let markerColor = isNeutralValue ? Color.white : PSTheme.accent
-                Canvas(rendersAsynchronously: true) { context, size in
+                // Drawn with the value it shows: an asynchronous canvas lags the finger by a frame.
+                Canvas(rendersAsynchronously: false) { context, size in
                     let offset = CGFloat((value - range.lowerBound) / unitValue) * pointsPerUnit
                     let count = Int(units)
                     let neutralIndex = Int(((neutral - range.lowerBound) / unitValue).rounded())

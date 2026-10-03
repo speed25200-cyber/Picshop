@@ -20,6 +20,10 @@ public final class AppSettings {
     public var speaksReplies: Bool { didSet { defaults.set(speaksReplies, forKey: "speaksReplies"); VoiceFeedback.shared.isEnabled = speaksReplies } }
     public var hapticsEnabled: Bool { didSet { defaults.set(hapticsEnabled, forKey: "haptics"); Haptics.isEnabled = hapticsEnabled } }
     public var photoExportFormat: ExportOptions.Format { didSet { defaults.set(photoExportFormat.rawValue, forKey: "photoFormat") } }
+    /// Display P3 (the default, the iPhone's own) or sRGB for the web.
+    public var photoExportColorSpace: ExportOptions.ColorSpaceChoice { didSet { defaults.set(photoExportColorSpace.rawValue, forKey: "photoColorSpace") } }
+    /// 'Retirer la position': exports carry no place, in the file or in Photos.
+    public var photoExportRemovesLocation: Bool { didSet { defaults.set(photoExportRemovesLocation, forKey: "photoRemovesLocation") } }
     public var videoExportQuality: VideoExportOptions.Quality { didSet { defaults.set(videoExportQuality.rawValue, forKey: "videoQuality") } }
     public var hasCompletedOnboarding: Bool { didSet { defaults.set(hasCompletedOnboarding, forKey: "onboarded") } }
     /// Large models (Generative Fill, the local brain) download by themselves over Wi‑Fi.
@@ -76,6 +80,8 @@ public final class AppSettings {
         speaksReplies = (defaults.object(forKey: "speaksReplies") as? Bool) ?? false
         hapticsEnabled = (defaults.object(forKey: "haptics") as? Bool) ?? true
         photoExportFormat = ExportOptions.Format(rawValue: defaults.string(forKey: "photoFormat") ?? "") ?? .heic
+        photoExportColorSpace = ExportOptions.ColorSpaceChoice(rawValue: defaults.string(forKey: "photoColorSpace") ?? "") ?? .displayP3
+        photoExportRemovesLocation = defaults.bool(forKey: "photoRemovesLocation")
         videoExportQuality = VideoExportOptions.Quality(rawValue: defaults.string(forKey: "videoQuality") ?? "") ?? .high
         hasCompletedOnboarding = defaults.bool(forKey: "onboarded")
         autoInstallsModels = (defaults.object(forKey: "autoInstallsModels") as? Bool) ?? true

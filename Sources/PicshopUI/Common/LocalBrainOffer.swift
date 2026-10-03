@@ -12,28 +12,45 @@ import PicshopIntent
 /// yet, shows the download's progress, and "Chargement du cerveau…" while the
 /// weights load. A tap opens `LocalBrainOfferSheet` whenever there is something
 /// to decide. A leaf: only this view reads the route and the hub's status.
+///
+/// In the W1 workspace (`inField`) it sits at the end of the Ask field, flat inside
+/// the field's glass (no glass shape of its own over the picture), and shows
+/// 'Sur l'iPhone' when it has nothing to offer.
 struct LocalBrainPill: View {
     let live: LiveSession
     /// The top bar's glass namespace, so the pill melts into its neighbours.
     var glass: Namespace.ID?
 
     @State private var showsSheet = false
+    /// W1 shows the pill only at rest (the offer, the download, the load): during
+    /// Live the brain's name moves to a long press on the orb.
+    var showsWhileLive = true
+    /// Flat, inside the Ask field, with the on-device cue when there is no offer.
+    var inField = false
+
     @AppStorage(LocalBrainPillLook.snoozeKey) private var snoozedUntil: Double = 0
+    @Environment(\.dynamicTypeSize) private var typeSize
     private let hub = LocalBrainHub.shared
 
-    init(live: LiveSession, glass: Namespace.ID? = nil) {
+    init(live: LiveSession, glass: Namespace.ID? = nil, showsWhileLive: Bool = true, inField: Bool = false) {
         self.live = live
         self.glass = glass
+        self.showsWhileLive = showsWhileLive
+        self.inField = inField
     }
 
     var body: some View {
         let isLive = live.isLive
         let offersAtRest = live.canGoLive && Date().timeIntervalSince1970 >= snoozedUntil
-        let look = LocalBrainPillLook.make(status: hub.status, route: isLive ? live.route : nil, offersAtRest: offersAtRest)
+        let look = isLive && !showsWhileLive ? nil
+            : LocalBrainPillLook.make(status: hub.status, route: isLive ? live.route : nil, offersAtRest: offersAtRest)
         ZStack {
             if let look {
                 pill(look)
                     .transition(AnyTransition.opacity.combined(with: .scale(scale: 0.85)))
+            } else if inField, !typeSize.isAccessibilitySize {
+                OnDeviceCue()
+                    .transition(.opacity)
             }
         }
         .animation(PSMotion.morph, value: look?.identity)
@@ -48,11 +65,11 @@ struct LocalBrainPill: View {
             LocalBrainPillLabel(look: look, showsTitle: true)
             LocalBrainPillLabel(look: look, showsTitle: false)
         }
-        .padding(.horizontal, 11)
-        .frame(height: PSMetrics.badge)
-        .psGlass(interactive: look.opensSheet, variant: .clear)
-        .modifier(OptionalGlassID(id: "brain", namespace: glass))
-        .frame(minHeight: PSMetrics.barButton)
+        .padding(.horizontal, inField ? 9 : 11)
+        // Inside the field it keeps to the field's text line, so the dock never grows for it.
+        .frame(height: inField ? 24 : PSMetrics.badge)
+        .modifier(LocalBrainPillSurface(inField: inField, interactive: look.opensSheet, glass: glass))
+        .frame(minHeight: inField ? nil : PSMetrics.barButton)
         .contentShape(Capsule())
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         if look.opensSheet {
@@ -179,7 +196,7 @@ private struct LocalBrainPillLabel: View {
             }
         }
         .font(.caption2.weight(.semibold))
-        .foregroundStyle(look.isWarning ? PSTheme.warning : PSTheme.textPrimary)
+        .foregroundStyle(look.isWarning ? Color.psWarning : Color.psTextPrimary)
     }
 
     @ViewBuilder
@@ -187,7 +204,7 @@ private struct LocalBrainPillLabel: View {
         switch look.accessory {
         case .symbol(let name):
             Image(systemName: name)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.caption2.weight(.semibold))
                 .symbolRenderingMode(.hierarchical)
                 .contentTransition(.symbolEffect(.replace))
         case .ring(let progress):
@@ -196,7 +213,7 @@ private struct LocalBrainPillLabel: View {
         case .spinner:
             ProgressView()
                 .controlSize(.mini)
-                .tint(PSTheme.textPrimary)
+                .tint(Color.psTextPrimary)
                 .frame(width: 12, height: 12)
         }
     }
@@ -209,14 +226,31 @@ struct LocalBrainRing: View {
 
     var body: some View {
         ZStack {
-            Circle().stroke(Color.white.opacity(0.18), lineWidth: lineWidth)
+            Circle().stroke(Color.psStrokeStrong, lineWidth: lineWidth)
             Circle()
                 .trim(from: 0, to: CGFloat(max(0.03, min(1, progress))))
-                .stroke(PSTheme.textPrimary, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .stroke(Color.psTextPrimary, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
         }
         .animation(PSMotion.standard, value: progress)
         .accessibilityHidden(true)
+    }
+}
+
+/// Clear glass in the top bar; a flat chip inside the Ask field's glass (no glass on glass).
+private struct LocalBrainPillSurface: ViewModifier {
+    let inField: Bool
+    let interactive: Bool
+    let glass: Namespace.ID?
+
+    func body(content: Content) -> some View {
+        if inField {
+            content.psChipFill(Capsule())
+        } else {
+            content
+                .psGlass(interactive: interactive, variant: .clear)
+                .modifier(OptionalGlassID(id: "brain", namespace: glass))
+        }
     }
 }
 
@@ -306,24 +340,25 @@ private struct LocalBrainOfferContent: View {
         ScrollView {
             VStack(spacing: 16) {
                 Image(systemName: "brain")
-                    .font(.system(size: 40, weight: .regular))
+                    .font(.largeTitle)
+                    .imageScale(.large)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(PSTheme.textPrimary)
+                    .foregroundStyle(Color.psTextPrimary)
                     .accessibilityHidden(true)
                 Text(title(status))
                     .font(.title3.weight(.semibold))
-                    .foregroundStyle(PSTheme.textPrimary)
+                    .foregroundStyle(Color.psTextPrimary)
                     .multilineTextAlignment(.center)
                     .accessibilityAddTraits(.isHeader)
                 Text(explanation(status))
                     .font(.subheadline)
-                    .foregroundStyle(PSTheme.textSecondary)
+                    .foregroundStyle(Color.psTextSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                 if let model = status.model, status.downloadBytes > 0 {
                     Text(verbatim: "\(model.displayName) · \(LocalBrainText.size(status.downloadBytes))")
                         .font(PSFont.mono(12))
-                        .foregroundStyle(PSTheme.textTertiary)
+                        .foregroundStyle(Color.psTextTertiary)
                 }
                 progress(status)
                 actions(status)
@@ -369,22 +404,22 @@ private struct LocalBrainOfferContent: View {
         case .downloading(let progress):
             VStack(spacing: 6) {
                 ProgressView(value: min(max(progress, 0), 1))
-                    .tint(PSTheme.textPrimary)
+                    .tint(Color.psTextPrimary)
                 Text(LocalBrainText.phase(status.phase))
                     .font(PSFont.caption(12).monospacedDigit())
-                    .foregroundStyle(PSTheme.textSecondary)
+                    .foregroundStyle(Color.psTextSecondary)
                     .contentTransition(.numericText())
             }
             .frame(maxWidth: 280)
         case .verifying, .loading:
             HStack(spacing: 8) {
-                ProgressView().controlSize(.small).tint(PSTheme.textPrimary)
-                Text(LocalBrainText.phase(status.phase)).font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
+                ProgressView().controlSize(.small).tint(Color.psTextPrimary)
+                Text(LocalBrainText.phase(status.phase)).font(PSFont.caption(12)).foregroundStyle(Color.psTextSecondary)
             }
         case .failed(let message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .font(.footnote)
-                .foregroundStyle(PSTheme.warning)
+                .foregroundStyle(Color.psWarning)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         default:
@@ -438,7 +473,7 @@ private struct LocalBrainOfferContent: View {
         Button(action: action) {
             Text(title)
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(PSTheme.textSecondary)
+                .foregroundStyle(Color.psTextSecondary)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .contentShape(Rectangle())
         }
@@ -555,31 +590,31 @@ struct OnboardingBrainChoice: View {
             Toggle(isOn: $downloads) {
                 HStack(spacing: 12) {
                     Image(systemName: "brain")
-                        .font(.system(size: 20, weight: .regular))
+                        .font(PSFont.glyph(.dock, weight: .regular))
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(PSTheme.textPrimary)
+                        .foregroundStyle(Color.psTextPrimary)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(L("Download the local brain over Wi‑Fi"))
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(PSTheme.textPrimary)
+                            .foregroundStyle(Color.psTextPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                         Text(verbatim: "\(model.displayName) · \(LocalBrainText.size(status.downloadBytes))")
                             .font(PSFont.caption(12))
-                            .foregroundStyle(PSTheme.textSecondary)
+                            .foregroundStyle(Color.psTextSecondary)
                     }
                 }
             }
-            .tint(PSTheme.success)
+            .tint(Color.psSuccess)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .psCard(cornerRadius: PSRadius.onboardingCard, shadow: false)
+            .psCard(cornerRadius: PSRadius.card, shadow: false)
             .frame(maxWidth: 360)
             .padding(.top, PSSpacing.large)
         } else if case .unsupported = status.phase, status.decision.reason == .notEnoughMemory {
             Text(LocalBrainText.reason(.notEnoughMemory))
                 .font(.footnote)
-                .foregroundStyle(PSTheme.textSecondary)
+                .foregroundStyle(Color.psTextSecondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 330)

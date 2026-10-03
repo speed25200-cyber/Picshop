@@ -109,6 +109,40 @@ struct StudioActions {
     /// Back to the document as imported; nil hides the menu item.
     var revert: (() -> Void)?
     var export: () -> Void
+    /// The title's zoom menu (Ajuster, 200 %, 400 %); nil hides it.
+    var zoom: ((StudioZoom) -> Void)? = nil
+}
+
+/// What the top bar's centre names in the W1 workspace: the document and its zoom.
+struct StudioContext: Equatable {
+    var title: String
+    /// The zoom to show when no StudioZoomMirror is in the environment; nil hides it.
+    var zoomPercent: Int?
+}
+
+/// A choice in the title's zoom menu.
+enum StudioZoom: Equatable {
+    /// The whole picture between the bars (100 %).
+    case fit
+    /// A zoom relative to fit.
+    case percent(Int)
+
+    /// The menu's zoom levels besides Ajuster.
+    static let levels = [200, 400]
+}
+
+/// The canvas's zoom as a whole percentage of fit, for the title. The canvas
+/// writes it (ZoomBadge), only the title reads it, so a pinch redraws the
+/// title and nothing else.
+@MainActor
+@Observable
+final class StudioZoomMirror {
+    var percent: Int? = 100
+
+    func report(_ zoom: CGFloat) {
+        let value = Int((zoom * 100).rounded())
+        if percent != value { percent = value }
+    }
 }
 
 /// The one editor shell for photo, video and PDF: a full-bleed black canvas,
@@ -120,13 +154,29 @@ struct StudioActions {
 /// The canvas reads `studioEdges` to fit its picture between the bars; it
 /// ignores the keyboard, and the edges come from the bars' sizes, not from
 /// where the keyboard pushes them, so typing never moves the picture.
+///
+/// The W1 workspace (studioWorkspace) is on when the editor passes a
+/// `context`: the top bar's centre names the document and its zoom, the
+/// compare button joins Undo and Redo in one glass shape, the tool rail sits
+/// above the dock (`showsRail`), panels become three-height inspectors, and the
+/// brain's download offer sits at the end of the Ask field. At rest the screen
+/// holds six glass shapes: Close, the history union, Export, the rail, the ideas
+/// union and the field. Editors that pass none of these get the W0 shell unchanged.
 struct StudioChrome<Canvas: View, Panel: View>: View {
     let bar: StudioBar
     let actions: StudioActions
     let live: LiveSession
     let catalog: () -> ToolCatalog
+    /// The rail's panels when building them is cheaper than the whole catalog (no Magic actions);
+    /// nil reads them from `catalog`.
+    var rail: (() -> ToolCatalog)?
     let isToolOpen: Bool
     var candidateThumbnail: ((Int) async -> UIImage?)?
+    var context: StudioContext?
+    var compare: CompareControl?
+    /// The open panel's id, for the rail's selection.
+    var openToolID: String?
+    var showsRail: Bool
     let canvas: Canvas
     let panel: Panel
 
@@ -137,21 +187,32 @@ struct StudioChrome<Canvas: View, Panel: View>: View {
     @State private var showsHistory = false
     @State private var pendingAction: (() -> Void)?
     @State private var keyboardVisible = false
+    @State private var inspector = StudioInspectorState()
     @Namespace private var toolsNamespace
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(bar: StudioBar, actions: StudioActions, live: LiveSession, catalog: @escaping () -> ToolCatalog, isToolOpen: Bool,
+    init(bar: StudioBar, actions: StudioActions, live: LiveSession, catalog: @escaping () -> ToolCatalog, rail: (() -> ToolCatalog)? = nil,
+         isToolOpen: Bool,
          candidateThumbnail: ((Int) async -> UIImage?)? = nil,
+         context: StudioContext? = nil, compare: CompareControl? = nil, openToolID: String? = nil, showsRail: Bool = false,
          @ViewBuilder canvas: () -> Canvas, @ViewBuilder panel: () -> Panel) {
         self.bar = bar
         self.actions = actions
         self.live = live
         self.catalog = catalog
+        self.rail = rail
         self.isToolOpen = isToolOpen
         self.candidateThumbnail = candidateThumbnail
+        self.context = context
+        self.compare = compare
+        self.openToolID = openToolID
+        self.showsRail = showsRail
         self.canvas = canvas()
         self.panel = panel()
     }
+
+    /// The W1 workspace: the editor named its document.
+    private var isStudio: Bool { context != nil }
 
     var body: some View {
         GeometryReader { proxy in
@@ -174,25 +235,39 @@ struct StudioChrome<Canvas: View, Panel: View>: View {
                 // Empty space in the stack is not hit-testable: the canvas
                 // keeps every touch between the bars.
                 VStack(spacing: 0) {
-                    StudioTopBar(bar: bar, actions: actions, live: live)
+                    StudioTopBar(bar: bar, actions: actions, live: live, context: context, compare: compare)
                         .padding(.top, extraTop)
                         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { topEdge = $0 }
                     Spacer(minLength: 0)
-                    // Dock and panel overlap while one replaces the other.
-                    ZStack(alignment: .bottom) { bottom }
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomHeight = $0 }
-                        .padding(.bottom, keyboardVisible ? 8 : restingBottom)
+                    VStack(spacing: PSSpacing.small) {
+                        if showsRail, !(isToolOpen && inspector.detent == .full) {
+                            StudioRailHost(catalog: rail ?? catalog, openToolID: isToolOpen ? openToolID : nil, onAllTools: openTools)
+                                .padding(.horizontal, PSSpacing.editorSide)
+                                .frame(maxWidth: 620)
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
+                        // Dock and panel overlap while one replaces the other.
+                        ZStack(alignment: .bottom) { bottom }
+                    }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomHeight = $0 }
+                    .padding(.bottom, keyboardVisible ? 8 : restingBottom)
                 }
                 .ignoresSafeArea(.container, edges: .bottom)
+                // W1: the local brain's offer and download sit at the end of the Ask field
+                // (LiveDock, flat in the field's glass), not in a glass badge over the picture.
             }
             .environment(\.studioCompact, screenHeight <= 700)
             .environment(\.studioPanelMaxHeight, screenHeight * 0.46)
+            .environment(\.studioScreenHeight, screenHeight)
+            .environment(\.studioInspectorFullHeight, max(PSMetrics.inspectorCompact, screenHeight - topEdge - 24 - restingBottom))
+            .environment(\.studioInspector, isStudio ? inspector : nil)
         }
-        .background(PSTheme.canvas.ignoresSafeArea())
+        .background(Color.psCanvas.ignoresSafeArea())
         .environment(\.studioToolsNamespace, StudioChromeIDs.zoomsToolsSheet ? toolsNamespace : nil)
-        .animation(reduceMotion ? .easeInOut(duration: 0.25) : PSMotion.standard, value: isToolOpen)
+        .animation(reduceMotion ? PSSpring.fade : PSSpring.standard, value: isToolOpen)
+        .animation(reduceMotion ? PSSpring.fade : PSSpring.standard, value: inspector.detent)
         .sheet(isPresented: $showsTools, onDismiss: runPendingAction) {
-            ToolsSheet(catalog: sheetCatalog(), onPick: pick)
+            ToolsSheet(catalog: sheetCatalog(), onPick: pick, onAsk: isStudio ? { text in live.send(text: text) } : nil)
                 .modifier(ToolsZoomTransition(namespace: StudioChromeIDs.zoomsToolsSheet ? toolsNamespace : nil))
         }
         .background {
@@ -217,7 +292,8 @@ struct StudioChrome<Canvas: View, Panel: View>: View {
                 }
                 .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.move(edge: .bottom).combined(with: .opacity))
         } else {
-            LiveDock(live: live, onTools: openTools, candidateThumbnail: candidateThumbnail)
+            LiveDock(live: live, onTools: openTools, candidateThumbnail: candidateThumbnail,
+                     showsToolsButton: !showsRail, showsOnDeviceCue: isStudio)
                 .transition(.opacity)
         }
     }
@@ -292,36 +368,135 @@ private struct StudioHistoryPresenter: View {
 
 // MARK: - Top bar
 
-/// Close, the brain pill, then Undo (with Redo after an undo) and Export.
-/// 44 points tall, 4 below the safe area. The pill (LocalBrainOffer.swift)
-/// names Live's brain while it runs and offers the local brain at rest; it
-/// sits here so the dock and the picture never move for it.
+/// W0: Close, the brain pill, then Undo (with Redo after an undo) and Export.
+/// W1 (a `context`): Close, the document's title and zoom, then Compare, Undo
+/// and Redo in one glass shape, and Export. 44 points tall, 4 below the safe
+/// area. The W0 pill (LocalBrainOffer.swift) names Live's brain while it runs
+/// and offers the local brain at rest; in W1 the brain shows on a long press
+/// of the orb and its offer sits at the end of the Ask field.
 struct StudioTopBar: View {
     let bar: StudioBar
     let actions: StudioActions
     let live: LiveSession
+    var context: StudioContext?
+    var compare: CompareControl?
     @Namespace private var glass
 
+    /// Compare, Undo and Redo melt into one glass shape.
+    private static let historyUnion = "history"
+
     var body: some View {
-        PSGlassContainer(spacing: 8) {
-            HStack(spacing: 8) {
+        PSGlassContainer(spacing: PSSpacing.small) {
+            HStack(spacing: PSSpacing.small) {
                 PSCircleButton(systemImage: "xmark", accessibilityLabel: L("Close"), action: actions.close)
                     .glassEffectID("close", in: glass)
                 Spacer(minLength: 4)
-                // Takes its full width first; it shrinks to its symbol when the bar is short.
-                LocalBrainPill(live: live, glass: glass)
-                    .layoutPriority(1)
+                if let context {
+                    StudioContextMenu(context: context, onZoom: actions.zoom)
+                        .layoutPriority(1)
+                } else {
+                    // Takes its full width first; it shrinks to its symbol when the bar is short.
+                    LocalBrainPill(live: live, glass: glass)
+                        .layoutPriority(1)
+                }
                 Spacer(minLength: 4)
-                UndoRedoCluster(bar: bar, actions: actions, glass: glass)
-                // Never truncated by the pill, whatever its words.
+                if let compare {
+                    CompareButton(control: compare)
+                        .glassEffectID("compare", in: glass)
+                        .glassEffectUnion(id: Self.historyUnion, namespace: glass)
+                }
+                UndoRedoCluster(bar: bar, actions: actions, glass: glass, unionID: compare != nil ? Self.historyUnion : nil)
+                // Never truncated by the centre, whatever its words.
                 PSCapsuleButton(L("Export"), action: actions.export)
                     .fixedSize(horizontal: true, vertical: false)
             }
         }
         .padding(.horizontal, PSSpacing.editorSide)
         .padding(.top, 4)
-        .frame(height: PSMetrics.barButton + 4, alignment: .bottom)
+        .frame(height: PSMetrics.topBar, alignment: .bottom)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    }
+}
+
+/// The top bar's centre in W1: the document's title over its zoom (a whole
+/// percentage of fit, from StudioZoomMirror). A tap opens Ajuster, 200 %,
+/// 400 %. Plain text over the bar's scrim, not glass. A leaf: a pinch
+/// redraws only this.
+struct StudioContextMenu: View {
+    let context: StudioContext
+    var onZoom: ((StudioZoom) -> Void)?
+    @Environment(StudioZoomMirror.self) private var mirror: StudioZoomMirror?
+
+    var body: some View {
+        let percent = mirror?.percent ?? context.zoomPercent
+        if let onZoom {
+            Menu {
+                Button {
+                    onZoom(.fit)
+                } label: {
+                    Label(L("Fit"), systemImage: "arrow.down.right.and.arrow.up.left")
+                }
+                ForEach(StudioZoom.levels, id: \.self) { level in
+                    Button(Self.format(level)) { onZoom(.percent(level)) }
+                }
+            } label: {
+                label(percent: percent, showsChevron: true)
+            }
+            .menuStyle(.button)
+            .buttonStyle(PSPressStyle(scale: 0.97))
+            .accessibilityHint(L("Zoom options"))
+        } else {
+            label(percent: percent, showsChevron: false)
+        }
+    }
+
+    private func label(percent: Int?, showsChevron: Bool) -> some View {
+        VStack(spacing: 0) {
+            Text(context.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.psTextPrimary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            if let percent {
+                HStack(spacing: 3) {
+                    Text(Self.format(percent))
+                        .contentTransition(.numericText())
+                    if showsChevron {
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                    }
+                }
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(Color.psTextSecondary)
+                .animation(PSSpring.numeric, value: percent)
+            }
+        }
+        .frame(minHeight: PSMetrics.barButton)
+        .padding(.horizontal, PSSpacing.xSmall)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(context.title)
+        .accessibilityValue(percent.map { String(format: L("Zoom %@"), Self.format($0)) } ?? "")
+    }
+
+    /// 150 % in French, 150% in English.
+    static func format(_ percent: Int) -> String {
+        (Double(percent) / 100).formatted(.percent.precision(.fractionLength(0)))
+    }
+}
+
+/// Feeds the rail with the editor's catalog. A leaf: it alone reads the
+/// session state the catalog is built from (the yellow dots).
+private struct StudioRailHost: View {
+    let catalog: () -> ToolCatalog
+    let openToolID: String?
+    let onAllTools: () -> Void
+
+    var body: some View {
+        let built = catalog()
+        ToolRail(items: built.railItems, selectedID: openToolID, onSelect: { id in
+            if case .panel(_, _, _, _, let open)? = catalog().panel(id: id) { open() }
+        }, onAllTools: onAllTools)
     }
 }
 
@@ -332,6 +507,8 @@ private struct UndoRedoCluster: View {
     let bar: StudioBar
     let actions: StudioActions
     let glass: Namespace.ID
+    /// Melts Undo and Redo into the compare button's glass (W1).
+    var unionID: String? = nil
 
     @State private var showsRedo = false
     @State private var redoToken = 0
@@ -344,6 +521,7 @@ private struct UndoRedoCluster: View {
         HStack(spacing: 8) {
             undoMenu
                 .glassEffectID("undo", in: glass)
+                .glassEffectUnion(id: unionID, namespace: glass)
             if showsRedo, bar.canRedo {
                 PSCircleButton(systemImage: "arrow.uturn.forward", accessibilityLabel: L("Redo")) {
                     actions.redo()
@@ -351,6 +529,7 @@ private struct UndoRedoCluster: View {
                 }
                 .disabled(bar.isBusy)
                 .glassEffectID("redo", in: glass)
+                .glassEffectUnion(id: unionID, namespace: glass)
                 .transition(AnyTransition.opacity.combined(with: .scale(scale: 0.8)))
             }
         }
@@ -401,8 +580,8 @@ private struct UndoRedoCluster: View {
             }
         } label: {
             Image(systemName: "arrow.uturn.backward")
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(PSTheme.textPrimary)
+                .font(PSFont.glyph(.bar))
+                .foregroundStyle(Color.psTextPrimary)
                 .frame(width: PSMetrics.barButton, height: PSMetrics.barButton)
                 .contentShape(Circle())
                 .psGlass(interactive: true, shape: AnyShape(Circle()))
@@ -443,10 +622,10 @@ struct StudioHistorySheet: View {
                         } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: index == labels.count - 1 ? "circle.inset.filled" : "circle")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(PSTheme.textTertiary)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Color.psTextTertiary)
                                 Text(String(format: L("Before “%@”"), LD(label)))
-                                    .foregroundStyle(PSTheme.textPrimary)
+                                    .foregroundStyle(Color.psTextPrimary)
                             }
                         }
                     }
@@ -497,11 +676,11 @@ private struct StudioChromePreview: View {
                         .aspectRatio(3 / 4, contentMode: .fit)
                 } panel: {
                     ToolPanel(title: "Réglages", live: live, onDone: { toolOpen = false }) {
-                        Text(verbatim: "Contenu du panneau").foregroundStyle(PSTheme.textSecondary).frame(height: 120)
+                        Text(verbatim: "Contenu du panneau").foregroundStyle(Color.psTextSecondary).frame(height: 120)
                     }
                 }
             } else {
-                PSTheme.canvas
+                Color.psCanvas
             }
         }
         .onAppear { if live == nil { live = LiveSession.preview(scenario) } }

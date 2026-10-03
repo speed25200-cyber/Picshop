@@ -1,0 +1,4 @@
+# Files under Sources/PicshopUI or App that call findString(, PDFComposer.compose( or
+# createCGImage( off the main thread. One path per line, then the reason.
+Sources/PicshopUI/Library/HomeView.swift   the Home glow is rasterised inside Task.detached (makeGlow)
+Sources/PicshopUI/Theme/GrainTile.swift   the grain tile is made once in a nonisolated function run by Task.detached

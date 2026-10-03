@@ -22,7 +22,9 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
 
     // MARK: Import
 
-    /// Copies a PDF into a new project package and reads its page sizes.
+    /// Copies a PDF into a new project package and reads its page sizes. A password-protected
+    /// PDF is imported as it is: the editor asks for its password when it opens
+    /// (`isLocked`, `unlock`), and its pages are read then.
     public static func importDocument(from sourceURL: URL, store: ProjectStore, title: String) throws -> PDFDocumentModel {
         let id = UUID()
         try store.createPackage(for: id)
@@ -32,23 +34,44 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
         let accessing = sourceURL.startAccessingSecurityScopedResource()
         defer { if accessing { sourceURL.stopAccessingSecurityScopedResource() } }
         try FileManager.default.copyItem(at: sourceURL, to: destination)
-        guard let document = PDFDocument(url: destination), document.pageCount > 0 else { throw PicshopError.mediaUnavailable(sourceURL.lastPathComponent) }
-        let sizes = (0..<document.pageCount).map { index -> PSSize in
-            let page = document.page(at: index)
-            return PSSize(page?.bounds(for: .mediaBox).size ?? CGSize(width: 595, height: 842))
-        }
+        guard let document = PDFDocument(url: destination) else { throw PicshopError.mediaUnavailable(sourceURL.lastPathComponent) }
+        let locked = document.isLocked
+        guard locked || document.pageCount > 0 else { throw PicshopError.mediaUnavailable(sourceURL.lastPathComponent) }
+        // Locked: one placeholder page until the password is given (the editor reads the real ones then).
+        let sizes = locked && document.pageCount == 0 ? [PSSize(width: 595, height: 842)] : pageSizes(of: document)
         let asset = MediaAsset(kind: .image, relativePath: relative, pixelSize: sizes.first ?? .zero, origin: .file)
         var model = PDFDocumentModel(title: title, sourceAsset: asset, pageSizes: sizes)
         model.id = id
-        // Keep the original page rotation so display rotation stays additive.
-        for index in model.pages.indices {
-            if let page = document.page(at: index) { model.pages[index].rotation = 0; _ = page }
-        }
-        if let first = document.page(at: 0) {
+        if !locked, let first = document.page(at: 0) {
             let thumb = first.thumbnail(of: CGSize(width: 512, height: 512), for: .mediaBox)
             if let cg = thumb.cgImage { ThumbnailGenerator.writeThumbnail(image: cg, projectID: id, store: store) }
         }
         return model
+    }
+
+    static func pageSizes(of document: PDFDocument) -> [PSSize] {
+        (0..<document.pageCount).map { index -> PSSize in
+            PSSize(document.page(at: index)?.bounds(for: .mediaBox).size ?? CGSize(width: 595, height: 842))
+        }
+    }
+
+    // MARK: Passwords
+
+    /// Whether the document's source PDF still needs its password.
+    public func isLocked(_ model: PDFDocumentModel) -> Bool {
+        document(for: model.sourceAsset)?.isLocked ?? false
+    }
+
+    /// Opens the source PDF with `password`: its page sizes, or nil when the password is wrong.
+    /// The password is kept in this device's Keychain, so the project opens without it next time.
+    public func unlock(_ model: PDFDocumentModel, password: String) -> [PSSize]? {
+        guard let document = document(for: model.sourceAsset) else { return nil }
+        if document.isLocked {
+            guard document.unlock(withPassword: password) else { return nil }
+            PDFPasswordStore.save(password, projectID: projectID, path: model.sourceAsset.relativePath)
+        }
+        let sizes = Self.pageSizes(of: document)
+        return sizes.isEmpty ? nil : sizes
     }
 
     // MARK: Documents
@@ -58,6 +81,10 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
         defer { lock.unlock() }
         if let cached = documents[asset.relativePath] { return cached }
         let document = PDFDocument(url: store.url(for: asset.relativePath, in: projectID))
+        // A protected PDF opened once: its password is in the Keychain.
+        if let document, document.isLocked, let password = PDFPasswordStore.password(projectID: projectID, path: asset.relativePath) {
+            _ = document.unlock(withPassword: password)
+        }
         documents[asset.relativePath] = document
         return document
     }
@@ -82,7 +109,13 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
     // MARK: PDFAIServices
 
     public func findText(_ query: String, in model: PDFDocumentModel, pageIndex: Int?) async throws -> [PDFTextHit] {
-        guard let composed = compose(model) else { throw PicshopError.mediaUnavailable("pdf") }
+        try findTextNow(query, in: model, pageIndex: pageIndex)
+    }
+
+    /// `findText` on the caller's thread: the background worker runs it on its own executor, so
+    /// this service's PDFKit objects never meet another thread.
+    public func findTextNow(_ query: String, in model: PDFDocumentModel, pageIndex: Int?, composed provided: PDFDocument? = nil) throws -> [PDFTextHit] {
+        guard let composed = provided ?? compose(model) else { throw PicshopError.mediaUnavailable("pdf") }
         let selections = composed.findString(query, withOptions: [.caseInsensitive])
         var hits: [PDFTextHit] = []
         for selection in selections {
@@ -185,14 +218,21 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
     }
 
     public func extractPage(_ pageIndex: Int, from model: PDFDocumentModel) async throws -> MediaAsset {
-        guard let composed = compose(model), let page = composed.page(at: pageIndex) else { throw PicshopError.mediaUnavailable("page") }
+        let (asset, url) = try renderPageFile(pageIndex, from: model)
+        try await PhotoLibrary.save(imageAt: url)
+        return asset
+    }
+
+    /// The page as a JPEG in the package (PDFKit work, on the caller's thread); Photos comes after.
+    public func renderPageFile(_ pageIndex: Int, from model: PDFDocumentModel, composed provided: PDFDocument? = nil) throws -> (MediaAsset, URL) {
+        guard let composed = provided ?? compose(model), let page = composed.page(at: pageIndex) else { throw PicshopError.mediaUnavailable("page") }
         let image = render(page: page, longestSide: 2400)
         try store.createPackage(for: projectID)
         let url = store.mediaURL(for: projectID).appendingPathComponent("page-\(pageIndex + 1)-\(UUID().uuidString).jpg")
         guard let cg = image.cgImage else { throw PicshopError.renderFailed("page render") }
         try ImageSupport.write(cg, to: url, type: .jpeg, quality: 0.95)
-        try await PhotoLibrary.save(imageAt: url)
-        return MediaAsset(kind: .image, relativePath: "\(Project.mediaDirectory)/\(url.lastPathComponent)", pixelSize: PSSize(width: Double(cg.width), height: Double(cg.height)), origin: .generated)
+        let asset = MediaAsset(kind: .image, relativePath: "\(Project.mediaDirectory)/\(url.lastPathComponent)", pixelSize: PSSize(width: Double(cg.width), height: Double(cg.height)), origin: .generated)
+        return (asset, url)
     }
 
     public func signatureAsset() async -> MediaAsset? {
@@ -220,34 +260,23 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
 
     // MARK: Export
 
-    /// Exports a flattened PDF: page content stays vector/text, every markup
-    /// (including image and signature stamps, which have no appearance stream
-    /// through PDFKit) is drawn into the page.
-    public func export(_ model: PDFDocumentModel) throws -> URL {
-        guard let composed = compose(model) else { throw PicshopError.exportFailed("compose") }
+    /// Exports the document through `PDFDocument.write(to:withOptions:)` (see `PDFExporter`):
+    /// the outline, links, form fields and metadata are kept; marks stay annotations unless
+    /// `options.flattenAnnotations`; redacted pages are rasterized with an OCR text layer that
+    /// leaves the redacted words out, and pages with replaced words too under
+    /// `options.flattenModifiedPages`. `options` nil: the document's defaults.
+    public func export(_ model: PDFDocumentModel, options: PDFExportOptions? = nil) throws -> URL {
+        guard let original = document(for: model.sourceAsset) else { throw PicshopError.exportFailed("source") }
+        guard !original.isLocked else { throw PicshopError.exportFailed("locked") }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("exports", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let name = model.title.replacingOccurrences(of: "/", with: "-")
         let url = directory.appendingPathComponent("\(name).pdf")
         try? FileManager.default.removeItem(at: url)
-        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 595, height: 842))
-        try renderer.writePDF(to: url) { context in
-            for index in 0..<composed.pageCount {
-                guard let page = composed.page(at: index) else { continue }
-                let box = page.bounds(for: .mediaBox)
-                let rotated = page.rotation % 180 != 0
-                let size = rotated ? CGSize(width: box.height, height: box.width) : box.size
-                context.beginPage(withBounds: CGRect(origin: .zero, size: size), pageInfo: [:])
-                let cg = context.cgContext
-                cg.saveGState()
-                // UIKit PDF contexts are top-left; PDFKit draws in bottom-left page space.
-                cg.translateBy(x: 0, y: size.height)
-                cg.scaleBy(x: 1, y: -1)
-                cg.concatenate(page.transform(for: .mediaBox))
-                page.draw(with: .mediaBox, to: cg)
-                cg.restoreGState()
-            }
-        }
+        let exporter = PDFExporter(model: model, original: original, options: options ?? .defaults(for: model),
+                                   sources: { [weak self] asset in self?.document(for: asset) },
+                                   resolveImage: { [weak self] asset in self?.resolvedImage(for: asset) })
+        try exporter.write(to: url)
         return url
     }
 
@@ -259,7 +288,10 @@ public final class PDFEditingService: PDFAIServices, @unchecked Sendable {
         let accessing = sourceURL.startAccessingSecurityScopedResource()
         defer { if accessing { sourceURL.stopAccessingSecurityScopedResource() } }
         try FileManager.default.copyItem(at: sourceURL, to: destination)
-        guard let document = PDFDocument(url: destination) else { throw PicshopError.mediaUnavailable(sourceURL.lastPathComponent) }
+        guard let document = PDFDocument(url: destination), !document.isLocked else {
+            try? FileManager.default.removeItem(at: destination)
+            throw PicshopError.mediaUnavailable(sourceURL.lastPathComponent)
+        }
         let asset = MediaAsset(kind: .image, relativePath: relative, pixelSize: .zero, origin: .file)
         return (0..<document.pageCount).map { index in
             PDFPageModel(source: .imported(asset, index: index), size: PSSize(document.page(at: index)?.bounds(for: .mediaBox).size ?? CGSize(width: 595, height: 842)))

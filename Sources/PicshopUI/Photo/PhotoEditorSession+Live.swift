@@ -63,6 +63,9 @@ extension PhotoEditorSession: LiveEditingHost {
         // model reads are the ones its steps resolve against.
         state.table = liveTable
         state.sceneMap = liveSceneMap
+        // The retrieved cards mark the layer and LUT operations unavailable without these.
+        state.layerCount = document.layers.count
+        state.hasImportedLUT = document.activeLayerHasLUT
         state.hasGenerativeEngine = hasGenerativeEngine
         state.canUndo = canUndo
         state.busyTitle = isProcessing && !processingTitle.isEmpty ? processingTitle : nil

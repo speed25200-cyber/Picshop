@@ -405,8 +405,12 @@ public final class LocalBrainHub {
                 guard let directory = await models.languageModelDirectory(for: id) else {
                     throw LiveBrainError.modelUnavailable("files missing")
                 }
-                // Never on the main actor: the weights are gigabytes.
-                try await Task.detached(priority: .userInitiated) {
+                // Never on the main actor: the weights are gigabytes. Opening an editor loads them
+                // at utility priority (after its first pixels); Live waiting for them, at once.
+                let priority: TaskPriority = reason == "editor" ? .utility : .userInitiated
+                let signpost = PSSignpost.begin("llm.load", "\(id) (\(reason))")
+                defer { PSSignpost.end(signpost) }
+                try await Task.detached(priority: priority) {
                     try await runtime.load(entry.info, from: directory)
                 }.value
                 try Task.checkCancellation()

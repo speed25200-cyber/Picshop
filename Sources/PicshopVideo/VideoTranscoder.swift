@@ -193,11 +193,10 @@ public enum VideoTranscoder {
         guard let buffer else { throw PicshopError.renderFailed("still buffer") }
         let canvas = CGRect(x: 0, y: 0, width: width, height: height)
         RenderContext.export.render(image.cropped(to: canvas), to: buffer, bounds: canvas, colorSpace: RenderContext.colorSpace)
-        let frames = max(2, Int((duration * frameRate).rounded()))
-        let frameDuration = CMTime(value: 1, timescale: CMTimeScale(frameRate.rounded()))
+        let frames = max(2, Int((duration * FrameRate.exact(frameRate)).rounded()))
         for i in 0..<frames {
             while !input.isReadyForMoreMediaData { try await Task.sleep(for: .milliseconds(4)) }
-            adaptor.append(buffer, withPresentationTime: CMTimeMultiply(frameDuration, multiplier: Int32(i)))
+            adaptor.append(buffer, withPresentationTime: VideoTime.frameTime(i, fps: frameRate))
         }
         input.markAsFinished()
         await writer.finishWriting()

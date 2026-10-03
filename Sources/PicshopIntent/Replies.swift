@@ -136,8 +136,38 @@ public enum Replies {
             return fr ? (scope == "les cases" ? "Je surligne le tableau." : "Je surligne \(scope).") : (scope == "the cells" ? "Highlighting the table." : "Highlighting \(scope).")
         case .eraseRegion: return fr ? "J'efface cette zone." : "Erasing that area."
         case .moveText: return fr ? "Je déplace le texte." : "Moving the text."
+        case .operation:
+            // The catalog operation's own title, in the user's language.
+            guard let title = operationTitle(intent.operation, french: fr) else { return fr ? "C'est fait." : "Done." }
+            return fr ? "\(title) : c'est fait." : "\(title): done."
         case .unknown: return fr ? "Je n'ai pas compris. Tu peux reformuler ?" : "I didn't catch that. Could you rephrase?"
         }
+    }
+
+    /// The catalog title of a call ("Courbes", "Curves"); the id when the catalog lacks it.
+    public static func operationTitle(_ call: OperationCall?, french: Bool) -> String? {
+        guard let call else { return nil }
+        return OperationCatalog.shared.spec(call.id)?.title(french ? .fr : .en) ?? call.id.raw
+    }
+
+    /// The honest answer for an operation only the language model reaches (the grammar does not own
+    /// its words): not done, and the panel that does it. `modelTried`: a model was asked and failed.
+    public static func notByVoice(_ id: OpID, french: Bool, modelTried: Bool = false) -> String {
+        let spec = OperationCatalog.shared.spec(id)
+        let title = spec?.title(french ? .fr : .en) ?? id.raw
+        if modelTried {
+            return french ? "Je n'ai pas réussi à faire « \(title) ». Essaie l'outil \(title) dans Outils." : "I couldn't do “\(title)”. Try the \(title) tool in Tools."
+        }
+        return french ? "« \(title) » ne se fait pas encore à la voix sans modèle : ouvre l'outil \(title) dans Outils."
+            : "“\(title)” isn't available by voice without a model yet: open the \(title) tool in Tools."
+    }
+
+    /// The honest refusal for a step the editor cannot run, with the nearest catalog operations.
+    public static func unsupported(_ name: String, nearest: [OpID], french: Bool) -> String {
+        let titles = nearest.prefix(3).compactMap { OperationCatalog.shared.spec($0)?.title(french ? .fr : .en) }
+        guard !titles.isEmpty else { return french ? "Ça, je ne peux pas encore le faire ici." : "I can't do that here yet." }
+        let list = titles.joined(separator: ", ")
+        return french ? "Ça, je ne peux pas encore le faire ici. Le plus proche : \(list)." : "I can't do that here yet. Closest: \(list)."
     }
 
     /// Sentence for "décris la photo".

@@ -18,36 +18,39 @@ public extension View {
         modifier(PSGlassModifier(tint: tint, interactive: interactive, shape: shape, variant: variant))
     }
 
+    @available(*, deprecated, renamed: "psCard(cornerRadius:)")
     @ViewBuilder
-    func psGlassPanel(cornerRadius: CGFloat = PSTheme.panelRadius) -> some View {
+    func psGlassPanel(cornerRadius: CGFloat = PSRadius.floating) -> some View {
         psCard(cornerRadius: cornerRadius)
     }
 
     /// A floating panel: system glass in a continuous rounded rectangle. The
     /// content is kept inside the shape. `shadow` is kept for existing call
     /// sites; the glass draws its own.
-    func psCard(cornerRadius: CGFloat = PSTheme.panelRadius, shadow: Bool = true, variant: PSGlassVariant = .regular) -> some View {
+    func psCard(cornerRadius: CGFloat = PSRadius.floating, shadow: Bool = true, variant: PSGlassVariant = .regular) -> some View {
         modifier(PSCardModifier(cornerRadius: cornerRadius, variant: variant))
     }
 
     /// Inset text-field surface: a darker well, no edge.
     func psField<S: InsettableShape>(_ shape: S) -> some View {
-        background(shape.fill(Color.white.opacity(0.08)))
+        background(shape.fill(Color.psHairline))
     }
 
     /// A control inside glass (chip, well): a plain fill, white when selected
     /// (the Photos filter-chip idiom; use black content on it).
     func psChipFill<S: Shape>(_ shape: S, isSelected: Bool = false) -> some View {
-        background(shape.fill(isSelected ? Color.white : PSTheme.fill))
+        background(shape.fill(isSelected ? Color.psActionPrimary : Color.psFillControl))
     }
 
-    /// Edit-accent fill (the yellow "Done"): flat, like Photos. Content on it
-    /// should use `PSTheme.onAccent`. `glow` is kept for existing call sites.
+    /// A value-accent fill (a chip whose value is off neutral). Never an action:
+    /// actions are white. Content on it uses `psOnValueAccent`. `glow` is kept
+    /// for existing call sites.
     func psAccentFill<S: Shape>(_ shape: S, glow: Bool = true) -> some View {
-        background(shape.fill(PSTheme.accent))
+        background(shape.fill(Color.psValueAccent))
     }
 
     /// The selected state of a neutral control: a lit thumb behind the label.
+    @available(*, deprecated, message: "Unused: selected controls take psChipFill(isSelected:).")
     func psActivePill<S: Shape>(_ shape: S, isActive: Bool, glow: Bool = true) -> some View {
         modifier(PSActivePillModifier(shape: AnyShape(shape), isActive: isActive))
     }
@@ -96,7 +99,7 @@ struct PSGlassModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         if effects == .minimal || reduceTransparency {
-            content.background(shape.fill(PSTheme.surfaceFlat)).overlay(shape.stroke(PSTheme.hairline, lineWidth: 1))
+            content.background(shape.fill(Color.psElevated)).overlay(shape.stroke(Color.psHairline, lineWidth: 1))
         } else {
             content.glassEffect(psMakeGlass(tint: tint, interactive: interactive, variant: variant), in: shape)
         }
@@ -114,8 +117,8 @@ struct PSCardModifier: ViewModifier {
         // The content is clipped, never the glass, so its rim stays whole.
         if effects == .minimal || reduceTransparency {
             content.clipShape(shape)
-                .background(shape.fill(PSTheme.surfaceFlat))
-                .overlay(shape.strokeBorder(PSTheme.hairline, lineWidth: 1))
+                .background(shape.fill(Color.psElevated))
+                .overlay(shape.strokeBorder(Color.psHairline, lineWidth: 1))
         } else {
             content.clipShape(shape).glassEffect(variant.glass, in: shape)
         }
@@ -128,7 +131,7 @@ struct PSActivePillModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content.background {
-            if isActive { shape.fill(PSTheme.selection) }
+            if isActive { shape.fill(Color.psFillPressed) }
         }
     }
 }
@@ -143,7 +146,7 @@ public struct PSPressStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? scale : 1)
             .opacity(configuration.isPressed ? 0.88 : 1)
-            .animation(PSMotion.quick, value: configuration.isPressed)
+            .animation(PSSpring.press, value: configuration.isPressed)
     }
 }
 
@@ -165,7 +168,7 @@ public struct PSGlassContainer<Content: View>: View {
 /// Round glass button used across toolbars: the system `.glass` button in a
 /// circle. `isActive` makes it `.glassProminent` in white with a dark glyph
 /// (play, the primary action of a bar). `tint` colours the glyph of an
-/// inactive button.
+/// inactive button. New code uses PSCircleButton.
 public struct GlassIconButton: View {
     let systemName: String
     let label: String
@@ -191,13 +194,13 @@ public struct GlassIconButton: View {
         Group {
             if effects == .minimal || reduceTransparency {
                 Button(action: tap) {
-                    glyph.background(Circle().fill(isActive ? Color.white : PSTheme.surfaceFlat))
+                    glyph.background(Circle().fill(isActive ? Color.psActionPrimary : Color.psElevated))
                 }
                 .buttonStyle(PSPressStyle(scale: 0.9))
             } else if isActive {
                 Button(action: tap) { glyph }
                     .buttonStyle(.glassProminent)
-                    .tint(.white)
+                    .tint(Color.psActionPrimary)
             } else if variant == .clear {
                 Button(action: tap) {
                     glyph.glassEffect(psMakeGlass(tint: nil, interactive: true, variant: .clear), in: .circle)
@@ -215,8 +218,8 @@ public struct GlassIconButton: View {
 
     private var glyph: some View {
         Image(systemName: systemName)
-            .font(.system(size: (size * 0.39).rounded(), weight: .medium))
-            .foregroundStyle(isActive ? Color.black : (tint ?? PSTheme.textPrimary))
+            .font(PSFont.glyph(diameter: size))
+            .foregroundStyle(isActive ? Color.psOnAction : (tint ?? Color.psTextPrimary))
             .contentTransition(.symbolEffect(.replace))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Circle())
@@ -244,11 +247,11 @@ public struct GlassChip: View {
 
     public var body: some View {
         HStack(spacing: 6) {
-            if let systemImage { Image(systemName: systemImage).foregroundStyle(tint ?? PSTheme.textSecondary) }
+            if let systemImage { Image(systemName: systemImage).foregroundStyle(tint ?? Color.psTextSecondary) }
             Text(text)
         }
         .font(.footnote.weight(.medium))
-        .foregroundStyle(PSTheme.textPrimary)
+        .foregroundStyle(Color.psTextPrimary)
         .padding(.horizontal, 12)
         .frame(minHeight: 32)
         .psGlass(variant: variant)
@@ -298,13 +301,13 @@ struct PSSystemButton: View {
             configuration.label
                 .font(kind == .magicCompact ? PSFont.headline(13) : PSFont.headline())
                 .modifier(PSMagicLabelModifier(isMagic: kind == .magic || kind == .magicCompact))
-                .foregroundStyle(kind == .primary ? Color.black : PSTheme.textPrimary)
+                .foregroundStyle(kind == .primary ? Color.psOnAction : Color.psTextPrimary)
                 .frame(maxWidth: kind == .magicCompact ? nil : .infinity)
         }
         if effects == .minimal || reduceTransparency {
-            button.buttonStyle(PSFlatButtonStyle(fill: kind == .primary ? Color.white : PSTheme.surfaceFlat, compact: kind == .magicCompact))
+            button.buttonStyle(PSFlatButtonStyle(fill: kind == .primary ? Color.psActionPrimary : Color.psElevated, compact: kind == .magicCompact))
         } else if kind == .primary {
-            button.buttonStyle(.glassProminent).tint(.white).controlSize(.large)
+            button.buttonStyle(.glassProminent).tint(Color.psActionPrimary).controlSize(.large)
         } else {
             button.buttonStyle(.glass).controlSize(kind == .magicCompact ? .regular : .large)
         }
@@ -341,7 +344,7 @@ struct PSFlatButtonStyle: ButtonStyle {
             .padding(.horizontal, compact ? 14 : 16)
             .background(Capsule().fill(fill))
             .opacity(configuration.isPressed ? 0.8 : 1)
-            .animation(PSMotion.quick, value: configuration.isPressed)
+            .animation(PSSpring.press, value: configuration.isPressed)
     }
 }
 #endif

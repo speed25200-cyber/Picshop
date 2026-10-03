@@ -297,8 +297,11 @@ final class LocalTurnRepairTests: XCTestCase {
             if case .toolFinished(_, _, let result) = event { return result.execution }
             return nil
         }
-        XCTAssertEqual(finished.last?.steps.map(\.status), [.blocked, .applied])
-        XCTAssertEqual(finished.last?.steps.map(\.index), [0, 1])
+        // The plan linter may put the steps in phase order: the repeat is blocked wherever it lands.
+        let steps = try XCTUnwrap(finished.last?.steps)
+        XCTAssertEqual(steps.first { $0.action == .textBehind }?.status, .blocked)
+        XCTAssertEqual(steps.first { $0.action == .fillCells }?.status, .applied)
+        XCTAssertEqual(steps.map(\.index), [0, 1])
     }
 }
 

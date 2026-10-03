@@ -22,12 +22,18 @@ public enum LiveTurnRouter {
     /// The most words a table plan may have on the local lane.
     static let tableTokenLimit = 24
 
-    public static func route(_ text: String, grammar: EditPlan, brain: LiveBrainKind, ideasOnScreen: Int, jobRunning: Bool, fastLane: Bool) -> LiveLane {
+    /// `mode`: the editor, for abstention. A grammar plan for words that name an operation the grammar
+    /// does not own ("mets le calque en mode produit", "courbe en S") is capped below the fast lane, so the
+    /// model answers; with no model, the turn goes to the local planners (an honest "pas encore").
+    public static func route(_ text: String, grammar original: EditPlan, brain: LiveBrainKind, ideasOnScreen: Int, jobRunning: Bool, fastLane: Bool,
+                             mode: EditorMode = .photo) -> LiveLane {
         let utterance = NormalizedUtterance(text)
         let tokens = utterance.tokens
         if let command = control(tokens, ideasOnScreen: ideasOnScreen, jobRunning: jobRunning) { return .control(command) }
-        if brain == .local { return .local(grammar) }
-        if answersPendingChoice(grammar) { return .local(grammar) }
+        if answersPendingChoice(original) { return .local(original) }
+        let grammar = FeatureFlags.isOn(.catalogOps) ? OperationAbstention.capped(original, utterance: text, domain: mode.opDomain) : original
+        let abstained = grammar.confidence < original.confidence
+        if brain == .local { return .local(abstained ? .unknown(text) : original) }
         if isQuestion(text, tokens: tokens) { return .brain(isQuestion: true) }
         if fastLane, !grammar.isEmpty, grammar.confidence >= 0.9, grammar.clarification == nil, tokens.count <= 10,
            grammar.intents.allSatisfy({ instantActions.contains($0.action) }) {

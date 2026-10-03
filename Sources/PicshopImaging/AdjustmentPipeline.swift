@@ -38,8 +38,9 @@ public enum AdjustmentPipeline {
             filter.radius = Float(3 * scale)
             image = filter.outputImage ?? image
         }
+        // A look's 5-point curve with whites, blacks, highlights (+) and fade, as before W1.
         let curve = combinedToneCurve(adjustments, base: toneCurve)
-        if !curve.isIdentity {
+        if !curve.isIdentity(.rgb) {
             let filter = CIFilter.toneCurve()
             filter.inputImage = image
             filter.point0 = curve.rgb[0].cgPoint
@@ -120,10 +121,12 @@ public enum AdjustmentPipeline {
         return image.cropped(to: extent)
     }
 
-    /// Adds whites/blacks/highlights(+)/fade to the base curve.
+    /// Adds whites/blacks/highlights(+)/fade to the base curve. Core Image's tone curve takes
+    /// exactly five points: a base curve of any other shape stands as the straight 5-point line
+    /// (the person's curves render in the tone table instead), and the adjustments still apply.
     static func combinedToneCurve(_ adjustments: Adjustments, base: ToneCurve) -> ToneCurve {
         var points = base.rgb
-        guard points.count == 5 else { points = ToneCurve.linear; return ToneCurve(rgb: points) }
+        if points.count != 5 { points = ToneCurve.linear }
         let fade = adjustments[.fade] * 0.14
         let blacks = adjustments[.blacks] * 0.12
         let whites = adjustments[.whites] * 0.12

@@ -5,15 +5,20 @@ import PicshopIntent
 /// Picshop Live's one presence on screen: a living sphere whose colours,
 /// motion and scale say what Live is doing.
 ///
-/// Layers, bottom to top: a blurred halo, then in one `drawingGroup` the mesh
-/// body (its centre drifting on a Lissajous path, turning while it thinks or
-/// acts), the specular highlight, the rim, the thinking comet, the speaking
-/// ripples and the acting ring. The muted and problem marks sit on top.
+/// Layers, bottom to top: a gradient halo (drawn only while it shows), then the
+/// mesh body (its centre drifting on a Lissajous path, turning while it thinks
+/// or acts), the specular highlight, the rim, the thinking comet, the speaking
+/// ripples and the acting ring. The muted and problem marks sit on top. No blur
+/// and no offscreen pass: the highlight and the halo are gradients.
 ///
-/// Only the orb (and its halo) reads `meter`, so the 30 Hz audio levels never
-/// re-evaluate anything else. `meter` is nil where there is no audio (Settings,
-/// Home's empty state). It holds still with Reduce Motion, when the scene is
-/// inactive or the orb is off screen, and is a flat radial gradient at `.minimal`.
+/// It only moves while Live is busy (hearing, thinking, speaking, acting, or
+/// listening to a voice), at the display's rate (120 Hz at rich effects, 60 at
+/// reduced). Off, in a problem, or listening to silence it is a still picture
+/// with no timeline, so an idle editor draws nothing. Only the orb (and its
+/// halo) reads `meter`, so the 30 Hz audio levels never re-evaluate anything
+/// else. `meter` is nil where there is no audio (Settings, Home's empty state).
+/// It holds still with Reduce Motion, when the scene is inactive or the orb is
+/// off screen, and is a flat radial gradient at `.minimal`.
 struct LiveOrb: View {
     let size: CGFloat
     let state: LiveState
@@ -29,6 +34,15 @@ struct LiveOrb: View {
     @State private var motion = OrbMotion()
     @State private var isOnScreen = true
     @State private var pulse = false
+    /// Listening: the voice level woke the orb (above `wakeLevel`); it rests again only after
+    /// `restDelay` under `quietLevel`, so room noise near the threshold never makes it flicker.
+    @State private var isAwake = false
+    /// When the level last went under `quietLevel` while awake; nil while it is not quiet.
+    @State private var quietSince: Double?
+
+    static let quietLevel = 0.02
+    static let wakeLevel = 0.04
+    static let restDelay = 0.6
 
     init(size: CGFloat, state: LiveState, meter: LiveMeter?, isMuted: Bool = false) {
         self.size = size
@@ -62,15 +76,44 @@ struct LiveOrb: View {
             .onChange(of: state) { old, new in
                 motion.noteTransition(from: old, to: new, at: OrbMotion.now)
                 startPulse()
+                noteInput(meter?.input ?? 0)
+            }
+            .onChange(of: meter?.input ?? 0, initial: true) { _, input in noteInput(input) }
+            .task(id: quietSince) { await restAfterQuiet() }
+            .onChange(of: isResting) { _, resting in
+                // The next wake eases the drift in from the still picture instead of jumping to it.
+                if resting { motion.settle() }
             }
             .accessibilityHidden(true)
+    }
+
+    /// Wakes at once above `wakeLevel`; starts the quiet clock under `quietLevel`; in between,
+    /// keeps the orb as it is (and the clock stopped).
+    private func noteInput(_ input: Double) {
+        if input > Self.wakeLevel {
+            quietSince = nil
+            if !isAwake { isAwake = true }
+        } else if input < Self.quietLevel {
+            if isAwake, quietSince == nil { quietSince = OrbMotion.now }
+        } else if quietSince != nil {
+            quietSince = nil
+        }
+    }
+
+    /// Rests the orb once the level stayed quiet for `restDelay`.
+    private func restAfterQuiet() async {
+        guard quietSince != nil else { return }
+        try? await Task.sleep(for: .seconds(Self.restDelay))
+        guard !Task.isCancelled, quietSince != nil else { return }
+        isAwake = false
+        quietSince = nil
     }
 
     @ViewBuilder
     private var content: some View {
         if effects == .minimal {
             flatOrb
-        } else if holdsStill {
+        } else if holdsStill || isResting {
             stillOrb
         } else {
             SwiftUI.TimelineView(.animation(minimumInterval: frameInterval, paused: scenePhase != .active || !isOnScreen)) { context in
@@ -79,9 +122,20 @@ struct LiveOrb: View {
         }
     }
 
-    /// 60 fps at rich effects, 30 when reduced; the slow resting drift needs no more than 30.
+    /// Nothing for the orb to show: off, a problem, or listening to silence. It rests as
+    /// a still picture (no timeline), so the screen can idle at 0 fps. Listening wakes and
+    /// rests with hysteresis (`isAwake`), never at the instant the level crosses a threshold.
+    private var isResting: Bool {
+        switch state {
+        case .off, .problem: return true
+        case .listening, .connecting: return isMuted || !isAwake
+        default: return false
+        }
+    }
+
+    /// The display's rate while Live is busy: 120 Hz at rich effects, 60 when reduced.
     private var frameInterval: Double {
-        effects == .rich && state != .off ? 1.0 / 60.0 : 1.0 / 30.0
+        effects == .rich ? 1.0 / 120.0 : 1.0 / 60.0
     }
 
     // MARK: Living
@@ -100,9 +154,11 @@ struct LiveOrb: View {
         }
         m.cometTurns += dt / 1.1
         m.scale += (dynamics.targetScale(at: t) - m.scale) * min(1, dt * 12)
+        m.wake += (1 - m.wake) * min(1, dt * 5)
         m.updateRipples(speaking: state == .speaking, output: output, at: t)
         let colors = m.paletteColors(at: t, fallback: OrbPalette.meshRGB(for: state, isMuted: isMuted))
-        return orbStack(points: dynamics.points(phase: m.phase), colors: colors.map(\.color),
+        let points = OrbDynamics.blend(OrbDynamics.restPoints, dynamics.points(phase: m.phase), Float(m.wake))
+        return orbStack(points: points, colors: colors.map(\.color),
                         rotation: m.rotation, scale: m.scale * m.popScale(at: t),
                         cometTurns: m.cometTurns, ripples: m.rippleStates(at: t),
                         haloOpacity: dynamics.haloOpacity, haloColor: colors[4].color)
@@ -114,15 +170,17 @@ struct LiveOrb: View {
         let input = meter?.input ?? 0
         let output = meter?.output ?? 0
         let colors = OrbPalette.meshRGB(for: state, isMuted: isMuted)
-        // The halo follows the voice level and nothing else moves.
-        let level: Double
+        // The halo follows the voice level and nothing else moves. Listening keeps the living
+        // orb's resting halo, so waking and resting never make the halo blink.
+        let halo: Double
         switch state {
-        case .hearing, .dictating: level = input
-        case .speaking: level = output
-        default: level = 0
+        case .hearing, .dictating: halo = input * (isMuted ? 0.4 : 1)
+        case .speaking: halo = output * (isMuted ? 0.4 : 1)
+        case .listening, .connecting, .problem: halo = OrbDynamics(state: state, input: 0, output: 0, isMuted: isMuted).haloOpacity
+        default: halo = 0
         }
         return orbStack(points: OrbDynamics.restPoints, colors: colors.map(\.color), rotation: 0, scale: 1,
-                        cometTurns: nil, ripples: [], haloOpacity: level * (isMuted ? 0.4 : 1), haloColor: colors[4].color)
+                        cometTurns: nil, ripples: [], haloOpacity: halo, haloColor: colors[4].color)
             .opacity(state == .thinking && pulse ? 0.75 : 1)
             .animation(.easeInOut(duration: 0.4), value: paletteKey)
     }
@@ -162,11 +220,11 @@ struct LiveOrb: View {
             ZStack {
                 MeshGradient(width: 3, height: 3, points: points, colors: colors)
                     .rotationEffect(.degrees(rotation))
-                // Specular highlight: light from the top left.
+                // Specular highlight: light from the top left, a soft gradient rather than a blur.
                 Ellipse()
-                    .fill(Color.white.opacity(0.32))
-                    .frame(width: size * 0.46, height: size * 0.30)
-                    .blur(radius: size * 0.08)
+                    .fill(EllipticalGradient(colors: [Color.white.opacity(0.32), Color.white.opacity(0.12), Color.white.opacity(0)],
+                                             center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5))
+                    .frame(width: size * 0.66, height: size * 0.46)
                     .offset(x: -size * 0.16, y: -size * 0.22)
             }
             .frame(width: size, height: size)
@@ -187,15 +245,18 @@ struct LiveOrb: View {
         }
         .scaleEffect(scale)
         .frame(width: canvas, height: canvas)
-        .drawingGroup()
         .frame(width: size, height: size)
         .background {
-            if effects != .minimal {
+            // The halo only while it shows; a multi-stop gradient fades as softly as the blur did.
+            if effects != .minimal, haloOpacity > 0.01 {
                 Circle()
-                    .fill(RadialGradient(colors: [haloColor.opacity(0.55), haloColor.opacity(0)], center: .center,
-                                         startRadius: 0, endRadius: size * 1.1))
+                    .fill(RadialGradient(stops: [
+                        .init(color: haloColor.opacity(0.55), location: 0),
+                        .init(color: haloColor.opacity(0.32), location: 0.35),
+                        .init(color: haloColor.opacity(0.12), location: 0.65),
+                        .init(color: haloColor.opacity(0), location: 1),
+                    ], center: .center, startRadius: 0, endRadius: size * 1.1))
                     .frame(width: size * 2.2, height: size * 2.2)
-                    .blur(radius: min(26, size * 0.22))
                     .opacity(haloOpacity)
                     .allowsHitTesting(false)
             }
@@ -360,6 +421,12 @@ struct OrbDynamics {
         [0, 1], [0.5, 1], [1, 1],
     ]
 
+    /// `from` moved `amount` (0…1) of the way to `to`, point by point.
+    static func blend(_ from: [SIMD2<Float>], _ to: [SIMD2<Float>], _ amount: Float) -> [SIMD2<Float>] {
+        guard amount < 0.999 else { return to }
+        return zip(from, to).map { $0 + ($1 - $0) * amount }
+    }
+
     /// A spring from `from` to `to` with zero initial velocity, SwiftUI's
     /// `.spring(duration:bounce:)` parameters, `elapsed` seconds in.
     static func spring(from: Double, to: Double, elapsed: Double, duration: Double, bounce: Double) -> Double {
@@ -387,6 +454,8 @@ final class OrbMotion {
     var rotation: Double = 0
     var cometTurns: Double = 0
     var scale: Double = 1
+    /// 0 at rest, easing to 1 once living: how far the mesh has drifted from the still picture.
+    var wake: Double = 0
     private(set) var ripples: [Double] = []
     private var rippleArmed = true
     private var lastRipple = -Double.infinity
@@ -397,6 +466,12 @@ final class OrbMotion {
     private var paletteDuration = 0.6
     private var bloomStart: Double?
     private var dipStart: Double?
+
+    /// Back to the still picture's shape and size, so the next living frame eases out of it.
+    func settle() {
+        wake = 0
+        scale = 1
+    }
 
     /// Seconds since the previous frame, at most 1/15 s, so a resumed timeline never jumps.
     func advance(to time: Double) -> Double {

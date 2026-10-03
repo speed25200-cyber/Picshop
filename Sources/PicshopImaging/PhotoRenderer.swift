@@ -124,6 +124,16 @@ public actor PhotoRenderer {
     private var inFlight: [String: Task<CIImage, Error>] = [:]
     /// Renders currently awaiting each job; the job is cancelled when the last one leaves.
     private var inFlightWaiters: [String: Set<UUID>] = [:]
+    /// Clone, paint and heal masks per stroke list and size: a render after the first draws no
+    /// stroke, and a list that grows draws only its new strokes. Their images, by the same keys.
+    private var strokeRasters = StrokeRasterCache()
+    private var strokeMasks: [String: CIImage] = [:]
+    /// Tone tables (Levels and the person's curves) by their inputs: a drag elsewhere rebuilds none.
+    private var toneTables: [Int: ToneLUT?] = [:]
+    /// Text and shape rasters drawn since the renderer was made: moving or turning a layer draws none.
+    private(set) var overlayRasterizations = 0
+    /// Brush strokes drawn into masks since the renderer was made.
+    var strokeRasterizations: Int { strokeRasters.strokesDrawn }
 
     public init(store: ProjectStore, projectID: UUID, inpainting: InpaintingPipeline, upscaler: Upscaler = Upscaler()) {
         self.store = store
@@ -181,6 +191,7 @@ public actor PhotoRenderer {
         displayedKeys.removeAll()
         clearOverlays()
         disparityCache.removeAll()
+        clearStrokeMasks()
     }
 
     /// Memory warning: drops what is cheap to rebuild and the least recently used
@@ -193,6 +204,7 @@ public actor PhotoRenderer {
         maskOrder.removeAll()
         clearOverlays()
         disparityCache.removeAll()
+        clearStrokeMasks()
         let displayedSizes = Set(displayedKeys.compactMap(Self.sizeSuffix(ofKey:)))
         evict(downTo: keep) { key in Self.sizeSuffix(ofKey: key).map { !displayedSizes.contains($0) } ?? true }
         RenderContext.shared.clearCaches()
@@ -243,7 +255,8 @@ public actor PhotoRenderer {
             case .image(let asset):
                 rendered = try await renderImageLayer(layer, asset: asset, scale: scale, options: options, log: log)
             case .text(let element):
-                rendered = overlayImage(key: "text-\(layer.id)-\(element.hashValue)-\(Int(canvasRect.width))") {
+                // Keyed without where the text sits: a drag or a turn places the same raster.
+                rendered = overlayImage(key: "\(layer.overlayRasterKey ?? "text-\(layer.id)")-\(Int(canvasRect.width))") {
                     #if canImport(UIKit)
                     return TextRasterizer.image(for: element, canvasSize: canvasRect.size).map { CIImage(cgImage: $0) }
                     #else
@@ -251,7 +264,7 @@ public actor PhotoRenderer {
                     #endif
                 }
             case .shape(let shape):
-                rendered = overlayImage(key: "shape-\(layer.id)-\(shape.hashValue)-\(Int(canvasRect.width))") {
+                rendered = overlayImage(key: "\(layer.overlayRasterKey ?? "shape-\(layer.id)")-\(Int(canvasRect.width))") {
                     #if canImport(UIKit)
                     return TextRasterizer.image(for: shape, canvasSize: canvasRect.size).map { CIImage(cgImage: $0) }
                     #else
@@ -261,7 +274,12 @@ public actor PhotoRenderer {
             case .fill(let color):
                 rendered = CIImage(color: color.ciColor).cropped(to: canvasRect)
             case .adjustment(let adjustments):
-                canvas = AdjustmentPipeline.apply(adjustments, toneCurve: .identity, to: canvas, scale: scale)
+                // Applied to everything beneath, then laid back through the layer's mask, opacity and blend mode.
+                var adjusted = adjustments.isNeutral ? canvas : AdjustmentPipeline.apply(adjustments, toneCurve: .identity, to: canvas, scale: scale)
+                if let tone = toneTable(for: layer.edits) { adjusted = ToneRenderer.apply(tone, to: adjusted) }
+                if adjusted !== canvas {
+                    canvas = composite(adjusted.cropped(to: canvasRect), over: canvas, layer: layer, canvasRect: canvasRect, isBase: true)
+                }
                 rendered = nil
             }
             if let rendered {
@@ -386,9 +404,14 @@ public actor PhotoRenderer {
         }
         let look = layer.edits.resolvedLook
         let adjustments = AdjustmentPipeline.effectiveAdjustments(manual: layer.edits.resolvedAdjustments, look: look)
-        let curve = layer.edits.resolvedToneCurve
-        if !adjustments.isNeutral || !curve.isIdentity {
-            image = AdjustmentPipeline.apply(adjustments, toneCurve: curve, to: image, scale: effectiveScale)
+        // The look's own 5-point curve goes with the adjustments, through Core Image's tone curve, as before W1.
+        let lookCurve = layer.edits.resolvedLookToneCurve
+        if !adjustments.isNeutral || !lookCurve.isIdentity {
+            image = AdjustmentPipeline.apply(adjustments, toneCurve: lookCurve, to: image, scale: effectiveScale)
+        }
+        // Levels and the person's curves: one table, in a gamma-encoded space, after the look and before colour.
+        if let tone = toneTable(for: layer.edits) {
+            image = ToneRenderer.apply(tone, to: image)
         }
         // Colour work after tone, as in a grading suite: match, then mixer and wheels in one LUT.
         if let match = layer.edits.resolvedColorMatch {
@@ -397,13 +420,54 @@ public actor PhotoRenderer {
         let mixer = layer.edits.resolvedColorMixer
         let grade = layer.edits.resolvedColorGrade
         if mixer != nil || grade != nil {
-            image = ColorCube.shared.apply(mixer: mixer, grade: grade, to: image)
+            // A drag frame gets the small cube; the settled frame the full one.
+            image = ColorCube.shared.apply(mixer: mixer, grade: grade, to: image, interactive: !options.allowExpensiveWork)
         }
         // An imported look sits on top, as the last node of a grade.
         if let lut = layer.edits.resolvedLUT {
             image = ColorCube.shared.apply(lutAt: store.url(for: lut.relativePath, in: projectID), intensity: lut.intensity, to: image)
         }
         return image
+    }
+
+    /// The layer's tone table, nil when Levels and its curve change nothing. Kept by its inputs.
+    private func toneTable(for edits: EditStack) -> ToneLUT? {
+        let levels = edits.resolvedLevels
+        let curve = edits.resolvedUserToneCurve
+        guard !levels.isIdentity || curve != nil else { return nil }
+        var hasher = Hasher()
+        hasher.combine(levels)
+        hasher.combine(curve)
+        let key = hasher.finalize()
+        if let cached = toneTables[key] { return cached }
+        let table = edits.resolvedToneLUT
+        if toneTables.count >= 8 { toneTables.removeAll() }
+        toneTables[key] = table
+        return table
+    }
+
+    /// The mask of brush strokes at `extent` (linear grey, so a soft edge is the brush's own
+    /// falloff), drawn once per stroke list and size; with its bytes for a bounding box.
+    private func strokeMask(_ strokes: [BrushStroke], extent: CGRect) -> (image: CIImage, bytes: [UInt8])? {
+        let width = Int(extent.width), height = Int(extent.height)
+        guard width > 0, height > 0 else { return nil }
+        let raster = strokeRasters.mask(for: strokes, width: width, height: height)
+        let origin = CGAffineTransform(translationX: extent.minX, y: extent.minY)
+        if !raster.isNew, let image = strokeMasks[raster.key] { return (image.transformed(by: origin), raster.bytes) }
+        guard let cg = ImageSupport.grayImage(width: width, height: height, bytes: raster.bytes, colorSpace: RenderContext.maskColorSpace) else { return nil }
+        let image = CIImage(cgImage: cg)
+        strokeMasks[raster.key] = image
+        if strokeMasks.count > strokeRasters.count {
+            let live = strokeRasters.keys
+            strokeMasks = strokeMasks.filter { live.contains($0.key) }
+        }
+        return (image.transformed(by: origin), raster.bytes)
+    }
+
+    private func clearStrokeMasks() {
+        strokeRasters.removeAll()
+        strokeMasks.removeAll()
+        toneTables.removeAll()
     }
 
     // MARK: - Expensive work
@@ -562,7 +626,11 @@ public actor PhotoRenderer {
         guard !extent.isInfinite, extent.width.isFinite, extent.height.isFinite else { return input }
         let cacheKey = "\(operation.id.uuidString)@\(Int(extent.width))x\(Int(extent.height))"
         switch operation.kind {
-        case .adjust, .adjustments, .toneCurve, .look, .autoEnhance, .colorMixer, .colorGrade, .colorMatch, .lut:
+        case .adjust, .adjustments, .toneCurve, .levels, .look, .autoEnhance, .colorMixer, .colorGrade, .colorMatch, .lut:
+            return input
+
+        case .unsupported:
+            // A kind from a newer build: kept in the document, drawn as nothing.
             return input
 
         case .lensBlur(let focus, let aperture, let mask):
@@ -650,12 +718,11 @@ public actor PhotoRenderer {
             let reused = try await reusedResult(key: cacheKey, operationID: operation.id, extent: extent, options: options, log: log)
             if let reused { return reused }
             guard options.allowExpensiveWork else { return input }
-            let width = Int(extent.width), height = Int(extent.height)
-            var bytes = [UInt8](repeating: 0, count: width * height)
-            MaskStore.rasterize(strokes: strokes, width: width, height: height, into: &bytes)
-            guard let cg = ImageSupport.grayImage(width: width, height: height, bytes: bytes) else { return input }
-            let maskImage = CIImage(cgImage: cg)
-            let box = MaskStore.boundingBox(of: bytes, width: width, height: height)
+            // A hole to fill has no soft edge: the erase brush is drawn hard, whatever its hardness.
+            let hard = strokes.map { BrushStroke(id: $0.id, points: $0.points, radius: $0.radius, hardness: 1, mode: $0.mode) }
+            guard let raster = strokeMask(hard, extent: extent) else { return input }
+            let maskImage = raster.image
+            let box = MaskStore.boundingBox(of: raster.bytes, width: Int(extent.width), height: Int(extent.height))
             let inpainting = self.inpainting
             return try await runExpensive(key: cacheKey, step: "heal", log: log) {
                 try await inpainting.fill(image: input, mask: maskImage, boundingBox: box, feather: 0.01)
@@ -719,21 +786,16 @@ public actor PhotoRenderer {
             return BackgroundEffects.recolor(input, mask: maskImage, color: color, strength: strength)
 
         case .cloneStamp(let strokes, let offset):
-            let width = Int(extent.width), height = Int(extent.height)
-            var bytes = [UInt8](repeating: 0, count: width * height)
-            MaskStore.rasterize(strokes: strokes, width: width, height: height, into: &bytes)
-            guard let cg = ImageSupport.grayImage(width: width, height: height, bytes: bytes) else { return input }
-            let maskImage = CIImage(cgImage: cg).clampedToExtent().applyingGaussianBlur(sigma: 1.5 * scale).cropped(to: extent)
+            // The strokes' mask is drawn once (hardness honoured), then reused by every render.
+            guard let raster = strokeMask(strokes, extent: extent) else { return input }
+            let maskImage = raster.image.clampedToExtent().applyingGaussianBlur(sigma: 1.5 * scale).cropped(to: extent)
             // Source pixels come from the image shifted by the (normalised) offset; y flips because CI is bottom-up.
             let shifted = input.transformed(by: CGAffineTransform(translationX: -CGFloat(offset.x) * extent.width, y: CGFloat(offset.y) * extent.height)).clampedToExtent().cropped(to: extent)
             return AdjustmentPipeline.blendWithMask(foreground: shifted, background: input, mask: maskImage)
 
         case .pixelPaint(let strokes, let color):
-            let width = Int(extent.width), height = Int(extent.height)
-            var bytes = [UInt8](repeating: 0, count: width * height)
-            MaskStore.rasterize(strokes: strokes, width: width, height: height, into: &bytes)
-            guard let cg = ImageSupport.grayImage(width: width, height: height, bytes: bytes) else { return input }
-            let maskImage = CIImage(cgImage: cg)
+            guard let raster = strokeMask(strokes, extent: extent) else { return input }
+            let maskImage = raster.image
             let paint = CIImage(color: color.ciColor).cropped(to: extent)
             return AdjustmentPipeline.blendWithMask(foreground: paint, background: input, mask: maskImage)
         }
@@ -794,6 +856,7 @@ public actor PhotoRenderer {
             overlayUse[key] = overlayTick
             return cached
         }
+        overlayRasterizations += 1
         guard let image = make() else { return nil }
         overlayCache[key] = image
         overlayUse[key] = overlayTick
@@ -844,30 +907,25 @@ public actor PhotoRenderer {
         if let mask = layer.mask, let maskImage = loadMask(mask, fitting: placed.extent) {
             placed = AdjustmentPipeline.applyingAlpha(mask: maskImage, to: placed)
         }
-        if layer.opacity < 1 {
-            let matrix = CIFilter.colorMatrix()
-            matrix.inputImage = placed
-            matrix.aVector = CIVector(x: 0, y: 0, z: 0, w: CGFloat(layer.opacity.clamped(to: 0...1)))
-            placed = matrix.outputImage ?? placed
-        }
-        let filter: CIFilter & CICompositeOperation
-        switch layer.blendMode {
-        case .normal: filter = CIFilter.sourceOverCompositing()
-        case .multiply: filter = CIFilter.multiplyBlendMode()
-        case .screen: filter = CIFilter.screenBlendMode()
-        case .overlay: filter = CIFilter.overlayBlendMode()
-        case .softLight: filter = CIFilter.softLightBlendMode()
-        case .hardLight: filter = CIFilter.hardLightBlendMode()
-        case .darken: filter = CIFilter.darkenBlendMode()
-        case .lighten: filter = CIFilter.lightenBlendMode()
-        case .difference: filter = CIFilter.differenceBlendMode()
-        case .luminosity: filter = CIFilter.luminosityBlendMode()
-        case .color: filter = CIFilter.colorBlendMode()
-        case .hue: filter = CIFilter.hueBlendMode()
-        }
-        filter.inputImage = placed
-        filter.backgroundImage = canvas
-        return (filter.outputImage ?? canvas).cropped(to: canvasRect)
+        // Opacity and the 27 blend modes (BlendModes: gamma-encoded blends, as BlendMath; with the
+        // proTone kill switch off, the 12 older modes blend as before W1).
+        return BlendModes.composite(placed, over: canvas, mode: layer.blendMode, opacity: layer.opacity,
+                                    seed: Self.dissolveSeed(for: layer.id), legacy: !FeatureFlags.isOn(.proTone))
+            .cropped(to: canvasRect)
+    }
+
+    /// Dissolve's noise offset for a layer, from its id: the same grain on every frame and every launch.
+    static func dissolveSeed(for id: UUID) -> UInt64 {
+        let b = id.uuid
+        return [b.0, b.1, b.2, b.3, b.4, b.5, b.6, b.7].reduce(UInt64(0)) { $0 << 8 | UInt64($1) }
+    }
+
+    /// The rendered document read back as top-down RGBA8 in Display P3 (tests, pixel probes).
+    func renderedRGBA(_ document: PhotoDocument, options: Options = .full) async throws -> (bytes: [UInt8], width: Int, height: Int) {
+        let image = try await render(document, options: options)
+        let extent = image.extent.integral
+        guard let bytes = ImageSupport.rgbaBytes(of: image, rect: extent) else { throw PicshopError.renderFailed("readback") }
+        return (bytes, Int(extent.width), Int(extent.height))
     }
 }
 #endif

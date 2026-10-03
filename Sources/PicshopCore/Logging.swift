@@ -49,18 +49,24 @@ public enum PSLog {
     }
 }
 
-/// Wall-clock timing helper for performance logging.
+/// Wall-clock timing helper for performance logging. Each timer is also a
+/// signpost interval ('timer', its label as detail), so Release builds can be
+/// measured in Instruments' Points of Interest; the log line stays DEBUG-only.
 public struct PSTimer: Sendable {
     private let start = Date()
     public let label: String
+    private let interval: PSSignpost.Interval
 
     public init(_ label: String) {
         self.label = label
+        interval = PSSignpost.begin("timer", label)
     }
 
     public var elapsedMilliseconds: Double { Date().timeIntervalSince(start) * 1000 }
 
+    /// Ends the interval and logs the time. Call it once.
     public func log(category: PSLog.Category = .core) {
+        PSSignpost.end(interval)
         PSLog.debug("\(label) took \(Int(elapsedMilliseconds)) ms", category: category)
     }
 }

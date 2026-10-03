@@ -32,6 +32,12 @@ public enum CanvasPlacement {
         return destination
     }
 }
+
+/// Where the render loop hands finished frames, straight to the screen (MetalCanvasView).
+/// `generation` increases with every render request, so a late frame never replaces a newer one.
+@MainActor public protocol CanvasSink: AnyObject {
+    func present(_ image: CIImage, generation: Int)
+}
 #endif
 
 #if canImport(UIKit) && canImport(MetalKit)
@@ -42,18 +48,29 @@ import CoreImage
 import PicshopCore
 
 /// Displays a `CIImage` through Metal with pinch-to-zoom quality scaling.
-/// The SwiftUI editor wraps this view; all drawing happens on the GPU via the
-/// shared `CIContext`, so full-resolution previews stay at 120 Hz.
+/// The SwiftUI editor wraps this view; all drawing happens on the GPU through
+/// the canvas's own `CIContext` (`RenderContext.interactive`).
+///
+/// Frames arrive two ways: settled frames through SwiftUI (`image`), and frames
+/// under a moving finger straight from the frame pump (`present(_:generation:)`),
+/// which skips SwiftUI's update pass. Either way a frame older than the one on
+/// screen is dropped. At most `maxInFlightFrames` command buffers are queued: when
+/// the GPU is busy (the local model, Vision) a frame is skipped and redrawn when
+/// one completes, instead of blocking the main thread on the next drawable.
 public final class MetalCanvasView: MTKView {
     private let commandQueue: MTLCommandQueue?
-    private let context = RenderContext.shared
+    private let context = RenderContext.interactive
+    private let frameBudget = FrameBudget()
 
     /// The image to display, in Core Image coordinates (origin bottom-left).
     public var image: CIImage? {
         didSet { setNeedsDisplay() }
     }
 
-    /// Optional overlay drawn on top (masks preview, candidate highlights).
+    /// Generation of `image`: a frame with a lower one never replaces it.
+    public private(set) var displayedGeneration = 0
+
+    /// Optional overlay drawn on top (masks preview, clipping warnings, candidate highlights).
     public var overlay: CIImage? {
         didSet { setNeedsDisplay() }
     }
@@ -63,7 +80,21 @@ public final class MetalCanvasView: MTKView {
         didSet { setNeedsDisplay() }
     }
 
-    public var backgroundClearColor = MTLClearColor(red: 0.04, green: 0.04, blue: 0.05, alpha: 1)
+    /// The canvas surround: true black.
+    public var backgroundClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
+
+    /// Command buffers allowed in the GPU queue at once.
+    public var maxInFlightFrames: Int {
+        get { frameBudget.limit }
+        set { frameBudget.limit = max(1, newValue) }
+    }
+
+    /// Called on the main actor when a frame reaches the glass: its generation and
+    /// the time it was presented (touch-to-photon ends here).
+    public var onPresented: (@MainActor (_ generation: Int, _ presentedTime: CFTimeInterval) -> Void)?
+
+    /// A frame was skipped for lack of a free command buffer: drawn when one completes.
+    private var skippedFrame = false
 
     /// Caps the drawable resolution: 3× panels render at 2× when the phone is hot.
     public var maxContentScale: CGFloat = UIScreen.main.scale {
@@ -76,7 +107,8 @@ public final class MetalCanvasView: MTKView {
         }
     }
 
-    /// Frame-rate ceiling; drawing is on demand, so this only bounds bursts of redraws.
+    /// Frame-rate ceiling; drawing is on demand (the frame pump's display link applies the
+    /// governor's cap), so this only bounds bursts of redraws.
     public var maxFrameRate: Int = 120 {
         didSet { preferredFramesPerSecond = max(30, maxFrameRate) }
     }
@@ -90,6 +122,7 @@ public final class MetalCanvasView: MTKView {
         enableSetNeedsDisplay = true
         colorPixelFormat = .bgra8Unorm
         clearColor = backgroundClearColor
+        backgroundColor = .black
         isOpaque = true
         autoResizeDrawable = true
         presentsWithTransaction = false
@@ -102,8 +135,28 @@ public final class MetalCanvasView: MTKView {
         fatalError("init(coder:) is not supported")
     }
 
+    /// Shows `image` if it is not older than the frame on screen. The SwiftUI path
+    /// passes the same generation again with a recomposed image (a split compare).
+    @discardableResult
+    public func show(_ image: CIImage?, generation: Int) -> Bool {
+        guard generation >= displayedGeneration else { return false }
+        displayedGeneration = generation
+        if self.image !== image { self.image = image }
+        return true
+    }
+
     public override func draw(_ rect: CGRect) {
-        guard let drawable = currentDrawable, let commandQueue, let commandBuffer = commandQueue.makeCommandBuffer() else { return }
+        // No free command buffer: skip rather than block on the drawable; redrawn on completion.
+        guard frameBudget.reserve() else {
+            skippedFrame = true
+            return
+        }
+        guard let drawable = currentDrawable, let commandQueue, let commandBuffer = commandQueue.makeCommandBuffer() else {
+            frameBudget.release()
+            return
+        }
+        let signpost = PSSignpost.begin("canvas.draw")
+        defer { PSSignpost.end(signpost) }
         let scale = contentScaleFactor
         let drawableSize = CGSize(width: CGFloat(drawable.texture.width), height: CGFloat(drawable.texture.height))
         let destination = CanvasPlacement.destination(width: Int(drawableSize.width), height: Int(drawableSize.height), pixelFormat: colorPixelFormat, commandBuffer: commandBuffer) { [drawable] in
@@ -127,8 +180,63 @@ public final class MetalCanvasView: MTKView {
         } catch {
             PSLog.error("canvas render failed: \(error)", category: .imaging)
         }
+        let generation = displayedGeneration
+        if onPresented != nil {
+            drawable.addPresentedHandler { [weak self] presented in
+                let time = presented.presentedTime
+                Task { @MainActor [weak self] in self?.onPresented?(generation, time) }
+            }
+        }
+        let budget = frameBudget
+        commandBuffer.addCompletedHandler { [weak self] buffer in
+            budget.release()
+            let gpu = buffer.gpuEndTime - buffer.gpuStartTime
+            PSSignpost.event("canvas.gpu", String(format: "%.2f ms", gpu * 1000))
+            Task { @MainActor [weak self] in self?.redrawSkippedFrame() }
+        }
         commandBuffer.present(drawable)
         commandBuffer.commit()
+    }
+
+    private func redrawSkippedFrame() {
+        guard skippedFrame else { return }
+        skippedFrame = false
+        setNeedsDisplay()
+    }
+}
+
+/// How many command buffers the canvas has queued; reserved on the main thread,
+/// released from Metal's completion thread.
+final class FrameBudget: @unchecked Sendable {
+    private let lock = NSLock()
+    private var queued = 0
+    private var maximum = 2
+
+    var limit: Int {
+        get { lock.withLock { maximum } }
+        set { lock.withLock { maximum = newValue } }
+    }
+
+    var count: Int { lock.withLock { queued } }
+
+    func reserve() -> Bool {
+        lock.withLock {
+            guard queued < maximum else { return false }
+            queued += 1
+            return true
+        }
+    }
+
+    func release() {
+        lock.withLock { queued = max(0, queued - 1) }
+    }
+}
+
+extension MetalCanvasView: CanvasSink {
+    /// A frame straight from the pump: on screen at the next display refresh, unless
+    /// a newer one is already there.
+    public func present(_ image: CIImage, generation: Int) {
+        show(image, generation: generation)
     }
 }
 #endif

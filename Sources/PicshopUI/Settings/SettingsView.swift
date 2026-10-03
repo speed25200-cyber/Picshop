@@ -130,34 +130,48 @@ public struct SettingsView: View {
     }
 }
 
-/// App identity at the top, like the Apple ID card in Settings: the tile,
-/// the version, and where Live answers from: always the iPhone.
+/// App identity at the top, like the Apple ID card in Settings: the mark and
+/// the wordmark (the lockup), the version, and where everything runs: the iPhone.
+/// With the psBackdrop flag off, the W0 tile.
 private struct SettingsHeader: View {
     var body: some View {
         Section {
-            HStack(spacing: 14) {
-                let shape = RoundedRectangle(cornerRadius: PSRadius.tile, style: .continuous)
-                Image(systemName: "sparkles")
-                    .font(.system(size: 24, weight: .medium))
-                    .foregroundStyle(.white)
-                    .frame(width: 58, height: 58)
-                    .background { HeroMesh().clipShape(shape) }
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(verbatim: "PicShop").font(.title2.weight(.bold)).foregroundStyle(PSTheme.textPrimary)
+            if FeatureFlags.isOn(.psBackdrop) {
+                VStack(alignment: .leading, spacing: PSSpacing.small) {
+                    PSLockup()
                     HStack(spacing: 6) {
-                        Text(L("Version")).foregroundStyle(PSTheme.textTertiary)
+                        Text(L("Version")).foregroundStyle(Color.psTextTertiary)
                         Text(verbatim: "\(BuildInfo.version) (\(BuildInfo.buildNumber))")
                     }
-                    .font(PSFont.caption(12)).foregroundStyle(PSTheme.textSecondary)
-                    Label(L("Live: on the iPhone"), systemImage: "iphone")
+                    .font(PSFont.caption(12)).foregroundStyle(Color.psTextSecondary)
+                    Label(L("Everything stays on the iPhone."), systemImage: "lock.fill")
                         .font(PSFont.caption(12))
-                        .foregroundStyle(PSTheme.success)
+                        .foregroundStyle(Color.psTextSecondary)
                 }
-                Spacer(minLength: 0)
+                .padding(.vertical, PSSpacing.small)
+                .accessibilityElement(children: .combine)
+            } else {
+                HStack(spacing: 14) {
+                    PSMark(size: 30)
+                        .frame(width: 58, height: 58)
+                        .background(RoundedRectangle(cornerRadius: PSRadius.tile, style: .continuous).fill(Color.psElevated))
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(verbatim: "PicShop").font(.title2.weight(.bold)).foregroundStyle(Color.psTextPrimary)
+                        HStack(spacing: 6) {
+                            Text(L("Version")).foregroundStyle(Color.psTextTertiary)
+                            Text(verbatim: "\(BuildInfo.version) (\(BuildInfo.buildNumber))")
+                        }
+                        .font(PSFont.caption(12)).foregroundStyle(Color.psTextSecondary)
+                        Label(L("Live: on the iPhone"), systemImage: "iphone")
+                            .font(PSFont.caption(12))
+                            .foregroundStyle(Color.psSuccess)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 6)
+                .accessibilityElement(children: .combine)
             }
-            .padding(.vertical, 6)
-            .accessibilityElement(children: .combine)
         }
         .listRowBackground(Color.clear)
         .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))

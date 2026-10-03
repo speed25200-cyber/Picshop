@@ -1613,3 +1613,18 @@ extension VisionTextQuery {
         return nil
     }
 }
+
+// MARK: - Histogram (Auto Tone, Levels' Auto)
+
+#if canImport(Vision) && canImport(CoreImage)
+extension VisionPhotoServices {
+    /// The active image layer's histogram before its Levels and curves (what Auto Levels reads,
+    /// so asking twice gives the same answer), on a 256 px proxy, off the main thread.
+    public func histogram(of document: PhotoDocument) async -> Histogram? {
+        await Self.histograms.toneInputHistogram(of: document, renderer: renderer)
+    }
+
+    /// Counts on its own executor, never the caller's.
+    private static let histograms = HistogramComputer()
+}
+#endif

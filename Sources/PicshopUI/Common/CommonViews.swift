@@ -25,35 +25,35 @@ struct ProgressHUD: View {
                     ShimmerText(title, font: PSFont.control(selected: true))
                         .multilineTextAlignment(.center)
                 } else {
-                    Text(title).font(PSFont.control(selected: true)).foregroundStyle(PSTheme.textPrimary)
+                    Text(title).font(PSFont.control(selected: true)).foregroundStyle(Color.psTextPrimary)
                         .multilineTextAlignment(.center).lineLimit(2)
                 }
                 if let onCancel {
-                    Button(L("Cancel"), action: onCancel).font(PSFont.footnote()).foregroundStyle(PSTheme.textSecondary)
+                    Button(L("Cancel"), action: onCancel).font(PSFont.footnote()).foregroundStyle(Color.psTextSecondary)
                 }
             }
             .padding(.horizontal, PSSpacing.xLarge)
             .padding(.vertical, PSSpacing.mediumLarge)
             .frame(minWidth: 168, maxWidth: 280)
-            .psCard(cornerRadius: PSRadius.hud)
+            .psCard(cornerRadius: PSRadius.card)
         }
         .transition(.opacity.combined(with: .scale(scale: 0.98)))
     }
 
     private var ring: some View {
         ZStack {
-            Circle().stroke(Color.white.opacity(0.12), lineWidth: 3.5)
+            Circle().stroke(Color.psStrokeStrong, lineWidth: 3.5)
             if let progress {
                 Circle()
                     .trim(from: 0, to: CGFloat(max(0.02, min(1, progress))))
                     .stroke(ringStyle, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(PSMotion.numeric, value: progress)
-                Text("\(Int(progress * 100))").font(PSFont.rounded(13)).foregroundStyle(PSTheme.textPrimary).contentTransition(.numericText())
+                Text("\(Int(progress * 100))").font(PSFont.rounded(13)).foregroundStyle(Color.psTextPrimary).contentTransition(.numericText())
             } else if tone == .intelligence {
                 MagicGlyph(size: 18).symbolEffect(.pulse)
             } else {
-                ProgressView().tint(PSTheme.textPrimary)
+                ProgressView().tint(Color.psTextPrimary)
             }
         }
         .frame(width: 44, height: 44)
@@ -62,7 +62,7 @@ struct ProgressHUD: View {
     private var ringStyle: AnyShapeStyle {
         tone == .intelligence
             ? AnyShapeStyle(AngularGradient(colors: PSTheme.intelligence + [PSTheme.intelligence[0]], center: .center))
-            : AnyShapeStyle(PSTheme.textPrimary)
+            : AnyShapeStyle(Color.psTextPrimary)
     }
 }
 
@@ -71,7 +71,7 @@ struct ProgressHUD: View {
 struct ToastView: View {
     let text: String
     var systemImage: String = "checkmark.circle.fill"
-    var tint: Color = PSTheme.success
+    var tint: Color = Color.psSuccess
     /// When set, the toast offers a one-tap follow-up right there, like Undo in Mail after an archive.
     var action: Action? = nil
 
@@ -84,10 +84,10 @@ struct ToastView: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: systemImage)
-                .font(.system(size: 17, weight: .medium))
+                .font(PSFont.glyph(.bar))
                 .foregroundStyle(tint)
                 .symbolRenderingMode(.hierarchical)
-            Text(text).font(PSFont.control()).foregroundStyle(PSTheme.textPrimary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            Text(text).font(PSFont.control()).foregroundStyle(Color.psTextPrimary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
             if let action {
                 Button {
                     Haptics.tap()
@@ -96,7 +96,7 @@ struct ToastView: View {
                     // Concentric with the toast: 44 − 2 × 6.
                     Label(action.title, systemImage: action.symbol)
                         .font(PSFont.control(selected: true))
-                        .foregroundStyle(PSTheme.textPrimary)
+                        .foregroundStyle(Color.psTextPrimary)
                         .padding(.horizontal, 12)
                         .frame(height: 32)
                         .psChipFill(Capsule())
@@ -115,6 +115,7 @@ struct ToastView: View {
 }
 
 /// Horizontal value slider with a centred zero for bipolar parameters.
+@available(*, deprecated, message: "Use DialSlider, or InspectorRow in the inspector.")
 struct ParameterSlider: View {
     let title: String
     @Binding var value: Double
@@ -125,17 +126,17 @@ struct ParameterSlider: View {
     var body: some View {
         VStack(spacing: 6) {
             HStack {
-                Text(title).font(PSFont.footnote()).foregroundStyle(PSTheme.textSecondary)
+                Text(title).font(PSFont.footnote()).foregroundStyle(Color.psTextSecondary)
                 Spacer()
                 Text(value >= 0 && bipolar ? "+\(Int((value * 100).rounded()))" : "\(Int((value * 100).rounded()))")
-                    .font(PSFont.mono(12)).foregroundStyle(PSTheme.textPrimary)
+                    .font(PSFont.mono(12)).foregroundStyle(Color.psTextPrimary)
                     .contentTransition(.numericText())
             }
             Slider(value: $value, in: range) { editing in
                 onEditingChanged?(editing)
                 if !editing { Haptics.tick() }
             }
-            .tint(PSTheme.accent)
+            .tint(Color.psValueAccent)
         }
     }
 }
@@ -147,9 +148,9 @@ struct SectionTitle: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(title).font(PSFont.section()).foregroundStyle(PSTheme.textPrimary)
+            Text(title).font(PSFont.section()).foregroundStyle(Color.psTextPrimary)
             if let count {
-                Text("\(count)").font(.subheadline.monospacedDigit()).foregroundStyle(PSTheme.textTertiary).contentTransition(.numericText())
+                Text("\(count)").font(.subheadline.monospacedDigit()).foregroundStyle(Color.psTextTertiary).contentTransition(.numericText())
             }
             Spacer()
         }

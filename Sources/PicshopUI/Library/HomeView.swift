@@ -6,13 +6,17 @@ import PicshopCore
 import PicshopIntent
 import PicshopImaging
 
-/// The first screen, calm: the name and Settings, your latest project to pick
-/// up, your recent work, and the dock — '+' to start, three ideas, the field
-/// and the orb. Colour comes from your own pictures.
+/// The first screen, calm: the lockup, search and Settings, your latest
+/// project to pick up, a one-tap strip of your photo library, your recent
+/// work, and the dock — '+' to start, three ideas, the field and the orb.
+/// Colour comes from your own pictures (PSBackdrop).
 ///
-/// The body reads only the summaries. Thumbnails, download progress, the
-/// crash report and the microphone are read by leaves, so none of them
-/// redraws the screen.
+/// The body reads only the summaries. Thumbnails, the palette, the scroll
+/// offset, download progress, the crash report and the microphone are read by
+/// leaves, so none of them redraws the screen.
+///
+/// With the psBackdrop flag off, Home is the W0 screen (flat ink, a blurred
+/// glow, the large title, three square columns).
 public struct HomeView: View {
     @Environment(\.picshop) private var app
     @State private var pickedItem: PhotosPickerItem?
@@ -26,6 +30,14 @@ public struct HomeView: View {
     @State private var renameTarget: ProjectSummary?
     @State private var renameText = ""
     @State private var deleteTarget: ProjectSummary?
+    /// psBackdrop, read once: a flag change takes effect the next time Home appears.
+    @State private var isStudio = FeatureFlags.isOn(.psBackdrop)
+    /// The latest picture's palette: read by the backdrop and the hero, never by this body.
+    @State private var palette = HomePaletteModel()
+    /// The scroll offset, read only by the backdrop.
+    @State private var scroll = HomeScrollState()
+    @State private var isSearching = false
+    @State private var query = ""
     @Namespace private var cardTransition
 
     /// The zoom source of the hero card.
@@ -48,11 +60,19 @@ public struct HomeView: View {
     public var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
-                PSTheme.ink.ignoresSafeArea()
-                if let library = app?.library {
-                    HomeBackdropHost(library: library).ignoresSafeArea()
+                if isStudio {
+                    if let library = app?.library {
+                        HomePaletteBackdrop(library: library, palette: palette, scroll: scroll).ignoresSafeArea()
+                    } else {
+                        Color.psBase.ignoresSafeArea()
+                    }
+                } else {
+                    Color.psBase.ignoresSafeArea()
+                    if let library = app?.library {
+                        HomeBackdropHost(library: library).ignoresSafeArea()
+                    }
                 }
-                content
+                if isStudio { studioContent } else { content }
             }
             .toolbar(.hidden, for: .navigationBar)
             .safeAreaBar(edge: .bottom) { dock }
@@ -166,13 +186,64 @@ public struct HomeView: View {
         }
     }
 
+    /// The W1 Home: lockup, Reprendre, Depuis la photothèque, Récents with a
+    /// sticky filter; or, with no project, the invitation and the strip.
+    @ViewBuilder
+    private var studioContent: some View {
+        if let app {
+            let library = app.library
+            let summaries = library.summaries
+            if let latest = summaries.first {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: PSSpacing.section, pinnedViews: [.sectionHeaders]) {
+                        HomeStudioHeader(app: app, isSearching: $isSearching, query: $query) { showsSettings = true }
+                        if !isSearching {
+                            hero(latest, library: library)
+                            HomeLibraryStrip(selection: $pickedItem)
+                                .padding(.horizontal, PSSpacing.page)
+                        }
+                        HomeRecentsGrid(summaries: isSearching ? HomeCommands.search(query, in: summaries) : summaries,
+                                        library: library, namespace: cardTransition, actions: projectActions,
+                                        style: .studio, searchQuery: isSearching ? query : nil)
+                    }
+                    .padding(.bottom, PSSpacing.large)
+                    .animation(PSSpring.standard, value: isSearching)
+                }
+                .scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.immediately)
+                .scrollEdgeEffectStyle(.soft, for: .top)
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.contentOffset.y + geometry.contentInsets.top
+                } action: { _, offset in
+                    scroll.update(offset)
+                }
+            } else {
+                VStack(spacing: 0) {
+                    HomeStudioHeader(app: app, isSearching: .constant(false), query: .constant(""), showsSearch: false) { showsSettings = true }
+                    if library.hasLoaded {
+                        HomeStudioEmptyState(selection: $pickedItem, actions: HomeStartActions(
+                            pickVideo: { pick(.videos) },
+                            importPDF: { showsPDFPicker = true },
+                            magicMovie: { showsMagicMovie = true }
+                        ))
+                        .frame(maxHeight: .infinity)
+                        .transition(.opacity)
+                    } else {
+                        Spacer(minLength: 0)
+                    }
+                }
+                .animation(PSSpring.standard, value: library.hasLoaded)
+            }
+        }
+    }
+
     /// The latest project, full width, to pick up where you left off.
     private func hero(_ summary: ProjectSummary, library: ProjectLibrary) -> some View {
         Button {
             Haptics.tap()
             openProject = OpenedProject(summary: summary, sourceID: Self.heroSourceID)
         } label: {
-            HomeResumeCard(summary: summary, slot: library.slot(for: summary.id))
+            HomeResumeCard(summary: summary, slot: library.slot(for: summary.id), palette: isStudio ? palette : nil)
         }
         .buttonStyle(PSPressStyle(scale: 0.98))
         // The editor grows out of the hero.
@@ -235,7 +306,7 @@ public struct HomeView: View {
 
 // MARK: - Header
 
-/// The name, and the one control Home keeps at the top: Settings.
+/// W0: the name, and the one control Home keeps at the top: Settings.
 private struct HomeHeader: View {
     let app: AppEnvironment
     let onSettings: () -> Void
@@ -244,17 +315,105 @@ private struct HomeHeader: View {
         HStack(alignment: .center, spacing: PSSpacing.medium) {
             Text(verbatim: "PicShop")
                 .font(PSFont.largeTitle())
-                .foregroundStyle(PSTheme.textPrimary)
+                .foregroundStyle(Color.psTextPrimary)
                 .lineLimit(1)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
-            PSCircleButton(systemImage: "gearshape", accessibilityLabel: L("Settings"), action: onSettings)
-                .overlay { HomeHeaderStatus(app: app).allowsHitTesting(false) }
-                // A report from a session that ended badly waits in Settings.
-                .accessibilityValue(app.pendingCrashReport != nil ? L("A diagnostics report is waiting") : "")
+            HomeSettingsButton(app: app, action: onSettings)
         }
         .padding(.horizontal, PSSpacing.page)
         .padding(.top, PSSpacing.small)
+    }
+}
+
+/// W1: the lockup (22-point mark, 28-point expanded wordmark), then Search and
+/// Settings as 44-point glass circles. Search turns the lockup into a field
+/// that filters the projects by title, on the device.
+private struct HomeStudioHeader: View {
+    let app: AppEnvironment
+    @Binding var isSearching: Bool
+    @Binding var query: String
+    var showsSearch = true
+    let onSettings: () -> Void
+
+    @FocusState private var fieldFocused: Bool
+    @Namespace private var glass
+
+    var body: some View {
+        PSGlassContainer(spacing: PSSpacing.small) {
+            HStack(alignment: .center, spacing: PSSpacing.small) {
+                if isSearching {
+                    searchField
+                        .glassEffectID("search", in: glass)
+                        .transition(.opacity)
+                    PSCircleButton(systemImage: "xmark", accessibilityLabel: L("Cancel")) { close() }
+                        .glassEffectID("settings", in: glass)
+                } else {
+                    PSLockup()
+                        .transition(.opacity)
+                    Spacer(minLength: 0)
+                    // Search and Settings: one glass shape on Home's budget.
+                    if showsSearch {
+                        PSCircleButton(systemImage: "magnifyingglass", accessibilityLabel: L("Search projects")) { open() }
+                            .glassEffectID("search", in: glass)
+                            .glassEffectUnion(id: "header", namespace: glass)
+                    }
+                    HomeSettingsButton(app: app, action: onSettings)
+                        .glassEffectID("settings", in: glass)
+                        .glassEffectUnion(id: "header", namespace: glass)
+                }
+            }
+        }
+        .frame(minHeight: PSMetrics.barButton)
+        .padding(.horizontal, PSSpacing.page)
+        .padding(.top, PSSpacing.small)
+        .animation(PSSpring.morph, value: isSearching)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: PSSpacing.small) {
+            Image(systemName: "magnifyingglass")
+                .font(PSFont.glyph(.chip))
+                .foregroundStyle(Color.psTextSecondary)
+            TextField(text: $query, prompt: Text(L("Search projects")).foregroundStyle(Color.psTextTertiary)) {
+                Text(L("Search projects"))
+            }
+            .font(.body)
+            .foregroundStyle(Color.psTextPrimary)
+            .tint(Color.psTextPrimary)
+            .focused($fieldFocused)
+            .submitLabel(.search)
+            .autocorrectionDisabled()
+        }
+        .padding(.horizontal, PSSpacing.large)
+        .frame(maxWidth: .infinity, minHeight: PSMetrics.barButton)
+        .psGlass(interactive: true)
+        // The field exists only once the morph has started: focus it then.
+        .onAppear { fieldFocused = true }
+    }
+
+    private func open() {
+        withAnimation(PSSpring.morph) { isSearching = true }
+    }
+
+    private func close() {
+        fieldFocused = false
+        query = ""
+        withAnimation(PSSpring.morph) { isSearching = false }
+    }
+}
+
+/// Settings, with the download ring and the diagnostics dot.
+private struct HomeSettingsButton: View {
+    let app: AppEnvironment
+    let action: () -> Void
+
+    var body: some View {
+        PSCircleButton(systemImage: "gearshape", accessibilityLabel: L("Settings"), action: action)
+            .overlay { HomeHeaderStatus(app: app).allowsHitTesting(false) }
+            // A report from a session that ended badly waits in Settings.
+            .accessibilityValue(app.pendingCrashReport != nil ? L("A diagnostics report is waiting") : "")
     }
 }
 
@@ -267,17 +426,17 @@ private struct HomeHeaderStatus: View {
         let progress = app.modelInstallProgress
         ZStack {
             if let progress {
-                Circle().stroke(Color.white.opacity(0.12), lineWidth: 2)
+                Circle().stroke(Color.psStrokeStrong, lineWidth: 2)
                 Circle()
                     .trim(from: 0, to: CGFloat(max(0.02, min(1, progress))))
-                    .stroke(PSTheme.textPrimary, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .stroke(Color.psTextPrimary, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                     .rotationEffect(.degrees(-90))
             }
         }
         .frame(width: PSMetrics.barButton + 6, height: PSMetrics.barButton + 6)
         .overlay(alignment: .topTrailing) {
             if app.pendingCrashReport != nil {
-                Circle().fill(PSTheme.warning).frame(width: 8, height: 8).offset(x: -3, y: 3)
+                Circle().fill(Color.psWarning).frame(width: 8, height: 8).offset(x: -3, y: 3)
             }
         }
         .animation(PSMotion.standard, value: progress)
@@ -291,10 +450,16 @@ private struct HomeHeaderStatus: View {
 /// an arrow to step back in. Its height comes from the summary, never from
 /// the image, so it does not move while the picture loads or the editor
 /// zooms back into it.
+///
+/// The light under it is a sibling shape filled with a soft gradient of the
+/// palette's glow (black without a palette), not a shadow on the picture, so
+/// scrolling never pays for an offscreen blur.
 private struct HomeResumeCard: View {
     let summary: ProjectSummary
     let slot: ThumbnailSlot
+    var palette: HomePaletteModel?
     @Environment(\.psEffects) private var effects
+    @Namespace private var glass
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: PSRadius.hero, style: .continuous)
@@ -303,45 +468,77 @@ private struct HomeResumeCard: View {
                 .overlay { ThumbnailImage(slot: slot, kind: summary.kind, glyphSize: 34) }
                 // A soft floor so clear glass stays legible over bright pictures.
                 .overlay(alignment: .bottom) {
-                    LinearGradient(colors: [.clear, .black.opacity(0.35)], startPoint: .top, endPoint: .bottom)
+                    LinearGradient(colors: [.clear, Color.psScrim], startPoint: .top, endPoint: .bottom)
                         .frame(height: 140)
                         .allowsHitTesting(false)
                 }
                 .overlay(alignment: .bottom) { caption }
         }
         .clipShape(shape)
-        .shadow(color: .black.opacity(effects == .rich ? 0.4 : 0), radius: 30, y: 16)
+        .background {
+            if effects == .rich {
+                HomeHeroGlow(palette: palette)
+            }
+        }
         .contentShape(shape)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L("Resume") + ", " + summary.title)
         .accessibilityAddTraits(.isButton)
     }
 
+    /// The title and the arrow: one clear-glass union (one shape on Home's glass budget), over the scrim.
     private var caption: some View {
+        PSGlassContainer(spacing: PSSpacing.small) {
+            captionRow
+        }
+        .padding(PSSpacing.medium)
+    }
+
+    private var captionRow: some View {
         HStack(alignment: .bottom, spacing: PSSpacing.small) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(summary.title)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.psTextPrimary)
                 HStack(spacing: 4) {
                     Text(L("Edited"))
                     Text(summary.modifiedAt, format: .relative(presentation: .named))
                 }
                 .font(PSFont.footnote())
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(Color.psTextSecondary)
             }
             .lineLimit(1)
             .padding(.horizontal, PSSpacing.large)
             .padding(.vertical, 10)
             .psGlass(variant: .clear)
+            .glassEffectUnion(id: "hero", namespace: glass)
             Spacer(minLength: 0)
+            // A capsule as wide as it is tall (a circle), so it unions with the title's capsule.
             Image(systemName: "arrow.up.right")
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .psGlass(shape: AnyShape(Circle()), variant: .clear)
+                .font(PSFont.glyph(.bar))
+                .foregroundStyle(Color.psTextPrimary)
+                .frame(width: PSMetrics.barButton, height: PSMetrics.barButton)
+                .psGlass(variant: .clear)
+                .glassEffectUnion(id: "hero", namespace: glass)
         }
-        .padding(PSSpacing.medium)
+    }
+}
+
+/// The hero's light: the palette's glow at 45 %, fading out below the card,
+/// 24 points down. A gradient on a sibling shape; it cross-fades with the palette.
+private struct HomeHeroGlow: View {
+    let palette: HomePaletteModel?
+
+    var body: some View {
+        let glow = palette?.palette.map { Color(psColor: $0.glow) } ?? Color.psCanvas
+        RoundedRectangle(cornerRadius: PSRadius.hero, style: .continuous)
+            .fill(EllipticalGradient(colors: [glow.opacity(0.45), glow.opacity(0)], center: .center,
+                                     startRadiusFraction: 0.3, endRadiusFraction: 0.62))
+            .scaleEffect(x: 1.12, y: 1.18)
+            .offset(y: 24)
+            .animation(PSSpring.paletteFade, value: palette?.palette)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 
@@ -379,13 +576,13 @@ struct ThumbnailImage: View {
                 Image(uiImage: image).resizable().scaledToFill()
                     .transition(.opacity)
             } else {
-                PSTheme.surface
+                Color.psRaised
                 Image(systemName: Self.symbol(for: kind))
-                    .font(.system(size: glyphSize, weight: .light))
-                    .foregroundStyle(PSTheme.textTertiary)
+                    .font(glyphSize > 30 ? .largeTitle.weight(.light) : .title2.weight(.light))
+                    .foregroundStyle(Color.psTextTertiary)
             }
         }
-        .animation(.easeOut(duration: 0.2), value: slot.image == nil)
+        .animation(PSSpring.fade, value: slot.image == nil)
     }
 
     static func symbol(for kind: ProjectSummary.Kind) -> String {
@@ -432,7 +629,57 @@ private struct HomeImportHUD: View {
 
 // MARK: - Backdrop
 
-/// Feeds the backdrop with the newest project's slot.
+/// The latest picture's palette, shared by the backdrop and the hero's glow.
+/// Only those two leaves read it.
+@MainActor
+@Observable
+final class HomePaletteModel {
+    /// Nil until the latest thumbnail has been read (the backdrop shows the fallback).
+    var palette: PSPalette?
+}
+
+/// Home's scroll offset, for the backdrop's parallax. Only the backdrop reads
+/// it, so scrolling never re-evaluates Home; it moves in whole points and stops
+/// changing once the mesh has faded (past 600 points).
+@MainActor
+@Observable
+final class HomeScrollState {
+    private(set) var offset: CGFloat = 0
+
+    func update(_ raw: CGFloat) {
+        let clamped = min(600, max(0, raw)).rounded()
+        if clamped != offset { offset = clamped }
+    }
+}
+
+/// PSBackdrop fed with the newest project's picture: its palette is derived
+/// off the main thread once per picture (and cached), then cross-fades in.
+/// A library without pictures keeps the fallback palette.
+struct HomePaletteBackdrop: View {
+    let library: ProjectLibrary
+    let palette: HomePaletteModel
+    let scroll: HomeScrollState
+
+    var body: some View {
+        let latest = library.summaries.first
+        let slot = latest.map { library.slot(for: $0.id) }
+        let image = slot?.image
+        PSBackdrop(palette: palette.palette, style: .home, scrollOffset: scroll.offset)
+            .task(id: image.map { ObjectIdentifier($0) }) {
+                guard let image, let latest else { return }
+                let key = latest.id.uuidString + "|" + String(latest.modifiedAt.timeIntervalSinceReferenceDate)
+                if let cached = PSPaletteCache.cached(key) {
+                    if palette.palette != cached { palette.palette = cached }
+                    return
+                }
+                let derived = await PSPaletteCache.palette(for: image, key: key)
+                guard !Task.isCancelled, let derived, derived != palette.palette else { return }
+                palette.palette = derived
+            }
+    }
+}
+
+/// W0: feeds the backdrop with the newest project's slot.
 struct HomeBackdropHost: View {
     let library: ProjectLibrary
 
@@ -441,9 +688,9 @@ struct HomeBackdropHost: View {
     }
 }
 
-/// The latest project as a faint light at the top of the screen — the library
-/// takes the colour of your own work, like Music does with album art. A 64 px
-/// copy blurred once with Core Image and scaled up: no live blur.
+/// W0: the latest project as a faint light at the top of the screen — the
+/// library takes the colour of your own work, like Music does with album art.
+/// A 64 px copy blurred once with Core Image and scaled up: no live blur.
 struct HomeBackdrop: View {
     let slot: ThumbnailSlot?
     @State private var glow: UIImage?
@@ -453,7 +700,7 @@ struct HomeBackdrop: View {
     var body: some View {
         let source = slot?.image
         ZStack(alignment: .top) {
-            PSTheme.ink
+            Color.psBase
             if let glow {
                 Image(uiImage: glow)
                     .resizable()
@@ -465,15 +712,15 @@ struct HomeBackdrop: View {
                     .opacity(0.35)
                     .overlay {
                         LinearGradient(stops: [
-                            .init(color: PSTheme.ink.opacity(0), location: 0),
-                            .init(color: PSTheme.ink.opacity(0.6), location: 0.55),
-                            .init(color: PSTheme.ink, location: 1),
+                            .init(color: Color.psBase.opacity(0), location: 0),
+                            .init(color: Color.psBase.opacity(0.6), location: 0.55),
+                            .init(color: Color.psBase, location: 1),
                         ], startPoint: .top, endPoint: .bottom)
                     }
                     .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.8), value: glow.map { ObjectIdentifier($0) })
+        .animation(PSSpring.paletteFade, value: glow.map { ObjectIdentifier($0) })
         .task(id: source.map { ObjectIdentifier($0) }) {
             guard let source else {
                 glow = nil
@@ -495,25 +742,31 @@ struct HomeBackdrop: View {
             let scale = 64 / longest
             let small = input.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
             let blurred = small.clampedToExtent().applyingGaussianBlur(sigma: 5).cropped(to: small.extent)
-            guard let output = RenderContext.shared.createCGImage(blurred, from: small.extent) else { return nil }
+            guard let output = RenderContext.background.createCGImage(blurred, from: small.extent) else { return nil }
             return UIImage(cgImage: output)
         }.value
     }
 }
 
-/// Ground behind sheets and settings: neutral ink with a faint light from
-/// above, so glass has something to catch.
+/// Ground behind sheets and settings (Settings, Help, the export sheets): the
+/// calm PSBackdrop — the base, a light from above and grain, no mesh. With the
+/// psBackdrop flag off, the W0 ink and faint light.
 struct AmbientBackground: View {
     var body: some View {
-        ZStack {
-            PSTheme.ink
-            RadialGradient(colors: [Color.white.opacity(0.05), .clear], center: .top, startRadius: 0, endRadius: 460)
+        if FeatureFlags.isOn(.psBackdrop) {
+            PSBackdrop(palette: nil, style: .calm)
+        } else {
+            ZStack {
+                Color.psBase
+                PSTopLight(glow: .clear, amount: 0.05)
+            }
+            .drawingGroup(opaque: true)
         }
-        .drawingGroup(opaque: true)
     }
 }
 
 /// Static mesh gradient used behind hero surfaces (GPU-cheap, no blur).
+@available(*, deprecated, message: "Use PSBackdrop or PSMark.")
 struct HeroMesh: View {
     var body: some View { IntelligenceField() }
 }
@@ -548,7 +801,7 @@ struct EditorHost: View {
     var body: some View {
         ZStack {
             switch session {
-            case .photo(let session)?: PhotoEditorView(session: session)
+            case .photo(let session)?: PhotoEditorView(session: session, title: summary.title)
             case .video(let session)?: VideoEditorView(session: session)
             case .pdf(let session)?: PDFEditorView(session: session)
             case nil:
@@ -610,7 +863,7 @@ private struct EditorOpening: View {
 
     var body: some View {
         ZStack {
-            PSTheme.canvas.ignoresSafeArea()
+            Color.psCanvas.ignoresSafeArea()
             if let image = slot.image {
                 Image(uiImage: image)
                     .resizable()
@@ -622,15 +875,15 @@ private struct EditorOpening: View {
             if let failure {
                 VStack(spacing: PSSpacing.medium) {
                     Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 28, weight: .medium))
-                        .foregroundStyle(PSTheme.warning)
+                        .font(.title.weight(.medium))
+                        .foregroundStyle(Color.psWarning)
                     Text(L("This project can't be opened"))
                         .font(PSFont.headline())
-                        .foregroundStyle(PSTheme.textPrimary)
+                        .foregroundStyle(Color.psTextPrimary)
                         .multilineTextAlignment(.center)
                     Text(failure)
                         .font(PSFont.footnote())
-                        .foregroundStyle(PSTheme.textSecondary)
+                        .foregroundStyle(Color.psTextSecondary)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                     PSCapsuleButton(L("Close"), kind: .prominent, action: onClose)
@@ -638,11 +891,11 @@ private struct EditorOpening: View {
                 }
                 .padding(PSSpacing.xLarge)
                 .frame(maxWidth: 340)
-                .psCard(cornerRadius: PSRadius.onboardingCard, shadow: false)
+                .psCard(cornerRadius: PSRadius.card, shadow: false)
                 .padding(PSSpacing.page)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
             } else if slot.image == nil {
-                ProgressView().tint(PSTheme.textSecondary)
+                ProgressView().tint(Color.psTextSecondary)
             }
         }
         .animation(PSMotion.standard, value: failure)
