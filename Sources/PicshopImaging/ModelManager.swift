@@ -352,6 +352,32 @@ public actor ModelManager {
             try FileManager.default.removeItem(at: directory)
         }
         set(.notInstalled, for: id)
+        Self.notifyModelRemoved(id)
+    }
+
+    // MARK: Removal hook (W3, D22)
+
+    private final class RemovalHook: @unchecked Sendable {
+        let lock = NSLock()
+        var handler: (@Sendable (String) -> Void)?
+    }
+
+    private static let removalHook = RemovalHook()
+
+    /// Called with a model id once its files were deleted or replaced: `delete`, a Live model installed over its
+    /// older files, the other Live model removed by an install. The app hooks the KV prefix store here
+    /// (`MLXPrefixStore.purge(modelID:)`): a persisted prefix never outlives the weights it was computed with.
+    public static func setOnModelRemoved(_ handler: (@Sendable (String) -> Void)?) {
+        removalHook.lock.lock()
+        removalHook.handler = handler
+        removalHook.lock.unlock()
+    }
+
+    static func notifyModelRemoved(_ id: String) {
+        removalHook.lock.lock()
+        let handler = removalHook.handler
+        removalHook.lock.unlock()
+        handler?(id)
     }
 
     /// Downloads and compiles a Core ML model archive, or fetches a Hugging Face folder.
@@ -593,11 +619,15 @@ public actor ModelManager {
                         }
                     }
                     let model = directory.appendingPathComponent("model", isDirectory: true)
-                    try? FileManager.default.removeItem(at: model)
+                    if FileManager.default.fileExists(atPath: model.path) {
+                        try? FileManager.default.removeItem(at: model)
+                        Self.notifyModelRemoved(id)
+                    }
                     try FileManager.default.moveItem(at: staging, to: model)
                     try Data().write(to: directory.appendingPathComponent("installed"))
                     for other in others where FileManager.default.fileExists(atPath: other.path) {
                         try? FileManager.default.removeItem(at: other)
+                        Self.notifyModelRemoved(other.lastPathComponent)
                     }
                 }.value
                 for other in ModelCatalog.all where other.kind == .languageModel && other.id != id {

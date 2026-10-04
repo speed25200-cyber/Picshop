@@ -39,14 +39,21 @@ public struct LiveGenerationStats: Sendable, Equatable {
     public var generatedTokens: Int
     public var firstTokenMs: Int
     public var tokensPerSecond: Double
+    /// W3 (D23): how the turn reached its first token: "warm", "restored", "prefix", "cold", "picture"; nil for W2's engine.
+    public var kvPath: String? = nil
+    /// W3: tokens of the shared prefix snapshot the turn started from.
+    public var prefixTokens: Int = 0
 
-    public init(model: String, promptTokens: Int, cachedTokens: Int, generatedTokens: Int, firstTokenMs: Int, tokensPerSecond: Double) {
+    public init(model: String, promptTokens: Int, cachedTokens: Int, generatedTokens: Int, firstTokenMs: Int, tokensPerSecond: Double,
+                kvPath: String? = nil, prefixTokens: Int = 0) {
         self.model = model
         self.promptTokens = promptTokens
         self.cachedTokens = cachedTokens
         self.generatedTokens = generatedTokens
         self.firstTokenMs = firstTokenMs
         self.tokensPerSecond = tokensPerSecond
+        self.kvPath = kvPath
+        self.prefixTokens = prefixTokens
     }
 }
 

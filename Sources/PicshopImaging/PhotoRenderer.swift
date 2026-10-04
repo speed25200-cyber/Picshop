@@ -55,10 +55,14 @@ public enum ImagingBreadcrumbs {
     }
 }
 
-/// Turns a `PhotoDocument` into a `CIImage` by replaying every layer's edit
-/// stack. Expensive operations (inpainting, upscaling) are cached by operation
-/// id and resolution so scrubbing sliders after an object removal stays
-/// interactive.
+/// Turns a `PhotoDocument` into a `CIImage`.
+///
+/// W3: every render goes through the compositing plan (`CompositePlan.make`, D11) and its executor
+/// (`CompositeExecutor`, the same code a snapshot frame runs): groups, clipping, fill and opacity, the 27 modes in
+/// gamma-encoded Display P3, adjustment and fill layers, layer masks, and the non-uniform placement map (D10).
+/// Expensive results (erase, generate, expand, upscale) are cached by content keys (D12): a key chains the source and
+/// every operation the loop transforms, so a dial drag never recomputes one and reordering an earlier step never
+/// reuses a stale one. Caches are byte-bounded (D15).
 public actor PhotoRenderer {
     public struct Options: Sendable {
         /// Longest side of the rendered canvas in pixels. `nil` renders at full resolution.
@@ -75,9 +79,15 @@ public actor PhotoRenderer {
         public var includesLocalAdjustments: Bool
         /// The local adjustment under the finger (W2, D6): the other adjustments' masks are frozen meanwhile.
         public var interactionTarget: UUID?
+        /// W3 (D14): the canvas-normalised region a detail tile renders; nil renders the whole canvas.
+        public var regionOfInterest: PSRect?
+        /// W3 (D14): a full-resolution export pass. Its expensive results are pinned until `endExportPass()`, and every
+        /// 8-bit non-HEIC source is decoded once, eagerly, at the density the output needs (strips then never decode
+        /// again); HEIC, RAW and deep sources stay lazy (tiled decode).
+        public var isExportPass: Bool
 
         public init(targetLongestSide: Double? = nil, showOriginal: Bool = false, includeOverlays: Bool = true, allowExpensiveWork: Bool = true, isDisplayed: Bool = false,
-                    includesLocalAdjustments: Bool = true, interactionTarget: UUID? = nil) {
+                    includesLocalAdjustments: Bool = true, interactionTarget: UUID? = nil, regionOfInterest: PSRect? = nil, isExportPass: Bool = false) {
             self.targetLongestSide = targetLongestSide
             self.showOriginal = showOriginal
             self.includeOverlays = includeOverlays
@@ -85,6 +95,8 @@ public actor PhotoRenderer {
             self.isDisplayed = isDisplayed
             self.includesLocalAdjustments = includesLocalAdjustments
             self.interactionTarget = interactionTarget
+            self.regionOfInterest = regionOfInterest
+            self.isExportPass = isExportPass
         }
 
         public static let preview = Options(targetLongestSide: 2048, isDisplayed: true)
@@ -97,21 +109,37 @@ public actor PhotoRenderer {
     private let inpainting: InpaintingPipeline
     /// Set again once the model is located: the first frame never waits for it.
     private var upscaler: Upscaler
-    /// Decoded sources, least recently used first in `sourceOrder`.
-    private var sourceCache: [String: CIImage] = [:]
+    /// Decoded sources by "<path>@<side|full|lazy>", least recently used first in `sourceOrder`, byte-bounded (D15).
+    private var sourceCache: [String: (image: CIImage, bytes: Int)] = [:]
     private var sourceOrder: [String] = []
-    private static let sourceCacheLimit = 6
+    private var sourceBytes = 0
+    /// D15: 160 MB of decoded sources; a detail tile may use 200 MB, evicting the preview's first (least recent).
+    static let sourceByteLimit = 160 * 1_048_576
+    static let detailSourceByteLimit = 200 * 1_048_576
+    private static let sourceEntryLimit = 32
     /// Feathered masks rendered once per size ("path|WxH|feather|inverted"), least recently used first.
     private var maskCache: [String: CIImage] = [:]
     private var maskOrder: [String] = []
     private static let maskCacheLimit = 12
+    /// Expensive results by "<content key>@WxH" (D12), least recently used first; byte-bounded (D15).
     private var operationCache: [String: CIImage] = [:]
+    private var operationBytes: [String: Int] = [:]
+    private var operationTotalBytes = 0
     /// Least recently used first: a hit moves its key to the end.
     private var operationOrder: [String] = []
+    /// D15: 256 MB of expensive results (was 24 entries), and never more than 64 of them.
+    static let operationByteLimit = 256 * 1_048_576
+    private static let operationCacheLimit = 64
     /// Keys the last settled on-screen render used: never trimmed, so a memory
     /// warning does not make the open photo redo its erases.
     private var displayedKeys: Set<String> = []
+    /// D14: the keys an export pass uses, exempt from eviction until it ends.
+    private var exportPins: Set<String> = []
+    /// Bytes an export pass holds besides its strips: pinned results and eagerly decoded sources.
+    private var exportSourceBytes = 0
     private var displayGeneration = 0
+    /// Operation id of each chained key (the part before "@"), so `purgeOperationCache(for:)` finds them.
+    private var chainOwners: [String: UUID] = [:]
     /// Rasterised text and shape layers per content and size. A table fill adds one text layer per cell
     /// (45 to 400): they all stay, so a render after the fill rasterises nothing again. Least recently
     /// used out first past `overlayCacheLimit` entries or `overlayByteLimit` bytes.
@@ -121,11 +149,6 @@ public actor PhotoRenderer {
     private var overlayBytes = 0
     private static let overlayCacheLimit = 600
     private static let overlayByteLimit = 96 * 1_048_576
-    /// Results of the expensive operations (erase, generate, upscale, denoise)
-    /// are worth keeping so undo and a panel change do not re-run a neural
-    /// model, but not forever: unbounded, a long session grew until the system
-    /// started reclaiming memory, and everything stuttered. Least recently used out first.
-    private static let operationCacheLimit = 24
     /// Expensive results being computed, keyed like `operationCache`: a second render of
     /// the same step (compare, a panel, the analysis image) awaits the running job instead
     /// of starting another PatchMatch or neural pass.
@@ -143,7 +166,25 @@ public actor PhotoRenderer {
     /// Brush strokes drawn into masks since the renderer was made.
     var strokeRasterizations: Int { strokeRasters.strokesDrawn }
     /// Local adjustments' masks (W2, D6): rasters, settled bitmaps, the interaction freeze, cubes and brushes.
+    /// W3: layer masks too (owner = the layer's id).
     let rasterizer: MaskRasterizer
+    /// W3 (D12, D15): materialised image-layer contents by content key.
+    let contentCache = LayerContentCache()
+    /// Content keys and chained operation keys, recomputed only when the layer's relevant fields change (equality of
+    /// unchanged values is cheap; their sorted-keys JSON is not).
+    private var contentKeyMemo: [UUID: (layer: Layer, key: String)] = [:]
+    private var operationKeyMemo: [UUID: (source: MediaAsset, operations: [EditOperation], keys: [UUID: String])] = [:]
+    /// The cubes the develop step bakes into (tests swap in their own to count bakes).
+    var colorCube: ColorCube = .shared
+    /// D13: the live interactive snapshot's store; a new snapshot or a memory trim empties it.
+    var liveSnapshot: SnapshotStore?
+    /// D14: the last detail tiles (LRU of 4), dropped on any document change.
+    var detailTiles: [(key: String, image: CIImage)] = []
+    /// Layer and mask thumbnails by content key, transform and side.
+    var thumbnails: [String: CGImage] = [:]
+    var thumbnailOrder: [String] = []
+    /// Expensive steps started since the renderer was made (tests: a dial drag recomputes nothing).
+    private(set) var expensiveRuns = 0
 
     public init(store: ProjectStore, projectID: UUID, inpainting: InpaintingPipeline, upscaler: Upscaler = Upscaler()) {
         self.store = store
@@ -160,15 +201,26 @@ public actor PhotoRenderer {
 
     public var maskStore: MaskStore { MaskStore(store: store, projectID: projectID) }
 
+    /// Tests: the cubes the develop step bakes into.
+    func setColorCube(_ cube: ColorCube) {
+        colorCube = cube
+    }
+
     /// Cache keys one render read or produced.
     final class KeyLog {
         var keys: Set<String> = []
     }
 
+    // MARK: - Expensive-result cache (D12, D15)
+
     private func cacheOperation(_ image: CIImage, for key: String) {
+        if let old = operationBytes[key] { operationTotalBytes -= old }
+        let bytes = Self.rasterBytes(of: image)
         operationCache[key] = image
+        operationBytes[key] = bytes
+        operationTotalBytes += bytes
         touch(key)
-        evict(downTo: Self.operationCacheLimit) { _ in false }
+        evict(downTo: Self.operationCacheLimit, bytes: Self.operationByteLimit) { _ in false }
     }
 
     /// Marks a cached result as just used.
@@ -177,64 +229,108 @@ public actor PhotoRenderer {
         operationOrder.append(key)
     }
 
-    /// Drops least recently used results until `limit` remain, those matching
-    /// `preferring` first; what is on screen stays.
-    private func evict(downTo limit: Int, preferring first: (String) -> Bool) {
-        let candidates = operationOrder.filter { !displayedKeys.contains($0) }
+    /// Drops least recently used results until at most `limit` remain within `bytes`, those matching `preferring`
+    /// first; what is on screen and what an export pass pinned stay.
+    private func evict(downTo limit: Int, bytes byteLimit: Int = Int.max, preferring first: (String) -> Bool) {
+        let candidates = operationOrder.filter { !displayedKeys.contains($0) && !exportPins.contains($0) }
         let ranked = candidates.filter(first) + candidates.filter { !first($0) }
         var excess = operationOrder.count - limit
-        for key in ranked where excess > 0 {
-            operationCache[key] = nil
+        for key in ranked where excess > 0 || operationTotalBytes > byteLimit {
+            removeOperation(key)
             excess -= 1
         }
         operationOrder.removeAll { operationCache[$0] == nil }
     }
 
+    private func removeOperation(_ key: String) {
+        operationCache[key] = nil
+        operationTotalBytes -= operationBytes.removeValue(forKey: key) ?? 0
+    }
+
     /// Drops all cached intermediates (call when memory is tight or media changed).
     /// Jobs still running finish for the renders awaiting them.
     public func purgeCaches() {
-        sourceCache.removeAll()
-        sourceOrder.removeAll()
+        clearSources()
         maskCache.removeAll()
         maskOrder.removeAll()
         operationCache.removeAll()
+        operationBytes.removeAll()
+        operationTotalBytes = 0
         operationOrder.removeAll()
         displayedKeys.removeAll()
+        exportPins.removeAll()
         clearOverlays()
         disparityCache.removeAll()
         clearStrokeMasks()
         rasterizer.purge()
+        contentCache.removeAll()
+        dropSnapshot()
+        detailTiles.removeAll()
+        thumbnails.removeAll()
+        thumbnailOrder.removeAll()
     }
 
     /// Memory warning: drops what is cheap to rebuild and the least recently used
     /// expensive results, other sizes (export, analysis) first. The results the
-    /// picture on screen uses always stay, so its erases are not redone.
+    /// picture on screen uses always stay, so its erases are not redone. W3 adds the layer contents, the snapshot
+    /// and the detail tiles (D15).
     public func trimForMemoryPressure(keepingRecent keep: Int = 4) {
-        sourceCache.removeAll()
-        sourceOrder.removeAll()
+        clearSources()
         maskCache.removeAll()
         maskOrder.removeAll()
         clearOverlays()
         disparityCache.removeAll()
         clearStrokeMasks()
         rasterizer.purge()
+        contentCache.removeAll()
+        dropSnapshot()
+        detailTiles.removeAll()
+        thumbnails.removeAll()
+        thumbnailOrder.removeAll()
         let displayedSizes = Set(displayedKeys.compactMap(Self.sizeSuffix(ofKey:)))
         evict(downTo: keep) { key in Self.sizeSuffix(ofKey: key).map { !displayedSizes.contains($0) } ?? true }
         RenderContext.shared.clearCaches()
     }
 
-    /// "WxH" of a cache key ("<uuid>@WxH").
+    /// "WxH" of a cache key ("<key>@WxH").
     private static func sizeSuffix(ofKey key: String) -> Substring? {
         key.lastIndex(of: "@").map { key[key.index(after: $0)...] }
+    }
+
+    /// The chained key of a cache key (the part before "@").
+    private static func chainKey(ofKey key: String) -> Substring {
+        key.lastIndex(of: "@").map { key[..<$0] } ?? Substring(key)
     }
 
     /// Whether an expensive step is being computed right now.
     public var hasHeavyWorkInFlight: Bool { !inFlight.isEmpty }
 
+    /// Drops the results of these operations: their current content keys (D12) and the W2 id keys alike.
     public func purgeOperationCache(for operationIDs: Set<UUID>) {
-        operationCache = operationCache.filter { key, _ in !operationIDs.contains { key.hasPrefix($0.uuidString) } }
+        let ids = Set(operationIDs.map(\.uuidString))
+        for key in Array(operationCache.keys) {
+            let chain = String(Self.chainKey(ofKey: key))
+            if let owner = chainOwners[chain], operationIDs.contains(owner) { removeOperation(key); continue }
+            if ids.contains(chain) { removeOperation(key) }
+        }
         operationOrder = operationOrder.filter { operationCache[$0] != nil }
         displayedKeys = displayedKeys.filter { operationCache[$0] != nil }
+        exportPins = exportPins.filter { operationCache[$0] != nil }
+    }
+
+    // MARK: - Export passes (D14)
+
+    /// Ends an export pass: its pinned results become ordinary cache entries again, its eager sources go.
+    public func endExportPass() {
+        exportPins.removeAll()
+        exportSourceBytes = 0
+        for key in sourceOrder where key.hasSuffix("#export") { removeSource(key) }
+        evict(downTo: Self.operationCacheLimit, bytes: Self.operationByteLimit) { _ in false }
+    }
+
+    /// Bytes the current export pass holds besides its strips (D14 `pinnedBytes`).
+    public var exportPinnedBytes: Int {
+        exportSourceBytes + exportPins.reduce(0) { $0 + (operationBytes[$1] ?? 0) }
     }
 
     // MARK: - Rendering
@@ -243,83 +339,388 @@ public actor PhotoRenderer {
         try await render(document, options: options, capture: nil)
     }
 
-    /// The render, with the base layer's masks for an overlay recorded in `capture` (W2, D17).
+    /// The render, with the masks of the capture's layer for an overlay recorded in `capture` (W2, D17; W3: any
+    /// image layer, or a layer mask).
     func render(_ document: PhotoDocument, options: Options, capture: MaskCapture?) async throws -> CIImage {
         let timer = PSTimer("render")
         defer { timer.log(category: .imaging) }
-        // A settled on-screen render records the results it uses; the newest one to finish wins.
-        let log = options.isDisplayed && options.allowExpensiveWork && !options.showOriginal ? KeyLog() : nil
-        if log != nil { displayGeneration += 1 }
+        // A settled on-screen render records the results it uses; the newest one to finish wins. An export pass
+        // records them too, to pin them (D14).
+        let records = (options.isDisplayed && options.allowExpensiveWork && !options.showOriginal) || options.isExportPass
+        let log = records ? KeyLog() : nil
+        let displayed = options.isDisplayed && options.allowExpensiveWork && !options.showOriginal
+        if displayed { displayGeneration += 1 }
         let generation = displayGeneration
 
-        guard let base = document.baseLayer, let baseAsset = base.imageAsset else {
-            throw PicshopError.renderFailed("document has no photo")
+        let frame = try await prepareFrame(document, options: options, log: log, capture: capture)
+        var image: CIImage
+        if let original = frame.original {
+            image = original
+        } else {
+            image = CompositeExecutor.render(frame.plan, inputs: frame.inputs(colorCube: colorCube, lutURL: lutURLMaker()))
         }
-        // Preview scale relative to the full-resolution original.
-        let fullLongest = max(baseAsset.pixelSize.width, baseAsset.pixelSize.height)
-        let scale = options.targetLongestSide.map { min(1, $0 / max(1, fullLongest)) } ?? 1
-
-        let baseImage = try await renderImageLayer(base, asset: baseAsset, scale: scale, options: options, log: log, capture: capture)
-        let canvasRect = CGRect(origin: .zero, size: baseImage.extent.size)
-        capture?.canvasOffset = CGAffineTransform(translationX: -baseImage.extent.minX, y: -baseImage.extent.minY)
-        capture?.canvasRect = canvasRect
-        var canvas = CIImage(color: document.backgroundColor.ciColor).cropped(to: canvasRect)
-        canvas = composite(baseImage.transformed(by: CGAffineTransform(translationX: -baseImage.extent.minX, y: -baseImage.extent.minY)), over: canvas, layer: base, canvasRect: canvasRect, isBase: true)
-
-        if options.showOriginal { return canvas }
-
-        for layer in document.layers where layer.id != base.id && layer.isVisible {
-            guard options.includeOverlays else { break }
-            let rendered: CIImage?
-            switch layer.content {
-            case .image(let asset):
-                rendered = try await renderImageLayer(layer, asset: asset, scale: scale, options: options, log: log)
-            case .text(let element):
-                // Keyed without where the text sits: a drag or a turn places the same raster.
-                rendered = overlayImage(key: "\(layer.overlayRasterKey ?? "text-\(layer.id)")-\(Int(canvasRect.width))") {
-                    #if canImport(UIKit)
-                    return TextRasterizer.image(for: element, canvasSize: canvasRect.size).map { CIImage(cgImage: $0) }
-                    #else
-                    return nil
-                    #endif
-                }
-            case .shape(let shape):
-                rendered = overlayImage(key: "\(layer.overlayRasterKey ?? "shape-\(layer.id)")-\(Int(canvasRect.width))") {
-                    #if canImport(UIKit)
-                    return TextRasterizer.image(for: shape, canvasSize: canvasRect.size).map { CIImage(cgImage: $0) }
-                    #else
-                    return nil
-                    #endif
-                }
-            case .fill(let color):
-                rendered = CIImage(color: color.ciColor).cropped(to: canvasRect)
-            case .adjustment(let adjustments):
-                // Applied to everything beneath, then laid back through the layer's mask, opacity and blend mode.
-                var adjusted = adjustments.isNeutral ? canvas : AdjustmentPipeline.apply(adjustments, toneCurve: .identity, to: canvas, scale: scale)
-                if let tone = toneTable(for: layer.edits) { adjusted = ToneRenderer.apply(tone, to: adjusted) }
-                if adjusted !== canvas {
-                    canvas = composite(adjusted.cropped(to: canvasRect), over: canvas, layer: layer, canvasRect: canvasRect, isBase: true)
-                }
-                rendered = nil
-            }
-            if let rendered {
-                canvas = composite(rendered, over: canvas, layer: layer, canvasRect: canvasRect, isBase: false)
-            }
+        if let roi = options.regionOfInterest {
+            // D14: the plan's output cropped to the region before any scaling.
+            let rect = roi.clampedToUnit().ciRect(in: frame.canvas).integral.intersection(frame.canvas)
+            if !rect.isEmpty { image = image.cropped(to: rect) }
         }
-        if let log, generation == displayGeneration { displayedKeys = log.keys }
+        if let log {
+            if displayed, generation == displayGeneration { displayedKeys = log.keys }
+            if options.isExportPass { exportPins.formUnion(log.keys) }
+        }
         // A settled picture on screen is drawn again for every zoom, pan and glide:
         // Core Image keeps the finished bitmap instead of replaying the edit graph.
-        if log != nil { return canvas.cropped(to: canvasRect).insertingIntermediate(cache: true) }
-        return canvas.cropped(to: canvasRect)
+        if displayed { return image.insertingIntermediate(cache: true) }
+        return image
     }
 
     /// Renders only the base photo with its edits (used by tools that need the pixels, e.g. segmentation).
     public func renderBase(_ document: PhotoDocument, options: Options = .preview) async throws -> CIImage {
         guard let base = document.baseLayer, let asset = base.imageAsset else { throw PicshopError.renderFailed("no photo") }
-        let fullLongest = max(asset.pixelSize.width, asset.pixelSize.height)
-        let scale = options.targetLongestSide.map { min(1, $0 / max(1, fullLongest)) } ?? 1
+        let scale = Self.renderScale(document, options: options)
         let image = try await renderImageLayer(base, asset: asset, scale: scale, options: options)
         return image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
+    }
+
+    /// The render's scale relative to the base photo's full resolution.
+    static func renderScale(_ document: PhotoDocument, options: Options) -> Double {
+        guard let asset = document.baseLayer?.imageAsset else { return 1 }
+        let fullLongest = max(asset.pixelSize.width, asset.pixelSize.height)
+        return options.targetLongestSide.map { min(1, $0 / max(1, fullLongest)) } ?? 1
+    }
+
+    /// The compositor's space (D6): gamma-encoded, unless the proTone kill switch is off.
+    static var compositeSpace: CompositeSpace { FeatureFlags.isOn(.proTone) ? .encoded : .linear }
+
+    /// Turns a LUT's project path into its file (the develop step runs off the actor too).
+    nonisolated func lutURLMaker() -> @Sendable (String) -> URL {
+        let store = self.store, projectID = self.projectID
+        return { store.url(for: $0, in: projectID) }
+    }
+
+    // MARK: - Frames (D11)
+
+    /// What one render draws, prepared on the actor: the plan, each layer placed on the canvas with its masks, the
+    /// adjustment and group masks, the adjustment recipes. The executor then builds the graph from it.
+    struct PreparedFrame {
+        var plan: [CompositeNode] = []
+        var canvas: CGRect = .null
+        /// The document's canvas at full resolution (the placement maps are normalised to it).
+        var canvasSize = PSSize(width: 1, height: 1)
+        var scale: Double = 1
+        var background: PSColor = .clear
+        var space: CompositeSpace = .encoded
+        var cubes: DevelopRenderer.Cubes = .settled
+        var pieces: [UUID: LayerPieces] = [:]
+        var masks: [UUID: CIImage] = [:]
+        var recipes: [UUID: DevelopRenderer.Recipe] = [:]
+        /// `showOriginal`: the untouched base over the background, drawn as it is.
+        var original: CIImage?
+
+        func placed(_ id: UUID) -> CIImage? {
+            pieces[id].flatMap { $0.placed(on: canvas) }
+        }
+
+        func inputs(colorCube: ColorCube, lutURL: @escaping @Sendable (String) -> URL) -> CompositeInputs {
+            let pieces = self.pieces, masks = self.masks, recipes = self.recipes, canvas = self.canvas
+            let scale = self.scale, cubes = self.cubes
+            return CompositeInputs(canvas: canvas, background: background, space: space,
+                                   content: { id in pieces[id].flatMap { $0.placed(on: canvas) } },
+                                   mask: { masks[$0] },
+                                   adjust: { id, backdrop in
+                                       guard let recipe = recipes[id], !recipe.isNeutral else { return backdrop }
+                                       return DevelopRenderer.apply(recipe, to: backdrop, scale: scale, cubes: cubes, colorCube: colorCube, lutURL: lutURL)
+                                   })
+        }
+    }
+
+    /// One layer's pixels before placement, and how they land on the canvas (D10, D8).
+    struct LayerPieces {
+        /// Content space, linear values, premultiplied, the legacy mask and a linked stack applied; nil draws nothing.
+        var content: CIImage?
+        /// Content unit square (top-left) → canvas-normalised (top-left), a group's transform included.
+        var map: PSHomography = .identity
+        /// A stack in canvas space (unlinked), gray.
+        var canvasMask: CIImage?
+        /// The content's full-resolution size the map was made for.
+        var contentSize = PSSize(width: 1, height: 1)
+
+        func placed(on canvas: CGRect) -> CIImage? {
+            guard let content else { return nil }
+            var image = ContentPlacement.place(content, map: map, canvas: canvas)
+            if let canvasMask { image = AdjustmentPipeline.applyingAlpha(mask: canvasMask, to: image) }
+            return image.cropped(to: canvas)
+        }
+    }
+
+    /// The prepared frame of a render (`render` and the snapshot's capture share it).
+    func prepareFrame(_ document: PhotoDocument, options: Options, log: KeyLog?, capture: MaskCapture?) async throws -> PreparedFrame {
+        guard let base = document.baseLayer, let baseAsset = base.imageAsset else {
+            throw PicshopError.renderFailed("document has no photo")
+        }
+        let scale = Self.renderScale(document, options: options)
+        var frame = PreparedFrame()
+        frame.scale = scale
+        frame.background = document.backgroundColor
+        frame.space = Self.compositeSpace
+        frame.cubes = options.allowExpensiveWork ? .settled : .interactive
+        let rasterMode: MaskRasterizer.Mode = options.allowExpensiveWork ? .settled(target: options.interactionTarget)
+                                                                          : .interactive(target: options.interactionTarget)
+        rasterizer.begin(rasterMode)
+
+        if options.showOriginal {
+            let original = try await renderImageLayer(base, asset: baseAsset, scale: scale, options: options)
+            let canvas = CGRect(origin: .zero, size: original.extent.size)
+            let placed = original.transformed(by: CGAffineTransform(translationX: -original.extent.minX, y: -original.extent.minY))
+            frame.canvas = canvas
+            frame.original = placed.composited(over: CIImage(color: document.backgroundColor.ciColor).cropped(to: canvas)).cropped(to: canvas)
+            return frame
+        }
+
+        var plan = CompositePlan.make(document)
+        if !options.includeOverlays { plan = [.layer(LayerDraw(base))] }
+        frame.plan = plan
+        let ids = plan.flatMap(\.layerIDs)
+        let materializes = ids.count > 1
+
+        // A layer mask's overlay reads only the content's extent and placement (set below): its layer's content stays
+        // in the content cache instead of being rebuilt every brush frame.
+        let contentCapture: MaskCapture?
+        if case .layerMask? = capture?.target { contentCapture = nil } else { contentCapture = capture }
+        // The base defines the canvas (its output at this scale).
+        let captureBase = capture != nil && (capture?.layerID == nil || capture?.layerID == base.id)
+        let baseContent = try await imageContent(base, asset: baseAsset, density: scale, options: options, log: log,
+                                                 capture: captureBase ? contentCapture : nil, canMaterialize: materializes)
+        let canvas = CGRect(origin: .zero, size: baseContent.extent.size)
+        frame.canvas = canvas
+        let canvasSize = document.canvasSize.width > 0 && document.canvasSize.height > 0
+            ? document.canvasSize : PSSize(width: Double(canvas.width) / scale, height: Double(canvas.height) / scale)
+        frame.canvasSize = canvasSize
+        if let capture, captureBase {
+            capture.layerID = base.id
+            if capture.extent.isNull, contentCapture == nil { capture.extent = baseContent.extent }
+            if !capture.extent.isNull { capture.canvasOffset = CGAffineTransform(translationX: -capture.extent.minX, y: -capture.extent.minY) }
+            capture.canvasRect = canvas
+            capture.map = .identity
+        }
+        let region = options.regionOfInterest.map { $0.clampedToUnit().ciRect(in: canvas).integral.intersection(canvas) }
+        let canvasPixels = PSSize(width: Double(canvas.width), height: Double(canvas.height))
+
+        for id in ids {
+            guard let layer = document.layer(id: id) else { continue }
+            let groupMap = groupPlacement(of: layer, in: document, canvasSize: canvasSize)
+            switch layer.content {
+            case .image(let asset):
+                if layer.id == base.id {
+                    let masked = layerMasked(layer, content: baseContent, canvas: canvas, mode: rasterMode)
+                    frame.pieces[id] = LayerPieces(content: masked.content, map: .identity, canvasMask: masked.canvasMask, contentSize: canvasSize)
+                    continue
+                }
+                let contentSize = LayerPlacement.contentSize(of: layer) ?? asset.pixelSize
+                var map = LayerPlacement.map(for: layer, contentSize: contentSize, canvasSize: canvasSize, isBase: false)
+                if let groupMap { map = map.then(groupMap) }
+                let wantsCapture = capture?.layerID == id
+                if let region, !wantsCapture, ContentPlacement.bounds(map, canvas: canvas).intersection(region).isEmpty { continue }
+                // Decoded at the density the placement needs (never denser than the source), in √2 steps.
+                let need = ContentPlacement.density(map, contentPixels: contentSize, canvasPixels: canvasPixels)
+                let density = Self.quantizedDensity(need * contentSize.width / max(1, asset.pixelSize.width))
+                let content = try await imageContent(layer, asset: asset, density: density, options: options, log: log,
+                                                     capture: wantsCapture ? contentCapture : nil, canMaterialize: materializes)
+                let masked = layerMasked(layer, content: content, canvas: canvas, mode: rasterMode)
+                if let capture, wantsCapture {
+                    capture.map = map
+                    capture.canvasRect = canvas
+                }
+                frame.pieces[id] = LayerPieces(content: masked.content, map: map, canvasMask: masked.canvasMask, contentSize: contentSize)
+            case .text, .shape:
+                guard let raster = overlayContent(layer, canvas: canvas) else { continue }
+                let k = Double(canvas.width) / max(1, canvasSize.width)
+                let contentSize = PSSize(width: Double(raster.extent.width) / max(1e-9, k), height: Double(raster.extent.height) / max(1e-9, k))
+                var map = LayerPlacement.map(for: layer, contentSize: contentSize, canvasSize: canvasSize, isBase: false)
+                if let groupMap { map = map.then(groupMap) }
+                if let region, ContentPlacement.bounds(map, canvas: canvas).intersection(region).isEmpty { continue }
+                let masked = layerMasked(layer, content: raster, canvas: canvas, mode: rasterMode)
+                frame.pieces[id] = LayerPieces(content: masked.content, map: map, canvasMask: masked.canvasMask, contentSize: contentSize)
+            case .fill(let color):
+                let masked = layerMasked(layer, content: CIImage(color: color.ciColor).cropped(to: canvas), canvas: canvas, mode: rasterMode)
+                frame.pieces[id] = LayerPieces(content: masked.content, map: .identity, canvasMask: masked.canvasMask, contentSize: canvasSize)
+            case .gradientFill(let gradient):
+                let masked = layerMasked(layer, content: GradientRenderer.image(gradient, canvas: canvas), canvas: canvas, mode: rasterMode)
+                frame.pieces[id] = LayerPieces(content: masked.content, map: .identity, canvasMask: masked.canvasMask, contentSize: canvasSize)
+            case .adjustment(let adjustments):
+                frame.masks[id] = canvasMask(of: layer, canvas: canvas, map: nil, mode: rasterMode)
+                frame.recipes[id] = DevelopRenderer.Recipe(edits: layer.edits, extra: adjustments, tone: toneTable(for: layer.edits))
+            case .group:
+                let ownMap = layer.transform == .identity ? nil : LayerPlacement.map(for: layer, contentSize: canvasSize, canvasSize: canvasSize, isBase: false)
+                frame.masks[id] = canvasMask(of: layer, canvas: canvas, map: layer.isMaskLinked ? ownMap : nil, mode: rasterMode)
+            case .unsupported:
+                continue
+            }
+        }
+        if let capture, let id = capture.layerID, id != base.id, let pieces = frame.pieces[id] {
+            // Text, shape and fill layers too (a layer mask's overlay).
+            capture.map = pieces.map
+            capture.canvasRect = canvas
+            if capture.extent.isNull, let content = pieces.content { capture.extent = content.extent }
+        }
+        return frame
+    }
+
+    /// A child's extra placement from its group's own transform (canvas-normalised → canvas-normalised); nil when the
+    /// layer is not in a group or the group is not transformed.
+    func groupPlacement(of layer: Layer, in document: PhotoDocument, canvasSize: PSSize) -> PSHomography? {
+        guard let parentID = layer.parentID, let group = document.layer(id: parentID), group.isGroup, group.transform != .identity else { return nil }
+        return LayerPlacement.map(for: group, contentSize: canvasSize, canvasSize: canvasSize, isBase: false)
+    }
+
+    /// Decode densities in √2 steps (a scaling drag re-decodes only when it crosses one), at most 1.
+    static func quantizedDensity(_ need: Double) -> Double {
+        guard need.isFinite, need > 0 else { return 1 }
+        guard need < 0.999 else { return 1 }
+        let step = (log2(need) * 2).rounded(.up) / 2
+        return min(1, max(1.0 / 64, pow(2, step)))
+    }
+
+    /// An image layer's content (its develop, local adjustments), from the content cache when it holds it (D12), else
+    /// rendered and, on a settled on-screen frame, materialised for the next ones.
+    func imageContent(_ layer: Layer, asset: MediaAsset, density: Double, options: Options, log: KeyLog?, capture: MaskCapture?,
+                      canMaterialize: Bool) async throws -> CIImage {
+        let usesCache = FeatureFlags.isOn(.contentHashCache) && capture == nil && !options.isExportPass && options.regionOfInterest == nil
+        let key = usesCache ? cacheContentKey(layer, options: options) : nil
+        if let key {
+            if let hit = contentCache.image(content: key, density: density) { return hit }
+            if !options.allowExpensiveWork, let scaled = contentCache.scaled(content: key, density: density) { return scaled }
+        }
+        let image = try await renderImageLayer(layer, asset: asset, scale: density, options: options, log: log, capture: capture)
+        let atOrigin = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
+        if let key, canMaterialize, options.isDisplayed, options.allowExpensiveWork,
+           let bitmap = contentCache.materialize(atOrigin, content: key, density: density) {
+            return bitmap
+        }
+        return atOrigin
+    }
+
+    /// The content cache's key: D12's content key and what the render options change in the pixels.
+    func cacheContentKey(_ layer: Layer, options: Options) -> String {
+        "\(contentKey(of: layer))|L\(options.includesLocalAdjustments ? 1 : 0)|T\(options.interactionTarget?.uuidString ?? "-")"
+    }
+
+    /// The id the content key hashes in place of the layer's own, so a duplicated layer shares its materialised pixels.
+    static let contentKeyID = UUID(uuidString: "00000000-0000-0000-0000-00000000C0DE")!
+
+    /// The content cache's key of a layer: a process-local hash of what its pixels depend on before placement and
+    /// masks (its content, operations, develop recipe and local adjustments; not its placement, opacity, blend, masks,
+    /// name or locks), recomputed only when those change. The content cache and the thumbnails live in memory only,
+    /// so a hash is enough: `RenderKeys.layerContentKey`'s JSON (milliseconds for a long brush) never runs per frame.
+    /// `layerMasked` applies the masks after the cached content, so a mask edit keeps it.
+    func contentKey(of layer: Layer) -> String {
+        var relevant = layer
+        relevant.transform = .identity
+        relevant.opacity = 1
+        relevant.fillOpacity = 1
+        relevant.blendMode = .normal
+        relevant.isVisible = true
+        relevant.isClipped = false
+        relevant.parentID = nil
+        relevant.name = ""
+        relevant.refNumber = nil
+        relevant.bakedMask = nil
+        relevant.lockOptions = []
+        relevant.isLocked = false
+        relevant.maskStack = nil
+        relevant.mask = nil
+        relevant.isMaskEnabled = true
+        relevant.isMaskLinked = true
+        relevant.id = Self.contentKeyID
+        if let memo = contentKeyMemo[layer.id], memo.layer == relevant { return memo.key }
+        var hasher = Hasher()
+        hasher.combine(relevant)
+        // The operation count guards against a collision between two states of one layer (MaskRasterizer's convention).
+        let key = String(UInt(bitPattern: hasher.finalize()), radix: 36) + "-\(relevant.edits.operations.count)"
+        contentKeyMemo[layer.id] = (relevant, key)
+        if contentKeyMemo.count > 256 { contentKeyMemo.removeAll() }
+        return key
+    }
+
+    /// D12: the chained keys of an image layer's operations, by operation id; W2's ids with the flag off.
+    func operationKeys(for layer: Layer, asset: MediaAsset) -> [UUID: String] {
+        guard FeatureFlags.isOn(.contentHashCache) else {
+            return Dictionary(layer.edits.operations.map { ($0.id, $0.id.uuidString) }, uniquingKeysWith: { _, last in last })
+        }
+        // The chain hashes only the operations that move pixels: a dial drag (a develop or local operation) keeps it.
+        let placed = RenderSnapshot.placedOperations(layer.edits)
+        if let memo = operationKeyMemo[layer.id], memo.source == asset, memo.operations == placed { return memo.keys }
+        let keys = RenderKeys.operationKeys(source: asset, edits: layer.edits)
+        operationKeyMemo[layer.id] = (asset, placed, keys)
+        if operationKeyMemo.count > 256 { operationKeyMemo.removeAll() }
+        for (id, key) in keys { chainOwners[key] = id }
+        if chainOwners.count > 4096 { chainOwners.removeAll() }
+        return keys
+    }
+
+    /// The legacy mask and a linked stack applied to `content` (content space); an unlinked stack returned apart, in
+    /// canvas space (D8). Content alpha × legacy × stack, raw mask values. Fill layers' content space is the canvas.
+    func layerMasked(_ layer: Layer, content: CIImage, canvas: CGRect, mode: MaskRasterizer.Mode) -> (content: CIImage, canvasMask: CIImage?) {
+        var image = content
+        let extent = content.extent
+        if let legacy = layer.mask, let mask = loadMask(legacy, fitting: extent) {
+            image = AdjustmentPipeline.applyingAlpha(mask: mask, to: image)
+        }
+        guard layer.isMaskEnabled, let stack = layer.maskStack, !stack.isEmpty else { return (image, nil) }
+        if layer.isMaskLinked || layer.isFill {
+            let mask = rasterizer.mask(stack, extent: extent, preLocal: content, mode: mode, owner: layer.id)
+            return (AdjustmentPipeline.applyingAlpha(mask: mask, to: image), nil)
+        }
+        return (image, rasterizer.mask(stack, extent: canvas, preLocal: nil, mode: mode, owner: layer.id))
+    }
+
+    /// An adjustment layer's or a group's mask on the canvas (legacy × stack), placed through `map` when linked to a
+    /// transformed group; nil without one.
+    func canvasMask(of layer: Layer, canvas: CGRect, map: PSHomography?, mode: MaskRasterizer.Mode) -> CIImage? {
+        var mask: CIImage?
+        if let legacy = layer.mask { mask = loadMask(legacy, fitting: canvas) }
+        if layer.isMaskEnabled, let stack = layer.maskStack, !stack.isEmpty {
+            let drawn = rasterizer.mask(stack, extent: canvas, preLocal: nil, mode: mode, owner: layer.id)
+            mask = mask.map { Self.multiply($0, drawn) } ?? drawn
+        }
+        guard let mask else { return nil }
+        if let map { return ContentPlacement.placeMask(mask, map: map, canvas: canvas) }
+        return mask.cropped(to: canvas)
+    }
+
+    /// Two gray masks multiplied (raw values).
+    static func multiply(_ a: CIImage, _ b: CIImage) -> CIImage {
+        let filter = CIFilter.multiplyCompositing()
+        filter.inputImage = a
+        filter.backgroundImage = b
+        return filter.outputImage ?? a
+    }
+
+    /// A text or shape layer's raster at the canvas size, from the overlay cache (keyed without where it sits).
+    func overlayContent(_ layer: Layer, canvas: CGRect) -> CIImage? {
+        switch layer.content {
+        case .text(let element):
+            // Keyed without where the text sits: a drag or a turn places the same raster.
+            return overlayImage(key: "\(layer.overlayRasterKey ?? "text-\(layer.id)")-\(Int(canvas.width))") {
+                #if canImport(UIKit)
+                return TextRasterizer.image(for: element, canvasSize: canvas.size).map { CIImage(cgImage: $0) }
+                #else
+                _ = element
+                return nil
+                #endif
+            }
+        case .shape(let shape):
+            return overlayImage(key: "\(layer.overlayRasterKey ?? "shape-\(layer.id)")-\(Int(canvas.width))") {
+                #if canImport(UIKit)
+                return TextRasterizer.image(for: shape, canvasSize: canvas.size).map { CIImage(cgImage: $0) }
+                #else
+                _ = shape
+                return nil
+                #endif
+            }
+        default:
+            return nil
+        }
     }
 
     // MARK: - Layers
@@ -350,39 +751,74 @@ public actor PhotoRenderer {
         return CIImage(cgImage: cg).transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
     }
 
-    /// A preview decodes its source eagerly, here, at the size it needs, never
-    /// inside a draw on the main thread; only a full-resolution render that is
-    /// not displayed (export) keeps the lazy full decode, for HDR and RAW.
-    private func source(for asset: MediaAsset, scale: Double, isFullResolution: Bool) throws -> CIImage {
+    /// A preview decodes its source eagerly, here, at the size it needs, never inside a draw on the main thread.
+    /// A full-resolution render that is not displayed keeps the lazy full decode (HDR, RAW), except in an export
+    /// pass, where an 8-bit JPEG or PNG is decoded once, eagerly, so its strips never decode it again (D14). A detail
+    /// tile opens a source above 24 MP lazily (ROI-driven, tiled for HEIC) and anything else at its density.
+    private func source(for asset: MediaAsset, scale: Double, isFullResolution: Bool, options: Options) throws -> CIImage {
         let longest = max(asset.pixelSize.width, asset.pixelSize.height)
         let targetSide = max(1, Int((longest * scale).rounded()))
-        let key = "\(asset.relativePath)@\(isFullResolution ? "full" : String(targetSide))"
+        let url = store.url(for: asset.relativePath, in: projectID)
+        let megapixels = asset.pixelSize.width * asset.pixelSize.height / 1_000_000
+        let lazyDetail = options.regionOfInterest != nil && megapixels > ExportBudget.streamingThresholdMegapixels
+        let eagerExport = isFullResolution && options.isExportPass && ImageSupport.decodesEagerly(at: url)
+        let tag: String
+        if lazyDetail || (isFullResolution && !eagerExport) {
+            tag = "lazy"
+        } else if eagerExport {
+            tag = "full#export"
+        } else {
+            tag = String(targetSide)
+        }
+        let key = "\(asset.relativePath)@\(tag)"
         if let cached = sourceCache[key] {
             if let index = sourceOrder.lastIndex(of: key) { sourceOrder.remove(at: index) }
             sourceOrder.append(key)
-            return cached
+            return cached.image
         }
-        let url = store.url(for: asset.relativePath, in: projectID)
         let image: CIImage
-        if isFullResolution {
+        let bytes: Int
+        if tag == "lazy" {
             image = try ImageSupport.loadCIImage(at: url)
+            bytes = 0
         } else {
-            let cg = try ImageSupport.loadCGImage(at: url, maxPixelSize: targetSide)
+            let cg = try ImageSupport.loadCGImage(at: url, maxPixelSize: eagerExport ? nil : targetSide)
             image = CIImage(cgImage: cg)
+            bytes = cg.bytesPerRow * cg.height
+            if eagerExport { exportSourceBytes += bytes }
         }
-        sourceCache[key] = image
+        sourceCache[key] = (image, bytes)
         sourceOrder.append(key)
-        while sourceOrder.count > Self.sourceCacheLimit {
-            sourceCache[sourceOrder.removeFirst()] = nil
+        sourceBytes += bytes
+        let limit = options.regionOfInterest != nil ? Self.detailSourceByteLimit : Self.sourceByteLimit
+        // Least recently used out first (the preview's before a tile's), never the source just decoded.
+        while sourceOrder.count > 1, sourceBytes > limit || sourceOrder.count > Self.sourceEntryLimit {
+            guard let victim = sourceOrder.first(where: { $0 != key && !$0.hasSuffix("#export") }) else { break }
+            removeSource(victim)
         }
         return image
     }
+
+    private func removeSource(_ key: String) {
+        sourceBytes -= sourceCache.removeValue(forKey: key)?.bytes ?? 0
+        sourceOrder.removeAll { $0 == key }
+    }
+
+    private func clearSources() {
+        sourceCache.removeAll()
+        sourceOrder.removeAll()
+        sourceBytes = 0
+        exportSourceBytes = 0
+    }
+
+    /// Bytes of decoded sources held (tests).
+    var sourceBytesHeld: Int { sourceBytes }
 
     /// A mask at `extent`, feathered and inverted as stored. Rendered once per size
     /// and kept (least recently used out first), so a dial drag over a masked edit
     /// never decodes a PNG or re-runs the feather blur. Fractional frames (placed
     /// layers) and very large ones (export) are loaded as they are.
-    private func loadMask(_ mask: MaskReference, fitting extent: CGRect) -> CIImage? {
+    func loadMask(_ mask: MaskReference, fitting extent: CGRect) -> CIImage? {
         guard extent == extent.integral, extent.width * extent.height <= 4096 * 4096, !extent.isEmpty else {
             return maskStore.load(mask, fitting: extent)
         }
@@ -409,8 +845,21 @@ public actor PhotoRenderer {
     }
 
     func renderImageLayer(_ layer: Layer, asset: MediaAsset, scale: Double, options: Options, log: KeyLog? = nil, capture: MaskCapture? = nil) async throws -> CIImage {
+        let image = try await preDevelopImage(layer, asset: asset, scale: scale, options: options, log: log)
+        if options.showOriginal { return image }
+        let effectiveScale = image.extent.width / max(1, asset.pixelSize.width)
+        let developed = DevelopRenderer.apply(developRecipe(for: layer), to: image, scale: effectiveScale,
+                                              cubes: options.allowExpensiveWork ? .settled : .interactive, colorCube: colorCube,
+                                              lutURL: { self.store.url(for: $0, in: self.projectID) })
+        // Local adjustments come last, each through its mask, Lightroom-style (W2, D2).
+        return applyLocalAdjustments(of: layer, to: developed, scale: effectiveScale, options: options, capture: capture)
+    }
+
+    /// The image layer's pixels after its operation loop, before the develop step: what a `.layerDevelop` snapshot
+    /// captures (D13). `showOriginal` returns the source as decoded.
+    func preDevelopImage(_ layer: Layer, asset: MediaAsset, scale: Double, options: Options, log: KeyLog? = nil) async throws -> CIImage {
         // Only an off-screen full-size render (export) keeps the lazy decode; what is drawn is decoded here.
-        var image = try source(for: asset, scale: scale, isFullResolution: scale >= 0.999 && !options.isDisplayed)
+        var image = try source(for: asset, scale: scale, isFullResolution: scale >= 0.999 && !options.isDisplayed, options: options)
         // Actual ratio between this render and the original (thumbnail loader rounds).
         let effectiveScale = image.extent.width / max(1, asset.pixelSize.width)
         if options.showOriginal { return image }
@@ -419,40 +868,21 @@ public actor PhotoRenderer {
         if let lens = layer.edits.resolvedLensBlur, !layer.edits.hasGeometry, let disparity = disparityMap(for: asset, fitting: image.extent) {
             image = LensBlur.apply(to: image, disparity: disparity, focus: lens.focus, aperture: lens.aperture)
         }
+        let keys = operationKeys(for: layer, asset: asset)
         for operation in layer.edits.operations {
-            image = try await apply(operation, to: image, layer: layer, scale: effectiveScale, options: options, log: log)
+            image = try await apply(operation, to: image, layer: layer, chainKey: keys[operation.id] ?? operation.id.uuidString,
+                                    scale: effectiveScale, options: options, log: log)
         }
-        let look = layer.edits.resolvedLook
-        let adjustments = AdjustmentPipeline.effectiveAdjustments(manual: layer.edits.resolvedAdjustments, look: look)
-        // The look's own 5-point curve goes with the adjustments, through Core Image's tone curve, as before W1.
-        let lookCurve = layer.edits.resolvedLookToneCurve
-        if !adjustments.isNeutral || !lookCurve.isIdentity {
-            image = AdjustmentPipeline.apply(adjustments, toneCurve: lookCurve, to: image, scale: effectiveScale)
-        }
-        // Levels and the person's curves: one table, in a gamma-encoded space, after the look and before colour.
-        if let tone = toneTable(for: layer.edits) {
-            image = ToneRenderer.apply(tone, to: image)
-        }
-        // Colour work after tone, as in a grading suite: match, then mixer and wheels in one LUT.
-        if let match = layer.edits.resolvedColorMatch {
-            image = ColorCube.shared.apply(match, to: image)
-        }
-        let mixer = layer.edits.resolvedColorMixer
-        let grade = layer.edits.resolvedColorGrade
-        if mixer != nil || grade != nil {
-            // A drag frame gets the small cube; the settled frame the full one.
-            image = ColorCube.shared.apply(mixer: mixer, grade: grade, to: image, interactive: !options.allowExpensiveWork)
-        }
-        // An imported look sits on top, as the last node of a grade.
-        if let lut = layer.edits.resolvedLUT {
-            image = ColorCube.shared.apply(lutAt: store.url(for: lut.relativePath, in: projectID), intensity: lut.intensity, to: image)
-        }
-        // Local adjustments come last, each through its mask, Lightroom-style (W2, D2).
-        return applyLocalAdjustments(of: layer, to: image, scale: effectiveScale, options: options, capture: capture)
+        return image
+    }
+
+    /// The develop recipe of an image layer, its tone table from the renderer's cache.
+    func developRecipe(for layer: Layer) -> DevelopRenderer.Recipe {
+        DevelopRenderer.Recipe(edits: layer.edits, extra: nil, tone: toneTable(for: layer.edits))
     }
 
     /// The layer's tone table, nil when Levels and its curve change nothing. Kept by its inputs.
-    private func toneTable(for edits: EditStack) -> ToneLUT? {
+    func toneTable(for edits: EditStack) -> ToneLUT? {
         let levels = edits.resolvedLevels
         let curve = edits.resolvedUserToneCurve
         guard !levels.isIdentity || curve != nil else { return nil }
@@ -496,7 +926,7 @@ public actor PhotoRenderer {
     /// The result for `key` when it is cached or being computed, else the same
     /// operation's result at another size, scaled. A larger result stands in for a
     /// smaller one at no loss; a smaller one only while interacting (no expensive work).
-    private func reusedResult(key: String, operationID: UUID, extent: CGRect, options: Options, log: KeyLog?) async throws -> CIImage? {
+    private func reusedResult(key: String, chainKey: String, extent: CGRect, options: Options, log: KeyLog?) async throws -> CIImage? {
         if let cached = operationCache[key] {
             touch(key)
             log?.keys.insert(key)
@@ -505,7 +935,7 @@ public actor PhotoRenderer {
         if options.allowExpensiveWork {
             // The same step is running, at this size or a larger one: wait for it rather than start another.
             let running = inFlight[key].map { (key: key, value: $0) }
-                ?? inFlight.first { Self.isResult(of: operationID, key: $0.key, reusableFor: extent, allowUpscale: false) }
+                ?? inFlight.first { Self.isResult(of: chainKey, key: $0.key, reusableFor: extent, allowUpscale: false) }
             if let running {
                 do {
                     let image = try await join(running.value, key: running.key)
@@ -519,10 +949,10 @@ public actor PhotoRenderer {
                 }
             }
         }
-        return scaledResult(of: operationID, to: extent, allowUpscale: !options.allowExpensiveWork, log: log)
+        return scaledResult(of: chainKey, to: extent, allowUpscale: !options.allowExpensiveWork, log: log)
     }
 
-    /// Input size encoded in a cache key ("<uuid>@WxH").
+    /// Input size encoded in a cache key ("<key>@WxH").
     private static func inputSize(inKey key: String) -> CGSize? {
         guard let at = key.lastIndex(of: "@") else { return nil }
         let parts = key[key.index(after: at)...].split(separator: "x")
@@ -530,17 +960,19 @@ public actor PhotoRenderer {
         return CGSize(width: width, height: height)
     }
 
-    private static func isResult(of operationID: UUID, key: String, reusableFor extent: CGRect, allowUpscale: Bool) -> Bool {
-        guard key.hasPrefix(operationID.uuidString + "@"), let size = inputSize(inKey: key) else { return false }
+    /// Whether `key` holds the result of the step whose chained key is `chainKey` (D12: by the prefix before "@"),
+    /// at a size that can stand in for `extent`.
+    static func isResult(of chainKey: String, key: String, reusableFor extent: CGRect, allowUpscale: Bool) -> Bool {
+        guard key.hasPrefix(chainKey + "@"), let size = inputSize(inKey: key) else { return false }
         guard extent.width > 0, extent.height > 0 else { return false }
         // Same framing only: a result for a different crop is not this one resized.
         guard abs(size.width / size.height - extent.width / extent.height) < 0.01 else { return false }
         return allowUpscale || size.width >= extent.width - 0.5
     }
 
-    private func scaledResult(of operationID: UUID, to extent: CGRect, allowUpscale: Bool, log: KeyLog?) -> CIImage? {
+    private func scaledResult(of chainKey: String, to extent: CGRect, allowUpscale: Bool, log: KeyLog?) -> CIImage? {
         var best: (key: String, size: CGSize, image: CIImage)?
-        for key in operationOrder where Self.isResult(of: operationID, key: key, reusableFor: extent, allowUpscale: allowUpscale) {
+        for key in operationOrder where Self.isResult(of: chainKey, key: key, reusableFor: extent, allowUpscale: allowUpscale) {
             guard let image = operationCache[key], let size = Self.inputSize(inKey: key) else { continue }
             let resultExtent = image.extent
             guard !resultExtent.isInfinite, resultExtent.width.isFinite, resultExtent.height.isFinite, resultExtent.width > 0, resultExtent.height > 0 else { continue }
@@ -576,6 +1008,7 @@ public actor PhotoRenderer {
             } else {
                 relieveMemoryIfNeeded(before: step)
                 ImagingBreadcrumbs.note("\(step) started · \(MemoryBudget.availableDescription) free")
+                expensiveRuns += 1
                 job = Task<CIImage, Error> {
                     let image = try await work()
                     try Task.checkCancellation()
@@ -641,11 +1074,12 @@ public actor PhotoRenderer {
         trimForMemoryPressure()
     }
 
-    private func apply(_ operation: EditOperation, to input: CIImage, layer: Layer, scale: Double, options: Options, log: KeyLog?) async throws -> CIImage {
+    /// One operation of the loop. `chainKey` is D12's content key after it (the operation id with the flag off).
+    private func apply(_ operation: EditOperation, to input: CIImage, layer: Layer, chainKey: String, scale: Double, options: Options, log: KeyLog?) async throws -> CIImage {
         let extent = input.extent
         // An unbounded or non-finite extent would trap in the Int conversions below.
         guard !extent.isInfinite, extent.width.isFinite, extent.height.isFinite else { return input }
-        let cacheKey = "\(operation.id.uuidString)@\(Int(extent.width))x\(Int(extent.height))"
+        let cacheKey = "\(chainKey)@\(Int(extent.width))x\(Int(extent.height))"
         switch operation.kind {
         case .adjust, .adjustments, .toneCurve, .levels, .look, .autoEnhance, .colorMixer, .colorGrade, .colorMatch, .lut:
             return input
@@ -685,7 +1119,7 @@ public actor PhotoRenderer {
             return perspective(input, horizontal: horizontal, vertical: vertical)
 
         case .expand(let placement):
-            let reused = try await reusedResult(key: cacheKey, operationID: operation.id, extent: extent, options: options, log: log)
+            let reused = try await reusedResult(key: cacheKey, chainKey: chainKey, extent: extent, options: options, log: log)
             if let reused { return reused }
             guard placement.width > 0.05, placement.height > 0.05 else { return input }
             let canvas = CGRect(x: 0, y: 0, width: (extent.width / placement.width).rounded(), height: (extent.height / placement.height).rounded())
@@ -715,7 +1149,7 @@ public actor PhotoRenderer {
             return AdjustmentPipeline.blendWithMask(foreground: blurred, background: input, mask: soft)
 
         case .moveObject(let mask, let offset):
-            let reused = try await reusedResult(key: cacheKey, operationID: operation.id, extent: extent, options: options, log: log)
+            let reused = try await reusedResult(key: cacheKey, chainKey: chainKey, extent: extent, options: options, log: log)
             if let reused { return reused }
             guard let maskImage = loadMask(mask, fitting: extent) else { return input }
             // The object lifted with a soft edge, carried to its new place.
@@ -731,7 +1165,7 @@ public actor PhotoRenderer {
             }
 
         case .removeObject(let mask):
-            let reused = try await reusedResult(key: cacheKey, operationID: operation.id, extent: extent, options: options, log: log)
+            let reused = try await reusedResult(key: cacheKey, chainKey: chainKey, extent: extent, options: options, log: log)
             if let reused { return reused }
             guard options.allowExpensiveWork, let maskImage = loadMask(mask, fitting: extent) else { return input }
             let inpainting = self.inpainting
@@ -740,7 +1174,7 @@ public actor PhotoRenderer {
             }
 
         case .heal(let strokes):
-            let reused = try await reusedResult(key: cacheKey, operationID: operation.id, extent: extent, options: options, log: log)
+            let reused = try await reusedResult(key: cacheKey, chainKey: chainKey, extent: extent, options: options, log: log)
             if let reused { return reused }
             guard options.allowExpensiveWork else { return input }
             // A hole to fill has no soft edge: the erase brush is drawn hard, whatever its hardness.
@@ -775,7 +1209,7 @@ public actor PhotoRenderer {
             return AdjustmentPipeline.blendWithMask(foreground: adjusted, background: input, mask: maskImage)
 
         case .upscale(let factor):
-            let reused = try await reusedResult(key: cacheKey, operationID: operation.id, extent: extent, options: options, log: log)
+            let reused = try await reusedResult(key: cacheKey, chainKey: chainKey, extent: extent, options: options, log: log)
             if let reused { return reused }
             guard options.allowExpensiveWork else { return input }
             let upscaler = self.upscaler
@@ -801,7 +1235,7 @@ public actor PhotoRenderer {
             return BackgroundEffects.relight(input, direction: direction, intensity: intensity)
 
         case .generativeFill(let mask, let prompt):
-            let reused = try await reusedResult(key: cacheKey, operationID: operation.id, extent: extent, options: options, log: log)
+            let reused = try await reusedResult(key: cacheKey, chainKey: chainKey, extent: extent, options: options, log: log)
             if let reused { return reused }
             guard options.allowExpensiveWork, let maskImage = loadMask(mask, fitting: extent) else { return input }
             let inpainting = self.inpainting
@@ -876,7 +1310,7 @@ public actor PhotoRenderer {
         return cropped.transformed(by: CGAffineTransform(translationX: -cropped.extent.minX, y: -cropped.extent.minY))
     }
 
-    // MARK: - Compositing
+    // MARK: - Overlay rasters
 
     private func overlayImage(key: String, make: () -> CIImage?) -> CIImage? {
         overlayTick += 1
@@ -906,40 +1340,11 @@ public actor PhotoRenderer {
         overlayBytes = 0
     }
 
-    /// Bytes of a rasterised overlay (RGBA of its extent).
-    private static func rasterBytes(of image: CIImage) -> Int {
+    /// Bytes of a rasterised image (RGBA of its extent).
+    static func rasterBytes(of image: CIImage) -> Int {
         let extent = image.extent
         guard extent.width.isFinite, extent.height.isFinite, !extent.isEmpty else { return 0 }
         return Int(extent.width * extent.height) * 4
-    }
-
-    private func composite(_ image: CIImage, over canvas: CIImage, layer: Layer, canvasRect: CGRect, isBase: Bool) -> CIImage {
-        var placed = image
-        if !isBase {
-            // Fit inside the canvas, then apply the layer transform (normalised centre, scale, rotation, flips).
-            // A text layer sits where its element says: the text tool, hit-testing and the executors move
-            // `TextElement.center` and turn `.rotation`, so the element is the truth for text (scale and flips stay
-            // the layer's).
-            let fit = min(canvasRect.width / max(1, image.extent.width), canvasRect.height / max(1, image.extent.height), 1)
-            let scale = fit * layer.transform.scale
-            let (center, rotation) = OverlayPlacement.placement(of: layer)
-            var transform = CGAffineTransform.identity
-            let cx = canvasRect.minX + CGFloat(center.x) * canvasRect.width
-            let cy = canvasRect.minY + (1 - CGFloat(center.y)) * canvasRect.height
-            transform = transform.translatedBy(x: cx, y: cy)
-            transform = transform.rotated(by: CGFloat(-rotation * .pi / 180))
-            transform = transform.scaledBy(x: scale * (layer.transform.isFlippedHorizontally ? -1 : 1), y: scale * (layer.transform.isFlippedVertically ? -1 : 1))
-            transform = transform.translatedBy(x: -image.extent.midX, y: -image.extent.midY)
-            placed = image.transformed(by: transform)
-        }
-        if let mask = layer.mask, let maskImage = loadMask(mask, fitting: placed.extent) {
-            placed = AdjustmentPipeline.applyingAlpha(mask: maskImage, to: placed)
-        }
-        // Opacity and the 27 blend modes (BlendModes: gamma-encoded blends, as BlendMath; with the
-        // proTone kill switch off, the 12 older modes blend as before W1).
-        return BlendModes.composite(placed, over: canvas, mode: layer.blendMode, opacity: layer.opacity,
-                                    seed: Self.dissolveSeed(for: layer.id), legacy: !FeatureFlags.isOn(.proTone))
-            .cropped(to: canvasRect)
     }
 
     /// Dissolve's noise offset for a layer, from its id: the same grain on every frame and every launch.

@@ -26,15 +26,48 @@ public protocol LocalModelRuntime: AnyObject, Sendable {
     /// Additive (phase 1): stops every generation in flight, keeping the weights
     /// and the conversations: the app is leaving the foreground (no GPU work in the background).
     func stopGenerating()
+    /// W3: the app is active again with the weights still loaded (Control Center, a banner): background model work that
+    /// `stopGenerating` stopped (the KV self-test) is scheduled again for when the person is idle.
+    func resumeBackgroundWork()
     /// Additive (phase 1): prefills the planner's session for `mode` (its instructions and
     /// examples) off the main actor, so push-to-talk's first command is not a cold one.
     /// Only used when the local planner is push-to-talk's preferred engine.
     func warmPlanner(mode: EditorMode)
+    /// W3 (D22): builds and keeps the KV prefix snapshot for `setup` (`LocalModelLiveBrain.prefixSetup`), in place of
+    /// the "Bonjour" warm-up when the KV engine is active. Off the main actor.
+    func warmLivePrefix(_ setup: LocalChatSetup)
+    /// W3 (D15): a memory warning or Live closed: the prefix snapshot in RAM goes (the persisted file stays).
+    func releaseLivePrefix(reason: String)
+    /// W3 (D23): the engine kind, the self-test and the prefix store, for Diagnostic Live's « Latence ». May touch
+    /// the disk: read it off the main actor.
+    var kvDiagnostics: LocalKVDiagnostics { get }
 }
 
 extension LocalModelRuntime {
     public func stopGenerating() {}
+    public func resumeBackgroundWork() {}
     public func warmPlanner(mode: EditorMode) {}
+    public func warmLivePrefix(_ setup: LocalChatSetup) {}
+    public func releaseLivePrefix(reason: String) {}
+    public var kvDiagnostics: LocalKVDiagnostics { LocalKVDiagnostics() }
+}
+
+/// What Diagnostic Live shows of the KV engine (W3, D22–D23).
+public struct LocalKVDiagnostics: Sendable, Equatable {
+    /// The engine new conversations get.
+    public var engine: LocalEngineKind
+    /// "pending", "waiting", "running", "passed", "failed", "mediaFailed" or "off".
+    public var selfTest: String
+    public var mediaAppendVerified: Bool
+    /// "1 · 142 MB · RAM 138 MB": persisted files, their size, the snapshot in RAM.
+    public var prefix: String
+
+    public init(engine: LocalEngineKind = .chatSession, selfTest: String = "off", mediaAppendVerified: Bool = false, prefix: String = "") {
+        self.engine = engine
+        self.selfTest = selfTest
+        self.mediaAppendVerified = mediaAppendVerified
+        self.prefix = prefix
+    }
 }
 
 public struct LocalModelSpeed: Sendable, Equatable, Codable {
@@ -154,6 +187,15 @@ public final class LocalBrainHub {
     /// Free memory when the app started, for the tier (the live figure gates each load).
     @ObservationIgnored private var launchAvailableMemory: UInt64?
     @ObservationIgnored private var liveBrains: [WeakModelBrain] = []
+    /// W3 (D22): the modes whose Live prefix was warmed for the loaded weights (at most once per mode per load), and
+    /// the modes a Live session asked for before the weights were in.
+    @ObservationIgnored private var warmedPrefixModes: Set<EditorMode> = []
+    @ObservationIgnored private var pendingPrefixModes: Set<EditorMode> = []
+    /// W3 (D23): first-token samples, restores and compactions for Diagnostic Live's « Latence ». Observed: only
+    /// LiveDebugView reads it, and it changes once per turn.
+    public private(set) var firstTokenStats = FirstTokenStats()
+    /// A compaction the brain logged since the last noted turn.
+    @ObservationIgnored private var compactionsSinceTurn = 0
 
     private struct WeakModelBrain {
         weak var brain: LocalModelLiveBrain?
@@ -447,6 +489,9 @@ public final class LocalBrainHub {
         pushThermalState()
         // W2 (D12, D13): the broker counts the weights; a vision model grounds boxes.
         await brokerNoteLoaded(id)
+        // A Live session that opened before the weights were in gets its prefix now.
+        for mode in pendingPrefixModes { warmLivePrefix(mode: mode) }
+        pendingPrefixModes = []
         guard let app else { return }
         if !plannerRegistered, let planner = runtime?.makePlanner() {
             plannerRegistered = true
@@ -511,6 +556,7 @@ public final class LocalBrainHub {
         let wasActive = load != .idle
         if case .failed = load {} else { load = .idle }
         UserDefaults.standard.removeObject(forKey: Keys.loadedModel)
+        warmedPrefixModes = []
         refreshStatus()
         guard wasActive, let runtime else { return }
         PSLog.info("local brain: releasing (\(reason))", category: .models)
@@ -520,6 +566,7 @@ public final class LocalBrainHub {
     }
 
     private func returnedToForeground() {
+        runtime?.resumeBackgroundWork()
         guard let app, app.isEditorOpen, app.settings.livePreparesOnOpen else { return }
         preload(reason: "foreground")
     }
@@ -697,9 +744,18 @@ public final class LocalBrainHub {
         #endif
         var model: (any LiveBrain)?
         if let runtime, runtime.isUsable, let entry = activeEntry(), installs[entry.info.id] == .installed {
+            // W3 (D23): the brain reads its compaction limits from the engine it gets (KV engine or ChatSession).
+            var limits = LocalModelLiveBrain.Limits()
+            limits.adaptive = true
+            let sink = LiveServices.shared.logSink
             let brain = LocalModelLiveBrain(mode: mode, info: entry.info, makeEngine: { [runtime] setup in
                 try await runtime.makeEngine(setup)
-            }, fallback: local, log: LiveServices.shared.logSink)
+            }, fallback: local, limits: limits, log: { logEntry in
+                // The brain's compaction note feeds the « Latence » rate (D23).
+                if logEntry.event == "model.compacted" { Task { @MainActor in LocalBrainHub.shared.noteCompaction() } }
+                sink(logEntry)
+            })
+            warmLivePrefix(mode: mode)
             liveBrains.removeAll { $0.brain == nil }
             liveBrains.append(WeakModelBrain(brain: brain))
             if ProcessInfo.processInfo.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue {
@@ -708,6 +764,67 @@ public final class LocalBrainHub {
             model = brain
         }
         return LiveBrainSet(model: model, onDevice: onDevice, local: local)
+    }
+
+    // MARK: Live latency (W3, D22–D23)
+
+    /// Builds the KV prefix snapshot for `mode` off the main actor, at most once per mode per load; before the weights
+    /// are in, when they arrive.
+    func warmLivePrefix(mode: EditorMode) {
+        guard let runtime, let entry = activeEntry() else { return }
+        guard isModelReady else {
+            pendingPrefixModes.insert(mode)
+            return
+        }
+        guard !warmedPrefixModes.contains(mode) else { return }
+        warmedPrefixModes.insert(mode)
+        let setup = LocalModelLiveBrain.prefixSetup(mode: mode, info: entry.info)
+        Task.detached(priority: .utility) { runtime.warmLivePrefix(setup) }
+    }
+
+    /// Live closed in an editor: the RAM prefix snapshot goes (D15); the next session warms it again.
+    public func liveClosed() {
+        pendingPrefixModes = []
+        guard let runtime else { return }
+        warmedPrefixModes = []
+        Task.detached(priority: .utility) { runtime.releaseLivePrefix(reason: "live closed") }
+    }
+
+    /// One answered turn's first generation: a `live.firstToken` event and a sample for « Latence ».
+    func noteTurn(stats: LiveGenerationStats, picture: Bool) {
+        firstTokenStats.noteDecodeRate(stats.tokensPerSecond)
+        guard let sample = FirstTokenSample(stats: stats, picture: picture) else { return }
+        PSSignpost.event("live.firstToken", "\(sample.milliseconds) ms · \(sample.signpostMetadata)")
+        firstTokenStats.add(sample)
+        firstTokenStats.noteTurn(compacted: compactionsSinceTurn > 0)
+        compactionsSinceTurn = 0
+    }
+
+    /// The brain logged `model.compacted`.
+    func noteCompaction() {
+        compactionsSinceTurn += 1
+    }
+
+    /// A barge-in restored the KV engine's turn checkpoint (the runtime reports it).
+    public func noteKVRestore(milliseconds: Int) {
+        firstTokenStats.noteRestore(milliseconds: milliseconds)
+    }
+
+    /// The runtime's KV state, read off the main actor (the prefix summary lists files).
+    public func kvDiagnostics() async -> LocalKVDiagnostics {
+        guard let runtime else { return LocalKVDiagnostics() }
+        return await Task.detached(priority: .utility) { runtime.kvDiagnostics }.value
+    }
+
+    /// Whether background model work (the KV self-test, D22 step 5) may run now: no canvas interaction for 10 s, the
+    /// thermal state nominal, and no export, mask analysis or model turn running.
+    public var allowsBackgroundModelWork: Bool {
+        guard ProcessInfo.processInfo.thermalState == .nominal, UIApplication.shared.applicationState == .active else { return false }
+        if let governor = app?.performance {
+            if governor.isCanvasInteracting { return false }
+            if let last = governor.lastCanvasInteraction, Date().timeIntervalSince(last) < 10 { return false }
+        }
+        return !ModelBrokerActivity.shared.isBusy(now: Date())
     }
 
     // MARK: Status

@@ -44,7 +44,7 @@ public struct PhotoEditorView: View {
                      rail: { PhotoToolCatalog.make(session: session, railOnly: true) },
                      isToolOpen: session.activeTool != nil,
                      candidateThumbnail: { index in await candidateThumbnail(index) },
-                     context: isStudio ? StudioContext(title: title, zoomPercent: 100) : nil,
+                     context: isStudio ? StudioContext(title: title, zoomPercent: 100, showsTransparency: session.layerState.showsTransparency) : nil,
                      compare: isStudio ? compare : nil,
                      openToolID: session.activeTool?.rawValue,
                      showsRail: isStudio) {
@@ -54,6 +54,8 @@ public struct PhotoEditorView: View {
                 .overlay(alignment: .topLeading) {
                     if isStudio { PhotoHistogramCorner(tone: session.tone) }
                 }
+                // W3: the Layers column on the canvas's right edge, between the bars.
+                .overlay { LayersColumnHost(session: session) }
         } panel: {
             if let tool = session.activeTool {
                 PhotoToolPanel(session: session, tool: tool)
@@ -64,7 +66,7 @@ public struct PhotoEditorView: View {
         .overlay { EditorStatusOverlay(session: session) }
         .task { await open() }
         .onDisappear { session.teardown() }
-        .sheet(isPresented: $session.showsExport) { ExportSheet(session: session) }
+        .sheet(isPresented: $session.showsExport, onDismiss: { session.exportPreset = nil }) { ExportSheet(session: session) }
         .sheet(isPresented: $session.showsHelp) {
             HelpSheet(mode: .photo) { text in session.live.send(text: text) }
         }
@@ -78,6 +80,8 @@ public struct PhotoEditorView: View {
             }
         }
         .background { SelectionSheets(session: session) }
+        .background { LayerDialogs(session: session) }
+        .imageLayerPicker(session)
         .environment(isStudio ? zoomMirror : nil)
         .persistentSystemOverlays(.hidden)
     }
@@ -118,6 +122,8 @@ public struct PhotoEditorView: View {
                                      session.zoomRequest = PhotoEditorSession.ZoomRequest(amount: .multiplier(Double(level) / 100 / max(0.01, current)), target: nil)
                                  case .actualPixels:
                                      session.zoomToActualPixels()
+                                 case .transparency:
+                                     session.setShowsTransparency(!session.layerState.showsTransparency)
                                  }
                              })
     }
@@ -162,6 +168,56 @@ private struct SelectionSheets: View {
                 SelectAndMaskSheet(session: session)
             }
             .accessibilityHidden(true)
+    }
+}
+
+/// The layer tools' questions (W3): « Supprimer le groupe et son contenu ? », « Aplatir l'image ? », and the pick menu of a
+/// long press on the picture (every layer under the finger). A leaf: only it reads them.
+private struct LayerDialogs: View {
+    let session: PhotoEditorSession
+
+    var body: some View {
+        let state = session.layerState
+        Color.clear
+            .confirmationDialog(Self.title(state.confirmation), isPresented: Binding(get: { state.confirmation != nil },
+                                                                                    set: { if !$0 { state.confirmation = nil } }),
+                                titleVisibility: .visible, presenting: state.confirmation) { confirmation in
+                switch confirmation {
+                case .deleteGroup(let id):
+                    Button(L("Delete the group"), role: .destructive) { session.deleteLayers([id]) }
+                case .deleteSelection(let ids):
+                    Button(L("Delete"), role: .destructive) {
+                        session.deleteLayers(session.document.layers.map(\.id).filter { ids.contains($0) })
+                    }
+                case .flatten:
+                    Button(L("Flatten"), role: .destructive) { session.flatten() }
+                }
+                Button(L("Cancel"), role: .cancel) {}
+            }
+            .confirmationDialog(L("Layers here"), isPresented: Binding(get: { !state.pickChoices.isEmpty },
+                                                                      set: { if !$0 { state.pickChoices = [] } }),
+                                titleVisibility: .visible) {
+                ForEach(state.pickChoices, id: \.self) { id in
+                    Button(session.layerChoiceName(id)) {
+                        state.pickChoices = []
+                        if session.document.selectedLayerID != id {
+                            Haptics.tick()
+                            session.selectLayer(id)
+                        }
+                    }
+                }
+                Button(L("Cancel"), role: .cancel) {}
+            }
+            .accessibilityHidden(true)
+    }
+
+    static func title(_ confirmation: LayerConfirmation?) -> String {
+        switch confirmation {
+        case .deleteGroup?: return L("Delete the group and its contents?")
+        case .deleteSelection?: return L("Delete these layers, groups with their contents?")
+        case .flatten?: return L("Flatten the image? Hidden layers will be discarded.")
+        case nil: return ""
+        }
     }
 }
 

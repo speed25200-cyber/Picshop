@@ -74,6 +74,8 @@ definitions:
         sh Scripts/build-stamp.sh
         xcodegen generate --spec "${PICSHOP_SPEC:-project.yml}"
         ls -d *.xcodeproj
+        # W3: the Icon Composer icon must reach actool as a `folder.iconcomposer.icon` reference (patched if needed).
+        python3 Scripts/generate_icon.py --check-project PicShop.xcodeproj/project.pbxproj
     - &tests
       name: Package tests
       script: |

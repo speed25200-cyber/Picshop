@@ -116,8 +116,13 @@ import PicshopCore
         // W2 (§8.6): the masks and the pixel selection, as the photo session reports them.
         state.masks = LiveMaskLines.lines(for: document, language: language == .english ? .en : .fr)
         if let selection = LiveMaskLines.selectionLine(for: document, language: language == .english ? .en : .fr) { state.selection = selection }
+        // W3 (D19): the layers with their stored refs.
+        state.layers = LiveLayerLines.line(for: document, scene: scene, language: language == .english ? .en : .fr)
         return state
     }
+
+    /// W3 (D19): the document now, so a plan's later steps are re-grounded after a crop or a turn.
+    public var liveGeometryAnchor: PhotoDocument? { document }
 
     // MARK: Running
 

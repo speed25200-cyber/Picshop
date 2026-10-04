@@ -20,6 +20,19 @@ final class MLaneRunnerTests: XCTestCase {
         }
     }
 
+    /// W3 (§8.7): + 80 single-turn layer cases with gold op and args, + 15 unsupported layer requests, on the layered lake.
+    func testTheW3CasesHaveTheirShape() {
+        let w3 = MLaneCorpus.all.filter { $0.setup == .layers }
+        XCTAssertGreaterThanOrEqual(w3.filter { !$0.isRefusal }.count, 80)
+        XCTAssertGreaterThanOrEqual(w3.filter(\.isRefusal).count, 15)
+        let ops: Set<String> = ["addFillLayer", "fillLayer", "addAdjustmentLayer", "layerVia", "layerMask", "layerClip", "groupLayers", "mergeLayers",
+                                "layerTransform", "layerProperties", "exportPhoto", "recipe"]
+        XCTAssertEqual(Set(w3.flatMap(\.gold)).intersection(ops), ops)
+        for testCase in w3 where testCase.isRefusal {
+            XCTAssertNotNil(UnsupportedLayerRequests.match(testCase.text), testCase.text)
+        }
+    }
+
     /// None copied from the catalog's examples or triggers (the four signature phrases excepted).
     func testNothingIsCopiedFromTheCatalog() {
         func folded(_ text: String) -> String { TextFolding.tokens(text).joined(separator: " ") }

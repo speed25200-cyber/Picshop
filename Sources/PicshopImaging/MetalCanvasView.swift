@@ -2,6 +2,7 @@
 import Foundation
 import Metal
 import CoreImage
+import CoreImage.CIFilterBuiltins
 import CoreGraphics
 
 /// Where and how the canvas draws: placement math and render target setup, shared
@@ -17,6 +18,19 @@ public enum CanvasPlacement {
         return CGAffineTransform(translationX: -imageExtent.minX, y: -imageExtent.minY)
             .concatenating(CGAffineTransform(scaleX: sx, y: sy))
             .concatenating(CGAffineTransform(translationX: originX, y: originY))
+    }
+
+    /// W3: the transparency checkerboard (`CICheckerboardGenerator`, squares of `square` pixels) under `rect` only;
+    /// nil for an empty rect.
+    public static func checkerboard(under rect: CGRect, square: CGFloat, colors: (CIColor, CIColor)) -> CIImage? {
+        guard !rect.isEmpty, !rect.isInfinite, square >= 1 else { return nil }
+        let filter = CIFilter.checkerboardGenerator()
+        filter.center = CGPoint(x: rect.minX, y: rect.minY)
+        filter.color0 = colors.0
+        filter.color1 = colors.1
+        filter.width = Float(square)
+        filter.sharpness = 1
+        return filter.outputImage?.cropped(to: rect)
     }
 
     /// A render destination configured exactly like the canvas's drawable.
@@ -40,10 +54,16 @@ public enum CanvasPlacement {
     /// The mask or selection overlay for the frame of that generation (nil clears it). W2, D17: drawn over the
     /// image and under the W1 `overlay`; never baked into the preview.
     func presentOverlay(_ overlay: CIImage?, generation: Int)
+    /// W3 (D14): a detail tile drawn over the preview at `rect` (in the image's extent coordinates); nil clears it.
+    func presentDetail(_ image: CIImage?, rect: CGRect?, generation: Int)
+    /// W3: the transparency checkerboard under the canvas rect (on by default; never exported).
+    func setShowsTransparencyGrid(_ shows: Bool)
 }
 
 public extension CanvasSink {
     func presentOverlay(_ overlay: CIImage?, generation: Int) {}
+    func presentDetail(_ image: CIImage?, rect: CGRect?, generation: Int) {}
+    func setShowsTransparencyGrid(_ shows: Bool) {}
 }
 #endif
 
@@ -93,6 +113,24 @@ public final class MetalCanvasView: MTKView {
 
     /// Placement of the image inside the view (points, top-left origin).
     public var imageFrame: CGRect = .zero {
+        didSet { setNeedsDisplay() }
+    }
+
+    /// W3 (D14): a detail tile and where it lies, in `image`'s extent coordinates; drawn over the image at native
+    /// density, cleared when a preview of a newer generation arrives.
+    public private(set) var detailImage: CIImage? {
+        didSet { setNeedsDisplay() }
+    }
+    public private(set) var detailRect: CGRect?
+    public private(set) var detailGeneration = 0
+
+    /// W3: the transparency checkerboard under the canvas rect (on by default; never exported).
+    public private(set) var showsTransparencyGrid = true {
+        didSet { setNeedsDisplay() }
+    }
+
+    /// The checkerboard's squares: 8 points, two neutral greys (PSTokens' elevated #1C1C20 and overlay #26262B).
+    public var transparencyGridColors = (CIColor(red: 28 / 255, green: 28 / 255, blue: 32 / 255), CIColor(red: 38 / 255, green: 38 / 255, blue: 43 / 255)) {
         didSet { setNeedsDisplay() }
     }
 
@@ -163,6 +201,11 @@ public final class MetalCanvasView: MTKView {
         guard generation >= displayedGeneration else { return false }
         displayedGeneration = generation
         if self.image !== image { self.image = image }
+        // A tile of an older picture no longer lines up with it.
+        if detailImage != nil, generation > detailGeneration {
+            detailImage = nil
+            detailRect = nil
+        }
         return true
     }
 
@@ -189,7 +232,20 @@ public final class MetalCanvasView: MTKView {
         var composed = background
         if let image, imageFrame.width > 0, imageFrame.height > 0 {
             // Map the image extent into the drawable (points → pixels, flip y for Metal/CI origin).
-            var placed = image.transformed(by: CanvasPlacement.transform(imageExtent: image.extent, frame: imageFrame, drawableSize: drawableSize, scale: scale))
+            let imageTransform = CanvasPlacement.transform(imageExtent: image.extent, frame: imageFrame, drawableSize: drawableSize, scale: scale)
+            var placed = image.transformed(by: imageTransform)
+            // W3: the transparency checkerboard under the canvas rect, then the detail tile over the picture (D14).
+            if showsTransparencyGrid, let grid = CanvasPlacement.checkerboard(under: placed.extent, square: 8 * scale, colors: transparencyGridColors) {
+                placed = placed.composited(over: grid)
+            }
+            if let detailImage, let detailRect, !detailImage.extent.isEmpty, !detailImage.extent.isInfinite, detailRect.width > 0, detailRect.height > 0 {
+                let tile = detailImage.extent
+                let toRect = CGAffineTransform(translationX: -tile.minX, y: -tile.minY)
+                    .concatenating(CGAffineTransform(scaleX: detailRect.width / tile.width, y: detailRect.height / tile.height))
+                    .concatenating(CGAffineTransform(translationX: detailRect.minX, y: detailRect.minY))
+                let placedTile = detailImage.transformed(by: toRect.concatenating(imageTransform))
+                placed = placedTile.cropped(to: detailRect.applying(imageTransform)).composited(over: placed)
+            }
             // The mask or selection overlay (D17) over the picture, then the SwiftUI overlay on top. Each is placed by
             // its own extent onto the same frame, so a settled overlay at another size still lines up.
             if let maskOverlay, !maskOverlay.extent.isEmpty, !maskOverlay.extent.isInfinite {
@@ -281,6 +337,25 @@ extension MetalCanvasView: CanvasSink {
         guard generation >= maskOverlayGeneration else { return }
         maskOverlayGeneration = generation
         if maskOverlay !== overlay { maskOverlay = overlay }
+    }
+
+    /// W3 (D14): a detail tile at `rect` in the image's extent coordinates, unless the picture on screen is newer than
+    /// its generation; nil clears it.
+    public func presentDetail(_ image: CIImage?, rect: CGRect?, generation: Int) {
+        guard let image, let rect else {
+            detailRect = nil
+            detailImage = nil
+            return
+        }
+        guard generation >= displayedGeneration else { return }
+        detailGeneration = generation
+        detailRect = rect
+        detailImage = image
+    }
+
+    /// W3: the transparency checkerboard on or off (on by default).
+    public func setShowsTransparencyGrid(_ shows: Bool) {
+        if showsTransparencyGrid != shows { showsTransparencyGrid = shows }
     }
 }
 #endif

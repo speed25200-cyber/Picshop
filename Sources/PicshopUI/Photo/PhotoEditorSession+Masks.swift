@@ -48,24 +48,47 @@ extension PhotoEditorSession {
         return MaskAccessibility.displayName(for: adjustment, language: maskNameLanguage)
     }
 
-    /// Masks act on the photo underneath (W2): another layer selected gets the caption.
-    var masksActOnAnotherLayer: Bool {
-        guard let selected = document.selectedLayerID else { return false }
-        return selected != document.localAdjustmentsLayerID
+    /// W3: masks act on the active image layer (`localAdjustmentsLayerID`), the selected one when it is an image
+    /// layer. The panel names it when it is not the background photo (« Sur : Tasse »); nil on the base.
+    var masksTargetName: String? {
+        guard let id = document.localAdjustmentsLayerID, id != document.baseLayerID, let layer = document.layer(id: id) else { return nil }
+        return LayerAccessibility.displayName(layer, isBase: false, language: maskNameLanguage)
     }
 
-    /// The aspect (w/h) mask coordinates live in: the base's output after its geometry, from the asset (D3).
-    var maskAspect: Double {
-        guard let base = document.baseLayer else { return 1 }
-        let source = base.imageAsset?.pixelSize.aspectRatio ?? document.canvasSize.aspectRatio
-        return base.edits.outputAspect(sourceAspect: source > 0 && source.isFinite ? source : 1)
+    /// The aspect (w/h) mask coordinates live in: the target layer's output after its geometry, from its asset (D3).
+    var maskAspect: Double { document.localAdjustmentsAspect }
+
+    /// Canvas → the target layer's mask space (W3): the base's masks live on the canvas, another image layer's in its
+    /// content space, reached through the inverse placement map (D8). Nil on the base, or when the placement is
+    /// degenerate.
+    func maskSpaceMap() -> PSHomography? {
+        guard let id = document.localAdjustmentsLayerID, id != document.baseLayerID, let layer = document.layer(id: id),
+              let size = layerContentSize(id), size.width > 0, size.height > 0 else { return nil }
+        return LayerPlacement.inverseMap(for: layer, contentSize: size, canvasSize: document.canvasSize, isBase: false)
+    }
+
+    /// A canvas point in the target layer's mask space (identity on the base).
+    func maskSpacePoint(_ point: PSPoint) -> PSPoint {
+        maskSpaceMap()?.apply(point) ?? point
+    }
+
+    /// Where the target layer's mask space lies on screen, for the handles: the picture's frame on the base, the
+    /// layer's placed bounds on another layer (exact for an upright layer; a turned one is drawn on its bounds).
+    func maskPlacementFrame(in imageFrame: CGRect) -> CGRect {
+        guard let id = document.localAdjustmentsLayerID, id != document.baseLayerID, let layer = document.layer(id: id),
+              let size = layerContentSize(id) else { return imageFrame }
+        let bounds = LayerPlacement.bounds(for: layer, contentSize: size, canvasSize: document.canvasSize, isBase: false)
+        guard bounds.width > 0, bounds.height > 0 else { return imageFrame }
+        return CGRect(x: imageFrame.minX + bounds.minX * imageFrame.width, y: imageFrame.minY + bounds.minY * imageFrame.height,
+                      width: bounds.width * imageFrame.width, height: bounds.height * imageFrame.height)
     }
 
     var canAddMask: Bool { document.localAdjustments.count < LocalAdjustment.maxPerLayer }
 
     /// An AI raster made for another state of the picture (an erase, a crop): « Mettre à jour » redoes it.
     func isStale(_ adjustment: LocalAdjustment) -> Bool {
-        let key = document.baseStateKey
+        // W3: a layer's masks were made on its own pixels (its content space): its own state, not the photo's.
+        let key = document.maskStateKey(on: document.localAdjustmentOwner(of: adjustment.id) ?? document.localAdjustmentsLayerID)
         return adjustment.stack.components.contains { component in
             guard case .raster(let raster) = component.kind, let stateKey = raster.stateKey, Self.request(for: raster) != nil else { return false }
             return stateKey != key
@@ -205,9 +228,11 @@ extension PhotoEditorSession {
         maskState.aiWorking = working
         maskState.caption = nil
         let document = self.document
+        // W3: on a non-base image layer the providers read that layer's own pixels, in its content space.
+        let owner = document.localAdjustmentsLayerID
         maskState.aiTask = Task { [weak self] in
             do {
-                let result = try await services.aiMask(request, in: document)
+                let result = try await services.aiMask(request, in: document, layer: owner)
                 guard let self, !Task.isCancelled, self.maskState.aiWorking == working else { return }
                 self.maskState.aiWorking = nil
                 guard result.coverage >= 0.002 else {
@@ -247,16 +272,31 @@ extension PhotoEditorSession {
         guard case .object(let mode)? = maskState.editing else { return }
         maskState.editing = nil
         maskState.caption = nil
+        // The prompts are on the canvas; a non-base layer's mask is found in its own content space (W3).
+        let map = maskSpaceMap()
         let request: AIMaskRequest
         if let box, box.width > 0.01, box.height > 0.01 {
-            request = .box(box.clampedToUnit(), label: nil)
+            request = .box(map.map { Self.mappedBox(box, by: $0) } ?? box.clampedToUnit(), label: nil)
         } else if let point {
-            request = .points([MaskPrompt(point)], label: nil)
+            let placed = map.map { m -> PSPoint in
+                let p = m.apply(point)
+                return PSPoint(x: p.x.clamped(to: 0...1), y: p.y.clamped(to: 0...1))
+            } ?? point
+            request = .points([MaskPrompt(placed)], label: nil)
         } else {
             return
         }
         let target = mode.flatMap { mode in maskState.selectedID.map { (adjustmentID: $0, mode: mode) } }
         runAIMask(.object, request: request, label: nil, into: target)
+    }
+
+    /// A canvas box in another space: the bounding box of its four mapped corners, clamped to the unit square.
+    static func mappedBox(_ box: PSRect, by map: PSHomography) -> PSRect {
+        let corners = [PSPoint(x: box.minX, y: box.minY), PSPoint(x: box.maxX, y: box.minY), PSPoint(x: box.maxX, y: box.maxY),
+                       PSPoint(x: box.minX, y: box.maxY)].map(map.apply)
+        let minX = corners.map(\.x).min()!.clamped(to: 0...1), maxX = corners.map(\.x).max()!.clamped(to: 0...1)
+        let minY = corners.map(\.y).min()!.clamped(to: 0...1), maxY = corners.map(\.y).max()!.clamped(to: 0...1)
+        return PSRect(x: minX, y: minY, width: max(0, maxX - minX), height: max(0, maxY - minY))
     }
 
     /// Near or far from the depth map (camera disparity, else the depth model): a depth range of 0.6…1 or 0…0.35.
@@ -562,7 +602,9 @@ extension PhotoEditorSession {
     /// « Mettre à jour »: every AI raster of the mask made for another state of the picture is made again.
     func refreshAIMask(_ id: UUID) {
         guard let services, let adjustment = mask(id) else { return }
-        let key = document.baseStateKey
+        // W3: a layer's masks are made again on its own pixels, against its own state.
+        let owner = document.localAdjustmentOwner(of: id) ?? document.localAdjustmentsLayerID
+        let key = document.maskStateKey(on: owner)
         let stale = adjustment.stack.components.compactMap { component -> (UUID, AIMaskRequest)? in
             guard case .raster(let raster) = component.kind, let stateKey = raster.stateKey, stateKey != key,
                   let request = Self.request(for: raster) else { return nil }
@@ -576,7 +618,7 @@ extension PhotoEditorSession {
         maskState.aiTask = Task { [weak self] in
             var kinds: [(UUID, MaskComponent.Kind)] = []
             for (componentID, request) in stale {
-                guard let result = try? await services.aiMask(request, in: document) else { continue }
+                guard let result = try? await services.aiMask(request, in: document, layer: owner) else { continue }
                 kinds.append((componentID, .raster(result.raster)))
             }
             guard let self, !Task.isCancelled, self.maskState.aiWorking == working else { return }
@@ -615,6 +657,11 @@ extension PhotoEditorSession {
             let dragging = maskState.isDragging && (maskState.showsOverlayWhileDragging || adjustment.isNeutral)
             guard maskState.isOverlayPinned || dragging || maskState.flashingID == id else { return nil }
             return MaskOverlayRequest(target: .localAdjustment(id), style: maskState.overlay, color: maskState.overlayColor, opacity: 0.5)
+        case .layers?:
+            // W3 (D8): the layer mask being painted, rubylith by default (the overlay menu's style when pinned).
+            guard layerState.mode == .maskPaint, let id = layerState.editingMaskOf, document.layer(id: id) != nil else { return nil }
+            return MaskOverlayRequest(target: .layerMask(id), style: maskState.isOverlayPinned ? maskState.overlay : .rubylith,
+                                      color: maskState.overlayColor, opacity: 0.5)
         case .select?:
             guard FeatureFlags.isOn(.aiSelection), document.selection != nil else { return nil }
             // Outline: the ants and a 20 % tint; any other style replaces the tint.
@@ -945,9 +992,14 @@ extension PhotoEditorSession {
         flattenBrushIfNeeded(adjustmentID: brush.adjustmentID, componentID: brush.componentID)
     }
 
+    /// One touch batch as a 2-point stroke in the mask's space: canvas points on the base; on another image layer
+    /// (W3) its content space (D8). The size stays a fraction of the mask space's longest side, which is what the
+    /// cursor draws on the layer's placed frame (`maskPlacementFrame`).
     private func segment(from a: PSPoint, to b: PSPoint) -> BrushStroke {
         let settings = maskState.brush
-        return BrushStroke(points: [a, b], radius: settings.size, hardness: settings.hardness, mode: settings.erase ? .subtract : .add,
+        var points = [a, b]
+        if let map = maskSpaceMap() { points = points.map(map.apply) }
+        return BrushStroke(points: points, radius: settings.size, hardness: settings.hardness, mode: settings.erase ? .subtract : .add,
                            flow: settings.flow < 0.999 ? settings.flow : nil)
     }
 
@@ -1335,6 +1387,11 @@ extension PhotoEditorSession {
     /// Opens the tool of a MaskPanelInventory control in the mode its gesture needs (« peins sur le masque »,
     /// « sélection rapide », « pipette »…); a Tool raw value opens that tool.
     func openControl(_ id: String) {
+        // W3: the photo panels' gesture controls (layers.*, canvas.*, export.*, erase.*, crop.*…).
+        if MaskPanelInventory.control(id) == nil, let control = PhotoPanelInventory.control(id) {
+            openPhotoPanelControl(id, control)
+            return
+        }
         guard let control = MaskPanelInventory.control(id), let tool = Tool(rawValue: control.uiTool) else {
             if let tool = Tool(rawValue: id) { activeTool = tool }
             return
@@ -1427,6 +1484,283 @@ extension PhotoEditorSession {
     var lastBrushPoint: PSPoint? {
         get { maskState.lastBrushPoint }
         set { maskState.lastBrushPoint = newValue }
+    }
+}
+
+// MARK: - The layer-mask brush (W3, D8)
+
+// Calques › masque › « Peindre »: W2's brush (pending segments, the stroke cache appending, one coalesced polyline per
+// gesture, flattened past `BrushSpec.maxStrokes`) on a layer's own mask, through `LayerEdit.maskStack` on the dragged
+// copy: one undo step per gesture on the `.layerMask` snapshot (D13). A mask is revealed by an add-mode brush and
+// hidden by a subtract-mode brush at the end of the stack; « Tout afficher » and « Tout masquer » masks are one brush
+// that does both (a first subtract component starts from everything). Linked masks of image, text and shape layers
+// live in the content space: canvas points go through the inverse placement map, the radius with them.
+extension PhotoEditorSession {
+    static let layerMaskLabel = "Layer Mask"
+
+    /// A drag on the canvas paints a layer mask now.
+    var paintsLayerMask: Bool {
+        activeTool == .layers && layerState.mode == .maskPaint && layerState.editingMaskOf != nil
+    }
+
+    /// `openTool:<PhotoPanelInventory id>` (W3): the control's tool, in the mode its gesture needs. The Intent
+    /// handler has already refused a control whose flag is off; the layer-mask brush and the transform handles check
+    /// their own flags, locks and the base layer (with the toast).
+    private func openPhotoPanelControl(_ id: String, _ control: PhotoPanelInventory.Control) {
+        if control.uiTool == "export" {
+            presentExport(preset: nil)
+            return
+        }
+        let selected = document.selectedLayerID
+        if id == "layers.mask.paint" || id == "layers.mask.paint.erase" || id.hasPrefix("layers.mask.brush.") {
+            guard let layerID = selected else {
+                if activeTool != .layers { activeTool = .layers }
+                return
+            }
+            beginLayerMaskPaint(layerID)
+            if id == "layers.mask.paint" { setLayerMaskHides(false) }
+            if id == "layers.mask.paint.erase" { setLayerMaskHides(true) }
+            return
+        }
+        let modePrefix = "layers.transform.mode."
+        if id == "layers.transform.handles" || id.hasPrefix(modePrefix) || id == "canvas.layer.drag" {
+            guard let layerID = selected else {
+                if activeTool != .layers { activeTool = .layers }
+                return
+            }
+            let mode = id.hasPrefix(modePrefix) ? TransformMode(rawValue: String(id.dropFirst(modePrefix.count))) : nil
+            beginTransformMode(layerID, mode: mode)
+            return
+        }
+        let tool = control.uiTool == "canvas" ? Tool.layers : Tool(rawValue: control.uiTool)
+        if let tool, activeTool != tool { activeTool = tool }
+    }
+
+    /// « Peindre » on a layer's mask (LayerMaskControls, the `paintLayerMask:` effect): a layer without a mask gets
+    /// a « Tout afficher » one first (its own step), then the brush paints it.
+    func beginLayerMaskPaint(_ layerID: UUID) {
+        guard proLayersEnabled, let layer = document.layer(id: layerID), layerAllows(.mask, on: layerID) else { return }
+        if layerState.mode == .transform { endTransformMode() }
+        if activeTool != .layers { activeTool = .layers }
+        if document.selectedLayerID != layerID { selectLayer(layerID) }
+        if layer.maskStack == nil, layer.mask == nil {
+            addLayerMask(.revealAll, to: layerID)
+            guard document.layer(id: layerID)?.maskStack != nil else { return }
+        }
+        layerState.editingMaskOf = layerID
+        layerState.mode = .maskPaint
+        layerState.maskControlsOf = layerID
+        // D13: the brush's snapshot is captured now and kept between strokes, so the first dab never waits for it.
+        if interaction == nil { requestInteractionSnapshot(.layerMask(layerID)) }
+        Haptics.tick()
+        requestPreview()
+    }
+
+    /// « Terminé », Calques closing or the layer gone: the brush goes down.
+    func endLayerMaskPaint() {
+        if layerState.maskStroke != nil { endLayerMaskStroke() }
+        guard layerState.mode == .maskPaint || layerState.editingMaskOf != nil else { return }
+        layerState.editingMaskOf = nil
+        if layerState.mode == .maskPaint { layerState.mode = .select }
+        releaseKeptInteractionSnapshot()
+        requestPreview()
+    }
+
+    /// « Peindre » reveals, « Effacer » hides.
+    func setLayerMaskHides(_ hides: Bool) {
+        guard layerState.maskPaintHides != hides else { return }
+        layerState.maskPaintHides = hides
+        Haptics.tick()
+    }
+
+    /// X on a hardware keyboard.
+    func swapLayerMaskPaint() {
+        setLayerMaskHides(!layerState.maskPaintHides)
+    }
+
+    /// Where a layer's mask lives (D8): the canvas (the base, unlinked masks, fill, gradient, adjustment and group
+    /// layers), or the content space of a linked image, text or shape layer, reached through the inverse placement.
+    /// Nil when that placement is degenerate.
+    func layerMaskSpace(of layer: Layer) -> (toMask: PSHomography?, aspect: Double)? {
+        let canvasAspect = Self.aspect(document.canvasSize)
+        guard layer.id != document.baseLayerID, layer.isMaskLinked else { return (nil, canvasAspect) }
+        switch layer.content {
+        case .image, .text, .shape: break
+        case .fill, .gradientFill, .adjustment, .group, .unsupported: return (nil, canvasAspect)
+        }
+        guard let size = layerContentSize(layer.id), size.width > 0, size.height > 0,
+              let inverse = LayerPlacement.inverseMap(for: layer, contentSize: size, canvasSize: document.canvasSize, isBase: false) else { return nil }
+        return (inverse, Self.aspect(size))
+    }
+
+    /// The finger goes down with the layer-mask brush: the components it paints into are found or made, and the drag
+    /// begins (one undo step).
+    func beginLayerMaskStroke(at point: PSPoint) {
+        guard paintsLayerMask, let id = layerState.editingMaskOf, let layer = document.layer(id: id) else { return }
+        guard layerAllows(.mask, on: id), var stack = layerMaskStack(id) else { return }
+        guard let space = layerMaskSpace(of: layer) else {
+            refuseLayerEdit(.notApplicable, layerID: id)
+            return
+        }
+        let hides = layerState.maskPaintHides != stack.isInverted
+        let components = stack.components
+        var hideIndex: Int? = components.indices.last.flatMap { Self.isBrush(components[$0], mode: .subtract) ? $0 : nil }
+        let below = (hideIndex ?? components.count) - 1
+        var revealIndex: Int? = below >= 0 && Self.isBrush(components[below], mode: .add) ? below : nil
+        if hides {
+            // A hide needs the subtract brush, unless the reveal brush is the whole mask (« Tout masquer »).
+            if hideIndex == nil, !(components.count == 1 && revealIndex == 0) {
+                stack.components.append(MaskComponent(.brush(BrushSpec()), mode: .subtract))
+                hideIndex = stack.components.count - 1
+            }
+        } else if revealIndex == nil, !(components.count == 1 && hideIndex == 0) {
+            // A reveal needs the add brush under the hide brush, unless the hide brush is the whole mask (« Tout afficher »).
+            let index = hideIndex ?? stack.components.count
+            stack.components.insert(MaskComponent(.brush(BrushSpec()), mode: .add), at: index)
+            revealIndex = index
+            if let hide = hideIndex { hideIndex = hide + 1 }
+        }
+        layerState.maskStroke = LayerMaskStroke(layerID: id, start: stack, revealIndex: revealIndex, hideIndex: hideIndex,
+                                                revealStrokes: Self.brushStrokes(in: stack, at: revealIndex),
+                                                hideStrokes: Self.brushStrokes(in: stack, at: hideIndex),
+                                                hides: hides, toMask: space.toMask, canvasAspect: Self.aspect(document.canvasSize),
+                                                maskAspect: space.aspect, last: point)
+        layerState.isCanvasGestureActive = true
+        beginInteraction(label: Self.layerMaskLabel, scope: .layerMask(id))
+        appendLayerMaskSegment(to: point)
+    }
+
+    /// Each touch batch adds one 2-point segment (the stroke cache appends).
+    func continueLayerMaskStroke(to point: PSPoint) {
+        guard layerState.maskStroke != nil else { return }
+        appendLayerMaskSegment(to: point)
+    }
+
+    /// The gesture's segments coalesce into one polyline per component, then the drag commits once; past the stroke
+    /// limit the brush is flattened, never during a drag.
+    func endLayerMaskStroke() {
+        guard let stroke = layerState.maskStroke else { return }
+        if let first = stroke.segments.first {
+            var points = first.points
+            for segment in stroke.segments.dropFirst() { if let end = segment.points.last { points.append(end) } }
+            let polyline = BrushStroke(points: points, radius: first.radius, hardness: first.hardness, mode: .add, flow: first.flow)
+            if let renderer {
+                let revealMode: BrushStroke.Mode = stroke.hides ? .subtract : .add
+                let hideMode: BrushStroke.Mode = stroke.hides ? .add : .subtract
+                let revealDrawn = stroke.revealStrokes + stroke.segments.map { Self.stroke($0, mode: revealMode) }
+                let revealMerged = stroke.revealStrokes + [Self.stroke(polyline, mode: revealMode)]
+                let hideDrawn = stroke.hideStrokes + stroke.segments.map { Self.stroke($0, mode: hideMode) }
+                let hideMerged = stroke.hideStrokes + [Self.stroke(polyline, mode: hideMode)]
+                let hasReveal = stroke.revealIndex != nil, hasHide = stroke.hideIndex != nil
+                Task {
+                    if hasReveal { await renderer.noteBrushCoalesced(revealDrawn, as: revealMerged) }
+                    if hasHide { await renderer.noteBrushCoalesced(hideDrawn, as: hideMerged) }
+                }
+            }
+            applyLayerMaskStrokes([polyline], stroke: stroke)
+        }
+        layerState.maskStroke = nil
+        layerState.isCanvasGestureActive = false
+        endInteraction()
+        flattenLayerMaskIfNeeded(stroke.layerID)
+    }
+
+    /// A second finger (a two-finger pan) or the system took the stroke: nothing committed.
+    func cancelLayerMaskStroke() {
+        guard layerState.maskStroke != nil else { return }
+        layerState.maskStroke = nil
+        layerState.isCanvasGestureActive = false
+        cancelInteraction()
+    }
+
+    private func appendLayerMaskSegment(to point: PSPoint) {
+        guard var stroke = layerState.maskStroke else { return }
+        let settings = maskState.brush
+        var points = [stroke.last, point]
+        // The cursor's radius is a fraction of the canvas's longest side; in the content space it scales with it.
+        var radius = settings.size
+        if let map = stroke.toMask {
+            points = points.map(map.apply)
+            radius *= map.localScale(at: point, aspectBefore: stroke.canvasAspect, aspectAfter: stroke.maskAspect)
+        }
+        stroke.segments.append(BrushStroke(points: points, radius: radius, hardness: settings.hardness, mode: .add,
+                                           flow: settings.flow < 0.999 ? settings.flow : nil))
+        stroke.last = point
+        layerState.maskStroke = stroke
+        applyLayerMaskStrokes(stroke.segments, stroke: stroke)
+    }
+
+    /// The start stack with `strokes` painted: revealing adds to the reveal brush and erases the hide brush; hiding
+    /// does the opposite. Applied to the dragged copy.
+    private func applyLayerMaskStrokes(_ strokes: [BrushStroke], stroke: LayerMaskStroke) {
+        var stack = stroke.start
+        if let index = stroke.revealIndex, case .brush(var spec) = stack.components[index].kind {
+            spec.strokes = stroke.revealStrokes + strokes.map { Self.stroke($0, mode: stroke.hides ? .subtract : .add) }
+            stack.components[index].kind = .brush(spec)
+        }
+        if let index = stroke.hideIndex, case .brush(var spec) = stack.components[index].kind {
+            spec.strokes = stroke.hideStrokes + strokes.map { Self.stroke($0, mode: stroke.hides ? .add : .subtract) }
+            stack.components[index].kind = .brush(spec)
+        }
+        let id = stroke.layerID
+        let edited = stack
+        interactiveEdit(label: Self.layerMaskLabel) { document in
+            document.applyLayerEdit(.maskStack(edited), to: id)
+        }
+    }
+
+    static func isBrush(_ component: MaskComponent, mode: CombineMode) -> Bool {
+        guard component.mode == mode, case .brush = component.kind else { return false }
+        return true
+    }
+
+    static func brushStrokes(in stack: MaskStack, at index: Int?) -> [BrushStroke] {
+        guard let index, stack.components.indices.contains(index), case .brush(let spec) = stack.components[index].kind else { return [] }
+        return spec.strokes
+    }
+
+    /// The same stroke (same id) in another mode.
+    static func stroke(_ stroke: BrushStroke, mode: BrushStroke.Mode) -> BrushStroke {
+        var copy = stroke
+        copy.mode = mode
+        return copy
+    }
+
+    /// Past `BrushSpec.maxStrokes` gestures a brush becomes a raster in the mask's space, off every actor; stored
+    /// with the stroke's step when nothing changed since, else as its own.
+    private func flattenLayerMaskIfNeeded(_ layerID: UUID) {
+        guard let layer = document.layer(id: layerID), let stack = layer.maskStack, let space = layerMaskSpace(of: layer) else { return }
+        guard let index = stack.components.firstIndex(where: { component in
+            if case .brush(let spec) = component.kind { return spec.needsFlatten }
+            return false
+        }), case .brush(let spec) = stack.components[index].kind else { return }
+        let componentID = stack.components[index].id
+        let side = Double(VisionPhotoServices.analysisLongestSide)
+        let aspect = space.aspect
+        let width = max(1, Int((aspect >= 1 ? side : side * aspect).rounded()))
+        let height = max(1, Int((aspect >= 1 ? side / aspect : side).rounded()))
+        let store = MaskStore(store: app.store, projectID: projectID)
+        let before = document
+        layerState.maskFlattenTask?.cancel()
+        layerState.maskFlattenTask = Task { [weak self] in
+            let flattened = try? await Task.detached(priority: .utility) { () throws -> RasterRef in
+                var bytes = [UInt8](repeating: 0, count: width * height)
+                BrushRaster.draw(spec.strokes, width: width, height: height, into: &bytes)
+                return try store.saveRaster(bytes: bytes, width: width, height: height, origin: .brush)
+            }.value
+            guard let self, !Task.isCancelled, let raster = flattened else { return }
+            guard var current = self.document.layer(id: layerID)?.maskStack,
+                  let at = current.components.firstIndex(where: { $0.id == componentID }),
+                  case .brush(let now) = current.components[at].kind, now == spec else { return }
+            current.components[at].kind = .raster(raster)
+            var updated = self.document
+            guard case .applied = updated.applyLayerEdit(.maskStack(current), to: layerID) else { return }
+            if self.document == before {
+                self.amendPresent(updated)
+            } else {
+                self.commit(updated, label: Self.layerMaskLabel)
+            }
+        }
     }
 }
 #endif

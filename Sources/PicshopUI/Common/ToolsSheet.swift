@@ -369,7 +369,11 @@ enum ToolSearch {
         "cutout": ["detourage", "detourer", "fond", "background", "sujet", "subject"],
         "text": ["texte", "titre", "title", "ecrire", "write", "typo", "font", "police"],
         "shapes": ["forme", "shape", "rectangle", "cercle", "circle", "fleche", "arrow"],
-        "layers": ["calque", "layer", "fusion", "blend", "opacite", "opacity", "mode"],
+        "layers": ["calque", "layer", "fusion", "blend", "opacite", "opacity", "mode",
+                   // W3: the layer tools.
+                   "groupe", "group", "ecretage", "clipping", "masque de fusion", "layer mask", "remplissage", "fill", "degrade", "gradient",
+                   "calque de reglage", "adjustment layer", "transformer", "transform", "perspective", "aligner", "align", "fusionner", "merge",
+                   "aplatir", "flatten", "tampon", "stamp", "photo par-dessus", "image layer", "verrou", "lock"],
         "focus": ["flou", "blur", "portrait", "bokeh", "profondeur", "depth"],
         "magic": ["objet", "object", "deplacer", "move"],
     ]

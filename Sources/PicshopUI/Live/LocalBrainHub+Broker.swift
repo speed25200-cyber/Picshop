@@ -66,6 +66,7 @@ actor ModelBroker: ModelResidencyCoordinator {
     }
 
     func noteUnloaded(_ client: ModelClient) async {
+        ModelBrokerActivity.shared.setBusy(client, false)
         guard ledger.isResident(client) || unloads[client] != nil else { return }
         ledger.noteUnloaded(client)
         unloads[client] = nil
@@ -74,6 +75,7 @@ actor ModelBroker: ModelResidencyCoordinator {
 
     func markBusy(_ client: ModelClient, _ busy: Bool) async {
         let isBusy = ledger.markBusy(client, busy, now: clock())
+        ModelBrokerActivity.shared.setBusy(client, isBusy)
         // Depth is transient on the 6 GB class and while an LLM is resident (D12): once idle, it goes.
         if !isBusy, ledger.shouldUnloadWhenIdle(client, physicalMemory: physicalMemory) {
             ledger.noteUnloaded(client)
@@ -88,6 +90,38 @@ actor ModelBroker: ModelResidencyCoordinator {
         for client in released {
             await unload(client, reason: "broker:export")
         }
+    }
+
+    /// The longest an export waits for a Live turn to end before it starts anyway (the estimate is an upper bound).
+    static let exportLLMWait: Double = 15
+
+    /// W3 (D15): the export rule with the export's own estimate. A `memory.sample` before and after; SAM and Depth
+    /// go; the LLM goes when `peakBytes` does not fit in the free memory above the floor and the export margin. A
+    /// busy LLM is never evicted mid-turn: the export waits for its turn to end (up to `exportLLMWait`), then asks
+    /// again with the memory free then.
+    func prepareForExport(megapixels: Double, peakBytes: Int) async {
+        ModelBrokerActivity.shared.exportStarted(at: Date())
+        sample(String(format: "export %.0f MP, estimate %d MB: before", megapixels, peakBytes / 1_048_576))
+        var released = ledger.releaseForExport(peakBytes: peakBytes, megapixels: megapixels, availableBytes: availableBytes())
+        for client in released { await unload(client, reason: "broker:export") }
+        if ledger.exportWaitsForLLM(peakBytes: peakBytes, availableBytes: availableBytes()) {
+            PSLog.info("model broker: export waits for the Live turn to end", category: .models)
+            let deadline = clock() + Self.exportLLMWait
+            // Actor reentrancy: markBusy(.llm, false) lands while this sleeps.
+            while ledger.resident(.llm)?.isBusy == true, clock() < deadline {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            let late = ledger.releaseForExport(peakBytes: peakBytes, megapixels: megapixels, availableBytes: availableBytes())
+            for client in late { await unload(client, reason: "broker:export") }
+            released += late
+        }
+        sample(String(format: "export %.0f MP, estimate %d MB: after, released %@", megapixels, peakBytes / 1_048_576,
+                      released.isEmpty ? "nothing" : released.map(\.rawValue).joined(separator: ", ")))
+    }
+
+    func exportFinished() async {
+        ModelBrokerActivity.shared.exportEnded()
+        sample("export finished")
     }
 
     func makeRoom(bytes: Int, for client: ModelClient) async {
@@ -139,6 +173,44 @@ actor ModelBroker: ModelResidencyCoordinator {
         switch decision {
         case .admit(let evicting): return evicting.isEmpty ? "admit" : "admit, evicting \(evicting.map(\.rawValue).joined(separator: ", "))"
         case .refuse(let reason): return "refuse (\(reason))"
+        }
+    }
+}
+
+// MARK: - Activity (W3)
+
+/// What the broker knows is running, readable synchronously from the main actor: which models are busy and whether an
+/// export is under way. The KV self-test (D22 step 5) runs only when none is.
+final class ModelBrokerActivity: @unchecked Sendable {
+    static let shared = ModelBrokerActivity()
+
+    /// An export that never said it finished stops counting after this long.
+    static let exportLifetime: Double = 90
+
+    private let lock = NSLock()
+    private var busy: Set<ModelClient> = []
+    private var exportSince: Date?
+
+    func setBusy(_ client: ModelClient, _ isBusy: Bool) {
+        lock.withLock {
+            if isBusy { busy.insert(client) } else { busy.remove(client) }
+        }
+    }
+
+    func exportStarted(at date: Date) {
+        lock.withLock { exportSince = date }
+    }
+
+    func exportEnded() {
+        lock.withLock { exportSince = nil }
+    }
+
+    /// A model is mid-inference (the LLM mid-turn, SAM or Depth mid-analysis) or an export runs.
+    func isBusy(now: Date) -> Bool {
+        lock.withLock {
+            if !busy.isEmpty { return true }
+            guard let exportSince else { return false }
+            return now.timeIntervalSince(exportSince) < Self.exportLifetime
         }
     }
 }

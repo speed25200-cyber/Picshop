@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PicShop's mark, the two crop corners (PSMark), on the 1024-point icon canvas: the mark box is 640 points,
+     centred; each corner is inset 5 % of the box, its arms 42 % of the box, its stroke 10 % with round caps. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <g fill="none" stroke="#FFFFFF" stroke-width="64" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M224 492.8 L224 224 L492.8 224"/>
+    <path d="M800 531.2 L800 800 L531.2 800"/>
+  </g>
+</svg>

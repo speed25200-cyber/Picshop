@@ -48,8 +48,24 @@ public actor LocalModelLiveBrain: LiveBrain {
         public var ideasMaxTokens = 320
         /// Thermal state serious.
         public var hotMaxTokens = 80
+        /// W3 (D23): read compactAt, maxImagesInContext and the look sizes from `LiveContextPolicy` for the engine
+        /// `makeEngine` returned. The app sets it; tests keep the fixed limits above.
+        public var adaptive = false
+        /// W3 (D20): generations per turn when the 4B outlines a long goal (the outline round and two fill batches).
+        public var outlineMaxRounds = 4
+        /// The outline round's text: up to 12 short numbered lines.
+        public var outlineMaxTokens = 220
 
         public init() {}
+    }
+
+    /// The setup `openEngine(recap: nil)` uses: the system prompt, the tool specs and the examples (D22's prefix).
+    public static func prefixSetup(mode: EditorMode, info: LocalModelInfo) -> LocalChatSetup {
+        let layout = LocalPromptLayout.current
+        return LocalChatSetup(system: LocalLivePrompt.system(mode: mode, size: info.promptSize, layout: layout),
+                              tools: LocalLivePrompt.toolSpecs(mode: mode, layout: layout),
+                              history: exampleHistory(mode: mode, size: info.promptSize, layout: layout),
+                              imageMaxPixels: LocalModelCatalog.imageMaxPixels)
     }
 
     /// .model
@@ -98,6 +114,15 @@ public actor LocalModelLiveBrain: LiveBrain {
     private var openQuestion: String?
     private var lastLookNote: String?
 
+    // W3 (D20) outline-then-fill: the 4B's plan for a long goal, the steps done, and the turns since the last
+    // « continue » (three without one, or a manual edit, and it is dropped).
+    private var outline: [OutlineStep] = []
+    private var outlineDone = 0
+    private var outlineIdleTurns = 0
+    private nonisolated let outlineFlag = OutlineFlag()
+    /// The limits this conversation runs with: `limits`, or with `adaptive` the D23 row of the engine it got.
+    private var contextLimits: LiveContextLimits
+
     // One turn at a time: a new turn waits for the previous one to wind down.
     private var busy = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
@@ -117,7 +142,19 @@ public actor LocalModelLiveBrain: LiveBrain {
         self.limits = limits
         self.clock = clock
         self.log = log
+        contextLimits = LiveContextLimits(compactAt: limits.compactAt, maxImagesInContext: limits.maxImagesInContext,
+                                          firstLookMaxPixel: Self.imageMaxPixel, verifyLookMaxPixel: Self.imageMaxPixel)
     }
+
+    /// W3 (D20): an outline is waiting for « continue ». Read without awaiting (the session asks it while it parses
+    /// the turn with the grammar, which then leaves « continue » to this brain: `BrainSelector.intentContext`).
+    public nonisolated var hasPendingOutline: Bool { outlineFlag.value }
+
+    /// The steps of the outline not done yet (D20).
+    public var pendingOutline: [OutlineStep] { Array(outline.dropFirst(outlineDone)) }
+
+    /// The D23 limits the open conversation runs with (the look sizes are the session's to apply).
+    public func currentContextLimits() -> LiveContextLimits { contextLimits }
 
     /// Serious: shorter answers (`hotMaxTokens`) and no ideas at session start.
     public func setThermalSerious(_ serious: Bool) {
@@ -237,6 +274,24 @@ public actor LocalModelLiveBrain: LiveBrain {
         var loggedActions: [String] = []
         /// Some step of the turn changed the picture (the turn then ends `.editApplied`).
         var changedDocument = false
+        /// W3 (D20): the outline round's text is read, not spoken.
+        var capturing = false
+        var captured = ""
+        /// Said after everything else when the turn ends (the outline's « dis « continue » », the 2B's honest line).
+        var closingLine: String?
+        /// A new generation's first words follow the last round's: a space between them.
+        var separatesSpeech = false
+    }
+
+    /// Where a turn stands in outline-then-fill (D20).
+    enum OutlinePhase: Equatable {
+        case none
+        /// Round 1: the model writes the plan.
+        case outlining
+        /// A fill round for batch `n` (1-based over the whole outline).
+        case filling(Int)
+        /// A long goal for a model that keeps no outline (the 2B): the first batch, then the honest line.
+        case firstSteps
     }
 
     /// What makes two steps the same for the identical-failure block (D12): the action and its key
@@ -299,12 +354,12 @@ public actor LocalModelLiveBrain: LiveBrain {
         heardBeforeInterruption = nil
 
         var engine = try await currentEngine()
-        if await engine.contextTokens() > limits.compactAt { engine = try await compact(reason: "tokens") }
+        if await engine.contextTokens() > contextLimits.compactAt { engine = try await compact(reason: "tokens") }
 
         // The picture: once per version, and only when this turn needs a fresh look (D7).
         var imageJPEG: Data?
         if capabilities.seesImages, let image = turn.image, deservesLook(turn, image: image) {
-            if imagesInContext >= limits.maxImagesInContext { engine = try await compact(reason: "images") }
+            if imagesInContext >= contextLimits.maxImagesInContext { engine = try await compact(reason: "images") }
             imageJPEG = image.jpeg
             imagesInContext += 1
             lastLook = (image.version, image.frameKey)
@@ -312,20 +367,38 @@ public actor LocalModelLiveBrain: LiveBrain {
             note("model.look", ["turn": String(turn.id), "version": String(image.version), "images": String(imagesInContext)])
         }
 
+        var phase = outlinePhase(for: turn)
+        // W3 (D20): the layer requests W3 does not do, named in this turn: the prompt says so, and a long goal's
+        // outline (captured, never spoken) says it aloud itself.
+        let unsupported = turn.kind == .sessionStart ? [] : UnsupportedLayerRequests.named(in: turn.text, domain: mode.opDomain)
         var text: String
         if turn.kind == .sessionStart {
             text = LocalLivePrompt.sessionStartMessage(turn, imageAttached: imageJPEG != nil)
             if thermalSerious { text += "\n" + Self.hotSessionStartLine(turn.language) }
         } else {
-            let cards = promptLayout == .catalog ? turnCards(turn) : ""
-            text = LocalLivePrompt.userMessage(turn, previous: lastSentState, imageAttached: imageJPEG != nil, cards: cards)
+            let opLanguage: OpLanguage = turn.language == .english ? .en : .fr
+            var cards = promptLayout == .catalog ? turnCards(turn) : ""
+            var task = ""
+            switch phase {
+            case .none: break
+            case .outlining: task = GoalOutline.outlineRequest(language: opLanguage)
+            case .firstSteps: task = GoalOutline.firstStepsRequest(language: opLanguage)
+            case .filling(let batch):
+                // « continue »: the next batch, with the cards of exactly its operations.
+                cards = batchCards(batch, turn: turn)
+                task = GoalOutline.fillRequest(batch: batch, steps: outline, language: opLanguage)
+            }
+            let hint = UnsupportedLayerRequests.promptHint(unsupported)
+            if !hint.isEmpty { cards += (cards.isEmpty ? "" : "\n") + hint }
+            text = LocalLivePrompt.userMessage(turn, previous: lastSentState, imageAttached: imageJPEG != nil, cards: cards, task: task)
         }
         var messages = owedResults + [LocalChatMessage.user(text, imageJPEG: imageJPEG)]
         owedResults = []
         lastSentState = turn.editorState
 
         let maxTokens = thermalSerious ? limits.hotMaxTokens : (Self.expectsIdeas(turn) ? limits.ideasMaxTokens : limits.speechMaxTokens)
-        var options = LocalGenerationOptions(style: Self.style(for: turn), maxTokens: maxTokens)
+        var options = LocalGenerationOptions(style: Self.style(for: turn), maxTokens: phase == .outlining ? limits.outlineMaxTokens : maxTokens)
+        let roundLimit = phase == .none ? limits.maxRounds : max(limits.maxRounds, limits.outlineMaxRounds)
 
         // Re-read after every round that changed the picture: a repair names what the last round made ("l1"),
         // and a block it erased ("t1") must no longer validate.
@@ -333,16 +406,77 @@ public actor LocalModelLiveBrain: LiveBrain {
         let grounding = ToolInputValidator.Grounding(imageAspect: lastImageAspect, canvasAspect: turn.editorState.canvasPixels.flatMap(Self.aspect))
         var progress = Progress()
         progress.looked = imageJPEG != nil
+        progress.capturing = phase == .outlining
+        var batchesThisTurn = 0
 
         while true {
             try Task.checkCancellation()
             progress.rounds += 1
+            let appliesBefore = progress.applyEdits
             let records = try await generate(engine: engine, messages: messages, options: options, turn: turn, tools: tools, context: context,
                                              grounding: grounding, started: started, progress: &progress, output: output)
             let replies = records.map(\.message)
 
+            switch phase {
+            case .outlining:
+                progress.capturing = false
+                phase = .none
+                // The model acted at once: the turn goes on as any other.
+                guard records.isEmpty, !progress.loopLimited else { break }
+                let language: OpLanguage = turn.language == .english ? .en : .fr
+                let steps = GoalOutline.parse(progress.captured, catalog: .shared).filter {
+                    OperationCatalog.shared.spec($0.op)?.domains.contains(mode.opDomain) ?? false
+                }
+                note("model.outline", ["turn": String(turn.id), "steps": String(steps.count), "ops": steps.map(\.op.raw).joined(separator: ",")])
+                // The outline round is captured, never spoken: what is not possible yet is said here, word for word.
+                let refusals = unsupported.filter { $0.offer == nil }.map { $0.reply(french: turn.language != .english) }
+                var task: String
+                if steps.isEmpty {
+                    let said = LiveSpeechSanitizer.clean(refusals.joined(separator: " "), language: turn.language)
+                    if !said.isEmpty {
+                        output.yield(.text(said + " "))
+                        progress.spoken += said + " "
+                    }
+                    task = GoalOutline.directRequest(language: language)
+                } else {
+                    outline = steps
+                    outlineDone = 0
+                    outlineIdleTurns = 0
+                    outlineFlag.set(true)
+                    let spoken = [GoalOutline.spokenOutline(steps, french: turn.language != .english)] + refusals
+                    let said = LiveSpeechSanitizer.clean(spoken.filter { !$0.isEmpty }.joined(separator: " "), language: turn.language)
+                    if !said.isEmpty {
+                        output.yield(.text(said + " "))
+                        progress.spoken += said + " "
+                    }
+                    phase = .filling(1)
+                    task = GoalOutline.fillRequest(batch: 1, steps: steps, language: language)
+                    let cards = batchCards(1, turn: turn)
+                    if !cards.isEmpty { task = cards + "\n<task>" + task + "</task>" } else { task = "<task>" + task + "</task>" }
+                    messages = [.user(task, imageJPEG: nil)]
+                    options = LocalGenerationOptions(style: .edit, maxTokens: maxTokens)
+                    continue
+                }
+                messages = [.user("<task>" + task + "</task>", imageJPEG: nil)]
+                options = LocalGenerationOptions(style: .edit, maxTokens: maxTokens)
+                continue
+            case .filling(let batch):
+                if progress.applyEdits > appliesBefore {
+                    // This batch ran (whatever its steps did): the outline moves on.
+                    let end = min(outline.count, batch * GoalOutline.batchSize)
+                    if end > outlineDone {
+                        outlineDone = end
+                        batchesThisTurn += 1
+                    }
+                    if outlineDone >= outline.count { clearOutline() }
+                }
+            case .none, .firstSteps:
+                break
+            }
+
             if progress.loopLimited {
                 owedResults = replies
+                progress.closingLine = outlineClosingLine(phase, progress: progress, turn: turn)
                 return finish(turn, .loopLimit, progress: progress, output: output)
             }
             if records.contains(where: \.needsReply) {
@@ -358,11 +492,13 @@ public actor LocalModelLiveBrain: LiveBrain {
                     // The repair round did not fix it (D12): one honest sentence, no more tries.
                     owedResults = replies
                     note("model.repair_exhausted", ["turn": String(turn.id), "rounds": String(progress.rounds)])
+                    progress.closingLine = outlineClosingLine(phase, progress: progress, turn: turn)
                     return finish(turn, progress.changedDocument ? .editApplied : .loopLimit, progress: progress, output: output)
                 }
-                if progress.rounds >= limits.maxRounds || progress.invalidRetries > 1 {
+                if progress.rounds >= roundLimit || progress.invalidRetries > 1 {
                     owedResults = replies
                     note("model.loop_limit", ["turn": String(turn.id), "rounds": String(progress.rounds)])
+                    progress.closingLine = outlineClosingLine(phase, progress: progress, turn: turn)
                     return finish(turn, .loopLimit, progress: progress, output: output)
                 }
                 messages = replies
@@ -371,6 +507,20 @@ public actor LocalModelLiveBrain: LiveBrain {
                 if progress.changedDocument { context = await tools.context() }
                 continue
             }
+            // A clean batch: the next one in the same turn while the budget lasts (D20: at most two per turn).
+            if case .filling(let batch) = phase, !outline.isEmpty, outlineDone >= batch * GoalOutline.batchSize, outlineDone < outline.count,
+               batchesThisTurn < GoalOutline.maxBatchesPerTurn, progress.rounds < roundLimit, progress.applyEdits < limits.maxApplyEdits {
+                let next = batch + 1
+                phase = .filling(next)
+                let language: OpLanguage = turn.language == .english ? .en : .fr
+                let cards = batchCards(next, turn: turn)
+                let task = "<task>" + GoalOutline.fillRequest(batch: next, steps: outline, language: language) + "</task>"
+                messages = replies + [.user(cards.isEmpty ? task : cards + "\n" + task, imageJPEG: nil)]
+                options = LocalGenerationOptions(style: .edit, maxTokens: maxTokens)
+                if progress.changedDocument { context = await tools.context() }
+                continue
+            }
+            progress.closingLine = outlineClosingLine(phase, progress: progress, turn: turn)
             owedResults = replies
             if records.isEmpty, progress.spoken.isEmpty {
                 // Nothing said after a step ran (a repair round left silent): the reason-aware outcome.
@@ -394,6 +544,7 @@ public actor LocalModelLiveBrain: LiveBrain {
         // Cold: no reuse seen yet, or a picture attached (Qwen3.5 cannot split a new picture
         // off a cached prefix, so that turn prefills everything and runs the vision tower).
         let cold = cacheIsCold || progress.looked
+        progress.separatesSpeech = !progress.spoken.isEmpty
         let firstToken = progress.rounds == 1 && cold ? max(limits.firstTokenTimeout, limits.coldFirstTokenTimeout) : limits.firstTokenTimeout
         let ticks = Self.watched(engine.send(messages, options: options), clock: clock, firstToken: firstToken, turn: remaining)
         // Several calls in one generation: each one is checked against the picture as the calls before left it.
@@ -418,6 +569,8 @@ public actor LocalModelLiveBrain: LiveBrain {
                     throw LiveBrainError.timeout(stage: "turn")
                 case .event(.text(let delta)):
                     token()
+                    // The outline round (D20) is read as the model wrote it, line breaks included.
+                    if progress.capturing { progress.captured += delta }
                     for piece in filter.feed(delta) {
                         try await take(piece, turn: turn, tools: tools, context: context, grounding: grounding, progress: &progress, records: &records, output: output)
                         if case .toolCall = piece { if progress.changedDocument { context = await tools.context() } }
@@ -470,9 +623,15 @@ public actor LocalModelLiveBrain: LiveBrain {
                       grounding: ToolInputValidator.Grounding, progress: inout Progress, records: inout [CallRecord], output: Output) async throws {
         switch piece {
         case .speech(let text):
-            guard let speakable = Self.speakable(text) else {
+            // The outline round (D20): read by the brain from the raw text (`generate`), never said.
+            if progress.capturing { return }
+            guard var speakable = Self.speakable(text) else {
                 if !text.isEmpty { note("model.markup_dropped", ["turn": String(turn.id), "chars": String(text.count)]) }
                 return
+            }
+            if progress.separatesSpeech {
+                progress.separatesSpeech = false
+                if let last = progress.spoken.last, !last.isWhitespace, let first = speakable.first, !first.isWhitespace { speakable = " " + speakable }
             }
             output.yield(.text(speakable))
             progress.spoken += speakable
@@ -708,6 +867,11 @@ public actor LocalModelLiveBrain: LiveBrain {
                 spoken += piece
             }
         }
+        if let closing = progress.closingLine.map({ LiveSpeechSanitizer.clean($0, language: turn.language) }), !closing.isEmpty {
+            let piece = spoken.isEmpty || spoken.last?.isWhitespace == true ? closing : " " + closing
+            output.yield(.text(piece))
+            spoken += piece
+        }
         output.yield(.stats(stats(progress)))
         output.yield(.completed(end))
         // Warm only once reuse was seen: a turn that prefilled everything says nothing of the next one.
@@ -732,14 +896,13 @@ public actor LocalModelLiveBrain: LiveBrain {
     private func openEngine(recap: String?) async throws -> any LocalChatEngine {
         promptLayout = .current
         recentCards = []
-        var history = Self.exampleHistory(mode: mode, size: info.promptSize, layout: promptLayout)
+        // The prefix every conversation shares (D22), then the recap after a compaction.
+        var setup = Self.prefixSetup(mode: mode, info: info)
         if let recap {
-            history.append(.user(recap, imageJPEG: nil))
-            history.append(.assistant(Self.recapAcknowledgement(recap), toolCalls: []))
+            setup.history.append(.user(recap, imageJPEG: nil))
+            setup.history.append(.assistant(Self.recapAcknowledgement(recap), toolCalls: []))
         }
-        let setup = LocalChatSetup(system: LocalLivePrompt.system(mode: mode, size: info.promptSize, layout: promptLayout),
-                                   tools: LocalLivePrompt.toolSpecs(mode: mode, layout: promptLayout),
-                                   history: history, imageMaxPixels: LocalModelCatalog.imageMaxPixels)
+        let history = setup.history
         let made: any LocalChatEngine
         do {
             made = try await makeEngine(setup)
@@ -753,7 +916,11 @@ public actor LocalModelLiveBrain: LiveBrain {
         }
         engine = made
         cacheIsCold = true
-        note("model.engine", ["history": String(history.count), "recap": recap == nil ? "0" : "1"])
+        if limits.adaptive {
+            // D23: the row of the engine actually made (a KV engine whose picture append passed its self-test keeps more).
+            contextLimits = LiveContextPolicy.limits(for: info, engine: made.engineKind, mediaAppendVerified: made.mediaAppendVerified)
+        }
+        note("model.engine", ["history": String(history.count), "recap": recap == nil ? "0" : "1", "compact_at": String(contextLimits.compactAt)])
         return made
     }
 
@@ -764,7 +931,8 @@ public actor LocalModelLiveBrain: LiveBrain {
         let tokens = await old?.contextTokens() ?? 0
         await old?.close()
         let recap = LocalLivePrompt.recap(LocalRecapInput(appliedEdits: Array(recapEdits.suffix(10)), lastExchanges: Array(recapExchanges.suffix(3)),
-                                                          openQuestion: openQuestion, lastLook: lastLookNote))
+                                                          openQuestion: openQuestion, lastLook: lastLookNote,
+                                                          outline: GoalOutline.recapLine(pendingOutline)))
         // Owed results belong to the closed conversation; the recap carries the edits.
         owedResults = []
         imagesInContext = 0
@@ -797,6 +965,80 @@ public actor LocalModelLiveBrain: LiveBrain {
         recapExchanges = []
         openQuestion = nil
         lastLookNote = nil
+        clearOutline()
+    }
+
+    // MARK: - Outline-then-fill (D20)
+
+    /// The 4B, with the flag: the model that outlines.
+    var outlines: Bool {
+        FeatureFlags.isOn(.outlineFill) && (info.promptSize == .full || info.id == LocalModelTiering.maxModelID)
+    }
+
+    /// What this turn does about a long goal: resume a pending outline on « continue », outline a new long goal
+    /// (4B), the first batch with the honest line (2B), or nothing. Also ages the pending outline: a manual edit or
+    /// three turns without « continue » drop it.
+    private func outlinePhase(for turn: LiveUserTurn) -> OutlinePhase {
+        guard turn.kind != .sessionStart, FeatureFlags.isOn(.outlineFill) else { return .none }
+        if !outline.isEmpty {
+            if turn.sinceLastReply.contains(where: { $0.hasSuffix("(manual)") }) {
+                note("model.outline_dropped", ["turn": String(turn.id), "why": "manual"])
+                clearOutline()
+            } else if GoalOutline.isContinue(turn.text), outlineDone < outline.count {
+                outlineIdleTurns = 0
+                return .filling(outlineDone / GoalOutline.batchSize + 1)
+            } else {
+                outlineIdleTurns += 1
+                if outlineIdleTurns >= 3 {
+                    note("model.outline_dropped", ["turn": String(turn.id), "why": "idle"])
+                    clearOutline()
+                }
+            }
+        }
+        guard GoalOutline.isLongGoal(turn: turn, mode: mode) else { return .none }
+        if outlines {
+            // A new long goal replaces the old outline.
+            clearOutline()
+            return .outlining
+        }
+        return .firstSteps
+    }
+
+    /// The cards of exactly the operations of batch `n` (D20), within the 4B's card budget.
+    private func batchCards(_ batch: Int, turn: LiveUserTurn) -> String {
+        let ops = GoalOutline.batch(batch, of: outline).map(\.op)
+        var seen: Set<OpID> = []
+        let unique = ops.filter { seen.insert($0).inserted }
+        let block = OperationCards.turnBlock(unique.map { RetrievedOperation(id: $0, score: 1) }, language: turn.language == .english ? .en : .fr,
+                                             budget: 1_000, domain: mode.opDomain)
+        if !block.isEmpty {
+            recentCards.append(unique)
+            if recentCards.count > 3 { recentCards.removeFirst(recentCards.count - 3) }
+            note("model.cards", ["turn": String(turn.id), "ops": unique.map(\.raw).joined(separator: ","), "batch": String(batch)])
+        }
+        return block
+    }
+
+    /// The sentence a turn ends with when a long goal is not finished: « dis « continue » » with an outline (4B),
+    /// « redis-moi la suite » without one (2B).
+    private func outlineClosingLine(_ phase: OutlinePhase, progress: Progress, turn: LiveUserTurn) -> String? {
+        let french = turn.language != .english
+        switch phase {
+        case .none, .outlining:
+            return nil
+        case .firstSteps:
+            return progress.changedDocument ? GoalOutline.firstStepsLine(french: french) : nil
+        case .filling:
+            guard !outline.isEmpty, outlineDone > 0, outlineDone < outline.count else { return nil }
+            return GoalOutline.stoppedLine(done: outlineDone, french: french)
+        }
+    }
+
+    private func clearOutline() {
+        outline = []
+        outlineDone = 0
+        outlineIdleTurns = 0
+        outlineFlag.set(false)
     }
 
     // MARK: - Memory for the recap
@@ -1008,5 +1250,23 @@ public actor LocalModelLiveBrain: LiveBrain {
             turnTimer.cancel()
         }
         return stream
+    }
+}
+
+/// The brain's « an outline is pending » bit, readable without awaiting the actor (D20).
+final class OutlineFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var flag = false
+
+    var value: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return flag
+    }
+
+    func set(_ value: Bool) {
+        lock.lock()
+        flag = value
+        lock.unlock()
     }
 }

@@ -348,6 +348,8 @@ public final class LiveSession {
     public func end() {
         guard isRunning || isStarting else { return }
         stopLive(reason: "end")
+        // W3 (D15): the KV prefix snapshot is kept only while Live is open.
+        LocalBrainHub.shared.liveClosed()
     }
 
     public func setMuted(_ muted: Bool) {

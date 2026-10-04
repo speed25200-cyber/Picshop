@@ -76,6 +76,20 @@ public enum BlendMath {
         return backdrop.map(blended) { b, x in (1 - a) * b + a * x }
     }
 
+    /// W3C Compositing Level 1, source-over with the mode's mix (W3, D6), over a backdrop of any alpha:
+    /// co = cs·αs·(1 − αb) + cb·αb·(1 − αs) + αs·αb·B(cb, cs), αo = αs + αb·(1 − αs). Returns the straight colour
+    /// (co ÷ αo; black where αo = 0) and αo. With αb = 1 it equals `composite(_:backdrop:source:alpha:)` within 1e-9.
+    public static func compositeRGBA(_ mode: BlendMode, backdrop: RGB, backdropAlpha: Double, source: RGB, sourceAlpha: Double) -> (rgb: RGB, alpha: Double) {
+        let ab = backdropAlpha.clamped(to: 0...1), as_ = sourceAlpha.clamped(to: 0...1)
+        let alpha = as_ + ab * (1 - as_)
+        guard alpha > 0 else { return (RGB(0, 0, 0), 0) }
+        let mixed = blend(mode, backdrop: backdrop, source: source)
+        func channel(_ cb: Double, _ cs: Double, _ b: Double) -> Double {
+            (cs * as_ * (1 - ab) + cb * ab * (1 - as_) + as_ * ab * b) / alpha
+        }
+        return (RGB(channel(backdrop.r, source.r, mixed.r), channel(backdrop.g, source.g, mixed.g), channel(backdrop.b, source.b, mixed.b)), alpha)
+    }
+
     /// Dissolve: a pixel shows the source when its random value (0…1) is below the source's coverage.
     public static func dissolveTakesSource(alpha: Double, noise: Double) -> Bool {
         noise < alpha

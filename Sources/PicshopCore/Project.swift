@@ -5,7 +5,8 @@ import Foundation
 /// On disk a project is a package directory:
 /// ```
 /// <uuid>.picshop/
-///   project.json      ← this struct
+///   project.json      ← this struct (a photo document as its v1 projection, D3)
+///   document-v2.json  ← photo projects: the lossless format 2 document (W3, D2)
 ///   summary.json      ← what Home shows (`ProjectSummary`)
 ///   media/…           ← imported originals + AI-rendered derivatives
 ///   masks/…           ← rasterised masks
@@ -251,11 +252,37 @@ public struct ProjectStore: Sendable {
         // equals the one a later reload decodes.
         copy.createdAt = Self.wholeSeconds(copy.createdAt)
         copy.modifiedAt = Self.wholeSeconds(Date())
+        // D2: project.json keeps the v1 projection every W2 build opens (D3); document-v2.json, written after it with
+        // the digest of exactly those bytes, keeps the lossless format 2 document.
+        var lossless: PhotoDocument?
+        if case .photo(let document) = copy.content {
+            lossless = document
+            let id = project.id
+            copy.content = .photo(DocumentCodec.v1Projection(of: document, maskFileExists: { path in
+                FileManager.default.fileExists(atPath: self.url(for: path, in: id).path)
+            }))
+        }
         let data = try encoder.encode(copy)
         try data.write(to: manifestURL(for: project.id), options: .atomic)
+        if let lossless {
+            try writeDocumentV2(lossless, manifest: data, projectID: project.id)
+        }
         let summary = ProjectSummary(project: copy)
         try? writeSummary(summary)
         return summary
+    }
+
+    /// D2 step 3: never over a newer build's file (its header's format version above 2); otherwise written when the
+    /// document holds v2-only state or the file already exists (so a later save drops nothing).
+    private func writeDocumentV2(_ document: PhotoDocument, manifest: Data, projectID: UUID) throws {
+        let url = documentV2URL(for: projectID)
+        let exists = FileManager.default.fileExists(atPath: url.path)
+        if exists, let header = documentV2Header(for: projectID), header.formatVersion > PhotoDocument.formatVersion { return }
+        guard exists || DocumentCodec.needsV2(document) else { return }
+        var stored = document
+        stored.formatVersion = PhotoDocument.formatVersion
+        let envelope = PhotoDocumentEnvelope(document: stored, v1Digest: DocumentCodec.digest(manifest), writer: PhotoDocumentEnvelope.currentWriter)
+        try encoder.encode(envelope).write(to: url, options: .atomic)
     }
 
     private static func wholeSeconds(_ date: Date) -> Date {
@@ -266,17 +293,9 @@ public struct ProjectStore: Sendable {
         packageURL(for: id).appendingPathComponent(Project.manifestName)
     }
 
+    /// The project, its photo document at format 2 from project.json and document-v2.json (D2, `loadWithSource`).
     public func load(id: UUID) throws -> Project {
-        let manifest = manifestURL(for: id)
-        guard FileManager.default.fileExists(atPath: manifest.path) else { throw PicshopError.projectNotFound(id) }
-        do {
-            let data = try Data(contentsOf: manifest)
-            return try decoder.decode(Project.self, from: data)
-        } catch let error as PicshopError {
-            throw error
-        } catch {
-            throw PicshopError.corruptProject(String(describing: error))
-        }
+        try loadWithSource(id: id).project
     }
 
     public func delete(id: UUID) throws {
@@ -365,5 +384,165 @@ extension ProjectStore {
 
     static func modificationDate(of url: URL) -> Date? {
         (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+    }
+}
+
+// MARK: - W3: document v2 (D2, D17)
+
+public extension Project {
+    /// The lossless photo document next to project.json (D2).
+    static let documentV2Name = PhotoDocumentEnvelope.fileName
+}
+
+public extension ProjectStore {
+    func documentV2URL(for id: UUID) -> URL {
+        packageURL(for: id).appendingPathComponent(Project.documentV2Name)
+    }
+
+    /// load(id:) plus where the photo document came from (D2):
+    /// - no document-v2.json, or one whose header does not decode or names another format: project.json migrated (.v1);
+    /// - a header with a format version above 2 (a newer build): project.json migrated, the file untouched (.newerFormat);
+    /// - a format 2 envelope whose digest matches project.json's bytes: its document (.v2); one that does not decode:
+    ///   project.json (.v1); a digest that differs (an older build saved meanwhile): the merge (.merged), which the
+    ///   session saves again so both files agree.
+    func loadWithSource(id: UUID) throws -> (project: Project, source: DocumentCodec.LoadSource) {
+        let manifest = manifestURL(for: id)
+        guard FileManager.default.fileExists(atPath: manifest.path) else { throw PicshopError.projectNotFound(id) }
+        let data: Data
+        var project: Project
+        do {
+            data = try Data(contentsOf: manifest)
+            project = try decoder.decode(Project.self, from: data)
+        } catch let error as PicshopError {
+            throw error
+        } catch {
+            throw PicshopError.corruptProject(String(describing: error))
+        }
+        guard case .photo(let v1) = project.content else { return (project, .v1) }
+        func finish(_ document: PhotoDocument, _ source: DocumentCodec.LoadSource) -> (project: Project, source: DocumentCodec.LoadSource) {
+            project.content = .photo(document)
+            return (project, source)
+        }
+        let url = documentV2URL(for: id)
+        guard let envelopeData = try? Data(contentsOf: url) else { return finish(DocumentCodec.migrated(v1), .v1) }
+        guard let header = try? decoder.decode(PhotoDocumentEnvelopeHeader.self, from: envelopeData), header.format == PhotoDocumentEnvelope.format else {
+            PSLog.error("document-v2.json of \(id) has no readable header: opening project.json", category: .core)
+            return finish(DocumentCodec.migrated(v1), .v1)
+        }
+        if header.formatVersion > PhotoDocument.formatVersion {
+            PSLog.info("document-v2.json of \(id) is format \(header.formatVersion): opening the v1 projection", category: .core)
+            return finish(DocumentCodec.migrated(v1), .newerFormat)
+        }
+        guard header.formatVersion == PhotoDocument.formatVersion, let envelope = try? decoder.decode(PhotoDocumentEnvelope.self, from: envelopeData) else {
+            PSLog.error("document-v2.json of \(id) does not decode: opening project.json", category: .core)
+            return finish(DocumentCodec.migrated(v1), .v1)
+        }
+        if envelope.v1Digest == DocumentCodec.digest(data) {
+            return finish(DocumentCodec.migrated(envelope.document), .v2)
+        }
+        PSLog.info("project.json of \(id) changed since document-v2.json was written: merging", category: .core)
+        let merged = DocumentCodec.merge(v1: v1, v2: envelope.document, maskFileExists: { path in
+            FileManager.default.fileExists(atPath: self.url(for: path, in: id).path)
+        })
+        return finish(merged, .merged)
+    }
+
+    /// The existing document-v2.json's header, nil when absent or unreadable; cached by the file's modification date
+    /// and size, so a save checks it without decoding the file again.
+    func documentV2Header(for id: UUID) -> PhotoDocumentEnvelopeHeader? {
+        let url = documentV2URL(for: id)
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else {
+            EnvelopeHeaderCache.shared.remove(url.path)
+            return nil
+        }
+        let stamp = EnvelopeHeaderCache.Stamp(date: attributes[.modificationDate] as? Date, size: (attributes[.size] as? NSNumber)?.int64Value ?? -1)
+        if let cached = EnvelopeHeaderCache.shared.header(for: url.path, stamp: stamp) { return cached }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let data = try? Data(contentsOf: url), let header = try? decoder.decode(PhotoDocumentEnvelopeHeader.self, from: data) else { return nil }
+        EnvelopeHeaderCache.shared.store(header, for: url.path, stamp: stamp)
+        return header
+    }
+
+    /// D17 storage: deletes files under media/ and masks/ not in `keeping` (relative paths, as documents store them)
+    /// and not modified in the last 24 hours (in-flight writes); returns (files, bytes). Nothing outside those two
+    /// directories is touched.
+    @discardableResult
+    func collectGarbage(projectID: UUID, keeping: Set<String>) throws -> (files: Int, bytes: Int) {
+        try collectGarbage(projectID: projectID, keeping: keeping, now: Date())
+    }
+
+    /// `collectGarbage(projectID:keeping:)` at a given time (tests).
+    @discardableResult
+    func collectGarbage(projectID: UUID, keeping: Set<String>, now: Date) throws -> (files: Int, bytes: Int) {
+        let fm = FileManager.default
+        let package = packageURL(for: projectID).standardizedFileURL
+        // Both documents on disk keep their files, whichever build wrote them: a document-v2.json from a newer build
+        // (this build edits its v1 projection and never rewrites it) or one it cannot decode still owns its layers'
+        // media, mask stacks and retained fields for when the newer build opens the project again (D2).
+        var keeping = keeping
+        for url in [documentV2URL(for: projectID), manifestURL(for: projectID)] {
+            guard let data = try? Data(contentsOf: url),
+                  let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else { continue }
+            PhotoDocument.collectPaths(in: object, into: &keeping)
+        }
+        var files = 0, bytes = 0
+        for directory in [Project.mediaDirectory, Project.masksDirectory] {
+            let root = package.appendingPathComponent(directory, isDirectory: true)
+            guard let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey, .fileSizeKey]) else { continue }
+            for case let url as URL in enumerator {
+                let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey, .fileSizeKey])
+                guard values?.isRegularFile == true else { continue }
+                let standardized = url.standardizedFileURL.path
+                guard standardized.hasPrefix(package.path + "/") else { continue }
+                let relative = String(standardized.dropFirst(package.path.count + 1))
+                guard !keeping.contains(relative) else { continue }
+                let modified = values?.contentModificationDate ?? now
+                guard now.timeIntervalSince(modified) >= 24 * 3600 else { continue }
+                let size = values?.fileSize ?? 0
+                do {
+                    try fm.removeItem(at: url)
+                    files += 1
+                    bytes += size
+                } catch {
+                    PSLog.error("could not delete \(relative): \(error)", category: .core)
+                }
+            }
+        }
+        if files > 0 { PSLog.info("project \(projectID): removed \(files) unused files (\(bytes) bytes)", category: .core) }
+        return (files, bytes)
+    }
+}
+
+/// document-v2.json headers by path, keyed by the file's modification date and size (D2: the save checks the header
+/// every time without decoding the file).
+final class EnvelopeHeaderCache: @unchecked Sendable {
+    struct Stamp: Equatable {
+        var date: Date?
+        var size: Int64
+    }
+
+    static let shared = EnvelopeHeaderCache()
+    private let lock = NSLock()
+    private var entries: [String: (stamp: Stamp, header: PhotoDocumentEnvelopeHeader)] = [:]
+
+    func header(for path: String, stamp: Stamp) -> PhotoDocumentEnvelopeHeader? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let entry = entries[path], entry.stamp == stamp else { return nil }
+        return entry.header
+    }
+
+    func store(_ header: PhotoDocumentEnvelopeHeader, for path: String, stamp: Stamp) {
+        lock.lock()
+        defer { lock.unlock() }
+        if entries.count > 64 { entries.removeAll() }
+        entries[path] = (stamp, header)
+    }
+
+    func remove(_ path: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        entries[path] = nil
     }
 }

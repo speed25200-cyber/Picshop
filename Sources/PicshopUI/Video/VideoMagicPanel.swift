@@ -41,8 +41,14 @@ struct VideoMagicPanel: View {
         return tiles.sorted { (order.firstIndex(of: $0.id) ?? 99) < (order.firstIndex(of: $1.id) ?? 99) }
     }
 
+    /// « Nettoyage vlog » adds captions too (W3, D21).
+    @State private var vlogCaptions = true
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            if FeatureFlags.isOn(.recipes) {
+                vlogCleanup
+            }
             if let captions = session.timeline.captions, !captions.isEmpty {
                 captionStyles(captions)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -51,6 +57,37 @@ struct VideoMagicPanel: View {
             }
         }
         .animation(PSMotion.standard, value: session.timeline.captions?.style)
+    }
+
+    /// « Nettoyage vlog » (W3, D21; §7.14): clean voice, fillers and silences out, captions (when asked and none exist),
+    /// music ducked under speech: one recipe, one history step, through the video executor.
+    private var vlogCleanup: some View {
+        HStack(spacing: PSSpacing.small) {
+            Button {
+                Haptics.magic()
+                let call = OperationCall("recipe", args: ["name": .string(RecipeName.vlogCleanup.rawValue), "captions": .bool(vlogCaptions)], source: .ui)
+                Task { await session.run(EditIntent(action: .operation, operation: call)) }
+            } label: {
+                HStack(spacing: PSSpacing.xSmall) {
+                    MagicGlyph(size: 15, symbol: "sparkles.tv")
+                    Text(L("Vlog cleanup")).lineLimit(1)
+                }
+                .font(.subheadline)
+                .foregroundStyle(Color.psTextPrimary)
+                .padding(.horizontal, PSSpacing.medium)
+                .frame(minHeight: PanelChipStyle.height)
+                .background(Capsule().fill(Color.psFillControl))
+                .contentShape(Capsule())
+            }
+            .buttonStyle(PSPressStyle(scale: 0.97))
+            .disabled(session.isProcessing)
+            .accessibilityIdentifier("video.magic.recipe.vlog")
+            Spacer(minLength: PSSpacing.small)
+            Toggle(L("Captions"), isOn: $vlogCaptions)
+                .font(.footnote)
+                .fixedSize()
+                .accessibilityIdentifier("video.magic.recipe.vlog.captions")
+        }
     }
 
     private var grid: some View {

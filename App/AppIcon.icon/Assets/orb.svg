@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The spectral orb of PSMark (PSTheme.intelligence: #4285FF, #9A6BFF, #F5619E, #FF9E4D) on the 1024-point icon
+     canvas: its disc is 38 % of the 640-point mark box (243.2 points), at the mark's offset (0.47, 0.15) of the box. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="spectrum" x1="492.8" y1="288" x2="736" y2="531.2" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4285FF"/>
+      <stop offset="0.38" stop-color="#9A6BFF"/>
+      <stop offset="0.7" stop-color="#F5619E"/>
+      <stop offset="1" stop-color="#FF9E4D"/>
+    </linearGradient>
+    <radialGradient id="bloom" cx="580" cy="370" r="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="614.4" cy="409.6" r="121.6" fill="url(#spectrum)"/>
+  <circle cx="614.4" cy="409.6" r="121.6" fill="url(#bloom)"/>
+</svg>

@@ -143,7 +143,7 @@ final class OperationArgumentsTests: XCTestCase {
         XCTAssertEqual(validate("layerOpacity", ["opacity": 150]).1, ["steps[0].opacity: 150 is outside 0...100"])
         XCTAssertEqual(validate("layerOpacity", ["opacity": "50"]).1, ["steps[0].opacity: must be a number"])
         XCTAssertEqual(validate("layerOpacity", ["opacity": 50, "alpha": 1]).1, ["steps[0].alpha: unknown field for layerOpacity; fields: ref, opacity"])
-        XCTAssertEqual(validate("layerOpacity", ["ref": "o1", "opacity": 50]).1, ["steps[0].ref: 'o1' is not an id such as l1, s1, i1"])
+        XCTAssertEqual(validate("layerOpacity", ["ref": "o1", "opacity": 50]).1, ["steps[0].ref: 'o1' is not an id such as l1, s1, i1, j1, g1"])
         XCTAssertEqual(validate("layerVisibility", ["visible": "no"]).1, ["steps[0].visible: must be true or false"])
         XCTAssertEqual(validate("colorGrade", ["range": "shadows", "color": "blurple"]).1, ["steps[0].color: 'blurple' is not a colour name or #RRGGBB"])
         XCTAssertEqual(validate("levels", ["black": 200, "white": 100]).1, ["steps[0].white: must be greater than black"])
@@ -157,7 +157,7 @@ final class OperationArgumentsTests: XCTestCase {
                        ["steps[0]: curves takes one of preset, points, not several"])
         XCTAssertNotNil(validate("hsl", ["band": "blue", "saturation": -40, "luminance": 10]).0, "several values of a non-exclusive group")
         XCTAssertEqual(validate("removeLUT", [:]).1, [])
-        XCTAssertEqual(validate("removeLUT", ["amount": 1]).1, ["steps[0].amount: unknown field for removeLUT; fields: none"])
+        XCTAssertEqual(validate("removeLUT", ["amount": 1]).1, ["steps[0].amount: unknown field for removeLUT; fields: layer"])
     }
 
     func testPointsAndBoxesAreIn0To1000() throws {
@@ -182,7 +182,7 @@ final class OperationArgumentsTests: XCTestCase {
         XCTAssertEqual(validate("applyLook", ["look": "mono", "amountMode": "absolute", "amount": -20]).1, ["steps[0].amount: -20 is outside 0...100"])
         XCTAssertEqual(validate("punchIns", ["amount": 0], .video).1, [], "0 takes the zoom cuts off")
         XCTAssertEqual(validate("adjust", ["parameter": "brightness", "amount": 20, "ref": "t1"]).1,
-                       ["steps[0].ref: unknown field for adjust; fields: parameter, amount, amountMode"])
+                       ["steps[0].ref: unknown field for adjust; fields: parameter, amount, amountMode, layer"])
         XCTAssertEqual(validate("addText", ["text": "Hello", "ref": "f1"], .video).1.first, "steps[0].ref: unknown field for addText; fields: text, placement, color")
         XCTAssertEqual(validate("replaceText", ["text": "brouillon", "replacement": ""], .pdf).1, [], "an empty replacement erases")
         XCTAssertNotNil(validate("movePage", ["clipNumber": 2, "choiceIndex": -1], .pdf).0)

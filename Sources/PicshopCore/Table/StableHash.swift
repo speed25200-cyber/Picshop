@@ -22,6 +22,22 @@ public enum StableHash {
         return String(repeating: "0", count: max(0, 16 - digits.count)) + digits
     }
 
+    /// FNV-1a 64 of raw bytes (D2's v1Digest, D12's keys over encoded data).
+    public static func fnv1a64(bytes: Data) -> UInt64 {
+        var hash = offsetBasis
+        for byte in bytes {
+            hash ^= UInt64(byte)
+            hash = hash &* prime
+        }
+        return hash
+    }
+
+    /// 16 lower-case hex digits of `fnv1a64(bytes:)`.
+    public static func hex(bytes: Data) -> String {
+        let digits = String(fnv1a64(bytes: bytes), radix: 16)
+        return String(repeating: "0", count: max(0, 16 - digits.count)) + digits
+    }
+
     /// A number written the same way everywhere: fixed decimals, no locale, no "-0".
     public static func token(_ value: Double, decimals: Int = 4) -> String {
         guard value.isFinite else { return "nan" }

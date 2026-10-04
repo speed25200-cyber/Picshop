@@ -96,16 +96,10 @@
       "radius": 7,
       "scheme": 0
     },
-    "Sources/PicshopUI/Photo/PhotoExportSheet.swift": {
-      "font": 0,
-      "opacity": 4,
-      "radius": 9,
-      "scheme": 0
-    },
     "Sources/PicshopUI/Photo/PhotoPanels.swift": {
-      "font": 7,
-      "opacity": 6,
-      "radius": 8,
+      "font": 5,
+      "opacity": 4,
+      "radius": 6,
       "scheme": 0
     },
     "Sources/PicshopUI/Settings/AdvancedSettingsView.swift": {
@@ -176,9 +170,9 @@
     }
   },
   "totals": {
-    "font": 65,
-    "opacity": 95,
-    "radius": 80,
+    "font": 63,
+    "opacity": 89,
+    "radius": 69,
     "scheme": 0
   }
 }

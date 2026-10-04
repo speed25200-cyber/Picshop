@@ -224,6 +224,13 @@ public enum IntentNormalizer {
             guard let call = OperationArguments.validate(spec.id, arguments, domain: context.mode.opDomain, path: "step", problems: &problems), problems.isEmpty else { return nil }
             return EditIntent(action: .operation, confidence: 0.85, operation: call)
         }
+        // W3 (D19): a legacy layer action with a stored layer ref (the planner keeps unknown keys in `extra`).
+        if let extra = step.extra, let spec = LayeredLegacy.spec(for: step.action.trimmingCharacters(in: .whitespaces), object: layeredObject(step, extra), mode: context.mode) {
+            var problems: [String] = []
+            let arguments = OperationArguments.coerce(layeredObject(step, extra), for: spec.id)
+            guard let call = OperationArguments.validate(spec.id, arguments, domain: context.mode.opDomain, path: "step", problems: &problems), problems.isEmpty else { return nil }
+            return EditIntent(action: .operation, confidence: 0.85, operation: call)
+        }
         guard var action = action(named: step.action) else { return nil }
         // On a photo, "replace this text" is an edit of the text block, never the PDF action.
         let replacesPhotoText = action == .replaceText && context.mode == .photo
@@ -355,6 +362,18 @@ public enum IntentNormalizer {
 
     /// The catalog operation run by a domain handler (IntentAction.operation) that `name` names in this
     /// editor, when the catalogOps switch is on. Operations that lower to an IntentAction keep its name.
+    /// A legacy step's fields with its extra keys, as one step object (LayeredLegacy reads `ref` and `layer`).
+    static func layeredObject(_ step: RawIntentStep, _ extra: [String: JSONValue]) -> [String: JSONValue] {
+        var object = extra
+        object["action"] = nil
+        if let ref = step.ref, object["ref"] == nil { object["ref"] = .string(ref) }
+        if let parameter = step.parameter, object["parameter"] == nil { object["parameter"] = .string(parameter) }
+        if let amount = step.amount, object["amount"] == nil { object["amount"] = .number(amount) }
+        if let mode = step.amountMode, object["amountMode"] == nil { object["amountMode"] = .string(mode) }
+        if let look = step.look, object["look"] == nil { object["look"] = .string(look) }
+        return object
+    }
+
     public static func catalogOperation(named name: String, mode: EditorMode) -> OperationSpec? {
         guard FeatureFlags.isOn(.catalogOps) else { return nil }
         let id = OpID(name.trimmingCharacters(in: .whitespacesAndNewlines))

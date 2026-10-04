@@ -80,6 +80,8 @@ public enum RefKind: String, Codable, Sendable, CaseIterable {
     case printedText, textLayer, object, freeArea, shape, imageLayer, adjustmentLayer, clip, soundTrack, overlay, caption, page, markup, textHit
     /// A local adjustment (W2): "a1" is `document.localAdjustments[0]`.
     case mask
+    /// W3: a layer group, "g1" (D19; table bundles share it).
+    case layerGroup
 
     /// The letter a ref of this kind starts with ("t3", "l2", "o1").
     public var prefix: Character {
@@ -99,6 +101,7 @@ public enum RefKind: String, Codable, Sendable, CaseIterable {
         case .markup: return "n"
         case .textHit: return "w"
         case .mask: return "a"
+        case .layerGroup: return "g"
         }
     }
 }
@@ -150,9 +153,14 @@ public struct ParamSpec: Hashable, Sendable {
     /// False keeps the param off the one-line card (still validated and documented): the cards
     /// stay within their 160 characters by showing what a model needs to write the call.
     public var onCard: Bool
+    /// W3: the inspector label (D18); nil → the enum value's frenchName or the key.
+    public var label: Bilingual?
+    /// W3: false keeps the param out of generated inspector rows.
+    public var inspector: Bool
 
     public init(_ key: String, _ kind: ParamKind, _ presence: Presence = .optional(nil), doc: String,
-                valueAliases: [String: String] = [:], keyAliases: [String] = [], onCard: Bool = true) {
+                valueAliases: [String: String] = [:], keyAliases: [String] = [], onCard: Bool = true,
+                label: Bilingual? = nil, inspector: Bool = true) {
         self.key = key
         self.kind = kind
         self.presence = presence
@@ -160,6 +168,8 @@ public struct ParamSpec: Hashable, Sendable {
         self.valueAliases = valueAliases
         self.keyAliases = keyAliases
         self.onCard = onCard
+        self.label = label
+        self.inspector = inspector
     }
 }
 
@@ -173,6 +183,10 @@ public struct OpRequirements: Hashable, Sendable {
     public var importedLUT = false, nonBaseLayer = false
     /// A local adjustment must exist (W2: maskEdit, maskDelete).
     public var localMask = false
+    /// W3: the target layer must have a layer mask (layerMask edit, invert, enable, apply, delete).
+    public var layerMask = false
+    /// W3: the document must have at least two layers above the base (groupLayers with several refs, mergeDown).
+    public var layerAboveBase = false
     public var referenceAsset: AssetKind? = nil
     public var cost: OpCost = .instant
     public var geometryChange = false, destructive = false
@@ -207,6 +221,13 @@ public enum StateProbe: Hashable, Sendable {
     /// W2, photo only. localAdjustments and selection: their count under increased/decreased, else a digest of
     /// their content; selectionCoverage: the number.
     case localAdjustments, selection, selectionCoverage
+    /// W3, photo only. layerStructure: digest of (id, kind, parent, clipped) in order (count under increased/decreased);
+    /// layerMasks: digest of every layer's mask stack and enable/link; layerClipping: the number of clipped layers;
+    /// layerTransform: digest of the call's layer's transform; layerFillOpacity: the call's layer's fill × 100;
+    /// layerLock: digest of the call's layer's effective lock.
+    case layerStructure, layerMasks, layerClipping, layerTransform, layerFillOpacity, layerLock
+    /// W3, photo only: the selected layer's ref (D19), for selectLayer's equalsParam("ref").
+    case selectedLayer
 }
 
 public enum Expectation: Hashable, Sendable { case increased, decreased, changed, unchanged, equalsParam(String), delta(Double) }
@@ -231,6 +252,10 @@ public enum PixelProbe: String, Codable, Sendable, CaseIterable {
     case selectionCoverage
     /// selectionApply, per `use`.
     case selectionUse
+    /// W3. compositeUnchanged: mean ΔE76 between before and after ≤ 1.5 and the 99th percentile ≤ 6 (merge, stamp, via
+    /// copy/cut); compositeChanged: mean ΔE76 ≥ 0.5 (new fill or adjustment layer); layerMaskCoverageInRange: the new or
+    /// edited layer mask covers 0.2 %–98 % of the layer.
+    case compositeUnchanged, compositeChanged, layerMaskCoverageInRange
 }
 
 /// What must be true after the step ran.

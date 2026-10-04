@@ -1,23 +1,46 @@
 #!/usr/bin/env python3
-"""PicShop app icon — rendered with Pillow + numpy at 4× supersampling.
+"""PicShop's fallback app icon (W3): the PNG twin of App/AppIcon.icon, rendered with Pillow + numpy at 4× supersampling.
 
-Concept: a glass camera lens with a luminous aperture ring and a voice
-waveform at its heart, on a deep indigo → violet → magenta ground. One idea,
-bold silhouette, rich but restrained lighting — the way Apple's own icons read
-at 60 px and at 1024 px alike.
+The design is the Icon Composer icon's, flattened: PicShop's mark (PSMark), the two crop corners in white with a soft
+specular and a neutral shadow, and the spectral orb (#4285FF → #9A6BFF → #F5619E → #FF9E4D, PSTheme.intelligence) on a
+graphite ground (#1E1E21 → #0A0A0C, top to bottom). Geometry, on the 1024-pixel canvas: the mark box is 640 px,
+centred; each corner is inset 5 % of the box, its arms 42 %, its stroke 10 % with round caps; the orb's disc is 38 % of
+the box at the mark's offset (0.47, 0.15).
+
+It writes App/Assets.xcassets/AppIconLegacy.appiconset (light, dark, tinted 1024 px): the icon the app falls back to
+when CI cannot compile the `.icon` (project.yml: set ASSETCATALOG_COMPILER_APPICON_NAME to AppIconLegacy).
+
+    python3 Scripts/generate_icon.py                          # render the PNGs (numpy, Pillow)
+    python3 Scripts/generate_icon.py --check-project <pbxproj> # standard library only
+
+`--check-project` runs after `xcodegen generate` (GitHub CI, Codemagic): App/AppIcon.icon must be one file reference
+of type `folder.iconcomposer.icon`, or actool will not compile it; the reference is patched when XcodeGen wrote another
+type, and the run fails when the icon is missing from the project.
 """
-import math, pathlib
-import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+import pathlib
+import re
+import sys
 
-OUT = pathlib.Path(__file__).resolve().parent.parent / "App/Assets.xcassets/AppIcon.appiconset"
+try:
+    import numpy as np
+    from PIL import Image, ImageDraw, ImageFilter
+except ImportError:  # --check-project needs neither
+    np = None
+
+OUT = pathlib.Path(__file__).resolve().parent.parent / "App/Assets.xcassets/AppIconLegacy.appiconset"
 SIZE = 1024
 SS = 4
 S = SIZE * SS  # working resolution
 
-
-def lerp(a, b, t):
-    return a + (b - a) * t
+# The mark on the canvas (fractions of SIZE), as in App/AppIcon.icon/Assets/*.svg.
+BOX = 640 / SIZE
+BOX_ORIGIN = (1 - BOX) / 2
+INSET = 0.05 * BOX
+ARM = 0.42 * BOX
+STROKE = 0.10 * BOX
+ORB_DIAMETER = 0.38 * BOX
+ORB_ORIGIN = (BOX_ORIGIN + 0.47 * BOX, BOX_ORIGIN + 0.15 * BOX)
+SPECTRUM = ["4285FF", "9A6BFF", "F5619E", "FF9E4D"]
 
 
 def hexc(h):
@@ -25,52 +48,9 @@ def hexc(h):
     return np.array([int(h[i:i + 2], 16) for i in (0, 2, 4)], dtype=np.float32) / 255
 
 
-def gradient(stops, angle_deg, size):
-    """Linear gradient across the square: stops = [(t, colour)]."""
-    y, x = np.mgrid[0:size, 0:size].astype(np.float32) / (size - 1)
-    a = math.radians(angle_deg)
-    t = (x * math.cos(a) + y * math.sin(a))
-    t = (t - t.min()) / (t.max() - t.min())
-    out = np.zeros((size, size, 3), dtype=np.float32)
-    for i in range(len(stops) - 1):
-        t0, c0 = stops[i]
-        t1, c1 = stops[i + 1]
-        m = (t >= t0) & (t <= t1)
-        k = ((t[m] - t0) / max(1e-6, t1 - t0))[:, None]
-        out[m] = c0 * (1 - k) + c1 * k
-    return out
-
-
-def radial(center, radius, size, inner=1.0, outer=0.0, power=1.0):
-    y, x = np.mgrid[0:size, 0:size].astype(np.float32)
-    d = np.hypot(x - center[0], y - center[1]) / radius
-    d = np.clip(d, 0, 1) ** power
-    return inner * (1 - d) + outer * d
-
-
-def ellipse_mask(cx, cy, rx, ry, size, feather=0):
-    y, x = np.mgrid[0:size, 0:size].astype(np.float32)
-    d = np.hypot((x - cx) / rx, (y - cy) / ry)
-    if feather <= 0:
-        return (d <= 1).astype(np.float32)
-    return np.clip((1 - d) * (rx / max(1, feather)) + 0.5, 0, 1)
-
-
-def rounded_rect_mask(x0, y0, x1, y1, r, size):
-    img = Image.new("L", (size, size), 0)
-    ImageDraw.Draw(img).rounded_rectangle([x0, y0, x1, y1], radius=r, fill=255)
-    return np.asarray(img, dtype=np.float32) / 255
-
-
-def polygon_mask(points, size):
-    img = Image.new("L", (size, size), 0)
-    ImageDraw.Draw(img).polygon(points, fill=255)
-    return np.asarray(img, dtype=np.float32) / 255
-
-
-def blur(mask, radius):
-    img = Image.fromarray((np.clip(mask, 0, 1) * 255).astype(np.uint8))
-    return np.asarray(img.filter(ImageFilter.GaussianBlur(radius)), dtype=np.float32) / 255
+def vertical(top, bottom, size):
+    t = np.linspace(0, 1, size, dtype=np.float32)[:, None, None]
+    return np.broadcast_to(top * (1 - t) + bottom * t, (size, size, 3)).copy()
 
 
 def composite(base, colour, alpha):
@@ -78,120 +58,137 @@ def composite(base, colour, alpha):
     return base * (1 - a) + colour * a
 
 
-def star_points(cx, cy, r, inner, n=4, rotation=-90):
-    pts = []
-    for i in range(n * 2):
-        ang = math.radians(rotation + i * 180 / n)
-        rad = r if i % 2 == 0 else inner
-        pts.append((cx + math.cos(ang) * rad, cy + math.sin(ang) * rad))
-    return pts
+def blur(mask, radius):
+    img = Image.fromarray((np.clip(mask, 0, 1) * 255).astype(np.uint8))
+    return np.asarray(img.filter(ImageFilter.GaussianBlur(radius)), dtype=np.float32) / 255
+
+
+def brackets_mask(size):
+    """The two crop corners: round-capped strokes, as PSMarkBracket draws them."""
+    px = lambda v: v * size  # noqa: E731
+    layer = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(layer)
+    width = px(STROKE)
+    left, top = px(BOX_ORIGIN + INSET), px(BOX_ORIGIN + INSET)
+    right, bottom = px(BOX_ORIGIN + BOX - INSET), px(BOX_ORIGIN + BOX - INSET)
+    arm = px(ARM)
+    corners = [[(left, top + arm), (left, top), (left + arm, top)], [(right, bottom - arm), (right, bottom), (right - arm, bottom)]]
+    for points in corners:
+        draw.line(points, fill=255, width=int(round(width)), joint="curve")
+        for x, y in (points[0], points[1], points[2]):
+            draw.ellipse([x - width / 2, y - width / 2, x + width / 2, y + width / 2], fill=255)
+    return np.asarray(layer, dtype=np.float32) / 255
+
+
+def orb(size, colours):
+    """The orb's colour (a diagonal sweep through `colours`) and its disc mask."""
+    radius = ORB_DIAMETER * size / 2
+    cx, cy = (ORB_ORIGIN[0] + ORB_DIAMETER / 2) * size, (ORB_ORIGIN[1] + ORB_DIAMETER / 2) * size
+    y, x = np.mgrid[0:size, 0:size].astype(np.float32)
+    t = np.clip(((x - (cx - radius)) + (y - (cy - radius))) / (4 * radius), 0, 1)
+    stops = np.linspace(0, 1, len(colours))
+    colour = np.zeros((size, size, 3), dtype=np.float32)
+    for i in range(len(colours) - 1):
+        k = np.clip((t - stops[i]) / (stops[i + 1] - stops[i]), 0, 1)[..., None]
+        inside = ((t >= stops[i]) & (t <= stops[i + 1]))[..., None]
+        colour = np.where(inside, colours[i] * (1 - k) + colours[i + 1] * k, colour)
+    disc = np.clip(radius - np.hypot(x - cx, y - cy) + 0.5 * SS, 0, SS) / SS
+    # Specular: a soft bloom toward the top left of the disc.
+    bloom = np.clip(1 - np.hypot(x - (cx - radius * 0.3), y - (cy - radius * 0.35)) / (radius * 1.1), 0, 1) ** 2
+    colour = colour * (1 - 0.28 * bloom[..., None]) + 0.28 * bloom[..., None]
+    return colour, disc, (cx, cy, radius)
 
 
 def render(variant="light"):
     s = S
-    c = lambda v: v * s  # noqa: E731
-    palettes = {
-        "light": dict(bg=[(0.0, hexc("1A1B4B")), (0.45, hexc("3B2FB8")), (0.78, hexc("8A35C9")), (1.0, hexc("E24A8A"))],
-                      ring=[hexc("FFE29A"), hexc("FF8A5C"), hexc("FF4D8D"), hexc("8C5BFF"), hexc("4FC3FF")],
-                      glass=hexc("0B0C2A"), wave=hexc("FFFFFF")),
-        "dark": dict(bg=[(0.0, hexc("0A0B22")), (0.5, hexc("1C1660")), (0.8, hexc("4B1D7A")), (1.0, hexc("7A1F52"))],
-                     ring=[hexc("FFD27A"), hexc("FF7A4C"), hexc("F0407C"), hexc("7C4DFF"), hexc("3FB6FF")],
-                     glass=hexc("06071A"), wave=hexc("FFFFFF")),
-        "tinted": dict(bg=[(0.0, hexc("2A2A2E")), (1.0, hexc("515158"))],
-                       ring=[hexc("FFFFFF"), hexc("D9D9DE"), hexc("FFFFFF"), hexc("C8C8CF"), hexc("FFFFFF")],
-                       glass=hexc("18181C"), wave=hexc("FFFFFF")),
-    }
-    pal = palettes[variant]
+    if variant == "tinted":
+        # A grayscale icon: the system tints it. Black ground, white mark, a light gray orb.
+        img = vertical(hexc("1A1A1A"), hexc("000000"), s)
+        orb_colours = [hexc("F2F2F2"), hexc("D6D6D6"), hexc("BDBDBD"), hexc("A8A8A8")]
+    else:
+        top, bottom = (hexc("1E1E21"), hexc("0A0A0C")) if variant == "light" else (hexc("161618"), hexc("050506"))
+        img = vertical(top, bottom, s)
+        orb_colours = [hexc(c) for c in SPECTRUM]
 
-    # ---- Ground: diagonal gradient + soft top-left bloom + faint vignette.
-    img = gradient(pal["bg"], 58, s)
-    bloom = radial((c(0.18), c(0.12)), c(0.9), s, inner=1, outer=0, power=1.6)
-    img = composite(img, hexc("9AA6FF") if variant != "tinted" else hexc("8A8A92"), bloom * 0.22)
-    vignette = radial((c(0.5), c(0.55)), c(0.95), s, inner=0, outer=1, power=2.2)
-    img = composite(img, hexc("06061A"), vignette * 0.28)
+    marks = brackets_mask(s)
+    colour, disc, (cx, cy, radius) = orb(s, orb_colours)
 
-    cx, cy = c(0.5), c(0.52)
-    R = c(0.335)  # lens outer radius
+    # Neutral shadows under both groups.
+    shadow = blur(np.clip(marks + disc, 0, 1), 0.012 * s)
+    shadow = np.roll(shadow, int(0.012 * s), axis=0)
+    img = composite(img, hexc("000000"), shadow * 0.45)
 
-    # ---- Lens shadow (grounds the object).
-    shadow = blur(ellipse_mask(cx, cy + c(0.06), R * 1.05, R * 1.0, s), c(0.045))
-    img = composite(img, hexc("05051A"), shadow * 0.55)
-
-    # ---- Aperture ring: angular light sweep through the palette.
+    # The orb: its colour sweep, a soft glow, a thin rim of light.
+    if variant != "tinted":
+        glow = blur(disc, 0.03 * s)
+        img = composite(img, colour, glow * 0.35)
+    img = composite(img, colour, disc)
     y, x = np.mgrid[0:s, 0:s].astype(np.float32)
-    ang = (np.arctan2(y - cy, x - cx) + math.pi) / (2 * math.pi)  # 0…1 around
-    ring_col = np.zeros((s, s, 3), dtype=np.float32)
-    stops = pal["ring"] + [pal["ring"][0]]
-    seg = len(stops) - 1
-    pos = ang * seg
-    idx = np.clip(pos.astype(np.int32), 0, seg - 1)
-    frac = (pos - idx)[..., None]
-    stops_arr = np.stack(stops)
-    ring_col = stops_arr[idx] * (1 - frac) + stops_arr[idx + 1] * frac
-    # Radial shading so the ring reads as a bevelled metal/glass torus.
-    rdist = np.hypot(x - cx, y - cy)
-    outer_r, inner_r = R, R * 0.80
-    ring_mask = ((rdist <= outer_r) & (rdist >= inner_r)).astype(np.float32)
-    ring_mask = blur(ring_mask, c(0.0012))
-    tube = np.clip(1 - np.abs((rdist - (outer_r + inner_r) / 2) / ((outer_r - inner_r) / 2)), 0, 1)
-    shade = 0.55 + 0.6 * tube ** 1.5
-    light_dir = np.clip(((cx - x) * 0.6 + (cy - y) * 0.8) / R, -1, 1)  # brighter top-left
-    shade = shade * (1 + 0.25 * light_dir)
-    ring_rgb = np.clip(ring_col * shade[..., None], 0, 1)
-    img = composite(img, ring_rgb, ring_mask)
-    # Ring outer glow.
-    glow = blur(ellipse_mask(cx, cy, R * 1.02, R * 1.02, s), c(0.03)) * (1 - ellipse_mask(cx, cy, R, R, s))
-    img = composite(img, np.clip(ring_col * 1.1, 0, 1), glow * 0.35)
+    rim = np.clip(1 - np.abs(np.hypot(x - cx, y - cy) - radius * 0.97) / (radius * 0.04), 0, 1) * disc
+    upper = np.clip((cy - y) / radius, 0, 1)
+    img = composite(img, hexc("FFFFFF"), rim * upper * 0.35)
 
-    # ---- Glass interior: deep disc with a diagonal reflection and inner rim shadow.
-    inner = ellipse_mask(cx, cy, inner_r, inner_r, s)
-    inner_soft = blur(inner, c(0.0012))
-    glass = np.zeros_like(img) + pal["glass"]
-    depth = radial((cx - R * 0.25, cy - R * 0.25), inner_r * 1.4, s, inner=1, outer=0, power=1.3)
-    glass = composite(glass, hexc("2B2E7A") if variant != "tinted" else hexc("34343A"), depth * 0.9)
-    rim = np.clip((rdist - inner_r * 0.82) / (inner_r * 0.18), 0, 1) ** 1.6
-    glass = composite(glass, hexc("000010"), rim * 0.75)
-    img = composite(img, glass, inner_soft)
-    # Reflection: crescent highlight top-left, faint.
-    refl = ellipse_mask(cx - R * 0.16, cy - R * 0.22, inner_r * 0.86, inner_r * 0.62, s) * (1 - ellipse_mask(cx - R * 0.02, cy - R * 0.02, inner_r * 0.86, inner_r * 0.66, s))
-    refl = blur(refl, c(0.01)) * inner
-    img = composite(img, hexc("FFFFFF"), refl * 0.16)
+    # The corners: white, with a specular gradient (brighter at the top) like Liquid Glass's highlight.
+    specular = np.clip(1.0 - 0.10 * (y / s), 0.85, 1.0)[..., None]
+    white = np.broadcast_to(hexc("FFFFFF"), (s, s, 3)) * specular
+    img = composite(img, white, marks)
 
-    # ---- Voice waveform: five capsule bars, white with a soft glow.
-    bars = [0.30, 0.62, 1.0, 0.72, 0.42]
-    bar_w = inner_r * 0.135
-    gap = inner_r * 0.20
-    total = len(bars) * bar_w + (len(bars) - 1) * (gap - bar_w) 
-    xs = [cx - (len(bars) - 1) / 2 * gap + i * gap for i in range(len(bars))]
-    wave = np.zeros((s, s), dtype=np.float32)
-    layer = Image.new("L", (s, s), 0)
-    d = ImageDraw.Draw(layer)
-    for xb, h in zip(xs, bars):
-        half = inner_r * 0.62 * h
-        d.rounded_rectangle([xb - bar_w / 2, cy - half, xb + bar_w / 2, cy + half], radius=bar_w / 2, fill=255)
-    wave = np.asarray(layer, dtype=np.float32) / 255
-    img = composite(img, pal["wave"], blur(wave, c(0.02)) * 0.45)  # glow
-    img = composite(img, pal["wave"], wave)
-
-    # ---- AI sparkle riding the ring at the top-right.
-    sx, sy = cx + R * 0.72, cy - R * 0.72
-    spark = polygon_mask(star_points(sx, sy, R * 0.30, R * 0.085), s)
-    spark_small = polygon_mask(star_points(sx - R * 0.30, sy + R * 0.30, R * 0.11, R * 0.035), s)
-    sparkle = np.clip(spark + spark_small, 0, 1)
-    img = composite(img, hexc("FFFFFF"), blur(sparkle, c(0.03)) * 0.55)
-    img = composite(img, hexc("FFFFFF"), sparkle)
-
-    # ---- Film grain for a print-like finish (very subtle).
-    rng = np.random.default_rng(7)
-    grain = rng.normal(0, 0.012, (s, s, 1)).astype(np.float32)
-    img = np.clip(img + grain, 0, 1)
-
-    out = Image.fromarray((img * 255 + 0.5).astype(np.uint8), "RGB").resize((SIZE, SIZE), Image.LANCZOS)
+    out = Image.fromarray((np.clip(img, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB").resize((SIZE, SIZE), Image.LANCZOS)
     return out
 
 
+CONTENTS = {
+    "images": [
+        {"filename": "AppIcon.png", "idiom": "universal", "platform": "ios", "size": "1024x1024"},
+        {"appearances": [{"appearance": "luminosity", "value": "dark"}], "filename": "AppIcon-Dark.png", "idiom": "universal",
+         "platform": "ios", "size": "1024x1024"},
+        {"appearances": [{"appearance": "luminosity", "value": "tinted"}], "filename": "AppIcon-Tinted.png", "idiom": "universal",
+         "platform": "ios", "size": "1024x1024"},
+    ],
+    "info": {"author": "xcode", "version": 1},
+}
+
+
+ICON_TYPE = "folder.iconcomposer.icon"
+
+
+def check_project(pbxproj):
+    """Makes AppIcon.icon's file reference a `folder.iconcomposer.icon`; False when the project has no such reference."""
+    path = pathlib.Path(pbxproj)
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    found = False
+    for index, line in enumerate(lines):
+        if "isa = PBXFileReference" not in line or not re.search(r'path = "?AppIcon\.icon"?;', line):
+            continue
+        found = True
+        if ICON_TYPE in line:
+            continue
+        if "lastKnownFileType = " in line:
+            line = re.sub(r"lastKnownFileType = [^;]+;", f"lastKnownFileType = {ICON_TYPE};", line)
+        else:
+            line = line.replace("isa = PBXFileReference;", f"isa = PBXFileReference; lastKnownFileType = {ICON_TYPE};")
+        lines[index] = line
+        print("patched:", line.strip())
+    if found:
+        path.write_text("".join(lines), encoding="utf-8")
+        print(f"AppIcon.icon: {ICON_TYPE}")
+    return found
+
+
 if __name__ == "__main__":
+    import json
+
+    if len(sys.argv) == 3 and sys.argv[1] == "--check-project":
+        if not check_project(sys.argv[2]):
+            print("::error::App/AppIcon.icon is not in the project: set ASSETCATALOG_COMPILER_APPICON_NAME to "
+                  "AppIconLegacy in project.yml to ship the PNG icon")
+            sys.exit(1)
+        sys.exit(0)
+    if np is None:
+        sys.exit("rendering needs numpy and Pillow: pip install numpy pillow")
     OUT.mkdir(parents=True, exist_ok=True)
     for name, variant in [("AppIcon.png", "light"), ("AppIcon-Dark.png", "dark"), ("AppIcon-Tinted.png", "tinted")]:
         render(variant).save(OUT / name, optimize=True)
         print("wrote", name)
+    (OUT / "Contents.json").write_text(json.dumps(CONTENTS, indent=2) + "\n", encoding="utf-8")
+    print("wrote Contents.json")

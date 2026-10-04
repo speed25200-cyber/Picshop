@@ -63,12 +63,15 @@ public struct LocalRecapInput: Sendable, Equatable {
     public var lastExchanges: [String]
     public var openQuestion: String?
     public var lastLook: String?
+    /// W3 (D20): the outline steps not done yet, as `GoalOutline.recapLine` writes them (« continue » resumes them).
+    public var outline: String?
 
-    public init(appliedEdits: [String], lastExchanges: [String], openQuestion: String?, lastLook: String?) {
+    public init(appliedEdits: [String], lastExchanges: [String], openQuestion: String?, lastLook: String?, outline: String? = nil) {
         self.appliedEdits = appliedEdits
         self.lastExchanges = lastExchanges
         self.openQuestion = openQuestion
         self.lastLook = lastLook
+        self.outline = outline
     }
 }
 
@@ -310,7 +313,10 @@ public enum LocalLivePrompt {
     /// the media text as data, then the words: at most 900 characters.
     /// `cards`: the turn's retrieved operation cards (`<ops>…</ops>`, catalog layout), after the state;
     /// the message grows by their size (they have their own budget).
-    public static func userMessage(_ turn: LiveUserTurn, previous: LiveEditorState?, imageAttached: Bool, cards: String = "") -> String {
+    /// `task` (W3, D20): an instruction from the app for this turn only (the outline request, a fill batch), after the
+    /// words in `<task>…</task>`; user-side text, so the prefix stays byte-stable. It never eats the state's budget.
+    public static func userMessage(_ turn: LiveUserTurn, previous: LiveEditorState?, imageAttached: Bool, cards: String = "", task: String = "") -> String {
+        let taskBlock = task.isEmpty ? "" : "<task>" + task + "</task>"
         let budget = (isGrounded(turn.editorState) ? Budgets.userMessageGrounded : Budgets.userMessage) + (cards.isEmpty ? 0 : cards.count + 1)
         var parts = [editorDelta(turn, previous: previous, imageAttached: imageAttached)]
         if !cards.isEmpty { parts.append(cards) }
@@ -323,7 +329,8 @@ public enum LocalLivePrompt {
             if media.count <= room { parts.append(media) }
         }
         parts.append(words)
-        return String(parts.joined(separator: "\n").prefix(budget))
+        let message = String(parts.joined(separator: "\n").prefix(budget))
+        return taskBlock.isEmpty ? message : message + "\n" + taskBlock
     }
 
     /// A table or a scene map in the state: the message and the state get their grounded budgets (D15).
@@ -409,6 +416,7 @@ public enum LocalLivePrompt {
             if !exchanges.isEmpty { lines.append("last exchanges: " + exchanges.joined(separator: " | ")) }
             if let question = input.openQuestion.map(clean), !question.isEmpty { lines.append("open question: " + String(question.prefix(200))) }
             if let look = input.lastLook.map(clean), !look.isEmpty { lines.append("last look: " + String(look.prefix(240))) }
+            if let outline = input.outline.map(clean), !outline.isEmpty { lines.append(String(outline.prefix(300))) }
             lines.append("Carry on from here.")
             return lines.joined(separator: "\n")
         }
@@ -515,6 +523,10 @@ public enum LocalLivePrompt {
             // The masks (W2): after the scene lines, before last:, when they changed.
             if full ? !state.masks.isEmpty : state.masks != (previous?.masks ?? []) {
                 lines.append(LiveMaskLines.masksLine(state.masks.map(clean)) ?? "masks: none")
+            }
+            // The layers (W3, D19): after the masks, when they changed (the delta rule); "layers: photo only" once they are gone.
+            if full ? state.layers != nil : state.layers != previous?.layers {
+                lines.append(state.layers.map(clean) ?? "layers: photo only")
             }
             if let video = state.video, full || video != previous?.video { lines.append(LivePrompt.timelineLine(video)) }
             if let busy = state.busyTitle, full || busy != previous?.busyTitle {

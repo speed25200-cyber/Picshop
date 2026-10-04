@@ -60,8 +60,25 @@ public enum OperationAbstention {
         let acting = plan.intents.filter { !neverCapped.contains($0.action) }
         guard !acting.isEmpty else { return nil }
         let stems = TextFolding.stems(utterance)
-        if let id = unownedOperation(stems, tokens: TextFolding.tokens(utterance), domain: domain, catalog: index.catalog) { return .unownedOperation(id) }
-        if let id = maskOperation(TextFolding.tokens(utterance), domain: domain), !acting.contains(where: { $0.operation?.id == id }) {
+        // W3: a plan made only of the grammar's whole-clause layer phrases, every clause read (the plan at the rule's
+        // confidence), is its own operation: another operation's trigger inside the phrase does not cap it.
+        let anchoredLayerPlan = plan.confidence >= RuleBasedIntentEngine.layerRuleConfidence && acting.allSatisfy { intent in
+            guard intent.action == .operation, let call = intent.operation, call.source == .grammar else { return false }
+            return RuleBasedIntentEngine.anchoredLayerOps.contains(call.id)
+        }
+        if !anchoredLayerPlan, let id = unownedOperation(stems, tokens: TextFolding.tokens(utterance), domain: domain, catalog: index.catalog) {
+            return .unownedOperation(id)
+        }
+        if !anchoredLayerPlan, let id = maskOperation(TextFolding.tokens(utterance), domain: domain), !acting.contains(where: { $0.operation?.id == id }) {
+            return .unownedOperation(id)
+        }
+        // W3: a layer request W3 does not do (« ombre portée », « objet dynamique »…), unless the plan is its own operation.
+        if FeatureFlags.isOn(.layerOps), let family = UnsupportedLayerRequests.match(utterance, domain: domain),
+           !acting.contains(where: { family.offer != nil && $0.operation?.id == family.offer?.id }) {
+            return .plannedOperation(family.id)
+        }
+        // W3: the words of a layer operation the grammar owns only by its signature phrases (§8.4).
+        if let id = layerOperation(TextFolding.tokens(utterance), domain: domain), !acting.contains(where: { $0.operation?.id == id }) {
             return .unownedOperation(id)
         }
         if let phrase = planned(TextFolding.tokens(utterance), domain: domain) { return .plannedOperation(phrase) }
@@ -78,9 +95,10 @@ public enum OperationAbstention {
         return grammarBest <= disagreementRatio * best.score ? .retrievalDisagrees(best.id) : nil
     }
 
-    /// The catalog operation the utterance names that the grammar does not own, if any.
+    /// The catalog operation the utterance names that the grammar does not own, if any (W3: a layer operation's words).
     public static func namesUnownedOp(_ utterance: String, domain: OpDomain) -> OpID? {
         unownedOperation(TextFolding.stems(utterance), tokens: TextFolding.tokens(utterance), domain: domain, catalog: .shared)
+            ?? layerOperation(TextFolding.tokens(utterance), domain: domain)
     }
 
     static func unownedOperation(_ stems: [String], tokens: [String], domain: OpDomain, catalog: OperationCatalog) -> OpID? {
@@ -109,9 +127,49 @@ public enum OperationAbstention {
         ("refine edges", "selectionModify"), ("refine the edges", "selectionModify"), ("select and mask", "selectionModify"),
     ].map { (TextFolding.tokens($0.0), $0.1) }
 
+    /// W3 (§8.4): the abstention lexicon of the layer operations (keywordsOnly): words that name one, so a grammar plan
+    /// that is not that operation goes to the model, or without one gets the honest « pas encore à la voix sans modèle ».
+    static let layerPhrases: [(phrase: [String], id: OpID)] = [
+        ("calque de reglage", "addAdjustmentLayer"), ("calque d ajustement", "addAdjustmentLayer"), ("adjustment layer", "addAdjustmentLayer"),
+        ("masque de fusion", "layerMask"), ("layer mask", "layerMask"), ("cache le haut du", "layerMask"), ("cache le bas du", "layerMask"),
+        ("cache la gauche du", "layerMask"), ("cache la droite du", "layerMask"), ("masque le haut du", "layerMask"), ("masque le bas du", "layerMask"),
+        ("hide the top of", "layerMask"), ("hide the bottom of", "layerMask"), ("ecretage", "layerClip"), ("ecrete", "layerClip"),
+        ("clipping mask", "layerClip"), ("fond du calque", "layerProperties"), ("fill opacity", "layerProperties"), ("transfert", "layerProperties"),
+        ("pass through", "layerProperties"), ("verrouille", "layerProperties"), ("deverrouille", "layerProperties"), ("lock the layer", "layerProperties"),
+        ("unlock the layer", "layerProperties"), ("perspective du calque", "layerTransform"), ("deforme", "layerTransform"), ("incline", "layerTransform"),
+        ("distort the layer", "layerTransform"), ("skew the layer", "layerTransform"), ("aplatis", "mergeLayers"), ("flatten", "mergeLayers"),
+        ("fusionne les calques", "mergeLayers"), ("merge the layers", "mergeLayers"), ("merge layers", "mergeLayers"), ("fusionne vers le bas", "mergeLayers"),
+        ("merge down", "mergeLayers"), ("tampon", "mergeLayers"), ("stamp visible", "mergeLayers"), ("psd", "exportPhoto"), ("tiff", "exportPhoto"),
+        ("16 bits", "exportPhoto"), ("16 bit", "exportPhoto"), ("calque par copier", "layerVia"), ("calque par couper", "layerVia"),
+        ("layer via", "layerVia"), ("calque de remplissage", "addFillLayer"), ("fill layer", "addFillLayer"), ("groupe les calques", "groupLayers"),
+        ("dissocie", "groupLayers"), ("ungroup", "groupLayers"), ("dans un groupe", "groupLayers"), ("in a group", "groupLayers"),
+        ("into a group", "groupLayers"),
+    ].map { (TextFolding.tokens($0.0), $0.1) }
+
+    static func layerOperation(_ tokens: [String], domain: OpDomain) -> OpID? {
+        guard domain == .photo else { return nil }
+        var best: (id: OpID, length: Int)?
+        for entry in layerPhrases where namesOperation(tokens, entry.phrase) && OperationGate.isEnabled(entry.id) {
+            if best == nil || entry.phrase.count > best!.length { best = (entry.id, entry.phrase.count) }
+        }
+        return best?.id
+    }
+
+    /// The phrase as a run of the words, not as the name of a layer that exists: « baisse l'exposition du calque de
+    /// réglage j4 » names the layer j4 (D19), not « add an adjustment layer ».
+    static func namesOperation(_ tokens: [String], _ phrase: [String]) -> Bool {
+        guard !phrase.isEmpty, tokens.count >= phrase.count else { return false }
+        for start in 0...(tokens.count - phrase.count) where Array(tokens[start..<(start + phrase.count)]) == phrase {
+            let next = start + phrase.count
+            if next < tokens.count, LiveLayerLines.normalized(tokens[next]) != nil { continue }
+            return true
+        }
+        return false
+    }
+
     static func maskOperation(_ tokens: [String], domain: OpDomain) -> OpID? {
         guard domain == .photo else { return nil }
-        // « masque de fusion » / "layer mask" are W3's (planned), not a local adjustment.
+        // « masque de fusion » / "layer mask" are W3's layerMask (layerPhrases), not a local adjustment.
         if OperationIndex.Document.contains(tokens, ["masque", "de", "fusion"]) || OperationIndex.Document.contains(tokens, ["layer", "mask"]) { return nil }
         for entry in maskPhrases where OperationIndex.Document.contains(tokens, entry.phrase) {
             guard OperationGate.isEnabled(entry.id) else { continue }
@@ -163,8 +221,7 @@ public enum OperationAbstention {
             "rectangles", "cercle", "cercles", "circle", "circles", "fleche", "fleches", "arrow", "arrows", "ombre portee", "drop shadow",
             "contour blanc", "contour noir", "outline", "bordure", "border",
             "filigrane", "filigranes", "watermark", "redimensionne", "redimensionner", "resize", "pixels de large", "pixels wide", "clone le", "clone the", "tampon de duplication",
-            "clone stamp", "fusionne les calques",
-            "merge the layers", "merge layers", "aplatis", "flatten", "masque de fusion", "layer mask", "melangeur de couches", "channel mixer", "posterise", "posterize", "seuil", "threshold", "filtre photo", "photo filter",
+            "clone stamp", "melangeur de couches", "channel mixer", "posterise", "posterize", "seuil", "threshold", "filtre photo", "photo filter",
         ],
         .video: [
             "keyframe", "keyframes", "image cle", "images cles", "incrustation", "incrustations", "picture in picture", "chroma key", "chroma", "fond vert sur",

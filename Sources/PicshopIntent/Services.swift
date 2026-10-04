@@ -61,6 +61,16 @@ public protocol PhotoAIServices: Sendable {
     /// `sampleSize` 1, 3 or 5 px; an 8-bit raster at the working size (W2, `select what: wand`). Hosts without it
     /// throw `unsupportedOperation`, and the handler samples the colour there instead (a colour range).
     func wandMask(at point: PSPoint, tolerance: Double, contiguous: Bool, sampleSize: Int, in document: PhotoDocument) async throws -> AIMaskResult
+
+    // MARK: Layers (W3). L2 implements them (VisionPhotoServices+Layers), L4 in LiveEvalServices.
+
+    /// The layers composited onto transparent in plan order, isolated (merge down, merge selected, apply mask), or the
+    /// visible composite (merge visible, flatten, stamp), written to media/<uuid>.png (D17).
+    func rasterizeLayers(_ request: LayerRasterRequest, in document: PhotoDocument) async throws -> LayerRasterResult
+    /// W2's aiMask for a layer other than the base: the layer's own pre-local pixels in its content space.
+    func aiMask(_ request: AIMaskRequest, in document: PhotoDocument, layer: UUID?) async throws -> AIMaskResult
+    /// Text and shape content sizes at the document's canvas size (placement maths); nil when unknown.
+    func contentSize(of layerID: UUID, in document: PhotoDocument) async -> PSSize?
 }
 
 public extension PhotoAIServices {
@@ -97,6 +107,42 @@ public extension PhotoAIServices {
     func groundBox(_ phrase: String, in document: PhotoDocument) async -> PSRect? { nil }
     func wandMask(at point: PSPoint, tolerance: Double, contiguous: Bool, sampleSize: Int, in document: PhotoDocument) async throws -> AIMaskResult {
         throw PicshopError.unsupportedOperation("Masks")
+    }
+
+    // Layers (W3): hosts without them say so.
+    func rasterizeLayers(_ request: LayerRasterRequest, in document: PhotoDocument) async throws -> LayerRasterResult {
+        throw PicshopError.unsupportedOperation("Layers")
+    }
+    func aiMask(_ request: AIMaskRequest, in document: PhotoDocument, layer: UUID?) async throws -> AIMaskResult {
+        if layer == nil || layer == document.baseLayerID { return try await aiMask(request, in: document) }
+        throw PicshopError.unsupportedOperation("Masks")
+    }
+    func contentSize(of layerID: UUID, in document: PhotoDocument) async -> PSSize? { nil }
+}
+
+// MARK: - Layers (W3)
+
+/// What `rasterizeLayers` flattens (D17).
+public enum LayerRasterRequest: Hashable, Sendable {
+    /// Composited onto transparent in plan order, isolated (merge down: [lower, upper]; apply mask: [id]).
+    case layers([UUID])
+    /// Merge selected: composited onto transparent in plan order with every layer's own blend, opacity, fill and
+    /// masks, so the merged layer (opacity 1, normal) shows what they showed; the base, when listed, at opacity 1
+    /// normal (it keeps them as properties).
+    case merged([UUID])
+    /// The visible composite (merge visible, flatten, stamp).
+    case visible
+}
+
+public struct LayerRasterResult: Hashable, Sendable {
+    /// media/<uuid>.png at canvas resolution, origin .file; cropped to `opaqueBounds` unless it replaces the base (D17).
+    public var asset: MediaAsset
+    /// Canvas-normalised.
+    public var opaqueBounds: PSRect
+
+    public init(asset: MediaAsset, opaqueBounds: PSRect) {
+        self.asset = asset
+        self.opaqueBounds = opaqueBounds
     }
 }
 
@@ -174,11 +220,16 @@ public struct PixelProbeResult: Hashable, Sendable {
     /// nil when not measured (timeout, no renderer).
     public var before: PixelStats.Regions?
     public var after: PixelStats.Regions?
+    /// W3: the composite probes' per-pixel ΔE between the two renders (same size); nil when not measured per pixel
+    /// (fakes, a canvas that changed size): the judge then compares the means.
+    public var compositeDelta: PixelStats.CompositeDelta?
 
-    public init(request: PixelProbeRequest, before: PixelStats.Regions?, after: PixelStats.Regions?) {
+    public init(request: PixelProbeRequest, before: PixelStats.Regions?, after: PixelStats.Regions?,
+                compositeDelta: PixelStats.CompositeDelta? = nil) {
         self.request = request
         self.before = before
         self.after = after
+        self.compositeDelta = compositeDelta
     }
 }
 
@@ -378,6 +429,8 @@ public enum ExecutionReason: String, Sendable, Equatable, CaseIterable {
     case noText = "no_text"
     /// The step applied but the check on the rendered result failed (act-then-verify).
     case verifyFailed = "verify_failed"
+    /// W3 (D7): the layer's lock refuses the change; nothing changed.
+    case locked
 
     static let prefix = "reason:"
 

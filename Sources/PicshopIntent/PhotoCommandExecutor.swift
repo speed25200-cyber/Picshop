@@ -34,7 +34,7 @@ public struct PhotoCommandExecutor: Sendable {
                 guard let rect = try await services.bestCrop(in: document) else {
                     return (document, ExecutionResult(outcome: .info(message: fr ? "Le cadrage est déjà très bon." : "The framing is already good.")))
                 }
-                document.apply(.crop(rect.clampedToUnit()))
+                guard document.apply(.crop(rect.clampedToUnit()), to: document.baseLayerID) else { return (document, lockedCanvas(document)) }
                 return (document, .applied("Best crop"))
             } catch {
                 return (document, failure(error))
@@ -159,6 +159,21 @@ public struct PhotoCommandExecutor: Sendable {
 
         case .adjust:
             guard let parameter = intent.parameter else { return (document, .failed(fr ? "Je ne sais pas quel réglage changer." : "I don't know which setting to change.")) }
+            // W3 (D9): with a « Lumière » adjustment layer selected, its own dials change (never `.adjust` in its edits).
+            if let target = document.toneTarget(for: "adjust"), let layer = document.layer(id: target), case .adjustment(let dials) = layer.content {
+                let value = (intent.amount ?? .relative(parameter.defaultStep)).resolve(current: dials[parameter], range: parameter.range)
+                var next = dials
+                next[parameter] = value
+                switch document.applyLayerEdit(.adjustments(next), to: target) {
+                case .refused(let reason):
+                    return (input, ExecutionResult(outcome: .failed(message: PhotoDocument.refusalMessage(reason, layerName: layer.name, french: fr)),
+                                                   effects: [(reason == .locked ? ExecutionReason.locked : .nothingToDo).effect]))
+                case .unchanged:
+                    return (input, ExecutionResult(outcome: .info(message: fr ? "C'est déjà réglé ainsi." : "It's already set that way.")))
+                case .applied:
+                    return (document, .applied(EditOperation.Kind.adjust(parameter, value: value).defaultLabel))
+                }
+            }
             let current = document.activeAdjustments[parameter]
             let value = (intent.amount ?? .relative(parameter.defaultStep)).resolve(current: current, range: parameter.range)
             document.apply(.adjust(parameter, value: value))
@@ -247,7 +262,7 @@ public struct PhotoCommandExecutor: Sendable {
                 do {
                     let framing = try await services.framingRect(for: target, in: document)
                     guard let rect = framing else { return (document, notFound(target)) }
-                    document.apply(.crop(rect.clampedToUnit()))
+                    guard document.apply(.crop(rect.clampedToUnit()), to: document.baseLayerID) else { return (document, lockedCanvas(document)) }
                     return (document, .applied("Crop to \(target.originalPhrase)"))
                 } catch {
                     return (document, failure(error))
@@ -268,23 +283,23 @@ public struct PhotoCommandExecutor: Sendable {
                 return (document, ExecutionResult(outcome: .info(message: fr ? "Ajuste le cadre avec les poignées." : "Adjust the frame with the handles."), effects: [.message("crop")]))
             }
             let rect = aspect.cropRect(in: document.canvasSize)
-            document.apply(.crop(rect))
+            guard document.apply(.crop(rect), to: document.baseLayerID) else { return (document, lockedCanvas(document)) }
             return (document, .applied("Crop \(aspect.displayName)"))
 
         case .rotate:
             let degrees = intent.degrees ?? 90
-            document.apply(.rotate(degrees: degrees))
+            guard document.apply(.rotate(degrees: degrees), to: document.baseLayerID) else { return (document, lockedCanvas(document)) }
             return (document, .applied("Rotate \(Int(degrees))°"))
 
         case .straighten:
             if let degrees = intent.degrees {
-                document.apply(.straighten(degrees: degrees))
+                guard document.apply(.straighten(degrees: degrees), to: document.baseLayerID) else { return (document, lockedCanvas(document)) }
                 return (document, .applied("Straighten"))
             }
             do {
                 let detected = try await services.horizonAngle(in: document)
                 if let angle = detected, abs(angle) > 0.05 {
-                    document.apply(.straighten(degrees: -angle))
+                    guard document.apply(.straighten(degrees: -angle), to: document.baseLayerID) else { return (document, lockedCanvas(document)) }
                     return (document, .applied("Straighten"))
                 }
                 return (document, ExecutionResult(outcome: .info(message: fr ? "L'horizon est déjà droit." : "The horizon already looks level.")))
@@ -294,7 +309,7 @@ public struct PhotoCommandExecutor: Sendable {
 
         case .flip:
             let axis = intent.flipAxis ?? .horizontal
-            document.apply(.flip(axis))
+            guard document.apply(.flip(axis), to: document.baseLayerID) else { return (document, lockedCanvas(document)) }
             return (document, .applied(axis == .horizontal ? "Flip Horizontal" : "Flip Vertical"))
 
         case .resetOrientation:
@@ -307,7 +322,7 @@ public struct PhotoCommandExecutor: Sendable {
             if document.resetOrientation(label: "Right Way Up") { return (document, .applied("Right Way Up")) }
             // Said to be upside down with nothing to undo: it was shot that way, so it is turned over.
             if intent.degrees == 180 {
-                document.apply(.rotate(degrees: 180))
+                guard document.apply(.rotate(degrees: 180), to: document.baseLayerID) else { return (document, lockedCanvas(document)) }
                 return (document, .applied("Rotate 180°"))
             }
             return (document, ExecutionResult(outcome: .info(message: fr ? "La photo est déjà à l'endroit." : "The photo is already the right way up.")))
@@ -379,12 +394,12 @@ public struct PhotoCommandExecutor: Sendable {
                 width = 1 / min(factor, 2)
                 height = width
             }
-            document.apply(.expand(PSRect(x: (1 - width) / 2, y: (1 - height) / 2, width: width, height: height)))
+            guard document.apply(.expand(PSRect(x: (1 - width) / 2, y: (1 - height) / 2, width: width, height: height)), to: document.baseLayerID) else { return (document, lockedCanvas(document)) }
             return (document, .applied(intent.aspect.map { "Expand \($0.displayName)" } ?? "Expand"))
 
         case .upscale:
             let factor = (intent.amount?.value ?? 2).clamped(to: 2...4)
-            document.apply(.upscale(factor: factor))
+            guard document.apply(.upscale(factor: factor), to: document.baseLayerID) else { return (document, lockedCanvas(document)) }
             return (document, .applied("Upscale \(Int(factor))×"))
 
         case .denoise:
@@ -415,16 +430,29 @@ public struct PhotoCommandExecutor: Sendable {
             return (document, .failed(fr ? "Calque introuvable." : "Layer not found."))
 
         case .duplicateLayer:
+            // W3 (D17): fresh ids and ref numbers, a group with its children, the locks and the 64-layer cap.
             guard let selected = document.selectedLayer else { return (document, .failed(fr ? "Aucun calque n'est sélectionné." : "No layer is selected.")) }
-            var copy = selected
-            copy.id = UUID()
-            copy.name += " copy"
-            document.addLayer(copy)
-            return (document, .applied("Duplicate Layer", effects: [.selectLayer(copy.id)]))
+            let duplicated = document.applyStructureEdit(.duplicate(selected.id))
+            guard case .applied = duplicated.outcome, let copyID = duplicated.layerID else {
+                if case .refused(let reason) = duplicated.outcome {
+                    return (input, ExecutionResult(outcome: .failed(message: PhotoDocument.refusalMessage(reason, layerName: selected.name, french: fr)),
+                                                   effects: [(reason == .locked ? ExecutionReason.locked : .nothingToDo).effect]))
+                }
+                return (input, .failed(fr ? "Impossible de dupliquer ce calque." : "This layer can't be duplicated."))
+            }
+            return (document, .applied("Duplicate Layer", effects: [.selectLayer(copyID)]))
 
         case .deleteLayer:
-            guard let selected = document.selectedLayerID, document.removeLayer(id: selected) != nil else {
+            guard let selected = document.selectedLayerID, selected != document.baseLayerID else {
                 return (document, .failed(fr ? "Impossible de supprimer ce calque." : "This layer can't be deleted."))
+            }
+            let removed = document.applyStructureEdit(.remove(selected))
+            guard case .applied = removed.outcome else {
+                if case .refused(let reason) = removed.outcome, reason == .locked {
+                    return (input, ExecutionResult(outcome: .failed(message: PhotoDocument.refusalMessage(.locked, layerName: input.layer(id: selected)?.name, french: fr)),
+                                                   effects: [ExecutionReason.locked.effect]))
+                }
+                return (input, .failed(fr ? "Impossible de supprimer ce calque." : "This layer can't be deleted."))
             }
             return (document, .applied("Delete Layer"))
 
@@ -454,6 +482,12 @@ public struct PhotoCommandExecutor: Sendable {
             if let pending = context.pendingClarification, pending.candidates.isEmpty, let id = ModelOfferText.modelID(in: pending.question) {
                 return (document, ExecutionResult(outcome: .info(message: ModelOfferText.installing(id, french: fr)), effects: [.message(ModelOfferText.installPrefix + id)]))
             }
+            // W3: « oui » to « On aplatit ? »: the pending operation runs with its confirmation (mergeLayers flatten).
+            if let pending = context.pendingClarification, pending.candidates.isEmpty, pending.pendingIntent.action == .operation,
+               var call = pending.pendingIntent.operation, call.args["confirm"] != nil {
+                call.args["confirm"] = .bool(true)
+                return await runOperation(call, on: document, context: context)
+            }
             return (document, .effect(.confirm, label: ""))
         case .cancel: return (document, .effect(.cancel, label: ""))
         case .unknown:
@@ -464,6 +498,34 @@ public struct PhotoCommandExecutor: Sendable {
         default:
             return (document, unsupported(intent.summary))
         }
+    }
+
+    /// W3 (D19): a plan's steps in order on the evolving document. After a step that changed the photo's geometry the
+    /// later steps aim where their targets went (`RefRegrounder`, M = inverse(old chain) ∘ new chain); a step whose
+    /// target left the canvas answers « Ce que tu visais n'est plus dans le cadre » and the run stops, as it does at a
+    /// failure or a question. The plan's order is kept (the W1 PlanLinter note).
+    public func execute(steps: [EditIntent], on input: PhotoDocument, context: IntentContext) async -> (PhotoDocument, [ExecutionResult]) {
+        var document = input
+        var results: [ExecutionResult] = []
+        var stepContext = context
+        for step in steps {
+            var intent = step
+            if let map = RefRegrounder.geometryMap(from: input, to: document) {
+                guard let moved = RefRegrounder.regrounded(intent, by: map) else {
+                    results.append(ExecutionResult(outcome: .failed(message: RefRegrounder.leftTheCanvas(french: language == .french)), effects: [ExecutionReason.badRegion.effect]))
+                    break
+                }
+                intent = moved
+            }
+            let (next, result) = await execute(intent, on: document, context: stepContext)
+            document = next
+            results.append(result)
+            switch result.outcome {
+            case .failed, .needsClarification: return (document, results)
+            case .applied, .info, .ignored: stepContext.lastIntent = intent
+            }
+        }
+        return (document, results)
     }
 
     /// "Not on a photo": the failure of an action with no photo executor.
@@ -535,7 +597,7 @@ public struct PhotoCommandExecutor: Sendable {
                 return (document, .applied("Selective \(parameter.englishName)"))
             case .crop:
                 let rect = candidates.map(\.boundingBox).reduce(PSRect.zero) { $0.union($1) }.insetBy(dx: -0.05, dy: -0.05).clampedToUnit()
-                document.apply(.crop(rect))
+                guard document.apply(.crop(rect), to: document.baseLayerID) else { return (document, lockedCanvas(document)) }
                 return (document, .applied("Crop to \(target.originalPhrase)"))
             case .generativeFill:
                 guard let prompt = intent.text, !prompt.isEmpty else { return (document, .failed(fr ? "Dis-moi quoi mettre à la place." : "Tell me what to put there.")) }
@@ -602,13 +664,28 @@ public struct PhotoCommandExecutor: Sendable {
     /// A catalog operation through its handler, then its postconditions: the structural ones read off the two
     /// documents, and the pixel ones (D14) when the spec has them and `pixelPostconditions` is on, measured on
     /// 256 px proxies within 2 s. Live's verify step reads the merged report.
+    /// W3 (D7, D10b): a canvas edit (crop, turn, flip, straighten, expand, upscale) goes on the base, and the other layers
+    /// follow it; a lock on the photo refuses it with the D7 sentence.
+    func lockedCanvas(_ document: PhotoDocument) -> ExecutionResult {
+        let fr = language == .french
+        let name = document.baseLayer.map { PhotoOperationHandlers.displayName($0, in: document, french: fr) }
+        return ExecutionResult(outcome: .failed(message: PhotoDocument.refusalMessage(.locked, layerName: name, french: fr)),
+                               effects: [ExecutionReason.locked.effect])
+    }
+
     func runOperation(_ call: OperationCall, on document: PhotoDocument, context: IntentContext, chosen: [ObjectCandidate]? = nil) async -> (PhotoDocument, ExecutionResult) {
         let run = OperationRunContext(intent: context, language: language, services: services, chosen: chosen)
+        // W3 (D21): a recipe expands into steps run here, one history step.
+        if call.id == RecipeExecution.recipeID {
+            return await RecipeExecution.run(call, on: document, context: context, language: language) { step, current, stepContext in
+                await self.execute(step, on: current, context: stepContext)
+            }
+        }
         var (updated, result) = await PhotoOperationHandlers.run(call, on: document, context: run)
         guard result.outcome.isSuccess else { return (updated, result) }
         var report = OperationPostconditions.check(call, before: document, after: updated)
         if let spec = OperationCatalog.shared.spec(call.id), FeatureFlags.isOn(.pixelPostconditions) {
-            let pixelConditions = spec.verify.filter { if case .pixels = $0 { return true } else { return false } }.count
+            let pixelConditions = LayerPostconditions.conditions(for: call, spec: spec).filter { if case .pixels = $0 { return true } else { return false } }.count
             if pixelConditions > 0 {
                 let verdict = await pixelVerdict(PixelPostconditions.plan(for: call, before: document, after: updated), before: document, after: updated)
                 report = report.merged(with: verdict.report, replacing: pixelConditions)
@@ -637,7 +714,7 @@ public struct PhotoCommandExecutor: Sendable {
         for baseline in plan.otherBaselines {
             guard case .withoutAdjustment(let id) = baseline else { continue }
             var without = after
-            without.removeLocalAdjustment(id: id)
+            if let owner = after.localAdjustmentOwner(of: id) { without.removeLocalAdjustment(id: id, on: owner) }
             others.append((baseline, without, plan.checks.filter { $0.baseline == baseline }.map(\.request)))
         }
         let baselines = others

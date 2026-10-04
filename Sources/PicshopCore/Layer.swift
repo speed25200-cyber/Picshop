@@ -119,6 +119,13 @@ public struct Layer: Hashable, Codable, Sendable, Identifiable {
         /// Adjustment layer: applies adjustments to everything beneath.
         case adjustment(Adjustments)
         case fill(PSColor)
+        /// W3: a group; its children are the layers whose parentID is this layer's id, directly below it (D1, D4).
+        case group(LayerFolder)
+        /// W3: a gradient fill layer (D9).
+        case gradientFill(GradientFill)
+        /// A content kind a newer build wrote: the "content" object's JSON (sorted keys), written back as read; drawn as
+        /// nothing, never projected to v1.
+        case unsupported(String)
     }
 
     public var id: UUID
@@ -134,9 +141,38 @@ public struct Layer: Hashable, Codable, Sendable, Identifiable {
     /// The group the layer was made with (the cells of one table fill); nil for a layer on its own.
     public var group: LayerGroup?
 
+    // MARK: W3 (document v2). Each key is written only when it differs from its default (LayerCodable.swift), so a
+    // layer that uses no W3 feature encodes byte for byte like W2 under sorted keys (D2).
+
+    /// "fill", default 1: multiplies the content's alpha before the blend (D6). Forced to 1 on groups.
+    public var fillOpacity: Double
+    /// "maskStack", default nil: the layer mask (D8), in the layer's content space when linked, else canvas space.
+    public var maskStack: MaskStack?
+    /// "maskEnabled", default true.
+    public var isMaskEnabled: Bool
+    /// "maskLinked", default true.
+    public var isMaskLinked: Bool
+    /// "clipped", default false: clips onto the nearest unclipped layer below with the same parent (D5).
+    public var isClipped: Bool
+    /// "lock", default []: partial locks (D7); `isLocked` stays "lock all".
+    public var lockOptions: LayerLockOptions
+    /// "parent", default nil: the group layer this layer belongs to (one level, D1).
+    public var parentID: UUID?
+    /// "recipeKind", default nil; an unknown raw value decodes as nil. Picks an adjustment layer's panel and name (D9).
+    public var recipeKind: AdjustmentLayerKind?
+    /// "bakedMask", default nil: a raster of maskStack kept only for the v1 projection (D8, "should"); never rendered.
+    public var bakedMask: MaskReference?
+    /// "ref", default nil: the stored ref number (D19), assigned at creation, never renumbered; out of render keys.
+    public var refNumber: Int?
+    /// Unknown keys as sorted-keys JSON text, written back as read (D2). Not a key of its own.
+    public var retainedFields: [String: String]
+
     public init(id: UUID = UUID(), name: String, content: Content, transform: LayerTransform = .identity,
                 opacity: Double = 1, blendMode: BlendMode = .normal, isVisible: Bool = true,
-                isLocked: Bool = false, mask: MaskReference? = nil, edits: EditStack = EditStack(), group: LayerGroup? = nil) {
+                isLocked: Bool = false, mask: MaskReference? = nil, edits: EditStack = EditStack(), group: LayerGroup? = nil,
+                fillOpacity: Double = 1, maskStack: MaskStack? = nil, isMaskEnabled: Bool = true, isMaskLinked: Bool = true,
+                isClipped: Bool = false, lockOptions: LayerLockOptions = [], parentID: UUID? = nil,
+                recipeKind: AdjustmentLayerKind? = nil, refNumber: Int? = nil) {
         self.id = id
         self.name = name
         self.content = content
@@ -148,6 +184,17 @@ public struct Layer: Hashable, Codable, Sendable, Identifiable {
         self.mask = mask
         self.edits = edits
         self.group = group
+        self.fillOpacity = fillOpacity
+        self.maskStack = maskStack
+        self.isMaskEnabled = isMaskEnabled
+        self.isMaskLinked = isMaskLinked
+        self.isClipped = isClipped
+        self.lockOptions = lockOptions
+        self.parentID = parentID
+        self.recipeKind = recipeKind
+        self.bakedMask = nil
+        self.refNumber = refNumber
+        self.retainedFields = [:]
     }
 
     public var isImage: Bool {
@@ -197,6 +244,10 @@ public struct Layer: Hashable, Codable, Sendable, Identifiable {
         case .shape: return "square.on.circle"
         case .adjustment: return "slider.horizontal.3"
         case .fill: return "paintbrush.fill"
+        case .group: return "folder"
+        // "square.fill.on.square.fill" needs a recent SF Symbols set; the UI falls back to "paintbrush.fill".
+        case .gradientFill: return "square.fill.on.square.fill"
+        case .unsupported: return "questionmark.square.dashed"
         }
     }
 
@@ -212,8 +263,54 @@ public struct Layer: Hashable, Codable, Sendable, Identifiable {
             return "text-\(id.uuidString)-\(element.hashValue)"
         case .shape(let shape):
             return "shape-\(id.uuidString)-\(shape.hashValue)"
-        default:
+        case .image, .adjustment, .fill, .group, .gradientFill, .unsupported:
             return nil
         }
+    }
+
+    // MARK: W3 accessors
+
+    public var isGroup: Bool {
+        if case .group = content { return true }
+        return false
+    }
+
+    public var isAdjustment: Bool {
+        if case .adjustment = content { return true }
+        return false
+    }
+
+    /// .fill or .gradientFill.
+    public var isFill: Bool {
+        switch content {
+        case .fill, .gradientFill: return true
+        case .image, .text, .shape, .adjustment, .group, .unsupported: return false
+        }
+    }
+
+    public var folder: LayerFolder? {
+        if case .group(let folder) = content { return folder }
+        return nil
+    }
+
+    public var gradient: GradientFill? {
+        if case .gradientFill(let gradient) = content { return gradient }
+        return nil
+    }
+
+    /// isLocked → .all, else lockOptions (the parent's lock is added by PhotoDocument.effectiveLock(of:)).
+    public var ownLock: LayerLockOptions {
+        isLocked ? .all : lockOptions
+    }
+
+    /// True when the layer uses any v2-only state (D2 needsV2); `refNumber` and `bakedMask` alone do not count.
+    public var usesV2State: Bool {
+        switch content {
+        case .group, .gradientFill, .unsupported: return true
+        case .image, .text, .shape, .adjustment, .fill: break
+        }
+        return fillOpacity != 1 || maskStack != nil || !isMaskEnabled || !isMaskLinked || isClipped || !lockOptions.isEmpty
+            || parentID != nil || recipeKind != nil || !transform.isAffineIdentityExtras || !transform.retainedFields.isEmpty
+            || !retainedFields.isEmpty
     }
 }

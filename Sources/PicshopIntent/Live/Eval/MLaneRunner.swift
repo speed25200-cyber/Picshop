@@ -127,7 +127,11 @@ import PicshopCore
         result.opMatch = ops.first.map(testCase.gold.contains) ?? false
         let chosen = ran.first { testCase.gold.contains(opID($0)) } ?? ran.first
         result.argumentF1 = chosen.map { f1(produced: arguments(of: $0), gold: testCase.args) } ?? 0
-        result.appliedVerified = applied.contains { testCase.gold.contains(opID($0)) } && !failedCheck
+        // The export sheet opens and writes nothing: verified when its step ran without a failure.
+        let opensASheet = testCase.gold.isSubset(of: ["exportPhoto"])
+        let sheetOpened = calls.contains { $0.execution?.steps.contains { $0.status == .info || $0.status == .applied } ?? false }
+        result.appliedVerified = opensASheet ? (ops.contains { testCase.gold.contains($0) } && sheetOpened)
+            : (applied.contains { testCase.gold.contains(opID($0)) } && !failedCheck)
         if !result.opMatch || !result.appliedVerified || result.argumentF1 < 1 {
             result.failure = "« \(testCase.text) » ran \(ops) (gold \(testCase.gold.sorted())), F1 \(String(format: "%.2f", result.argumentF1))"
                 + (result.appliedVerified ? "" : ", not applied and verified") + (error.map { ", \($0)" } ?? "")
@@ -145,6 +149,12 @@ import PicshopCore
             calls = [OperationCall("maskAdjust", args: ["where": "sky", "parameter": "exposure", "amount": -10], source: .ui),
                      OperationCall("maskAdjust", args: ["where": "bottom", "parameter": "exposure", "amount": -20], source: .ui)]
         case .selection: calls = [OperationCall("select", args: ["what": "subject"], source: .ui)]
+        case .layers:
+            _ = await host.liveRun(EditIntent(action: .addText, text: "SOLDES"))
+            calls = [OperationCall("addFillLayer", args: ["fill": "gradient", "color": "black", "angle": 90], source: .ui),
+                     OperationCall("addAdjustmentLayer", args: ["kind": "curves", "preset": "sCurve"], source: .ui),
+                     OperationCall("addAdjustmentLayer", args: ["kind": "light", "parameter": "exposure", "amount": 10], source: .ui),
+                     OperationCall("layerVia", args: ["mode": "copy", "where": "person", "name": "Sujet"], source: .ui)]
         }
         for call in calls { _ = await host.liveRun(EditIntent(action: .operation, operation: call)) }
     }

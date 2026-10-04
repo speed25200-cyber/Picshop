@@ -290,6 +290,9 @@ public struct LiveEditorState: Sendable, Equatable {
     /// Photo (W2): `LiveMaskLines.lines`, the local adjustments as "a1 Ciel (sky): exposure +0.30". The
     /// `selection` line above carries `LiveMaskLines.selectionLine` when the document has a selection.
     public var masks: [String] = []
+    /// Photo (W3, D19): `LiveLayerLines.line`, the layers with their stored refs, rendered after `masks:` when it
+    /// changed. Nil with only the photo.
+    public var layers: String? = nil
 
     public init(mode: EditorMode, version: Int) {
         self.mode = mode

@@ -26,6 +26,8 @@ struct LevelsPanel: View {
 
     var body: some View {
         VStack(spacing: 8) {
+            // W3 (D9): the layer Levels edits (a « Niveaux » adjustment layer, or an image layer).
+            ToneTargetChip(session: session, op: "levels", controlID: "levels.target")
             ModeSegments(modes: ToneCurve.Channel.allCases, selection: Binding(get: { tone.channel }, set: { tone.channel = $0 ?? .rgb }),
                          title: CurvesPanel.channelName, symbol: { _ in "" })
             GeometryReader { proxy in
@@ -157,7 +159,7 @@ struct LevelsPanel: View {
         if dragStart == nil {
             dragStart = values
             active = kind
-            session.beginInteraction(label: "Levels")
+            session.beginLevelsInteraction()
             Haptics.tick()
         }
         guard let start = dragStart else { return }

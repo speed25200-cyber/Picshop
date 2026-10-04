@@ -120,6 +120,26 @@ final class RetrievalLaneTests: XCTestCase {
 
     /// The R lane's gate (plan §9 and §14): E2's held-out set, written apart from the catalog,
     /// reaches the targets on the 4B's and the 2B's cards.
+    /// W3 (§8.7): ≥ 8 held-out utterances per new operation, recall@5 ≥ 0.95 over them and ≥ 0.85 per operation.
+    func testW3HeldOutRecall() {
+        let w3: [OpID] = ["addImageLayer", "layerVia", "addFillLayer", "fillLayer", "addAdjustmentLayer", "layerMask", "layerClip", "groupLayers",
+                          "mergeLayers", "layerTransform", "layerProperties", "exportPhoto", "recipe"]
+        let cases = HeldOutUtterances.parse(HeldOutUtterances.photoW3, .photo)
+        var total = 0, found = 0
+        var misses: [String] = []
+        for id in w3 {
+            let mine = cases.filter { $0.gold.contains(id.raw) }
+            XCTAssertGreaterThanOrEqual(mine.count, 8, id.raw)
+            XCTAssertTrue(mine.contains { $0.language == .fr } && mine.contains { $0.language == .en }, id.raw)
+            let hits = mine.filter { Self.shown($0.gold, $0.text, .photo, limit: 5, language: $0.language) }
+            total += mine.count
+            found += hits.count
+            for miss in mine where !hits.contains(miss) { misses.append("\(id) « \(miss.text) »") }
+            XCTAssertGreaterThanOrEqual(Double(hits.count) / Double(max(1, mine.count)), 0.85, "\(id): \(misses)")
+        }
+        XCTAssertGreaterThanOrEqual(Double(found) / Double(max(1, total)), 0.95, "\(misses)")
+    }
+
     func testHeldOutRecallMeetsTheTargets() {
         Self.assertRecallTargets(HeldOutUtterances.retrievalCases)
     }

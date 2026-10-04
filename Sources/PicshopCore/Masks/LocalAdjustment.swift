@@ -162,49 +162,133 @@ public extension EditStack {
     }
 }
 
-// MARK: - The document's local adjustments (W2: the base layer's)
+// MARK: - The document's local adjustments (W3: the active image layer's)
 
 public extension PhotoDocument {
-    /// W2: the base layer (D2). Local adjustments on other image layers come in W3.
-    var localAdjustmentsLayerID: UUID? { baseLayerID }
+    /// W3 (w2-contract §11 deferral): the active image layer, the selected one when it is an image layer, else the
+    /// base photo. Masques, its overlays and the `a<n>` creation path act on it.
+    var localAdjustmentsLayerID: UUID? { activeImageLayerID }
 
-    /// The local adjustments of `localAdjustmentsLayerID`, in operation order ("a1" is the first).
-    var localAdjustments: [LocalAdjustment] {
-        guard let id = localAdjustmentsLayerID, let layer = layer(id: id) else { return [] }
-        return layer.edits.resolvedLocalAdjustments
+    /// W3: a document whose photo is the image layer `layerID` alone in its content space (its source through its
+    /// own operations, the canvas its content size), so the AI mask providers, their caches and the state key read
+    /// that layer as they read a base. nil for anything but an image layer.
+    func contentSpaceDocument(of layerID: UUID) -> PhotoDocument? {
+        guard let layer = layer(id: layerID), let asset = layer.imageAsset else { return nil }
+        var proxy = PhotoDocument(title: title, baseImage: asset)
+        proxy.id = id
+        var photo = proxy.layers[0]
+        photo.id = layer.id
+        photo.name = layer.name
+        photo.edits = layer.edits
+        proxy.layers = [photo]
+        proxy.selectedLayerID = layer.id
+        proxy.canvasSize = LayerPlacement.contentSize(of: layer) ?? asset.pixelSize
+        return proxy
     }
 
-    /// The local adjustment with that id, nil when there is none.
+    /// The state an AI raster on `layerID`'s masks was made for: `baseStateKey` on the base (or nil), the layer's own
+    /// in its content space on any other image layer, so a layer's masks go stale when its own pixels move, never
+    /// when the photo's do.
+    func maskStateKey(on layerID: UUID?) -> String {
+        guard let layerID, layerID != baseLayerID, let proxy = contentSpaceDocument(of: layerID) else { return baseStateKey }
+        return proxy.baseStateKey
+    }
+
+    /// The local adjustments of `localAdjustmentsLayerID`, in operation order.
+    var localAdjustments: [LocalAdjustment] {
+        guard let id = localAdjustmentsLayerID else { return [] }
+        return localAdjustments(on: id)
+    }
+
+    /// The local adjustment with that id on `localAdjustmentsLayerID`, nil when there is none.
     func localAdjustment(id: UUID) -> LocalAdjustment? {
         guard let layerID = localAdjustmentsLayerID else { return nil }
-        return layer(id: layerID)?.edits.localAdjustment(id: id)
+        return localAdjustment(id: id, on: layerID)
     }
 
-    /// Room for one more local adjustment (fewer than `LocalAdjustment.maxPerLayer`).
+    /// Room for one more local adjustment (fewer than `LocalAdjustment.maxPerLayer`) on `localAdjustmentsLayerID`.
     var canAddLocalAdjustment: Bool { localAdjustments.count < LocalAdjustment.maxPerLayer }
 
     /// The aspect (w/h) of the space mask coordinates live in: the local-adjustment layer's output after its
-    /// geometric operations, from its asset's pixel size (D3: never from `canvasSize`, which `apply` does not
-    /// update for straighten or perspective). Parametric masks (`MaskStack.defaultComponent`) take it.
+    /// geometric operations, from its asset's pixel size (D3: never from `canvasSize`). Parametric masks
+    /// (`MaskStack.defaultComponent`) take it.
     var localAdjustmentsAspect: Double {
-        guard let id = localAdjustmentsLayerID, let layer = layer(id: id) else { return PSHomography.saneAspect(canvasSize.aspectRatio) }
-        return layer.edits.outputAspect(sourceAspect: sourceAspect(of: layer))
+        guard let id = localAdjustmentsLayerID else { return PSHomography.saneAspect(canvasSize.aspectRatio) }
+        return localAdjustmentsAspect(on: id)
     }
 
-    /// In place when it exists (one op per id), else appended; touches the document. A new one past
-    /// `LocalAdjustment.maxPerLayer` is refused (nothing changes): callers check `canAddLocalAdjustment` first.
+    /// In place when it exists (one op per id), else appended on `localAdjustmentsLayerID`; touches the document. A new
+    /// one past `LocalAdjustment.maxPerLayer` is refused (nothing changes): callers check `canAddLocalAdjustment` first.
     mutating func setLocalAdjustment(_ adjustment: LocalAdjustment, label: String? = nil) {
-        guard let id = localAdjustmentsLayerID, let layer = layer(id: id) else { return }
-        guard layer.edits.localAdjustment(id: adjustment.id) != nil || layer.edits.resolvedLocalAdjustments.count < LocalAdjustment.maxPerLayer else { return }
-        update(layerID: id) { $0.edits.setLocalAdjustment(adjustment, label: label) }
+        guard let id = localAdjustmentsLayerID else { return }
+        setLocalAdjustment(adjustment, label: label, on: id)
     }
 
     @discardableResult
     mutating func removeLocalAdjustment(id: UUID) -> Bool {
-        guard let layerID = localAdjustmentsLayerID, layer(id: layerID)?.edits.localAdjustment(id: id) != nil else { return false }
+        guard let layerID = localAdjustmentsLayerID else { return false }
+        return removeLocalAdjustment(id: id, on: layerID)
+    }
+
+    // MARK: W3: any image layer (the accessors take the owner's id)
+
+    /// Every local adjustment of every image layer in document order, the base first: what `a<n>` numbers (D19).
+    var allLocalAdjustments: [(layerID: UUID, adjustment: LocalAdjustment)] {
+        imageLayers.flatMap { layer in layer.edits.resolvedLocalAdjustments.map { (layerID: layer.id, adjustment: $0) } }
+    }
+
+    /// The image layer that owns the local adjustment `id`, nil when none does.
+    func localAdjustmentOwner(of id: UUID) -> UUID? {
+        imageLayers.first { $0.edits.localAdjustment(id: id) != nil }?.id
+    }
+
+    /// The local adjustments of one image layer, in operation order ([] for other layers).
+    func localAdjustments(on layerID: UUID) -> [LocalAdjustment] {
+        guard let layer = layer(id: layerID), layer.isImage else { return [] }
+        return layer.edits.resolvedLocalAdjustments
+    }
+
+    func localAdjustment(id: UUID, on layerID: UUID) -> LocalAdjustment? {
+        guard let layer = layer(id: layerID), layer.isImage else { return nil }
+        return layer.edits.localAdjustment(id: id)
+    }
+
+    /// The aspect (w/h) of one layer's mask space: its output after its geometric operations.
+    func localAdjustmentsAspect(on layerID: UUID) -> Double {
+        guard let layer = layer(id: layerID) else { return PSHomography.saneAspect(canvasSize.aspectRatio) }
+        return layer.edits.outputAspect(sourceAspect: sourceAspect(of: layer))
+    }
+
+    /// `setLocalAdjustment` on a given image layer (the same cap, in place when the id exists). A layer whose lock
+    /// refuses `.content` (D7) is left as it is.
+    mutating func setLocalAdjustment(_ adjustment: LocalAdjustment, label: String? = nil, on layerID: UUID) {
+        guard let layer = layer(id: layerID), layer.isImage, LayerLockPolicy.allows(.content, on: layerID, in: self) else { return }
+        guard layer.edits.localAdjustment(id: adjustment.id) != nil || layer.edits.resolvedLocalAdjustments.count < LocalAdjustment.maxPerLayer else { return }
+        update(layerID: layerID) { $0.edits.setLocalAdjustment(adjustment, label: label) }
+    }
+
+    /// Removes a local adjustment from its layer; false when it is not there or the layer's lock refuses `.content`.
+    @discardableResult
+    mutating func removeLocalAdjustment(id: UUID, on layerID: UUID) -> Bool {
+        guard layer(id: layerID)?.edits.localAdjustment(id: id) != nil, LayerLockPolicy.allows(.content, on: layerID, in: self) else { return false }
         var removed = false
         update(layerID: layerID) { removed = $0.edits.removeLocalAdjustment(id: id) }
         return removed
+    }
+
+    /// `applyLocalEdit(_:to:)` on the layer that owns the adjustment (an `a<n>` ref carries its owner, D19). The lock
+    /// rule of `apply` holds: a layer whose lock refuses `.content` refuses it.
+    @discardableResult
+    mutating func applyLocalEdit(_ edit: LocalAdjustmentEdit, to id: UUID, on layerID: UUID) -> Bool {
+        guard let current = localAdjustment(id: id, on: layerID), LayerLockPolicy.allows(.content, on: layerID, in: self) else { return false }
+        if case .duplicate = edit {
+            guard localAdjustments(on: layerID).count < LocalAdjustment.maxPerLayer else { return false }
+            setLocalAdjustment(current.duplicated(), on: layerID)
+            return true
+        }
+        guard let edited = current.applying(edit), edited != current else { return false }
+        setLocalAdjustment(edited, on: layerID)
+        return true
     }
 }
 

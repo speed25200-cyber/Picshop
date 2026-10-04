@@ -500,7 +500,115 @@ enum HeldOutUtterances {
     en | cut out what's selected | selectionApply
     """
 
-    static let all: [Utterance] = parse(photo, .photo) + parse(photoW2, .photo) + parse(video, .video) + parse(pdf, .pdf)
+    /// W3 (§8.7 R lane): ≥ 8 per new operation, French and English, written apart from the catalog.
+    static let photoW3 = """
+    fr | colle une autre image par-dessus la photo | addImageLayer
+    fr | importe une photo de ma galerie en calque | addImageLayer
+    fr | rajoute mon logo depuis les photos | addImageLayer
+    fr | pose une deuxième image sur celle-ci | addImageLayer
+    en | place another picture on top | addImageLayer
+    en | import an image from my library as a layer | addImageLayer
+    en | drop my logo in from photos | addImageLayer
+    en | put a second photo over this one | addImageLayer
+    fr | mets le sujet tout seul sur un nouveau calque | layerVia
+    fr | duplique juste la personne sur un calque à part | layerVia
+    fr | coupe le ciel et mets le sur son propre calque | layerVia
+    fr | sors la sélection sur un calque séparé | layerVia
+    en | copy the subject onto its own layer | layerVia
+    en | cut the sky out onto a separate layer | layerVia
+    en | lift the person onto a new layer | layerVia
+    en | move the selection to a layer of its own | layerVia
+    fr | ajoute un aplat de couleur bleu par dessus | addFillLayer
+    fr | un calque de couleur unie rose à 20 % | addFillLayer
+    fr | mets un dégradé du noir vers le transparent en bas | addFillLayer
+    fr | fond blanc en calque sous le produit | addFillLayer
+    en | add a solid red color layer | addFillLayer
+    en | overlay a black to clear gradient at the bottom | addFillLayer
+    en | put a white backdrop layer under it | addFillLayer
+    en | a pink tint layer at 30 percent | addFillLayer
+    fr | passe le calque de couleur j1 en vert | fillLayer
+    fr | le dégradé j2 en radial stp | fillLayer
+    fr | tourne le dégradé de quarante cinq degrés | fillLayer
+    fr | inverse le sens du dégradé | fillLayer
+    en | change the fill color of j1 to green | fillLayer
+    en | make that gradient reflected | fillLayer
+    en | flip the gradient direction | fillLayer
+    en | rotate the gradient to 45 degrees | fillLayer
+    fr | rajoute un calque de réglage courbes | addAdjustmentLayer
+    fr | un calque niveaux par dessus tout | addAdjustmentLayer
+    fr | calque de réglage teinte et saturation sur les verts | addAdjustmentLayer
+    fr | un calque d'étalonnage pour les ombres | addAdjustmentLayer
+    en | put a curves adjustment layer on top | addAdjustmentLayer
+    en | add a levels layer above everything | addAdjustmentLayer
+    en | new hue saturation adjustment layer | addAdjustmentLayer
+    en | stack a LUT adjustment layer at 60 | addAdjustmentLayer
+    fr | masque de fusion sur le logo qui cache le bas | layerMask
+    fr | ajoute un masque au calque i1 | layerMask
+    fr | inverse le masque de fusion | layerMask
+    fr | désactive le masque du calque une seconde | layerMask
+    en | add a layer mask that keeps only the subject | layerMask
+    en | invert the layer mask please | layerMask
+    en | disable the layer mask for now | layerMask
+    en | apply the mask to the layer | layerMask
+    fr | accroche le texte au calque juste en dessous | layerClip
+    fr | fais un masque d'écrêtage avec le titre | layerClip
+    fr | détache ce calque de celui du dessous | layerClip
+    fr | écrête la forme sur la photo du dessous | layerClip
+    en | clip this layer to the one below | layerClip
+    en | make a clipping mask with the title | layerClip
+    en | unclip the layer | layerClip
+    en | release this clipping mask | layerClip
+    fr | regroupe le titre et la forme | groupLayers
+    fr | fais un groupe avec l1 et s1 | groupLayers
+    fr | casse le groupe g1 | groupLayers
+    fr | range tous les calques dans un dossier | groupLayers
+    en | put the title and the shape in a group | groupLayers
+    en | group l1 with s1 | groupLayers
+    en | break up group g1 | groupLayers
+    en | put every layer into one folder | groupLayers
+    fr | fusionne ce calque avec celui du dessous | mergeLayers
+    fr | aplatis tout en un seul calque | mergeLayers
+    fr | fusionne tous les calques visibles | mergeLayers
+    fr | fais un tampon de tout ce qui est visible | mergeLayers
+    en | merge this layer down | mergeLayers
+    en | flatten everything into one layer | mergeLayers
+    en | merge all the visible layers | mergeLayers
+    en | stamp the visible layers onto a new one | mergeLayers
+    fr | agrandis le logo de vingt pour cent | layerTransform
+    fr | tourne le calque de 10 degrés | layerTransform
+    fr | décale le calque vers la droite | layerTransform
+    fr | aligne le titre et le logo à gauche | layerTransform
+    en | make the layer 20 percent bigger | layerTransform
+    en | rotate this layer 10 degrees | layerTransform
+    en | nudge the layer to the right | layerTransform
+    en | skew the layer a bit | layerTransform
+    fr | mets le fond du calque à 40 % | layerProperties
+    fr | verrouille la position du logo | layerProperties
+    fr | renomme le calque en Produit | layerProperties
+    fr | déverrouille ce calque | layerProperties
+    en | set the layer fill to 40 percent | layerProperties
+    en | lock the position of the logo | layerProperties
+    en | rename this layer to Product | layerProperties
+    en | unlock that layer | layerProperties
+    fr | sauvegarde en PNG 16 bits | exportPhoto
+    fr | fais moi un TIFF pour l'imprimeur | exportPhoto
+    fr | exporte un PSD avec tous les calques | exportPhoto
+    fr | sors un JPEG pour le web | exportPhoto
+    en | save it as a 16 bit PNG | exportPhoto
+    en | give me a TIFF for the printer | exportPhoto
+    en | export a PSD with all the layers | exportPhoto
+    en | export a JPEG for the web | exportPhoto
+    fr | prépare la pour un post Instagram | recipe
+    fr | fais une photo produit sur fond blanc | recipe
+    fr | retouche portrait légère sur cette photo | recipe
+    fr | une photo pour vendre sur leboncoin | recipe
+    en | get this ready for an Instagram post | recipe
+    en | make it a product shot on white | recipe
+    en | do a light portrait retouch | recipe
+    en | a listing photo for my shop | recipe
+    """
+
+    static let all: [Utterance] = parse(photo, .photo) + parse(photoW2, .photo) + parse(photoW3, .photo) + parse(video, .video) + parse(pdf, .pdf)
 
     static func parse(_ table: String, _ domain: OpDomain) -> [Utterance] {
         table.split(separator: "\n").compactMap { line -> Utterance? in

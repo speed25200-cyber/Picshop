@@ -14,7 +14,7 @@ import PicshopCore
 ///   (0…1 is read too). OpValue keeps them in 0…1000.
 public enum OperationArguments {
     /// apply_edits fields only a photo step has (LiveToolSchema.photoFields).
-    static let photoKeys: Set<String> = ["cells", "row", "column", "values", "min", "max", "decimals", "ref", "box", "size", "weight", "align", "font", "match"]
+    static let photoKeys: Set<String> = ["cells", "row", "column", "values", "min", "max", "decimals", "ref", "box", "size", "weight", "align", "font", "match", "layer"]
     /// apply_edits fields a photo step never has (LiveToolSchema.videoFields); PDF steps name pages with clipNumber.
     static let timelineKeys: Set<String> = ["startSeconds", "endSeconds", "seconds", "clipNumber", "transition", "speed", "scope"]
 
@@ -76,17 +76,29 @@ public enum OperationArguments {
             if let aliased = param.valueAliases[TextFolding.tokens(text).joined(separator: " ")] { return .string(aliased) }
             return value
         case .number:
-            return number(value).map { .number($0) } ?? value
+            if let parsed = number(value) { return .number(parsed) }
+            // A listed alias (« de moitié » → 50).
+            if let text = scalarText(value), let aliased = param.valueAliases[TextFolding.tokens(text).joined(separator: " ")], let parsed = Double(aliased) {
+                return .number(parsed)
+            }
+            return value
         case .integer:
             guard let parsed = number(value), parsed == parsed.rounded() else { return value }
             return .number(parsed)
         case .boolean:
-            return boolean(value).map { .bool($0) } ?? value
+            if let flag = boolean(value) { return .bool(flag) }
+            // A listed alias (« écrête » → true).
+            if let text = scalarText(value), let aliased = param.valueAliases[TextFolding.tokens(text).joined(separator: " ")] {
+                if aliased == "true" { return .bool(true) }
+                if aliased == "false" { return .bool(false) }
+            }
+            return value
         case .color, .text:
             return scalarText(value).map { .string($0) } ?? value
         case .ref:
             guard let text = value.string else { return value }
             let compact = text.lowercased().filter { !$0.isWhitespace && $0 != "#" }
+            // W3: « calque 2 » style refs are the model's to fix; "I2" and "#j1" are only spelled differently.
             return .string(compact)
         case .point:
             return pointPair(value).map { .array([.number($0.x), .number($0.y)]) } ?? value
@@ -179,6 +191,31 @@ public enum OperationArguments {
         }
         if let low = args["min"]?.double, let high = args["max"]?.double, !(low < high) {
             problems.append("\(path).max: must be greater than min")
+        }
+        // W3 (§8.2): four corners that make a quadrilateral; two layers at least to group, merge or align.
+        if spec.id == "layerTransform", case .list(let items)? = args["corners"] {
+            let corners = items.compactMap { item -> PSPoint? in
+                guard case .point(let point) = item else { return nil }
+                return PSPoint(x: point.x / 1000, y: point.y / 1000)
+            }
+            if corners.count != 4 {
+                problems.append("\(path).corners: exactly 4 points, top-left, top-right, bottom-right, bottom-left")
+            } else if !TransformHandles.isValidQuad(corners, aspect: 1) {
+                problems.append("\(path).corners: the 4 points must make a convex quadrilateral, in order top-left, top-right, bottom-right, bottom-left")
+            }
+        }
+        if spec.id == "groupLayers", args["all"]?.bool != true, args["ungroup"]?.bool != true, case .list(let items)? = args["refs"],
+           items.compactMap(\.string).isEmpty {
+            // One layer is a valid group (« mets le texte dans un groupe »), as the selected-layer path makes.
+            problems.append("\(path).refs: name at least 1 layer, or use all")
+        }
+        if spec.id == "mergeLayers", args["mode"]?.string == "selected" {
+            if case .list(let items)? = args["refs"], Set(items.compactMap(\.string)).count >= 2 {} else {
+                problems.append("\(path).refs: mode selected needs at least 2 layers in refs")
+            }
+        }
+        if spec.id == "layerTransform", args["align"] != nil, case .list(let items)? = args["refs"], Set(items.compactMap(\.string)).count < 2 {
+            problems.append("\(path).refs: name at least 2 different layers to align, or leave refs out for one")
         }
     }
 
@@ -291,8 +328,10 @@ public enum OperationArguments {
             return .string(trimmed)
         case .ref(let kinds):
             let prefixes = RefKind.allCases.filter(kinds.contains).map { String($0.prefix) }
+            // W3 (D19): the base photo is i0.
+            let lowest = kinds.contains(.imageLayer) ? 0 : 1
             guard case .string(let text) = raw, let letter = text.first.map(String.init), prefixes.contains(letter),
-                  let number = Int(text.dropFirst()), (1...999).contains(number) else {
+                  let number = Int(text.dropFirst()), (lowest...999).contains(number), letter == String(RefKind.imageLayer.prefix) || number >= 1 else {
                 let examples = prefixes.map { "\($0)1" }.joined(separator: ", ")
                 problems.append("\(path): '\(raw.string ?? raw.serialized())' is not an id such as \(examples)")
                 return nil

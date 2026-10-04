@@ -4,7 +4,7 @@ import PicshopCore
 import PicshopImaging
 
 /// « Utiliser la sélection pour » (W2): Réglage local, Masque, Effacer, Remplir…, Recolorer…, Flouter, Détourer,
-/// Générer… Each item runs the selectionApply handler, exactly what « remplis la sélection de rouge » runs, so the
+/// Générer…, and (W3) Nouveau calque (copier) / (couper). Each item runs the selectionApply handler, exactly what « remplis la sélection de rouge » runs, so the
 /// panel and the voice give the same document. Générer… asks for a prompt and needs the generative engine.
 struct SelectionUseMenu: View {
     let session: PhotoEditorSession
@@ -44,6 +44,13 @@ struct SelectionUseMenu: View {
             .accessibilityIdentifier("select.use.blur")
             Button { session.useSelection(for: .cutout) } label: { Label(L("Cut out"), systemImage: "person.crop.rectangle") }
                 .accessibilityIdentifier("select.use.cutout")
+            if FeatureFlags.isOn(.proLayers) {
+                // W3 (D17): the selection's pixels of the active image layer on a new layer, the single selectionApply path.
+                Button { session.useSelection(for: .copyToLayer) } label: { Label(L("New layer (copy)"), systemImage: "doc.on.doc") }
+                    .accessibilityIdentifier("select.use.copyToLayer")
+                Button { session.useSelection(for: .cutToLayer) } label: { Label(L("New layer (cut)"), systemImage: "scissors") }
+                    .accessibilityIdentifier("select.use.cutToLayer")
+            }
             Button {
                 prompt = ""
                 asksPrompt = true

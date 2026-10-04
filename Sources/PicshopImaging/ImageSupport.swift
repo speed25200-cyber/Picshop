@@ -117,6 +117,17 @@ public enum ImageSupport {
         return image
     }
 
+    /// W3 (D14): whether an export pass decodes this source once, eagerly, into an 8-bit bitmap: an 8-bit JPEG or
+    /// PNG, which Core Image would otherwise decode whole for every strip. HEIC (tiled decode), RAW and deeper files
+    /// stay lazy, at their full precision.
+    public static func decodesEagerly(at url: URL) -> Bool {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil), let type = CGImageSourceGetType(source) as String? else { return false }
+        guard type == UTType.jpeg.identifier || type == UTType.png.identifier else { return false }
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let depth = (properties?[kCGImagePropertyDepth] as? Int) ?? 8
+        return depth <= 8
+    }
+
     /// Whether the file carries a depth or disparity map (Portrait photos).
     public static func hasDepthData(at url: URL) -> Bool {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return false }

@@ -99,6 +99,8 @@ public enum LiveLines {
             return fr ? "Je ne vois pas de texte à cet endroit." : "I can't see any text there."
         case .verifyFailed:
             return fr ? "C'est fait, mais le résultat ne se lit pas bien — je peux réessayer." : "Done, but the result doesn't read right — I can try again."
+        case .locked:
+            return fr ? "Ce calque est verrouillé — déverrouille-le d'abord." : "That layer is locked — unlock it first."
         }
     }
 

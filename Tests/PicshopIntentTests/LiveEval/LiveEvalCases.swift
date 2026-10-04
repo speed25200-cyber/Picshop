@@ -175,8 +175,9 @@ enum LiveEvalCases {
         c("améliore la photo", .vague, [.autoEnhance]),
         c("c'est pour ma photo de profil LinkedIn", .vague, [.autoEnhance, .crop, .setAspect]),
         c("I need it for my profile picture", .vague, [.autoEnhance, .crop, .setAspect]),
-        c("je veux la vendre sur vinted", .vague, [.replaceBackground, .autoEnhance]),
-        c("product photo for ebay", .vague, [.replaceBackground, .autoEnhance]),
+        // W3 (D21): the product phrases run the productPhoto recipe (an `.operation`), the W1 goal before it.
+        c("je veux la vendre sur vinted", .vague, [.replaceBackground, .autoEnhance, .operation]),
+        c("product photo for ebay", .vague, [.replaceBackground, .autoEnhance, .operation]),
         c("photo d'identité", .vague, [.replaceBackground, .crop, .setAspect]),
         c("c'est pour mon fond d'écran", .vague, [.crop, .setAspect]),
         c("restaure cette vieille photo", .vague, [.autoEnhance, .adjust, .denoise]),

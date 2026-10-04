@@ -114,6 +114,9 @@ public struct RuleBasedIntentEngine: IntentEngine {
         if let summary = parseSummary(u) { return [summary] }
         if context.mode == .photo, let style = parseStyle(u, original: original) { return [style] }
         if let version = parseVersion(u, original: original) { return [version] }
+        // W3: layer, recipe, export and gesture phrases, anchored, before W1's export, share and undo words (« exporte en
+        // PSD », « annule l'export »), the W2 mask rules, the W1 layer rules and parseGoal (D21).
+        if let layered = parseLayers(u, context: context) { return [layered] }
         if let meta = parseMeta(u, context: context) { return [meta] }
         if context.mode == .photo, let describe = parseDescribe(u) { return [describe] }
         // W2: masks and selections, anchored, before the scene, removal, blur and layer rules that share their verbs.
@@ -122,6 +125,8 @@ public struct RuleBasedIntentEngine: IntentEngine {
         if context.mode == .photo, let again = parseLastFollowUp(u, original: original, context: context) { return [again] }
         if context.mode == .pdf { return parsePDF(u, original: original, context: context) }
         if context.mode == .video, let video = parseVideo(u, context: context) { return video }
+        // W3 (D21): the product phrases mean the productPhoto recipe, once the rules above had their turn.
+        if context.mode == .photo, let product = Self.productRecipeRule(u) { return [product] }
         if context.mode == .photo, let goal = parseGoal(u, context: context) { return goal }
         if context.mode == .photo, let portrait = parsePortrait(u) { return [portrait] }
         if context.mode == .photo, let expand = parseExpand(u) { return [expand] }
@@ -308,6 +313,13 @@ public struct RuleBasedIntentEngine: IntentEngine {
         if u.contains(["cancel", "annule", "laisse tomber", "never mind", "nevermind", "forget it", "non", "no", "aucun", "aucune", "none", "stop", "oublie"]),
            !restatedKnown || restated?.label == pendingLabel {
             return EditIntent(action: .cancel)
+        }
+        // A yes/no question (« Les calques masqués seront supprimés. On aplatit ? », the model offer): « oui » confirms
+        // it, and the executor re-runs the pending step.
+        if pending.candidates.isEmpty, u.tokens.count <= 4,
+           u.contains(["yes", "oui", "ok", "okay", "confirme", "vas y", "go", "do it", "fais le", "c est bon", "yep", "ouais", "sure", "d accord",
+                       "aplatis", "on aplatit"]) {
+            return EditIntent(action: .confirm, confidence: 0.95)
         }
         if u.contains(["both", "les deux", "all", "tous", "toutes", "all of them", "everyone", "tout le monde", "everything"]) {
             return EditIntent(action: .chooseCandidate, scope: .all, confidence: 0.95)
@@ -598,7 +610,7 @@ public struct RuleBasedIntentEngine: IntentEngine {
         var intents: [EditIntent] = []
         if u.contains(identity) {
             intents = [EditIntent(action: .replaceBackground, color: .white, background: .color(.white)), EditIntent(action: .crop, aspect: .ratio3x4)]
-        } else if u.contains(product) {
+        } else if u.contains(product), !FeatureFlags.isOn(.recipes) {
             intents = [EditIntent(action: .replaceBackground, color: .white, background: .color(.white)), EditIntent(action: .autoEnhance, amount: .absolute(0.7))]
         } else if u.contains(headshot) || u.contains(profile) {
             intents = [EditIntent(action: .autoEnhance, amount: .absolute(0.7)), EditIntent(action: .crop, aspect: .square)]
@@ -656,6 +668,8 @@ public struct RuleBasedIntentEngine: IntentEngine {
 
     /// A bare amount word after an adjustment refers to that adjustment.
     func parseFollowUp(_ u: NormalizedUtterance, context: IntentContext) -> EditIntent? {
+        // W3 (D20): « continue » resumes the Live brain's pending outline, not the last slider.
+        if context.hasPendingOutline, GoalOutline.isContinue(u.original) { return nil }
         guard let parameter = context.lastParameter else { return nil }
         let leftovers = u.tokens.filter { !Self.followUpFunctionWords.contains($0) && !ObjectVocabulary.fillerWords.contains($0) && Double($0) == nil && NumberWords.parse([$0], at: 0) == nil }
         guard leftovers.isEmpty else { return nil }

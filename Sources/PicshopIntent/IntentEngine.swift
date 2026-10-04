@@ -57,6 +57,9 @@ public struct IntentContext: Sendable {
     public var layerCount: Int? = nil
     /// Photo: a LUT was imported on the active image layer; nil when the editor does not say.
     public var hasImportedLUT: Bool? = nil
+    /// W3 (D20): the local brain has an outline in progress, so « continue » resumes it (the grammar's follow-up rule
+    /// skips it). The Live brain selector sets it from the local brain's state.
+    public var hasPendingOutline = false
 
     public init(mode: EditorMode, currentAdjustments: Adjustments = .neutral, hasSelection: Bool = false, selectedIndex: Int? = nil,
                 clipCount: Int = 0, textLayerCount: Int = 0, playheadSeconds: Double = 0, timelineDuration: Double = 0, frameRate: Double = 30,

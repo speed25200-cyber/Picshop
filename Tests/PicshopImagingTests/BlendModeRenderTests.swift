@@ -88,5 +88,63 @@ final class BlendModeRenderTests: XCTestCase {
             XCTAssertEqual(Int(bytes[3]), 255, "\(mode): still opaque")
         }
     }
+    /// W3 (D6): fill comes before the blend and opacity after, and both scale the same coverage: fill 0.5 equals
+    /// opacity 0.5 for every mode, and they multiply.
+    func testFillEqualsOpacityForEveryMode() {
+        let pair = Self.pairs[1]
+        for mode in BlendMode.allCases where mode != .dissolve {
+            let source = ToneTestImages.solid(pair.source), backdrop = ToneTestImages.solid(pair.backdrop)
+            let byFill = ToneTestImages.bytes(BlendModes.composite(source, over: backdrop, mode: mode, opacity: 1, fill: 0.5), width: 8, height: 8)
+            let byOpacity = ToneTestImages.bytes(BlendModes.composite(source, over: backdrop, mode: mode, opacity: 0.5), width: 8, height: 8)
+            let both = ToneTestImages.bytes(BlendModes.composite(source, over: backdrop, mode: mode, opacity: 0.5, fill: 0.5), width: 8, height: 8)
+            let quarter = ToneTestImages.bytes(BlendModes.composite(source, over: backdrop, mode: mode, opacity: 0.25), width: 8, height: 8)
+            for (a, b) in zip(byFill, byOpacity) { XCTAssertEqual(Int(a), Int(b), accuracy: 1, "\(mode): fill 0.5 = opacity 0.5") }
+            for (a, b) in zip(both, quarter) { XCTAssertEqual(Int(a), Int(b), accuracy: 1, "\(mode): fill × opacity") }
+        }
+    }
+
+    /// W3 (D6): over a backdrop that is not opaque, a mode blends where the backdrop is and shows the source where it
+    /// is not (W3C compositing), as `BlendMath.compositeRGBA` says.
+    func testAModeOverAHalfTransparentBackdropMatchesTheReference() {
+        let pair = Self.pairs[0]
+        // CIColor takes straight components.
+        let backdropColor = CIColor(red: pair.backdrop.r, green: pair.backdrop.g, blue: pair.backdrop.b, alpha: 0.5,
+                                    colorSpace: RenderContext.colorSpace) ?? CIColor(red: 0, green: 0, blue: 0)
+        let backdrop = CIImage(color: backdropColor).cropped(to: CGRect(x: 0, y: 0, width: 8, height: 8))
+        for mode in [BlendMode.multiply, .screen, .overlay, .softLight, .difference, .color, .luminosity] {
+            let result = BlendModes.composite(ToneTestImages.solid(pair.source), over: backdrop, mode: mode, opacity: 1, backdropIsOpaque: false)
+            let bytes = ToneTestImages.bytes(result, width: 8, height: 8)
+            let i = (4 * 8 + 4) * 4
+            let expected = BlendMath.compositeRGBA(mode, backdrop: pair.backdrop, backdropAlpha: 0.5, source: pair.source, sourceAlpha: 1)
+            XCTAssertEqual(Double(bytes[i + 3]) / 255, expected.alpha, accuracy: 1.5 / 255, "\(mode): alpha")
+            let a = max(1e-6, Double(bytes[i + 3]) / 255)
+            for (value, reference) in zip([bytes[i], bytes[i + 1], bytes[i + 2]], [expected.rgb.r, expected.rgb.g, expected.rgb.b]) {
+                XCTAssertEqual(Double(value) / 255 / a, reference, accuracy: 3 / 255, "\(mode): colour")
+            }
+        }
+    }
+
+    /// W3 (D14): dissolve's grain belongs to canvas coordinates, so a strip or a tile of the inputs shows the same
+    /// pixels where it overlaps the whole (no seam at strip boundaries).
+    func testDissolveGrainFollowsCanvasCoordinates() {
+        let side = 128
+        let top = ToneTestImages.solid(BlendMath.RGB(1, 0, 0), side: side)
+        let bottom = ToneTestImages.solid(BlendMath.RGB(0, 0, 1), side: side)
+        let whole = ToneTestImages.bytes(BlendModes.composite(top, over: bottom, mode: .dissolve, opacity: 0.5, seed: 3), width: side, height: side)
+        let rect = CGRect(x: 32, y: 40, width: 64, height: 48)
+        let part = BlendModes.composite(top.cropped(to: rect), over: bottom.cropped(to: rect), mode: .dissolve, opacity: 0.5, seed: 3)
+        guard let bytes = ImageSupport.rgbaBytes(of: part, rect: rect, colorSpace: RenderContext.colorSpace) else { return XCTFail("readback") }
+        var differing = 0
+        for row in 0..<Int(rect.height) {
+            // Top-down row `row` of the part is canvas row (side − maxY + row) of the whole.
+            let wholeRow = side - Int(rect.maxY) + row
+            for column in 0..<Int(rect.width) {
+                let a = (row * Int(rect.width) + column) * 4
+                let b = (wholeRow * side + Int(rect.minX) + column) * 4
+                if bytes[a] != whole[b] || bytes[a + 2] != whole[b + 2] { differing += 1 }
+            }
+        }
+        XCTAssertEqual(differing, 0, "the same grain in the strip and in the whole")
+    }
 }
 #endif

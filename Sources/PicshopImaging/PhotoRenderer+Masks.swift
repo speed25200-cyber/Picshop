@@ -13,7 +13,11 @@ public enum MaskOverlayStyle: String, Sendable, CaseIterable { case tint, rubyli
 
 /// Which mask to show over a frame, and how.
 public struct MaskOverlayRequest: Sendable, Equatable {
-    public enum Target: Sendable, Equatable { case localAdjustment(UUID), selection, stack(MaskStack) }
+    public enum Target: Sendable, Equatable {
+        case localAdjustment(UUID), selection, stack(MaskStack)
+        /// W3 (D8): a layer's own mask (legacy × stack), shown where the layer lies on the canvas.
+        case layerMask(UUID)
+    }
 
     public var target: Target
     public var style: MaskOverlayStyle
@@ -28,18 +32,33 @@ public struct MaskOverlayRequest: Sendable, Equatable {
     }
 }
 
-/// What one render recorded for an overlay: the base layer's pre-local image and its extent, the requested mask in
-/// the layer's space, and how the layer lands on the canvas.
+/// What one render recorded for an overlay: the captured layer's pre-local image and its extent, the requested mask
+/// in the layer's space, and how the layer lands on the canvas. W3: the layer is any image layer (local adjustments
+/// on the active image layer), or any layer for its layer mask; the base when nil.
 final class MaskCapture {
     let target: MaskOverlayRequest.Target?
+    /// W3: the layer whose local adjustments (or layer mask) the render records; nil records the base's.
+    var layerID: UUID?
     var preLocal: CIImage?
     var extent: CGRect = .null
     var mask: CIImage?
     var canvasOffset: CGAffineTransform = .identity
     var canvasRect: CGRect = .null
+    /// W3 (D10): how the captured layer's content lands on the canvas (content unit square → canvas-normalised).
+    var map: PSHomography = .identity
+    /// W3: `mask` is already on the canvas (a layer mask's overlay).
+    var maskOnCanvas = false
 
-    init(target: MaskOverlayRequest.Target?) {
+    init(target: MaskOverlayRequest.Target?, layerID: UUID? = nil) {
         self.target = target
+        self.layerID = layerID
+    }
+
+    /// A mask of the captured layer's content extent placed on the canvas (W2's offset for the base, W3's map for a
+    /// placed layer).
+    func placed(_ mask: CIImage, canvas: CGRect) -> CIImage {
+        if maskOnCanvas { return mask.cropped(to: canvas) }
+        return ContentPlacement.placeMask(mask, map: map, canvas: canvas)
     }
 
     var wantedAdjustment: UUID? {
@@ -102,9 +121,55 @@ extension PhotoRenderer {
     /// The frame and its mask overlay from one actor hop, the mask graph built once (D17).
     public func render(_ document: PhotoDocument, options: Options, overlay: MaskOverlayRequest?) async throws -> (image: CIImage, overlay: CIImage?) {
         guard let overlay else { return (try await render(document, options: options), nil) }
-        let capture = MaskCapture(target: overlay.target)
+        let capture = MaskCapture(target: overlay.target, layerID: captureLayer(for: overlay.target, in: document))
         let image = try await render(document, options: options, capture: capture)
+        if case .layerMask(let id) = overlay.target, let layer = document.layer(id: id) {
+            capture.mask = layerMaskOnCanvas(layer, capture: capture, options: options)
+            capture.maskOnCanvas = true
+        }
         return (image, overlayImage(overlay, capture: capture, document: document, frame: image))
+    }
+
+    /// The layer an overlay's render records (W3): the image layer owning a local adjustment, the Masques layer for a
+    /// stack preview, the base for the selection, the layer itself for its layer mask.
+    func captureLayer(for target: MaskOverlayRequest.Target, in document: PhotoDocument) -> UUID? {
+        switch target {
+        case .localAdjustment(let id):
+            return document.layers.first { $0.isImage && $0.edits.localAdjustment(id: id) != nil }?.id ?? document.localAdjustmentsLayerID
+        case .stack:
+            return document.localAdjustmentsLayerID
+        case .selection:
+            return document.baseLayerID
+        case .layerMask(let id):
+            return id
+        }
+    }
+
+    /// A layer's mask (legacy × stack) on the canvas of the recorded render: in its content space placed with the
+    /// layer when linked, in canvas space when not; nil without a mask.
+    func layerMaskOnCanvas(_ layer: Layer, capture: MaskCapture, options: Options) -> CIImage? {
+        let canvas = capture.canvasRect
+        guard !canvas.isNull, !canvas.isEmpty else { return nil }
+        let contentSpace = layer.isFill || layer.isAdjustment || layer.isGroup || capture.extent.isNull ? canvas : capture.extent
+        let mode: MaskRasterizer.Mode = options.allowExpensiveWork ? .settled(target: nil) : .interactive(target: nil)
+        var content: CIImage?
+        if let legacy = layer.mask { content = loadMask(legacy, fitting: contentSpace) }
+        var onCanvas: CIImage?
+        if layer.isMaskEnabled, let stack = layer.maskStack, !stack.isEmpty {
+            if layer.isMaskLinked || layer.isFill {
+                let drawn = rasterizer.mask(stack, extent: contentSpace, preLocal: nil, mode: mode, owner: layer.id)
+                content = content.map { Self.multiply($0, drawn) } ?? drawn
+            } else {
+                onCanvas = rasterizer.mask(stack, extent: canvas, preLocal: nil, mode: mode, owner: layer.id)
+            }
+        }
+        let placedContent = content.map { contentSpace == canvas ? $0.cropped(to: canvas) : ContentPlacement.placeMask($0, map: capture.map, canvas: canvas) }
+        switch (placedContent, onCanvas) {
+        case let (a?, b?): return Self.multiply(a, b).cropped(to: canvas)
+        case let (a?, nil): return a
+        case let (nil, b?): return b.cropped(to: canvas)
+        case (nil, nil): return nil
+        }
     }
 
     /// Aligned with `render(document, options)`'s output (base-layer masks); nil when there is nothing to show.
@@ -116,15 +181,16 @@ extension PhotoRenderer {
     func overlayImage(_ request: MaskOverlayRequest, capture: MaskCapture, document: PhotoDocument, frame: CIImage) -> CIImage? {
         guard let mask = overlayMask(request.target, capture: capture, document: document) else { return nil }
         let canvas = capture.canvasRect.isNull ? frame.extent : capture.canvasRect
-        let placed = mask.transformed(by: capture.canvasOffset).cropped(to: canvas)
+        let placed = capture.placed(mask, canvas: canvas)
         return MaskOverlayRenderer.overlay(mask: placed, frame: frame, style: request.style, color: request.color, opacity: request.opacity, extent: canvas)
     }
 
     private func overlayMask(_ target: MaskOverlayRequest.Target, capture: MaskCapture, document: PhotoDocument) -> CIImage? {
         switch target {
-        case .localAdjustment, .stack:
+        case .localAdjustment, .stack, .layerMask:
             return capture.mask
         case .selection:
+            // The selection lives in canvas space (W2 D7), recorded with the base, whose content space is the canvas.
             guard let selection = document.selection, selection.layerID == document.baseLayerID, !capture.extent.isNull else { return nil }
             return selectionMask(selection, extent: capture.extent)
         }
@@ -141,15 +207,50 @@ extension PhotoRenderer {
     /// The base layer rendered without local adjustments, with the target's mask recorded.
     func baseCapture(_ document: PhotoDocument, options: Options, target: MaskOverlayRequest.Target?) async throws -> MaskCapture {
         guard let base = document.baseLayer, let asset = base.imageAsset else { throw PicshopError.renderFailed("no photo") }
-        let fullLongest = max(asset.pixelSize.width, asset.pixelSize.height)
-        let scale = options.targetLongestSide.map { min(1, $0 / max(1, fullLongest)) } ?? 1
+        let scale = Self.renderScale(document, options: options)
         var preLocalOnly = options
         preLocalOnly.includesLocalAdjustments = false
-        let capture = MaskCapture(target: target)
+        let capture = MaskCapture(target: target, layerID: base.id)
         let image = try await renderImageLayer(base, asset: asset, scale: scale, options: preLocalOnly, capture: capture)
         capture.canvasOffset = CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY)
         capture.canvasRect = CGRect(origin: .zero, size: image.extent.size)
         return capture
+    }
+
+    /// W3: the Masques layer (`localAdjustmentsLayerID`) rendered without local adjustments in its content space, with
+    /// the target's mask recorded, and how it lands on the canvas. The base's is `baseCapture`.
+    func layerCapture(_ document: PhotoDocument, layerID: UUID?, options: Options, target: MaskOverlayRequest.Target?) async throws -> MaskCapture {
+        guard let id = layerID, id != document.baseLayerID, let layer = document.layer(id: id), let asset = layer.imageAsset,
+              let baseAsset = document.baseLayer?.imageAsset else {
+            return try await baseCapture(document, options: options, target: target)
+        }
+        let scale = Self.renderScale(document, options: options)
+        let canvasSize = document.canvasSize.width > 0 ? document.canvasSize : baseAsset.pixelSize
+        let canvas = CGRect(x: 0, y: 0, width: (canvasSize.width * scale).rounded(), height: (canvasSize.height * scale).rounded())
+        let contentSize = LayerPlacement.contentSize(of: layer) ?? asset.pixelSize
+        var map = LayerPlacement.map(for: layer, contentSize: contentSize, canvasSize: canvasSize, isBase: false)
+        if let groupMap = groupPlacement(of: layer, in: document, canvasSize: canvasSize) { map = map.then(groupMap) }
+        let need = ContentPlacement.density(map, contentPixels: contentSize, canvasPixels: PSSize(width: Double(canvas.width), height: Double(canvas.height)))
+        let density = Self.quantizedDensity(need * contentSize.width / max(1, asset.pixelSize.width))
+        var preLocalOnly = options
+        preLocalOnly.includesLocalAdjustments = false
+        let capture = MaskCapture(target: target, layerID: id)
+        let image = try await renderImageLayer(layer, asset: asset, scale: density, options: preLocalOnly, capture: capture)
+        capture.canvasOffset = CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY)
+        capture.canvasRect = canvas
+        capture.map = map
+        return capture
+    }
+
+    /// A local adjustment's stack drawn for the Masques layer: in its content space at the origin (`placed: false`,
+    /// thumbnails) or placed on the canvas (`placed: true`, probes). The base's content space is the canvas.
+    func adjustmentMask(_ stack: MaskStack, document: PhotoDocument, options: Options, placed: Bool) async throws -> CIImage? {
+        let capture = try await layerCapture(document, layerID: document.localAdjustmentsLayerID, options: options, target: .stack(stack))
+        guard let mask = capture.mask else { return nil }
+        if placed, capture.layerID != nil, capture.layerID != document.baseLayerID {
+            return capture.placed(mask, canvas: capture.canvasRect)
+        }
+        return mask.transformed(by: capture.canvasOffset)
     }
 
     /// The stack as gray 0…1 at the base layer's output extent at this scale.
@@ -158,10 +259,11 @@ extension PhotoRenderer {
         return capture.mask.map { $0.transformed(by: capture.canvasOffset) }
     }
 
-    /// A 64 px (or `side`) thumbnail of the stack, rendered on the background context.
+    /// A 64 px (or `side`) thumbnail of the stack, rendered on the background context. W3: a stack of the Masques layer
+    /// (`localAdjustmentsLayerID`, any image layer) is drawn in that layer's content space.
     public func maskThumbnail(_ stack: MaskStack, document: PhotoDocument, side: Int) async throws -> CGImage? {
         let options = Options(targetLongestSide: Double(max(8, side)), includeOverlays: false, allowExpensiveWork: false, includesLocalAdjustments: false)
-        guard let mask = try await maskImage(stack, document: document, options: options) else { return nil }
+        guard let mask = try await adjustmentMask(stack, document: document, options: options, placed: false) else { return nil }
         let rect = mask.extent.integral
         guard !rect.isEmpty, !rect.isInfinite else { return nil }
         return RenderContext.background.createCGImage(mask, from: rect, format: .L8, colorSpace: RenderContext.maskColorSpace, deferred: false)
@@ -218,9 +320,10 @@ extension PhotoRenderer {
         return (bytes, Int(rect.width), Int(rect.height))
     }
 
-    /// Raw mask values 0…1 (row 0 at the top) of a stack at the base output size of `options` (probes, tests).
+    /// Raw mask values 0…1 (row 0 at the top) of a local adjustment's stack on the canvas at the base output size of
+    /// `options` (probes, tests). W3: a stack of a non-base Masques layer is drawn in its content space and placed.
     func maskValues(_ stack: MaskStack, document: PhotoDocument, options: Options) async throws -> (values: [Float], width: Int, height: Int) {
-        guard let mask = try await maskImage(stack, document: document, options: options) else { throw PicshopError.renderFailed("mask") }
+        guard let mask = try await adjustmentMask(stack, document: document, options: options, placed: true) else { throw PicshopError.renderFailed("mask") }
         let rect = mask.extent.integral
         guard let values = ImageSupport.rawGrayValues(of: mask, rect: rect) else { throw PicshopError.renderFailed("mask readback") }
         return (values, Int(rect.width), Int(rect.height))
@@ -253,6 +356,55 @@ extension PhotoRenderer {
         let sRGB = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         guard let bytes = ImageSupport.rgbaBytes(of: image, rect: extent, colorSpace: sRGB) else { throw PicshopError.renderFailed("readback") }
         return (bytes, Int(extent.width), Int(extent.height))
+    }
+
+    // MARK: - Layer masks (W3)
+
+    /// W3 probe (`layerMaskCoverageInRange`): a layer's pixels (without its masks) and its mask (legacy × stack) in
+    /// its content space at `side` on the longest side, as gamma sRGB RGBA8 and raw values; the canvas for fills,
+    /// adjustment layers, groups and unlinked stacks. Nil without a mask.
+    func layerMaskProbe(_ document: PhotoDocument, layerID: UUID, side: Int) async throws -> (bytes: [UInt8], values: [Float], width: Int, height: Int)? {
+        guard let layer = document.layer(id: layerID), let baseAsset = document.baseLayer?.imageAsset else { return nil }
+        let hasStack = layer.maskStack.map { !$0.isEmpty } ?? false
+        guard layer.mask != nil || hasStack else { return nil }
+        let canvasSize = document.canvasSize.width > 0 && document.canvasSize.height > 0 ? document.canvasSize : baseAsset.pixelSize
+        let options = Options(targetLongestSide: Double(side), includeOverlays: true, allowExpensiveWork: false)
+        let canvasSpace = layer.isFill || layer.isAdjustment || layer.isGroup || (hasStack && !layer.isMaskLinked) || layer.id == document.baseLayerID
+        var content: CIImage
+        if canvasSpace {
+            let fitted = canvasSize.limited(toLongestSide: Double(side))
+            let sourceLongest = max(baseAsset.pixelSize.width, baseAsset.pixelSize.height)
+            var probeOptions = options
+            probeOptions.targetLongestSide = fitted.width / canvasSize.width * sourceLongest
+            content = try await render(document, options: probeOptions)
+        } else {
+            switch layer.content {
+            case .image(let asset):
+                let size = LayerPlacement.contentSize(of: layer) ?? asset.pixelSize
+                let density = min(1, Double(side) / max(1, max(size.width, size.height))) * size.width / max(1, asset.pixelSize.width)
+                content = try await imageContent(layer, asset: asset, density: density, options: options, log: nil, capture: nil, canMaterialize: false)
+            case .text, .shape:
+                let canvas = CGRect(origin: .zero, size: canvasSize.limited(toLongestSide: Double(side)).cgSize)
+                guard let raster = overlayContent(layer, canvas: canvas) else { return nil }
+                content = raster
+            default:
+                return nil
+            }
+        }
+        let extent = content.extent.integral
+        guard !extent.isEmpty, !extent.isInfinite else { return nil }
+        content = content.cropped(to: extent)
+        var mask: CIImage?
+        if let legacy = layer.mask { mask = loadMask(legacy, fitting: extent) }
+        if let stack = layer.maskStack, !stack.isEmpty, layer.isMaskEnabled {
+            let drawn = rasterizer.mask(stack, extent: extent, preLocal: canvasSpace ? nil : content, mode: .interactive(target: nil), owner: layer.id)
+            mask = mask.map { Self.multiply($0, drawn) } ?? drawn
+        }
+        guard let mask else { return nil }
+        let sRGB = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        guard let bytes = ImageSupport.rgbaBytes(of: content, rect: extent, colorSpace: sRGB),
+              let values = ImageSupport.rawGrayValues(of: mask, rect: extent) else { return nil }
+        return (bytes, values, Int(extent.width), Int(extent.height))
     }
 
     // MARK: - Depth from the camera

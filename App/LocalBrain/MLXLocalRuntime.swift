@@ -7,8 +7,13 @@
 //   weights see pictures), gated on free memory (D13), then one short decode so
 //   the Metal kernels are compiled before the first real turn. The processor is
 //   wrapped so pictures do not come with an attention mask (prefix reuse needs none).
-// - makeEngine: one MLXChatEngine (one ChatSession, one KV cache) per Live
-//   conversation. Unloading closes every engine, so no session keeps the weights alive.
+// - makeEngine: one engine (one KV cache) per Live conversation. W3 (D22): the KV engine
+//   (`MLXKVEngine`: checkpoints, the prefix snapshot, picture turns appended) when the
+//   `kvEngine` flag is on and KVSelfTest passed for this model, runtime and build; W2's
+//   `MLXChatEngine` (one ChatSession) otherwise, and as the automatic fallback. Unloading
+//   closes every engine, so no conversation keeps the weights alive.
+// - warmLivePrefix: builds the prefix snapshot when Live opens (in place of the load's
+//   "Bonjour" warm-up when the KV engine is active), then schedules the self-test.
 // - makePlanner: push-to-talk's planner over the same weights.
 // - benchmark: the Settings speed test.
 #if canImport(MLXVLM)
@@ -16,6 +21,7 @@ import Foundation
 import MLXLMCommon
 import MLXVLM
 import PicshopCore
+import PicshopImaging
 import PicshopIntent
 import PicshopUI
 
@@ -28,11 +34,23 @@ final class MLXLocalRuntime: LocalModelRuntime, @unchecked Sendable {
     /// Bumped by every load and unload, so a reused planner session never outlives its weights.
     private var generation = 0
     private var loading: (id: String, task: Task<Void, Error>)?
-    private let engines = NSHashTable<MLXChatEngine>.weakObjects()
+    /// Every open conversation, both engines (weak: the brain owns them).
+    private let engines = NSHashTable<AnyObject>.weakObjects()
     private var planner: MLXPlanner?
+    /// The Live prefix warm-up in flight (`warmLivePrefix`): cancelled when the app resigns active or the weights go.
+    private var prefixWarmup: Task<Void, Never>?
     private var lastLoadMs = 0
 
-    private init() {}
+    private init() {
+        // W3 (D22): a persisted prefix never outlives the weights it was computed with.
+        ModelManager.setOnModelRemoved { id in MLXPrefixStore.shared.purge(modelID: id) }
+        MLXPrefixStore.shared.sweepStaleBuilds()
+    }
+
+    /// The KV engine runs for `info`: its flag is on and the self-test passed for this model, runtime and build.
+    static func kvEngineActive(for info: LocalModelInfo) -> Bool {
+        FeatureFlags.isOn(.kvEngine) && KVSelfTest.isVerified(info)
+    }
 
     /// False on the simulator (MLX builds there but cannot run) and without a Metal GPU.
     var isUsable: Bool { Self.deviceCanRun }
@@ -88,7 +106,9 @@ final class MLXLocalRuntime: LocalModelRuntime, @unchecked Sendable {
         // ChatSession never extends a cached prefix for a masked input: without it, every
         // turn after the opening look would rebuild the cache and re-run the vision tower.
         await loaded.update { $0.processor = UnmaskedProcessor(base: $0.processor) }
-        await Self.compileKernels(loaded)
+        // With the KV engine the prefix snapshot's prefill compiles the kernels when Live opens (warmLivePrefix);
+        // ChatSession keeps its short warm-up decode.
+        if !Self.kvEngineActive(for: info) { await Self.compileKernels(loaded) }
         let milliseconds = Int(Date().timeIntervalSince(started) * 1_000)
         // An unload that came meanwhile wins: the weights are dropped, not kept.
         let kept: Bool = lock.withLock {
@@ -106,6 +126,7 @@ final class MLXLocalRuntime: LocalModelRuntime, @unchecked Sendable {
         MemoryGuard.clearCache()
         Diagnostics.shared.note("local brain: \(info.id) loaded in \(milliseconds) ms")
         PSLog.info("local model \(info.id) loaded in \(milliseconds) ms", category: .models)
+        KVSelfTest.shared.scheduleIfNeeded(runtime: self)
     }
 
     /// One short decode: the first real turn does not pay for compiling the kernels.
@@ -129,7 +150,10 @@ final class MLXLocalRuntime: LocalModelRuntime, @unchecked Sendable {
 
     /// Closes every conversation and drops the container, so nothing keeps the weights alive.
     private func releaseWeights() async {
-        let (open, planner, wasLoaded): ([MLXChatEngine], MLXPlanner?, Bool) = lock.withLock {
+        KVSelfTest.shared.cancel()
+        lock.withLock { prefixWarmup }?.cancel()
+        MLXPrefixStore.shared.dropInMemory(reason: "unload")
+        let (open, planner, wasLoaded): ([AnyObject], MLXPlanner?, Bool) = lock.withLock {
             let open = engines.allObjects
             engines.removeAllObjects()
             let wasLoaded = container != nil
@@ -138,7 +162,10 @@ final class MLXLocalRuntime: LocalModelRuntime, @unchecked Sendable {
             generation += 1
             return (open, self.planner, wasLoaded)
         }
-        for engine in open { await engine.close() }
+        for engine in open {
+            if let engine = engine as? MLXChatEngine { await engine.close() }
+            if let engine = engine as? MLXKVEngine { await engine.close() }
+        }
         await planner?.reset()
         MemoryGuard.clearCache()
         if wasLoaded { Diagnostics.shared.note("local brain: unloaded") }
@@ -151,10 +178,77 @@ final class MLXLocalRuntime: LocalModelRuntime, @unchecked Sendable {
     func makeEngine(_ setup: LocalChatSetup) async throws -> any LocalChatEngine {
         try lock.withLock {
             guard let container, let loadedInfo else { throw LiveBrainError.modelNotReady }
+            if Self.kvEngineActive(for: loadedInfo) {
+                let engine = MLXKVEngine(container: container, info: loadedInfo, setup: setup,
+                                         mediaAppendVerified: KVSelfTest.mediaVerified(loadedInfo), report: Self.report)
+                engines.add(engine)
+                return engine
+            }
             let engine = MLXChatEngine(container: container, info: loadedInfo, setup: setup)
             engines.add(engine)
             return engine
         }
+    }
+
+    /// A KV turn's outcome: a barge-in's restore time goes to the hub's first-token stats (« Latence »).
+    private static let report: @Sendable (KVTurnOutcome) -> Void = { outcome in
+        guard let restore = outcome.restoreMs, outcome.cancelled else { return }
+        PSSignpost.event("llm.restore", "\(restore) ms")
+        Task { @MainActor in LocalBrainHub.shared.noteKVRestore(milliseconds: restore) }
+    }
+
+    // MARK: Live prefix (W3, D22)
+
+    /// Live opened in an editor: registers its prefix setup and builds (or loads) the prefix snapshot off the main
+    /// actor, then schedules the self-test. With the KV engine off, nothing: ChatSession warmed up at load.
+    func warmLivePrefix(_ setup: LocalChatSetup) {
+        guard FeatureFlags.isOn(.kvEngine), let loaded = loadedContainerAndInfo() else { return }
+        let (container, info) = (loaded.container, loaded.info)
+        MLXPrefixStore.shared.register(setup)
+        // Until the self-test passed, Live runs on ChatSession: the snapshot waits for the self-test (when the person
+        // is idle) instead of competing with the first turn's prefill.
+        guard Self.kvEngineActive(for: info) else {
+            KVSelfTest.shared.scheduleIfNeeded(runtime: self)
+            return
+        }
+        let started = lock.withLock { generation }
+        let task = Task.detached(priority: .utility) { [self] in
+            let engine = MLXKVEngine(container: container, info: info, setup: setup, mediaAppendVerified: false)
+            do {
+                try await engine.prepare()
+            } catch {
+                PSLog.error("live prefix warm-up failed: \(error)", category: .models)
+            }
+            await engine.close()
+            // Weights unloaded meanwhile: a snapshot kept after the unload's drop would hold ~160 MB for nothing.
+            if lock.withLock({ generation }) != started {
+                MLXPrefixStore.shared.dropInMemory(reason: "unloaded during warm-up")
+                return
+            }
+            // The app resigned active: no new GPU work; the self-test is scheduled again on return.
+            guard !Task.isCancelled else { return }
+            KVSelfTest.shared.scheduleIfNeeded(runtime: self)
+        }
+        lock.withLock {
+            prefixWarmup?.cancel()
+            prefixWarmup = task
+        }
+    }
+
+    /// A memory warning or Live closed: the RAM snapshot goes, and open engines let go of theirs at their next turn.
+    func releaseLivePrefix(reason: String) {
+        MLXPrefixStore.shared.dropInMemory(reason: reason)
+        let open = lock.withLock { engines.allObjects }
+        for case let engine as MLXKVEngine in open { engine.dropPrefix() }
+    }
+
+    /// The engine kind, the self-test and the prefix store, for Diagnostic Live's « Latence ».
+    var kvDiagnostics: LocalKVDiagnostics {
+        let info = lock.withLock { loadedInfo }
+        let kind: LocalEngineKind = info.map { Self.kvEngineActive(for: $0) ? .kvEngine : .chatSession } ?? .chatSession
+        return LocalKVDiagnostics(engine: kind, selfTest: KVSelfTest.shared.describe(info),
+                                  mediaAppendVerified: info.map(KVSelfTest.mediaVerified) ?? false,
+                                  prefix: MLXPrefixStore.shared.summary())
     }
 
     func makePlanner() -> (any IntentEngine)? {
@@ -189,15 +283,27 @@ final class MLXLocalRuntime: LocalModelRuntime, @unchecked Sendable {
         return LocalModelSpeed(tokensPerSecond: speed.isFinite ? speed : 0, firstTokenMs: firstTokenMs ?? 0, loadMs: lock.withLock { lastLoadMs })
     }
 
+    /// Back in the foreground with the weights loaded: the self-test `stopGenerating` cancelled waits for idle again.
+    func resumeBackgroundWork() {
+        guard lock.withLock({ container != nil }) else { return }
+        KVSelfTest.shared.scheduleIfNeeded(runtime: self)
+    }
+
     func warmPlanner(mode: EditorMode) {
         let planner = lock.withLock { self.planner }
         planner?.warm(mode: mode)
     }
 
-    /// The app is leaving the foreground: no GPU work may run in the background.
+    /// The app is leaving the foreground: no GPU work may run in the background. The KV self-test and the Live prefix
+    /// warm-up stop too (their engines are not in `engines`): they would otherwise keep prefilling into the background.
     func stopGenerating() {
-        let (open, planner) = lock.withLock { (engines.allObjects, self.planner) }
-        for engine in open { engine.stopGenerating() }
+        KVSelfTest.shared.cancel()
+        let (open, planner, warmup) = lock.withLock { (engines.allObjects, self.planner, prefixWarmup) }
+        warmup?.cancel()
+        for engine in open {
+            (engine as? MLXChatEngine)?.stopGenerating()
+            (engine as? MLXKVEngine)?.stopGenerating()
+        }
         planner?.stopGenerating()
     }
 
@@ -225,6 +331,13 @@ final class MLXLocalRuntime: LocalModelRuntime, @unchecked Sendable {
 
     func loadedContainerAndGeneration() -> (ModelContainer, Int)? {
         lock.withLock { container.map { ($0, generation) } }
+    }
+
+    func loadedContainerAndInfo() -> (container: ModelContainer, info: LocalModelInfo)? {
+        lock.withLock {
+            guard let container, let loadedInfo else { return nil }
+            return (container, loadedInfo)
+        }
     }
 }
 #endif

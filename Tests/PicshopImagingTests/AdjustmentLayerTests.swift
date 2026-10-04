@@ -56,10 +56,41 @@ final class AdjustmentLayerTests: XCTestCase {
         let b = pixel(before.bytes, x: 10, y: 10)[0], f = pixel(full.bytes, x: 10, y: 10)[0], h = pixel(half.bytes, x: 10, y: 10)[0]
         XCTAssertGreaterThan(h, b)
         XCTAssertLessThan(h, f)
+        // W3 (D6): the opacity mixes gamma-encoded values, so half is the byte midpoint.
+        XCTAssertEqual(h, (b + f) / 2, accuracy: 2)
         // Darken with a brighter version of the same picture changes nothing.
         document.update(layerID: layer.id) { $0.opacity = 1; $0.blendMode = .darken }
         let darkened = try await fixture.renderer.renderedRGBA(document)
         XCTAssertEqual(pixel(darkened.bytes, x: 10, y: 10)[0], b, accuracy: 1)
+    }
+    /// W3 (D4): inside an isolated group an adjustment layer adjusts the group's children only; inside a pass-through
+    /// group it adjusts everything below, as at the top level.
+    func testAnAdjustmentLayerInsideAGroup() async throws {
+        let fixture = try LayerFixtures.project(width: width, height: height, base: LayerFixtures.solid(0.4, 0.4, 0.4, width: width, height: height))
+        defer { fixture.cleanup() }
+        // A child covering the left half.
+        var child = [UInt8](repeating: 0, count: width * height * 4)
+        let green = LayerFixtures.premultipliedPixel(0.3, 0.5, 0.3, 1)
+        for y in 0..<height { for x in 0..<(width / 2) { for k in 0..<4 { child[(y * width + x) * 4 + k] = green[k] } } }
+        let asset = try fixture.imageAsset(child, width: width, height: height)
+        let before = try await fixture.renderer.renderedRGBA(fixture.document)
+        for passThrough in [false, true] {
+            var document = fixture.document
+            let group = Layer(name: "Groupe", content: .group(LayerFolder(passThrough: passThrough)))
+            var inside = Layer(name: "Enfant", content: .image(asset))
+            inside.parentID = group.id
+            var adjustment = Layer(name: "Lumière", content: .adjustment(Adjustments([.exposure: 0.8])))
+            adjustment.parentID = group.id
+            document.layers += [inside, adjustment, group]
+            let after = try await fixture.renderer.renderedRGBA(document)
+            let right = pixel(after.bytes, x: width - 4, y: height / 2)[0], base = pixel(before.bytes, x: width - 4, y: height / 2)[0]
+            if passThrough {
+                XCTAssertGreaterThan(right, base + 20, "pass-through: the photo below is adjusted too")
+            } else {
+                XCTAssertEqual(right, base, accuracy: 1, "isolated: the photo outside the group is untouched")
+            }
+            XCTAssertGreaterThan(pixel(after.bytes, x: 4, y: height / 2)[1], Int(0.5 * 255) + 20, "the child is adjusted")
+        }
     }
 }
 #endif

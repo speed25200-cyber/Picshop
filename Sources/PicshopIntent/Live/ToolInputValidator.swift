@@ -192,6 +192,18 @@ public struct ToolInputValidator: Sendable {
             arguments["action"] = nil
             return RawIntentStep(action: spec.id.raw, extra: OperationArguments.coerce(arguments, for: spec.id))
         }
+        // W3 (D19): a legacy layer action with a stored layer ref, checked against its catalog params.
+        if case .string(let name)? = object["action"], let spec = LayeredLegacy.spec(for: name, object: object, mode: mode) {
+            var allowed: Set<String> = ["action"]
+            for param in OperationArguments.params(spec, in: mode.opDomain) {
+                allowed.insert(param.key)
+                allowed.formUnion(param.keyAliases)
+            }
+            unknownKeys(object, allowed: allowed, path: path, problems: &problems)
+            var arguments = object
+            arguments["action"] = nil
+            return RawIntentStep(action: name, extra: OperationArguments.coerce(arguments, for: spec.id))
+        }
         // Another editor's catalog operation: one problem (not available here), not one per key.
         if case .string(let name)? = object["action"], IntentAction(rawValue: name) == nil, FeatureFlags.isOn(.catalogOps),
            OperationCatalog.shared.spec(OpID(name)) != nil {
@@ -259,6 +271,12 @@ public struct ToolInputValidator: Sendable {
         var step = original
         if let grounding, !grounding.keepsPoints { step.point = nil }
 
+        // W3: a legacy layer action lowered with its stored ref (LayeredLegacy).
+        if LayeredLegacy.isLowered(step), let spec = OperationCatalog.shared.spec(OpID(step.action)) {
+            let call = OperationArguments.validate(spec.id, step.extra ?? [:], domain: mode.opDomain, path: path, problems: &problems)
+            guard problems.count == before, let call else { return nil }
+            return EditIntent(action: .operation, confidence: 0.85, operation: call)
+        }
         // A catalog operation: validated against its params (types, exact enums, ranges, groups).
         if IntentAction(rawValue: step.action) == nil, let spec = IntentNormalizer.catalogOperation(named: step.action, mode: mode) {
             let call = OperationArguments.validate(spec.id, step.extra ?? [:], domain: mode.opDomain, path: path, problems: &problems)

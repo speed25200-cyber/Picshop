@@ -185,14 +185,32 @@ extension PhotoOperationHandlers {
     /// The area a call names, in the order of §8.3: a ref, a box, a point, then `where` / `what` (AI regions,
     /// people parts, objects through the legacy candidates, parametric regions, depth, the selection), then a
     /// target alone. `context.chosen` (the person's pick after a question) resolves an object without asking again.
-    static func resolveArea(_ area: MaskAreaArgs, call: OperationCall, document: PhotoDocument, context: OperationRunContext) async -> AreaOutcome {
+    ///
+    /// W3 (D8): with `layer` an image layer above the photo, the area is found on that layer's own pixels
+    /// (`aiMask(_:in:layer:)`) and returned in its content space: the model's boxes and points, the scene's objects,
+    /// the selection and the masks of other layers are carried there through its placement. Nil (or the base): the
+    /// photo, in canvas space, as in W2.
+    static func resolveArea(_ area: MaskAreaArgs, call: OperationCall, document: PhotoDocument, context: OperationRunContext,
+                            layer: UUID? = nil) async -> AreaOutcome {
         let services = context.services
         let french = context.french
         let noun = area.target.map(canonicalNoun)
+        let ownLayer = layer.flatMap { $0 == document.baseLayerID ? nil : document.layer(id: $0) }
+        let space = ownLayer.flatMap { pixelSpace($0.id, in: document) }
+        let toLayer = space.flatMap { $0.toCanvas.inverse }
+        if ownLayer != nil, toLayer == nil {
+            return .answer(answer(french ? "Je ne peux pas lire ce calque." : "I can't read that layer.", reason: .nothingToDo))
+        }
+        func intoLayer(_ box: PSRect) -> PSRect { toLayer.map { mappedBox(box, by: $0) } ?? box }
+        func intoLayer(_ point: PSPoint) -> PSPoint {
+            guard let toLayer else { return point }
+            let mapped = toLayer.apply(point)
+            return PSPoint(x: mapped.x.clamped(to: 0...1), y: mapped.y.clamped(to: 0...1))
+        }
         func ai(_ request: AIMaskRequest, region: MaskRegion?, label: String?, source: SelectionStep.Source, phrase: String? = nil,
                 findable: Bool = true) async -> AreaOutcome {
             do {
-                let result = try await services.aiMask(request, in: document)
+                let result = try await services.aiMask(request, in: document, layer: ownLayer?.id)
                 let rasterLabel = result.raster.label ?? label
                 return .area(MaskArea(kind: .raster(result.raster), region: region, label: label ?? rasterLabel, coverage: result.coverage,
                                       isApproximate: result.isApproximate, source: source, isFindable: findable))
@@ -205,6 +223,10 @@ extension PhotoOperationHandlers {
         if let chosen = context.chosen, !chosen.isEmpty {
             let label = noun ?? chosen.first?.label ?? "object"
             let region = area.region ?? regionFor(noun: label) ?? .object
+            if ownLayer != nil {
+                let box = chosen.map(\.boundingBox).reduce(chosen[0].boundingBox) { $0.union($1) }
+                return await ai(.box(intoLayer(box), label: label), region: region, label: region == .object ? label : nil, source: source(of: region), phrase: area.target)
+            }
             let target = ObjectTarget(label: legacyLabel(region) ?? label, originalPhrase: area.target, attributes: area.attributes)
             return await ai(.candidates(chosen, target: target), region: region, label: region == .object ? label : nil, source: source(of: region),
                             phrase: area.target)
@@ -213,17 +235,36 @@ extension PhotoOperationHandlers {
         if let ref = area.ref, let letter = ref.first, let number = Int(ref.dropFirst()), number >= 1 {
             switch letter {
             case "a":
-                let masks = document.localAdjustments
-                guard number <= masks.count else { return .answer(unknownMask(ref, document: document, french: french)) }
-                do {
-                    let result = try await services.rasterize(masks[number - 1].stack, in: document)
-                    return .area(MaskArea(kind: .raster(result.raster), region: nil, label: ref, coverage: result.coverage, source: .mask, isFindable: false))
-                } catch {
-                    return .answer(failure(error, area: (nil, nil, ref), call: call, document: document, context: context))
+                // W3 (D19): a<n> numbers every image layer's masks, the base first; the ref carries its owner.
+                guard let owned = LiveMaskLines.mask(ref: ref, in: document),
+                      let mask = document.localAdjustment(id: owned.adjustmentID, on: owned.layerID) else {
+                    return .answer(unknownMask(ref, document: document, french: french))
                 }
+                if ownLayer == nil, owned.layerID == document.baseLayerID {
+                    do {
+                        let result = try await services.rasterize(mask.stack, in: document)
+                        return .area(MaskArea(kind: .raster(result.raster), region: nil, label: ref, coverage: result.coverage, source: .mask, isFindable: false))
+                    } catch {
+                        return .answer(failure(error, area: (nil, nil, ref), call: call, document: document, context: context))
+                    }
+                }
+                // Another layer's space: a one-part mask is carried over (D8); several parts are rasterised on the photo only.
+                guard mask.stack.components.count == 1, let from = pixelSpace(owned.layerID, in: document),
+                      let carried = remap(mask.stack, from: from, to: space ?? .canvas(document)), let component = carried.components.first else {
+                    return .answer(answer(french ? "Le masque \(ref) a plusieurs parties : nomme la zone directement." : "Mask \(ref) has several parts: name the area directly.",
+                                          reason: .nothingToDo))
+                }
+                return .area(MaskArea(kind: component.kind, isInverted: component.isInverted != mask.stack.isInverted, region: mask.region, label: ref,
+                                      coverage: nil, source: .mask, isFindable: false))
             case "o":
                 let object = context.intent.scene?.objects.first { $0.id == ref }
                 let label = object?.label ?? noun ?? "object"
+                if ownLayer != nil {
+                    guard let box = object?.box else {
+                        return .answer(answer(french ? "\(ref) n'est pas sur la photo." : "\(ref) is not on the picture.", reason: .unknownRef))
+                    }
+                    return await ai(.box(intoLayer(box), label: label), region: .object, label: label, source: .object, phrase: object?.label, findable: false)
+                }
                 return await ai(.sceneObject(number), region: .object, label: label, source: .object, phrase: object?.label, findable: false)
             default:
                 return .answer(answer(french ? "\(ref) n'est pas un masque ni un objet de la photo." : "\(ref) is not a mask or an object of the photo.",
@@ -233,15 +274,21 @@ extension PhotoOperationHandlers {
         // 3. A box (the model's 0–1000 box): SAM on it.
         if let box = area.box {
             let region = area.region.flatMap { $0.isAI ? $0 : nil } ?? .object
-            return await ai(.box(box, label: noun), region: region, label: noun, source: source(of: region), phrase: area.target, findable: noun != nil)
+            return await ai(.box(intoLayer(box), label: noun), region: region, label: noun, source: source(of: region), phrase: area.target, findable: noun != nil)
         }
         // 4. A point: a colour sampled there, the wand there, else SAM on it (never SAM for colour or wand).
         if let point = area.point {
             if area.region == .color || (area.isWand == false && area.region == nil && area.color != nil) {
                 return await sampledColor(at: point, area: area, call: call, document: document, context: context)
             }
-            if area.isWand { return await wand(at: point, area: area, call: call, document: document, context: context) }
-            return await ai(.points([MaskPrompt(point)], label: noun), region: .object, label: noun, source: .object, phrase: area.target,
+            if area.isWand {
+                if ownLayer != nil {
+                    return .answer(answer(french ? "La baguette magique marche sur la photo de base : sélectionne-la d'abord." : "The magic wand works on the base photo: select it first.",
+                                          reason: .nothingToDo))
+                }
+                return await wand(at: point, area: area, call: call, document: document, context: context)
+            }
+            return await ai(.points([MaskPrompt(intoLayer(point))], label: noun), region: .object, label: noun, source: .object, phrase: area.target,
                             findable: noun != nil)
         }
         if area.isAll {
@@ -267,6 +314,10 @@ extension PhotoOperationHandlers {
         case .water: return await ai(.water, region: .water, label: nil, source: .region)
         case .person:
             // « la personne de droite » with no number: the candidates ranked by where they are, as an object.
+            if ownLayer != nil, area.index == nil, area.spatialHint != nil {
+                let target = ObjectTarget(label: "person", originalPhrase: area.target, spatialHint: area.spatialHint, attributes: area.attributes)
+                return await ai(.object(target), region: .object, label: "person", source: .object, phrase: area.target)
+            }
             if area.index == nil, let hint = area.spatialHint {
                 let target = ObjectTarget(label: "person", originalPhrase: area.target, spatialHint: hint, attributes: area.attributes)
                 return await legacyArea(target, region: .object, call: call, document: document, context: context)
@@ -277,6 +328,7 @@ extension PhotoOperationHandlers {
             if let index = area.index {
                 return await ai(.personPart(region, person: index), region: region, label: "\(region.rawValue):\(index)", source: .facePart)
             }
+            if ownLayer != nil { return await ai(.personPart(region, person: nil), region: region, label: nil, source: .facePart) }
             let target = ObjectTarget(label: legacyLabel(region) ?? region.rawValue, originalPhrase: area.target, attributes: area.attributes)
             return await legacyArea(target, region: region, call: call, document: document, context: context)
         case .hair, .bodySkin:
@@ -287,6 +339,8 @@ extension PhotoOperationHandlers {
                                       effects: [.message("selectRegion")]))
             }
             let target = ObjectTarget(label: noun, originalPhrase: area.target, spatialHint: area.spatialHint, attributes: area.attributes)
+            // On a layer's own pixels the photo's candidates do not apply: Vision grounding on the layer.
+            if ownLayer != nil { return await ai(.object(target), region: .object, label: noun, source: .object, phrase: area.target) }
             return await legacyArea(target, region: .object, call: call, document: document, context: context)
         case .color:
             guard let color = area.color else {
@@ -295,6 +349,10 @@ extension PhotoOperationHandlers {
             }
             return colorArea(color, area: area, document: document, context: context)
         case .near, .far:
+            if ownLayer != nil {
+                return .answer(answer(french ? "La profondeur se mesure sur la photo de base, pas sur ce calque." : "Depth is measured on the base photo, not on this layer.",
+                                      reason: .nothingToDo))
+            }
             do {
                 let depth = try await services.depthMap(in: document)
                 let range = region == .near ? nearRange : farRange
@@ -308,9 +366,16 @@ extension PhotoOperationHandlers {
                 return .answer(answer(french ? "Il n'y a pas de sélection : sélectionne d'abord quelque chose." : "There's no selection: select something first.",
                                       reason: .needsSelection))
             }
+            // The selection lives in the output space of the layer it was made on (D8): carried into this one's.
+            let here = space ?? .canvas(document)
+            if selection.layerID != (ownLayer?.id ?? document.baseLayerID),
+               let carried = selectionStack(selection, in: document, to: here)?.components.first {
+                return .area(MaskArea(kind: carried.kind, region: .selection, label: nil, coverage: selection.coverage, source: .mask, isFindable: false))
+            }
             return .area(MaskArea(kind: .raster(selection.raster), region: .selection, label: nil, coverage: selection.coverage, source: .mask, isFindable: false))
         case .top, .bottom, .left, .right, .center, .edges, .shadows, .midtones, .highlights, .skinTones:
-            guard let component = MaskStack.defaultComponent(for: region, aspect: document.localAdjustmentsAspect) else {
+            let aspect = space?.aspect ?? document.baseLayerID.map { document.localAdjustmentsAspect(on: $0) } ?? document.localAdjustmentsAspect
+            guard let component = MaskStack.defaultComponent(for: region, aspect: aspect) else {
                 return .answer(answer(french ? "Je ne sais pas faire ce masque." : "I can't make that mask.", reason: .unsupported))
             }
             let source: SelectionStep.Source
@@ -547,9 +612,18 @@ extension PhotoOperationHandlers {
 
     // MARK: Refs
 
+    /// A canvas box through a map: the bounding box of its mapped corners, kept in the unit square.
+    static func mappedBox(_ box: PSRect, by map: PSHomography) -> PSRect {
+        let corners = [PSPoint(x: box.minX, y: box.minY), PSPoint(x: box.maxX, y: box.minY), PSPoint(x: box.maxX, y: box.maxY), PSPoint(x: box.minX, y: box.maxY)]
+            .map(map.apply)
+        let minX = corners.map(\.x).min()!.clamped(to: 0...1), maxX = corners.map(\.x).max()!.clamped(to: 0...1)
+        let minY = corners.map(\.y).min()!.clamped(to: 0...1), maxY = corners.map(\.y).max()!.clamped(to: 0...1)
+        return PSRect(x: minX, y: minY, width: max(0, maxX - minX), height: max(0, maxY - minY))
+    }
+
     /// "a3" that is not there: the masks that are, so the model corrects itself in one round.
     static func unknownMask(_ ref: String, document: PhotoDocument, french: Bool) -> ExecutionResult {
-        let names = MaskAccessibility.displayNames(for: document.localAdjustments, language: french ? .fr : .en)
+        let names = MaskAccessibility.displayNames(for: document.allLocalAdjustments.map(\.adjustment), language: french ? .fr : .en)
         let list = names.enumerated().map { "a\($0.offset + 1) \($0.element)" }.joined(separator: ", ")
         if names.isEmpty {
             return answer(french ? "Il n'y a pas encore de masque." : "There's no mask yet.", reason: .unknownRef)
@@ -557,30 +631,52 @@ extension PhotoOperationHandlers {
         return answer(french ? "Il n'y a pas de masque \(ref). Masques : \(list)." : "There's no mask \(ref). Masks: \(list).", reason: .unknownRef)
     }
 
-    /// The local adjustment a call edits: its `ref`, else the one the last step made or changed, else the newest.
-    static func targetMask(_ call: OperationCall, document: PhotoDocument, context: OperationRunContext) -> Answered<LocalAdjustment> {
-        let masks = document.localAdjustments
-        guard !masks.isEmpty else {
+    /// The image layer a mask call creates its mask on: its `layer` (an image layer; i0 the photo), else the active image
+    /// layer (`localAdjustmentsLayerID`, W3).
+    static func maskOwner(_ call: OperationCall, _ document: PhotoDocument, _ context: OperationRunContext) -> Answered<UUID> {
+        if let raw = call.args["layer"]?.string {
+            guard let layer = LiveLayerLines.layer(ref: raw, in: document, scene: context.intent.scene) else {
+                return .answer(unknownLayer(raw, document, context, kinds: [.imageLayer]))
+            }
+            guard layer.isImage else { return .answer(answer(notAnImage(layer, document, context), reason: .nothingToDo)) }
+            return .value(layer.id)
+        }
+        guard let id = document.localAdjustmentsLayerID else {
+            return .answer(answer(context.french ? "Il faut une photo." : "This needs a photo.", reason: .nothingToDo))
+        }
+        return .value(id)
+    }
+
+    /// The local adjustment a call edits, with the image layer that owns it (D19): its `ref` (a<n> numbers every
+    /// layer's masks), else the one the last step made or changed, else the newest on the call's layer (or the active
+    /// one), else the newest anywhere.
+    static func targetMask(_ call: OperationCall, document: PhotoDocument, context: OperationRunContext) -> Answered<(adjustment: LocalAdjustment, owner: UUID)> {
+        let all = document.allLocalAdjustments
+        guard let newest = all.last else {
             return .answer(answer(context.french ? "Il n'y a pas encore de masque. Dis par exemple « assombris le bas »."
                                                   : "There's no mask yet. Say for example “darken the bottom”.", reason: .nothingToDo))
         }
-        if let ref = call.args["ref"]?.string?.lowercased() {
-            guard ref.first == "a", let number = Int(ref.dropFirst()), number >= 1, number <= masks.count else {
-                return .answer(unknownMask(ref, document: document, french: context.french))
-            }
-            return .value(masks[number - 1])
+        func owned(_ ref: String) -> (adjustment: LocalAdjustment, owner: UUID)? {
+            guard let found = LiveMaskLines.mask(ref: ref, in: document), let mask = document.localAdjustment(id: found.adjustmentID, on: found.layerID) else { return nil }
+            return (mask, found.layerID)
         }
+        if let ref = call.args["ref"]?.string?.lowercased() {
+            guard ref.first == "a", let found = owned(ref) else { return .answer(unknownMask(ref, document: document, french: context.french)) }
+            return .value(found)
+        }
+        var owner: UUID?
+        if case .value(let id) = maskOwner(call, document, context) { owner = id }
+        let masks = owner.map { document.localAdjustments(on: $0) } ?? []
         if let last = context.intent.lastIntent, last.action == .operation, let previous = last.operation,
            ["maskAdjust", "maskEdit"].contains(previous.id.raw) {
-            if let ref = previous.args["ref"]?.string?.lowercased(), ref.first == "a", let number = Int(ref.dropFirst()), number >= 1, number <= masks.count {
-                return .value(masks[number - 1])
-            }
-            if let raw = previous.args["where"]?.string, let region = MaskRegion(rawValue: raw),
+            if let ref = previous.args["ref"]?.string?.lowercased(), ref.first == "a", let found = owned(ref) { return .value(found) }
+            if let raw = previous.args["where"]?.string, let region = MaskRegion(rawValue: raw), let owner,
                let match = masks.last(where: { $0.region == region }) {
-                return .value(match)
+                return .value((match, owner))
             }
         }
-        return .value(masks[masks.count - 1])
+        if let owner, let mask = masks.last { return .value((mask, owner)) }
+        return .value((newest.adjustment, newest.layerID))
     }
 
     // MARK: maskAdjust
@@ -590,6 +686,12 @@ extension PhotoOperationHandlers {
     static func maskAdjust(_ call: OperationCall, _ document: PhotoDocument, _ context: OperationRunContext) async -> (PhotoDocument, ExecutionResult) {
         guard FeatureFlags.isOn(.masks) else { return notEnabled(document, context) }
         guard document.localAdjustmentsLayerID != nil else { return unavailable(context.french ? "Il faut une photo." : "This needs a photo.", document) }
+        // W3 (D19): the layer the mask is made on (its `layer`, else the active image layer); a<n> carries its owner.
+        var owner: UUID
+        switch maskOwner(call, document, context) {
+        case .value(let id): owner = id
+        case .answer(let result): return (document, result)
+        }
         if call.args["parameter"]?.string == AdjustmentParameter.vignette.rawValue {
             return unavailable(context.french ? "Le vignettage se règle sur toute la photo, pas dans un masque." : "Vignette applies to the whole photo, not inside a mask.",
                                document, reason: .unsupported)
@@ -605,16 +707,16 @@ extension PhotoOperationHandlers {
             || (previous?.id.raw == "selectionApply" && previous?.args["use"]?.string == "adjust")
         if let ref = args.ref, ref.first == "a" {
             switch targetMask(call, document: document, context: context) {
-            case .value(let found): adjustment = found
+            case .value(let found): (adjustment, owner) = (found.adjustment, found.owner)
             case .answer(let result): return (document, result)
             }
-        } else if !args.namesSomething, !hasShape(call.args), followsAMask, !document.localAdjustments.isEmpty {
+        } else if !args.namesSomething, !hasShape(call.args), followsAMask, !document.allLocalAdjustments.isEmpty {
             switch targetMask(call, document: document, context: context) {
-            case .value(let found): adjustment = found
+            case .value(let found): (adjustment, owner) = (found.adjustment, found.owner)
             case .answer(let result): return (document, result)
             }
         } else {
-            let outcome = await resolveArea(args, call: call, document: document, context: context)
+            let outcome = await resolveArea(args, call: call, document: document, context: context, layer: owner)
             guard case .area(var area) = outcome else {
                 if case .answer(let result) = outcome { return (document, result) }
                 return (document, .failed(context.french ? "Je ne trouve pas cette zone." : "I can't find that area."))
@@ -625,12 +727,12 @@ extension PhotoOperationHandlers {
             }
             approximate = area.isApproximate
             let existing = area.isFindable && area.region != nil
-                ? document.localAdjustments.last { $0.matches(region: area.region ?? .object, label: area.label) && sameKind($0, area) }
+                ? document.localAdjustments(on: owner).last { $0.matches(region: area.region ?? .object, label: area.label) && sameKind($0, area) }
                 : nil
             if let existing {
                 adjustment = existing
             } else {
-                guard document.canAddLocalAdjustment else {
+                guard document.localAdjustments(on: owner).count < LocalAdjustment.maxPerLayer else {
                     return (document, answer(context.french ? "Il y a déjà 16 masques : supprime-en un." : "There are already 16 masks: delete one.",
                                              reason: .tooMany))
                 }
@@ -639,19 +741,22 @@ extension PhotoOperationHandlers {
                 created = true
             }
         }
+        guard LayerLockPolicy.allows(.content, on: owner, in: document) else {
+            return (document, refusal(.locked, layer: document.layer(id: owner), document: document, context: context))
+        }
         var updated = document
-        if created { updated.setLocalAdjustment(adjustment, label: maskLabel(adjustment)) }
+        if created { updated.setLocalAdjustment(adjustment, label: maskLabel(adjustment), on: owner) }
         let edits: [LocalAdjustmentEdit]
         switch effectEdits(call, on: adjustment, context: context) {
         case .value(let list): edits = list
         case .answer(let result): return (document, result)
         }
         var changed = created
-        for edit in edits where updated.applyLocalEdit(edit, to: adjustment.id) { changed = true }
+        for edit in edits where updated.applyLocalEdit(edit, to: adjustment.id, on: owner) { changed = true }
         guard changed else {
             return (document, info(context.french ? "Ce masque est déjà réglé ainsi." : "That mask is already set that way."))
         }
-        let final = updated.localAdjustment(id: adjustment.id) ?? adjustment
+        let final = updated.localAdjustment(id: adjustment.id, on: owner) ?? adjustment
         var result = ExecutionResult.applied(maskLabel(final))
         if approximate {
             let caption = context.french ? "\(spokenName(final.region, label: final.label, french: true).capitalizedFirst) approximatif : affine-le au pinceau."
@@ -753,12 +858,13 @@ extension PhotoOperationHandlers {
     static func maskEdit(_ call: OperationCall, _ document: PhotoDocument, _ context: OperationRunContext) async -> (PhotoDocument, ExecutionResult) {
         guard FeatureFlags.isOn(.masks) else { return notEnabled(document, context) }
         let adjustment: LocalAdjustment
+        let owner: UUID
         switch targetMask(call, document: document, context: context) {
-        case .value(let found): adjustment = found
+        case .value(let found): (adjustment, owner) = (found.adjustment, found.owner)
         case .answer(let result): return (document, result)
         }
         let args = call.args
-        if args["show"]?.bool == true, args.keys.allSatisfy({ ["show", "ref"].contains($0) }) {
+        if args["show"]?.bool == true, args.keys.allSatisfy({ ["show", "ref", "layer"].contains($0) }) {
             let name = MaskAccessibility.displayName(for: adjustment, language: context.french ? .fr : .en)
             return (document, info(context.french ? "Voici le masque « \(name) »." : "Here is the “\(name)” mask.", effects: [.message("showMask:\(adjustment.id.uuidString)")]))
         }
@@ -770,7 +876,7 @@ extension PhotoOperationHandlers {
                 return (document, answer(context.french ? "Quelle zone ajouter ou retirer ? Nomme-la ou touche-la." : "Which area? Name it or tap it.",
                                          reason: .needsSelection, effects: [.message("selectRegion")]))
             }
-            let outcome = await resolveArea(area, call: call, document: document, context: context)
+            let outcome = await resolveArea(area, call: call, document: document, context: context, layer: owner)
             guard case .area(var resolved) = outcome else {
                 if case .answer(let result) = outcome { return (document, result) }
                 return (document, .failed(context.french ? "Je ne trouve pas cette zone." : "I can't find that area."))
@@ -873,14 +979,14 @@ extension PhotoOperationHandlers {
             edits.append(.setGrade(ColorGrade(shadows: wheel, midtones: wheel, highlights: wheel)))
         }
         if args["refresh"]?.bool == true {
-            let refreshed = await refreshedRasters(adjustment, document: document, context: context)
+            let refreshed = await refreshedRasters(adjustment, owner: owner, document: document, context: context)
             switch refreshed {
             case .value(let list): edits += list
             case .answer(let result): return (document, result)
             }
         }
         if args["duplicate"]?.bool == true {
-            guard document.canAddLocalAdjustment else {
+            guard document.localAdjustments(on: owner).count < LocalAdjustment.maxPerLayer else {
                 return (document, answer(context.french ? "Il y a déjà 16 masques : supprime-en un." : "There are already 16 masks: delete one.", reason: .tooMany))
             }
             edits.append(.duplicate)
@@ -891,13 +997,16 @@ extension PhotoOperationHandlers {
             }
             return (document, answer(context.french ? "Que changer dans le masque ?" : "What should change in the mask?", reason: .nothingToDo))
         }
+        guard LayerLockPolicy.allows(.content, on: owner, in: document) else {
+            return (document, refusal(.locked, layer: document.layer(id: owner), document: document, context: context))
+        }
         var updated = document
         var changed = false
-        for edit in edits where updated.applyLocalEdit(edit, to: adjustment.id) { changed = true }
+        for edit in edits where updated.applyLocalEdit(edit, to: adjustment.id, on: owner) { changed = true }
         guard changed else {
             return (document, info(context.french ? "Le masque est déjà ainsi." : "The mask is already like that."))
         }
-        var result = ExecutionResult.applied(maskLabel(updated.localAdjustment(id: adjustment.id) ?? adjustment))
+        var result = ExecutionResult.applied(maskLabel(updated.localAdjustment(id: adjustment.id, on: owner) ?? adjustment))
         if args["show"]?.bool == true { result.effects.append(.message("showMask:\(adjustment.id.uuidString)")) }
         return (updated, result)
     }
@@ -922,13 +1031,14 @@ extension PhotoOperationHandlers {
     }
 
     /// « Mettre à jour »: every AI raster made on another base state, made again on this one.
-    static func refreshedRasters(_ adjustment: LocalAdjustment, document: PhotoDocument, context: OperationRunContext) async -> Answered<[LocalAdjustmentEdit]> {
+    static func refreshedRasters(_ adjustment: LocalAdjustment, owner: UUID? = nil, document: PhotoDocument, context: OperationRunContext) async -> Answered<[LocalAdjustmentEdit]> {
         var edits: [LocalAdjustmentEdit] = []
-        let key = document.baseStateKey
+        // W3: a layer's masks are made on its own pixels; they go stale with that layer's state, not the photo's.
+        let key = document.maskStateKey(on: owner)
         for component in adjustment.stack.components {
             guard case .raster(let raster) = component.kind, let stale = raster.stateKey, stale != key, let request = refreshRequest(raster) else { continue }
             do {
-                let result = try await context.services.aiMask(request, in: document)
+                let result = try await context.services.aiMask(request, in: document, layer: owner)
                 edits.append(.setComponentKind(component.id, .raster(result.raster)))
             } catch {
                 let region = adjustment.region
@@ -964,17 +1074,35 @@ extension PhotoOperationHandlers {
         guard FeatureFlags.isOn(.masks) else { return notEnabled(document, context) }
         var updated = document
         if call.args["all"]?.bool == true {
-            let masks = document.localAdjustments
-            guard !masks.isEmpty else {
+            // Every mask of the call's layer (or the active one); with no layer named, every layer's.
+            let owners: [UUID]
+            if call.args["layer"] != nil {
+                switch maskOwner(call, document, context) {
+                case .value(let id): owners = [id]
+                case .answer(let result): return (document, result)
+                }
+            } else {
+                owners = document.imageLayers.map(\.id)
+            }
+            var removed = 0
+            var locked: Layer?
+            for owner in owners {
+                for mask in document.localAdjustments(on: owner) {
+                    if updated.removeLocalAdjustment(id: mask.id, on: owner) { removed += 1 } else { locked = document.layer(id: owner) }
+                }
+            }
+            guard removed > 0 else {
+                if let locked { return (document, refusal(.locked, layer: locked, document: document, context: context)) }
                 return (document, answer(context.french ? "Il n'y a aucun masque." : "There's no mask.", reason: .nothingToDo))
             }
-            for mask in masks { updated.removeLocalAdjustment(id: mask.id) }
             return (updated, .applied("Delete Masks"))
         }
         switch targetMask(call, document: document, context: context) {
-        case .value(let mask):
-            updated.removeLocalAdjustment(id: mask.id)
-            return (updated, .applied("Delete " + maskLabel(mask)))
+        case .value(let found):
+            guard updated.removeLocalAdjustment(id: found.adjustment.id, on: found.owner) else {
+                return (document, refusal(.locked, layer: document.layer(id: found.owner), document: document, context: context))
+            }
+            return (updated, .applied("Delete " + maskLabel(found.adjustment)))
         case .answer(let result):
             return (document, result)
         }

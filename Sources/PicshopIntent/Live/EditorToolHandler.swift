@@ -21,6 +21,8 @@ import PicshopCore
     var verifyTimeout: Double = 2.0
 
     public var language: NormalizedUtterance.Language = .french
+    /// D19: the photo before the run that is finishing in the background (re-grounding its later steps).
+    private var runAnchor: PhotoDocument?
 
     /// The last actions run through this handler, oldest first: apply_edits calls (.model), grammar
     /// plans (.grammar) and tapped chips (.idea). A ring of `recentActionsCapacity`.
@@ -104,8 +106,21 @@ import PicshopCore
         /// D12 on every lane: a step identical to one that did not apply in this run is not run again.
         var missed: [LocalModelLiveBrain.StepSignature: LiveStepResult] = [:]
         var index = 0
+        // D19: the photo before the run; a step after one that changed its geometry aims where its target went.
+        let anchor = host.liveGeometryAnchor
         while index < intents.count {
-            let intent = intents[index]
+            var grounded = intents[index]
+            if let anchor, let now = host.liveGeometryAnchor, let map = RefRegrounder.geometryMap(from: anchor, to: now) {
+                guard let moved = RefRegrounder.regrounded(grounded, by: map) else {
+                    var lost = LiveStepResult(index: index, action: grounded.action, status: .failed, message: RefRegrounder.leftTheCanvas(french: language == .french))
+                    lost.reason = .badRegion
+                    results.append(lost)
+                    results += skipped(intents, after: index)
+                    break
+                }
+                grounded = moved
+            }
+            let intent = grounded
             if let earlier = missed[LocalModelLiveBrain.StepSignature(intent)] {
                 results.append(LiveStepResult(index: index, action: intent.action, status: .blocked, message: earlier.message, reason: earlier.reason, hint: earlier.hint))
                 index += 1
@@ -122,6 +137,7 @@ import PicshopCore
                 results.append(LiveStepResult(index: index, action: intent.action, status: .running))
                 results += intents.indices.dropFirst(index + 1).map { LiveStepResult(index: $0, action: intents[$0].action, status: .queued) }
                 let done = Array(results.prefix(index))
+                runAnchor = anchor
                 finishInBackground(step, index: index, intents: intents, done: done)
                 break
             }
@@ -220,11 +236,22 @@ import PicshopCore
                     results += self.skipped(intents, after: next)
                     break
                 }
-                let run = await host.liveRun(intents[next])
-                var result = LiveStepResult(index: next, intent: intents[next], run: run)
+                var intent = intents[next]
+                if let anchor = self.runAnchor, let now = host.liveGeometryAnchor, let map = RefRegrounder.geometryMap(from: anchor, to: now) {
+                    guard let moved = RefRegrounder.regrounded(intent, by: map) else {
+                        var lost = LiveStepResult(index: next, action: intent.action, status: .failed, message: RefRegrounder.leftTheCanvas(french: self.language == .french))
+                        lost.reason = .badRegion
+                        results.append(lost)
+                        results += self.skipped(intents, after: next)
+                        break
+                    }
+                    intent = moved
+                }
+                let run = await host.liveRun(intent)
+                var result = LiveStepResult(index: next, intent: intent, run: run)
                 result.createdRef = self.createdRef(of: result, run: run)
                 if result.status == .applied, let request = run.verificationRequest { checks.append((results.count, request)) }
-                Self.attachPostconditions(&result, intent: intents[next], run: run)
+                Self.attachPostconditions(&result, intent: intent, run: run)
                 results.append(result)
                 if result.stopsTheRun {
                     results += self.skipped(intents, after: next)

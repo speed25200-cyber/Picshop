@@ -94,6 +94,10 @@ final class CanvasDrag {
         case box
         /// A Quick Selection stroke.
         case quick
+        /// W3: a transform handle, or a pick-drag moving the selected layer (Calques).
+        case transform
+        /// W3: the layer-mask brush (Calques › masque › Peindre).
+        case layerMaskBrush
         /// The zoomed picture pans.
         case pan
         /// Nothing (a dropped stroke, or no role).
@@ -107,6 +111,13 @@ final class CanvasDrag {
     var placement = MaskHandleGeometry.Placement(frame: PSRect(x: 0, y: 0, width: 1, height: 1))
     /// A two-finger pan is under way: the one-finger drag stays out of it.
     var twoFingers = false
+    /// W3: where the drag ran, for the detail tile requested when it settles.
+    var container: CGSize = .zero
+    var layout: CanvasLayout?
+    /// W3: a pinch or a twist is turning the transformed layer.
+    var pinchesLayer = false
+    /// W3: the pending detail request (after a settle).
+    var detailTask: Task<Void, Never>?
 }
 
 /// The brush or lasso stroke under the finger. The path grows point by point
@@ -270,6 +281,8 @@ struct PhotoCanvasView: View {
     @State private var textDragStart: PSPoint?
     @State private var textRotationStart: Double = 0
     @State private var textSizeStart: Double = 0
+    /// W3: a pinch and a twist on the transformed layer (transform mode), combined into one drag.
+    @State private var layerPinch: (scale: Double, degrees: Double) = (1, 0)
     /// A tiny, blurred, darkened copy of the photo for the ambient fill.
     @State private var ambient: UIImage?
     /// The area being worked on, while work runs (from the selection), blurred once.
@@ -314,7 +327,15 @@ struct PhotoCanvasView: View {
                 .gesture(canvasGesture(container: container, layout: target), including: session.isCropping ? .subviews : .all)
                 .simultaneousGesture(compareGesture)
                 .simultaneousGesture(textRotationGesture, including: session.manipulatesOverlays ? .all : .none)
+                .simultaneousGesture(layerRotationGesture(container: container, layout: target),
+                                     including: session.layerState.mode == .transform ? .all : .none)
                 .gesture(twoFingerPan)
+                .gesture(LayerPickPress(isEnabled: session.activeTool == .layers && session.layerState.mode == .select) { location in
+                    let frame = currentFrame(container: container, layout: target)
+                    guard let point = normalized(location, in: frame) else { return }
+                    session.pickMenu(at: point)
+                })
+                .onChange(of: session.revision) { _, _ in scheduleDetail(container: container, layout: target) }
                 .onChange(of: session.zoomRequest) { _, request in
                     guard let request else { return }
                     applyZoomRequest(request, container: container, layout: target)
@@ -347,7 +368,7 @@ struct PhotoCanvasView: View {
     private var comparesOnHold: Bool {
         guard !session.isCropping else { return false }
         switch session.activeTool {
-        case .erase, .precise, .text, .shapes, .masks, .select: return false
+        case .erase, .precise, .text, .shapes, .masks, .select, .layers: return false
         default: return true
         }
     }
@@ -491,14 +512,20 @@ struct PhotoCanvasView: View {
         session.activeTool == .precise && session.preciseMode == .lasso
     }
 
-    /// Masques and Sélection own the one-finger drag (handles, brush, frame, strokes, lasso): two fingers pan.
+    /// Masques and Sélection own the one-finger drag (handles, brush, frame, strokes, lasso): two fingers pan. So does
+    /// Calques (W3: handles, the layer-mask brush, pick-drags).
     private var ownsOneFingerDrag: Bool {
-        session.activeTool == .masks || (session.activeTool == .select && session.aiSelectionEnabled)
+        session.activeTool == .masks || (session.activeTool == .select && session.aiSelectionEnabled) || session.activeTool == .layers
     }
 
     private func canvasGesture(container: CGSize, layout: CanvasLayout) -> some Gesture {
         let magnify = MagnifyGesture()
             .onChanged { value in
+                if session.layerState.mode == .transform {
+                    // W3: in transform mode a pinch scales the layer about its centre (a twist turns it).
+                    pinchLayer(scale: Double(value.magnification), degrees: nil, container: container, layout: layout)
+                    return
+                }
                 if session.manipulatesOverlays, let id = session.manipulatedTextLayerID ?? session.selectedOverlayLayerID {
                     if session.manipulatedTextLayerID == nil {
                         session.beginTextInteraction(id)
@@ -511,10 +538,15 @@ struct PhotoCanvasView: View {
                 } else {
                     // The ants pause while the picture zooms (their outline changes size every frame).
                     setInteracting(true)
+                    session.clearDetail()
                     viewport.zoom = min(CanvasViewport.maximumZoom, max(0.5, viewport.steadyZoom * value.magnification))
                 }
             }
             .onEnded { _ in
+                if session.layerState.mode == .transform {
+                    endLayerPinch()
+                    return
+                }
                 if session.manipulatedTextLayerID != nil {
                     session.endTextInteraction()
                 } else if viewport.zoom < 1 {
@@ -523,6 +555,7 @@ struct PhotoCanvasView: View {
                 } else {
                     setInteracting(false)
                     viewport.steadyZoom = viewport.zoom
+                    scheduleDetail(container: container, layout: layout)
                 }
             }
         let drag = DragGesture(minimumDistance: 2)
@@ -533,6 +566,8 @@ struct PhotoCanvasView: View {
                 if dragState.role != nil, value.startLocation != dragState.start { endDrag() }
                 if dragState.role == nil {
                     dragState.start = value.startLocation
+                    dragState.container = container
+                    dragState.layout = layout
                     dragState.role = role(for: value, frame: frame)
                 }
                 continueDrag(value, frame: frame)
@@ -573,7 +608,8 @@ struct PhotoCanvasView: View {
         let start = normalized(value.startLocation, in: frame)
         switch session.activeTool {
         case .masks?:
-            let placement = MaskHandleGeometry.Placement(frame: PSRect(frame))
+            // W3: on another image layer the handles sit on its placed frame.
+            let placement = MaskHandleGeometry.Placement(frame: PSRect(session.maskPlacementFrame(in: frame)))
             if session.beginHandleDrag(at: PSPoint(x: Double(value.startLocation.x), y: Double(value.startLocation.y)), placement: placement) {
                 dragState.placement = placement
                 return .maskHandle
@@ -591,6 +627,8 @@ struct PhotoCanvasView: View {
                 return .box
             }
             return pans
+        case .layers?:
+            return layerRole(for: value, start: start, frame: frame) ?? pans
         case .select? where session.aiSelectionEnabled:
             switch session.selectionState.mode {
             case .object where start != nil:
@@ -654,6 +692,15 @@ struct PhotoCanvasView: View {
             // The brush may run off the picture: its centre stays on the edge.
             let clamped = clampedNormalized(value.location, in: frame)
             if stroke.append(clamped, at: value.location) { session.continueMaskStroke(to: clamped) }
+        case .transform?:
+            let width = max(1, frame.width), height = max(1, frame.height)
+            session.transformDrag(translation: PSPoint(x: Double(value.translation.width / width), y: Double(value.translation.height / height)),
+                                  location: PSPoint(x: Double((value.location.x - frame.minX) / width), y: Double((value.location.y - frame.minY) / height)),
+                                  anchorAtCenter: false)
+        case .layerMaskBrush?:
+            stroke.cursor = value.location
+            let clamped = clampedNormalized(value.location, in: frame)
+            if stroke.append(clamped, at: value.location) { session.continueLayerMaskStroke(to: clamped) }
         case .box?:
             let a = clampedNormalized(value.startLocation, in: frame), b = clampedNormalized(value.location, in: frame)
             session.selectionState.boxDrag = PSRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
@@ -664,6 +711,7 @@ struct PhotoCanvasView: View {
             stroke.append(point, at: value.location)
         case .pan?:
             setInteracting(true)
+            session.clearDetail()
             pan(by: value.translation)
         case .ignored?, nil:
             break
@@ -694,6 +742,11 @@ struct PhotoCanvasView: View {
         case .maskBrush?:
             session.endMaskStroke()
             stroke.reset()
+        case .transform?:
+            session.endTransformDrag()
+        case .layerMaskBrush?:
+            session.endLayerMaskStroke()
+            stroke.reset()
         case .box?:
             let box = session.selectionState.boxDrag
             session.selectionState.boxDrag = nil
@@ -708,6 +761,7 @@ struct PhotoCanvasView: View {
         case .pan?:
             setInteracting(false)
             viewport.steadyOffset = viewport.offset
+            if let layout = dragState.layout { scheduleDetail(container: dragState.container, layout: layout) }
         case .ignored?, nil:
             stroke.cursor = nil
             viewport.steadyOffset = viewport.offset
@@ -725,6 +779,11 @@ struct PhotoCanvasView: View {
                 stroke.reset()
             case .maskHandle?:
                 session.cancelHandleDrag()
+            case .transform?:
+                session.cancelTransformDrag()
+            case .layerMaskBrush?:
+                session.cancelLayerMaskStroke()
+                stroke.reset()
             case .quick?, .lasso?:
                 stroke.reset()
                 setInteracting(false)
@@ -746,6 +805,93 @@ struct PhotoCanvasView: View {
             setInteracting(false)
             viewport.steadyOffset = viewport.offset
         })
+    }
+
+    // MARK: Layers (W3)
+
+    /// What a one-finger drag does with Calques open: the layer-mask brush; in transform mode a handle (or the quad's
+    /// inside) of the transformed layer; in select mode a pick-drag of the selected layer when it starts on it (moved
+    /// with snapping, no handles). Nil leaves it to the zoomed picture's pan.
+    private func layerRole(for value: DragGesture.Value, start: PSPoint?, frame: CGRect) -> CanvasDrag.Role? {
+        let state = session.layerState
+        if session.paintsLayerMask, let start {
+            // The cursor is the brush on the canvas (its size a fraction of the canvas's longest side).
+            let placement = MaskHandleGeometry.Placement(frame: PSRect(frame))
+            stroke.begin(.cursorOnly, radius: CGFloat(MaskHandleGeometry.brushCursorRadius(session.maskState.brush.size, in: placement)))
+            stroke.append(start, at: value.startLocation)
+            stroke.cursor = value.startLocation
+            session.beginLayerMaskStroke(at: start)
+            return .layerMaskBrush
+        }
+        switch state.mode {
+        case .transform:
+            guard let kind = session.transformHandle(at: value.startLocation, frame: frame), kind != .pivot,
+                  session.beginTransformDrag(kind, frame: frame) else { return nil }
+            return .transform
+        case .select:
+            guard FeatureFlags.isOn(.freeTransform), let start, let id = session.document.selectedLayerID, id != session.document.baseLayerID,
+                  let layer = session.document.layer(id: id), !layer.isGroup, !layer.isAdjustment, !layer.isFill,
+                  let size = session.layerContentSize(id) else { return nil }
+            let quad = LayerPlacement.quad(for: layer, contentSize: size, canvasSize: session.document.canvasSize, isBase: false)
+            guard PhotoEditorSession.contains(quad, start), session.beginTransformDrag(.inside, layerID: id, frame: frame) else { return nil }
+            return .transform
+        case .maskPaint:
+            return nil
+        }
+    }
+
+    /// A pinch (scale) or a twist (degrees) on the transformed layer: one drag about its centre, both combined.
+    private func pinchLayer(scale: Double?, degrees: Double?, container: CGSize, layout: CanvasLayout) {
+        if !dragState.pinchesLayer {
+            // A one-finger handle drag gives way to the pinch.
+            if dragState.role == .transform { session.cancelTransformDrag() }
+            dragState.role = .ignored
+            guard session.beginTransformDrag(.inside, frame: currentFrame(container: container, layout: layout)) else { return }
+            dragState.pinchesLayer = true
+            layerPinch = (1, 0)
+        }
+        if let scale { layerPinch.scale = scale }
+        if let degrees { layerPinch.degrees = degrees }
+        session.transformPinch(magnification: layerPinch.scale, rotation: layerPinch.degrees)
+    }
+
+    private func endLayerPinch() {
+        guard dragState.pinchesLayer else { return }
+        dragState.pinchesLayer = false
+        layerPinch = (1, 0)
+        session.endTransformDrag()
+    }
+
+    /// Transform mode's twist: the layer turns about its centre, snapped at 15°.
+    private func layerRotationGesture(container: CGSize, layout: CanvasLayout) -> some Gesture {
+        RotateGesture(minimumAngleDelta: .degrees(2))
+            .onChanged { value in
+                guard session.layerState.mode == .transform else { return }
+                pinchLayer(scale: nil, degrees: value.rotation.degrees, container: container, layout: layout)
+            }
+            .onEnded { _ in endLayerPinch() }
+    }
+
+    /// D14: once the picture rests zoomed past 1.25 device pixels per preview pixel, its visible part at native
+    /// density (`requestDetail`), 250 ms after the zoom, the pan or a new step settled.
+    private func scheduleDetail(container: CGSize, layout: CanvasLayout) {
+        dragState.detailTask?.cancel()
+        guard FeatureFlags.isOn(.tiledRendering), viewport.zoom > 1.01, container.width > 0 else {
+            session.clearDetail()
+            return
+        }
+        let stage = CanvasGeometry.stage(in: container, layout: layout)
+        let frame = viewport.imageFrame(in: stage, aspect: session.previewAspectRatio)
+        let scale = displayScale
+        dragState.detailTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, frame.width > 0, frame.height > 0 else { return }
+            let visible = frame.intersection(CGRect(origin: .zero, size: container))
+            guard !visible.isNull, visible.width > 1, visible.height > 1 else { return }
+            let rect = PSRect(x: Double((visible.minX - frame.minX) / frame.width), y: Double((visible.minY - frame.minY) / frame.height),
+                              width: Double(visible.width / frame.width), height: Double(visible.height / frame.height))
+            session.requestDetail(visibleRect: rect, devicePixelsAcross: Double(visible.width * scale))
+        }
     }
 
     /// The orb and the ants pause while a finger draws, pinches or pans (W2).
@@ -885,7 +1031,13 @@ private struct CanvasStage: View {
             CanvasOverlays(session: session, frame: frame, stage: stage, container: container, zoom: viewport.zoom)
             ResultMarks(session: session, frame: frame)
             LiveStroke(session: session, stroke: stroke, frame: frame, stage: stage)
-            MaskCanvasOverlay(session: session, stroke: stroke, frame: frame)
+            // W3: on another image layer, Masques' handles and cursor sit on its placed frame.
+            MaskCanvasOverlay(session: session, stroke: stroke, frame: session.activeTool == .masks ? session.maskPlacementFrame(in: frame) : frame)
+            // W3 (Calques): the smart guides, the transform handles, a gradient's handles, the layer-mask brush's cursor.
+            SmartGuidesOverlay(session: session, frame: frame)
+            LayerTransformOverlay(session: session, frame: frame)
+            GradientHandlesOverlay(session: session, frame: frame)
+            LayerMaskBrushCursor(session: session, stroke: stroke, frame: frame)
             CanvasFootChips(session: session)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 .padding(.bottom, layout.bottom + PSSpacing.medium)
@@ -903,6 +1055,11 @@ private struct CanvasStage: View {
                 .padding(.top, layout.top + 12)
                 .padding(.horizontal, 24)
                 .allowsHitTesting(false)
+            // W3: the transform readout, on a scrim at the top of the canvas.
+            TransformHUD(session: session)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .padding(.top, layout.top + 12)
+                .animation(PSSpring.quick, value: session.layerState.transform.isVisible)
             if zoomed, !session.isCropping {
                 ZoomBadge(zoom: viewport.zoom, onReset: onResetZoom)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -1635,6 +1792,7 @@ struct CanvasHint: View {
         case .shapes: return L("Tap the canvas to place a shape. Drag to move, pinch to resize, twist to rotate.")
         case .masks: return L("Pick what to mask, then move its dials. Two fingers move the picture.")
         case .select: return L("Choose how to select, then tap or paint the picture. Two fingers move the picture.")
+        case .layers: return L("Tap a layer to select it, drag it to move it. Hold to list the layers under your finger.")
         default: return nil
         }
     }
@@ -1668,5 +1826,40 @@ struct CanvasHint: View {
     }
 
     private var seenTools: [String] { seen.split(separator: ",").map(String.init) }
+}
+/// W3 (§7.4): a long press on the picture with Calques open lists every layer under the finger (the pick menu). UIKit's
+/// recogniser, for the press's location; it recognises alongside the canvas's other gestures.
+struct LayerPickPress: UIGestureRecognizerRepresentable {
+    var isEnabled: Bool
+    var onPress: (CGPoint) -> Void
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
+        let recognizer = UILongPressGestureRecognizer()
+        recognizer.minimumPressDuration = 0.5
+        recognizer.allowableMovement = 8
+        recognizer.cancelsTouchesInView = false
+        recognizer.delegate = context.coordinator
+        recognizer.isEnabled = isEnabled
+        return recognizer
+    }
+
+    func updateUIGestureRecognizer(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        if recognizer.isEnabled != isEnabled { recognizer.isEnabled = isEnabled }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            true
+        }
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        guard recognizer.state == .began else { return }
+        onPress(context.converter.localLocation)
+    }
 }
 #endif

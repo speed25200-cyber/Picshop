@@ -134,7 +134,11 @@ public enum CommandPalette {
         "crop": ToolInfo(fr: "Recadrer", en: "Crop", symbol: "crop", synonyms: ["rogner", "format", "rotation", "redresser", "rotate", "straighten"]),
         "text": ToolInfo(fr: "Texte", en: "Text", symbol: "textformat", synonyms: ["titre", "écrire", "title", "write"]),
         "shapes": ToolInfo(fr: "Formes", en: "Shapes", symbol: "square.on.circle", synonyms: ["forme", "rectangle", "cercle", "shape", "circle"]),
-        "layers": ToolInfo(fr: "Calques", en: "Layers", symbol: "square.3.layers.3d", synonyms: ["calque", "opacité", "layer", "opacity", "blend"]),
+        // W3: the Layers column (adjustment and fill layers, layer masks, groups, merges) answers to its Photoshop words.
+        "layers": ToolInfo(fr: "Calques", en: "Layers", symbol: "square.3.layers.3d",
+                           synonyms: ["calque", "opacité", "layer", "opacity", "blend", "calque de réglage", "calque de remplissage", "masque de fusion",
+                                      "grouper les calques", "fusionner les calques", "aplatir", "écrêtage", "adjustment layer", "fill layer",
+                                      "layer mask", "group layers", "merge layers", "flatten", "clipping mask"]),
         "curves": ToolInfo(fr: "Courbes", en: "Curves", symbol: "point.topleft.down.to.point.bottomright.curvepath",
                            synonyms: ["courbe", "courbe en s", "curve", "s curve", "tone curve"]),
         "levels": ToolInfo(fr: "Niveaux", en: "Levels", symbol: "chart.bar", synonyms: ["niveau", "point noir", "point blanc", "black point", "white point"]),
@@ -172,6 +176,20 @@ public enum CommandPalette {
         ("maskAdjust", ["where": "subject", "parameter": "exposure", "amount": 15], "Éclaircir le sujet", "Brighten subject", "person.fill"),
         ("autoTone", [:], "Tonalité auto", "Auto tone", "wand.and.rays"),
         ("autoEnhance", [:], "Amélioration auto", "Auto enhance", "wand.and.stars"),
+        // W3: « Transformer » opens free transform on the selected layer; « Exporter » opens the export sheet (on JPEG,
+        // its first format: exportPhoto never writes a file by itself).
+        ("layerTransform", ["mode": "free"], "Transformer", "Transform", "arrow.up.left.and.arrow.down.right"),
+        ("exportPhoto", ["format": "jpeg"], "Exporter", "Export", "square.and.arrow.up"),
+        ("exportPhoto", ["format": "psd"], "Exporter en PSD", "Export as PSD", "square.3.layers.3d.down.right"),
+    ]
+
+    /// More names of the ready operations, by their English title.
+    static let readySynonyms: [String: [String]] = [
+        "Transform": ["transformation", "transformation libre", "transformer le calque", "redimensionner le calque", "déformer", "perspective",
+                      "incliner", "free transform", "transform layer", "distort", "skew", "scale layer"],
+        "Export": ["exporter", "export", "enregistrer", "enregistrer sous", "partager", "sauvegarder", "save", "save as", "share", "tiff", "png",
+                   "jpeg", "heic", "16 bits"],
+        "Export as PSD": ["psd", "photoshop", "exporter les calques", "export layers", "export psd"],
     ]
 
     static func entries(domain: OpDomain, language: OpLanguage) -> [Entry] {
@@ -194,7 +212,7 @@ public enum CommandPalette {
             let call = OperationCall(ready.id, args: ready.args, source: .ui)
             let key = ready.args.keys.sorted().map { "\($0)=\(ready.args[$0].map(describe) ?? "")" }.joined(separator: ",")
             entries.append(Entry(id: "op.\(ready.id.raw).\(key)", title: french ? ready.fr : ready.en, symbol: ready.symbol, target: .operation(call),
-                                 names: [ready.fr, ready.en]))
+                                 names: [ready.fr, ready.en] + (readySynonyms[ready.en] ?? [])))
         }
         for spec in specs where spec.params.isEmpty && !spec.requires.destructive && !readyOperations.contains(where: { $0.id == spec.id }) {
             entries.append(Entry(id: "op.\(spec.id.raw)", title: french ? spec.title.fr : spec.title.en, symbol: nil,

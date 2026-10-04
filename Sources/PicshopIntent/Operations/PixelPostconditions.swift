@@ -23,6 +23,9 @@ public enum PixelPostconditions {
     public static let colorAlreadyThere = 8.0, uniformForBlur = 2.0
     /// The share of the mask's box that must lie in the target box grown by 10 %.
     public static let boxShare = 0.5
+    /// W3 (§4.8): the composite checks on the whole proxy: per-pixel ΔE76 (mean ≤ 1.5 and p99 ≤ 6 unchanged, mean ≥ 0.5
+    /// changed) when the renderer measured it, else the mean Lab and L* spread of the whole frame.
+    public static let compositeUnchangedCeiling = 1.5, compositeChangedFloor = 0.5, compositeUnchangedP99 = 6.0
 
     /// What a parameter's change is measured on.
     enum Metric: Equatable {
@@ -66,6 +69,8 @@ public enum PixelPostconditions {
             case peak
             /// selectionApply's `use` (fill, recolour, blur), with the colour asked for.
             case use(String, color: PSColor?)
+            /// W3: the whole composite changed (ΔE of the mean Lab ≥ 0.5, or of the L* spread) or did not (≤ 1.5).
+            case composite(changed: Bool)
         }
 
         public var request: PixelProbeRequest
@@ -109,6 +114,8 @@ public enum PixelPostconditions {
     /// The checks of a catalog call on a photo.
     public static func plan(for call: OperationCall, before: PhotoDocument, after: PhotoDocument) -> Plan {
         if let reason = expensiveStep(before: before, after: after) { return Plan(unverifiable: [reason]) }
+        // W3: the layer operations' composite and layer-mask checks (LayerPostconditions).
+        if let layered = LayerPostconditions.pixelPlan(for: call, before: before, after: after) { return layered }
         switch call.id.raw {
         case "maskAdjust": return maskAdjustPlan(call, before: before, after: after)
         case "maskEdit": return maskEditPlan(call, before: before, after: after)
@@ -134,8 +141,8 @@ public enum PixelPostconditions {
 
     /// The local adjustment a step created or changed (the only one), before (nil when new) and after.
     static func changedAdjustment(before: PhotoDocument, after: PhotoDocument) -> (before: LocalAdjustment?, after: LocalAdjustment)? {
-        let old = Dictionary(before.localAdjustments.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
-        let changed = after.localAdjustments.filter { old[$0.id] != $0 }
+        let old = Dictionary(before.allLocalAdjustments.map { ($0.adjustment.id, $0.adjustment) }, uniquingKeysWith: { _, last in last })
+        let changed = after.allLocalAdjustments.map(\.adjustment).filter { old[$0.id] != $0 }
         guard changed.count == 1, let adjustment = changed.first else { return nil }
         return (old[adjustment.id], adjustment)
     }
@@ -419,6 +426,30 @@ public enum PixelPostconditions {
             guard let before = result.before, let after = result.after else { return verdict.unverified("not measured") }
             guard before.inside.weight > 0, after.inside.weight > 0 else { return verdict.unverified("an empty mask") }
             judgeParameter(parameter, direction: direction, before: before, after: after, probe: probe, into: &verdict)
+        case .composite(let changed):
+            if let delta = result.compositeDelta {
+                // Per pixel: a layer that moved without changing the average colour still counts.
+                let observed = "mean ΔE \(format(delta.mean)), p99 \(format(delta.p99))"
+                if changed {
+                    if delta.mean >= compositeChangedFloor { return verdict.pass() }
+                    verdict.fail(probe, expected: "the picture changes (mean ΔE ≥ \(format(compositeChangedFloor)))", observed: observed)
+                } else {
+                    if delta.mean <= compositeUnchangedCeiling, delta.p99 <= compositeUnchangedP99 { return verdict.pass() }
+                    verdict.fail(probe, expected: "the picture unchanged (mean ΔE ≤ \(format(compositeUnchangedCeiling)), p99 ≤ \(format(compositeUnchangedP99)))",
+                                 observed: observed)
+                }
+                return
+            }
+            guard let before = result.before, let after = result.after else { return verdict.unverified("not measured") }
+            let distance = deltaE(before.inside, after.inside)
+            let spread = max(abs(after.inside.stdL - before.inside.stdL), abs(after.inside.meanChroma - before.inside.meanChroma))
+            if changed {
+                if distance >= compositeChangedFloor || spread >= compositeChangedFloor { return verdict.pass() }
+                verdict.fail(probe, expected: "the picture changes (ΔE ≥ \(format(compositeChangedFloor)))", observed: "ΔE \(format(distance))")
+            } else {
+                if distance <= compositeUnchangedCeiling, spread <= compositeUnchangedCeiling { return verdict.pass() }
+                verdict.fail(probe, expected: "the picture unchanged (ΔE ≤ \(format(compositeUnchangedCeiling)))", observed: "ΔE \(format(max(distance, spread)))")
+            }
         case .use(let use, let color):
             guard let before = result.before, let after = result.after else { return verdict.unverified("not measured") }
             switch use {

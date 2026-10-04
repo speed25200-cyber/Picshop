@@ -32,6 +32,8 @@ extension RuleBasedIntentEngine {
     /// executor lowers onto a mask): the same step again on the same mask, or half of it back. Without this the
     /// W1 follow-up would move the whole photo's dial.
     static func againRule(_ u: NormalizedUtterance, context: IntentContext) -> EditIntent? {
+        // W3 (D20): « continue » resumes the Live brain's pending outline.
+        if context.hasPendingOutline, GoalOutline.isContinue(u.original) { return nil }
         guard let last = context.lastIntent else { return nil }
         let isMask = last.action == .operation && last.operation?.id == "maskAdjust"
         // « éclaircis la sélection » made a mask (selectionApply use=adjust): its follow-ups move that mask's dial,
@@ -434,8 +436,7 @@ extension RuleBasedIntentEngine {
 extension PhotoOperationHandlers {
     /// A gesture-only control said aloud (the grammar's `openTool` call): its tool opens on it, with what to do.
     static func openTool(_ control: String, _ document: PhotoDocument, _ context: OperationRunContext) -> (PhotoDocument, ExecutionResult) {
-        let selecting = control.hasPrefix("select.")
-        guard FeatureFlags.isOn(selecting ? .aiSelection : .masks) else { return notEnabled(document, context) }
+        if let flag = toolFlag(of: control), !FeatureFlags.isOn(flag) { return notEnabled(document, context) }
         let fr = context.french
         let hint: String
         switch control {
@@ -455,8 +456,47 @@ extension PhotoOperationHandlers {
         case "select.mode.quick", "select.quick.stroke": hint = fr ? "Peins sur ce que tu veux sélectionner." : "Paint over what you want to select."
         case "select.quick.erase": hint = fr ? "Peins sur ce qu'il faut retirer de la sélection." : "Paint over what to take out of the selection."
         case "select.mode.lasso", "select.lasso.draw": hint = fr ? "Entoure la zone au doigt." : "Draw around the area with your finger."
-        default: hint = fr ? "C'est à faire au doigt sur la photo." : "That one is done with a finger on the photo."
+        default: hint = photoToolHint(control, french: fr)
         }
         return (document, ExecutionResult(outcome: .info(message: hint), effects: [.message("openTool:" + control)]))
+    }
+
+    /// The flag a control's tool needs (nil: none): the W2 masks and selections, the W3 layers and export.
+    static func toolFlag(of control: String) -> FeatureFlag? {
+        if control.hasPrefix("select.") { return .aiSelection }
+        if control.hasPrefix("masks.") { return .masks }
+        if control.hasPrefix("layers.") || control.hasPrefix("canvas.layer") { return .layerOps }
+        if control.hasPrefix("export.") { return .proExport }
+        return nil
+    }
+
+    /// What to do with a finger once a photo panel's gesture control is open (W3, PhotoPanelInventory).
+    static func photoToolHint(_ control: String, french fr: Bool) -> String {
+        switch control {
+        case "layers.row.reorder", "layers.column.reorder":
+            return fr ? "Fais glisser le calque à sa place dans la liste." : "Drag the layer to its place in the list."
+        case "layers.transform.handles", "layers.transform.mode.uniform", "canvas.layer.drag":
+            return fr ? "Fais glisser les poignées du calque sur la photo." : "Drag the layer's handles on the photo."
+        case "layers.mask.paint": return fr ? "Peins sur la photo : blanc révèle, noir masque." : "Paint on the photo: white reveals, black hides."
+        case "layers.mask.paint.erase": return fr ? "Peins en noir ce qu'il faut cacher." : "Paint in black what to hide."
+        case "layers.mask.brush.size", "layers.mask.brush.hardness", "layers.mask.brush.flow", "erase.brush.size", "precise.brush.size",
+             "precise.hardness", "precise.paintColor":
+            return fr ? "Règle le pinceau sous la photo." : "Set the brush under the photo."
+        case "layers.fill.handles": return fr ? "Fais glisser les poignées du dégradé." : "Drag the gradient's handles."
+        case "layers.adjustment.curves.points", "curves.points": return fr ? "Fais glisser les points de la courbe." : "Drag the curve's points."
+        case "color.lut.import": return fr ? "Choisis un fichier .cube." : "Pick a .cube file."
+        case "erase.tap", "magic.object.tap", "canvas.layer.pick": return fr ? "Touche-le sur la photo." : "Tap it on the photo."
+        case "erase.brush", "precise.pixelBrush", "precise.clone": return fr ? "Peins sur la photo." : "Paint on the photo."
+        case "precise.wand": return fr ? "Touche la zone à prendre." : "Tap the area to take."
+        case "precise.lasso": return fr ? "Entoure la zone au doigt." : "Draw around the area with your finger."
+        case "focus.tap": return fr ? "Touche ce qui doit être net." : "Tap what should be sharp."
+        case "crop.frame": return fr ? "Fais glisser les bords du cadre." : "Drag the frame's edges."
+        case "text.move", "shapes.move": return fr ? "Fais-le glisser sur la photo." : "Drag it on the photo."
+        case "layers.add.shape", "shapes.place": return fr ? "Touche la photo pour poser la forme." : "Tap the photo to place the shape."
+        case "shapes.kind", "shapes.color", "shapes.outline": return fr ? "Choisis-la sous la photo." : "Pick it under the photo."
+        case "canvas.layer.menu": return fr ? "Appuie longuement sur le calque." : "Press and hold the layer."
+        case "export.quality", "export.location", "export.cancel": return fr ? "C'est dans la feuille d'export." : "It's in the export sheet."
+        default: return fr ? "C'est à faire au doigt sur la photo." : "That one is done with a finger on the photo."
+        }
     }
 }

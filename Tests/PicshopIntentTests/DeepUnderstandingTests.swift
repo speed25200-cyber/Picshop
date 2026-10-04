@@ -27,9 +27,13 @@ final class DeepUnderstandingTests: XCTestCase {
     }
 
     func testProductAndIdentityGoals() {
+        // W3 (D21): the product phrases run the productPhoto recipe (layers, nothing destroyed), not the W1 goal.
         let product = plan("product photo for vinted")
-        XCTAssertEqual(product.intents.map(\.action), [.replaceBackground, .autoEnhance])
-        XCTAssertEqual(product.intents[0].color, .white)
+        XCTAssertEqual(product.intents.map(\.action), [.operation])
+        XCTAssertEqual(product.intents.first?.operation?.id, "recipe")
+        XCTAssertEqual(product.intents.first?.operation?.args["name"]?.string, "productPhoto")
+        let white = plan("photo produit sur fond blanc pour vinted")
+        XCTAssertEqual(white.intents.first?.operation?.args["background"]?.string, "white")
         let identity = plan("fais-en une photo d'identité")
         XCTAssertEqual(identity.intents.map(\.action), [.replaceBackground, .crop])
         XCTAssertEqual(identity.intents[1].aspect, .ratio3x4)

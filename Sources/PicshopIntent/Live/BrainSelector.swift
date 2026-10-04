@@ -40,6 +40,14 @@ public struct BrainSelector: Sendable {
 
     public init() {}
 
+    /// W3 (D20): the grammar's context for a Live turn. While the model brain holds an outline, « continue »,
+    /// « la suite », "keep going" resume it there, so the grammar's follow-up rule leaves them alone.
+    public static func intentContext(_ context: IntentContext, brain: (any LiveBrain)?) -> IntentContext {
+        var context = context
+        context.hasPendingOutline = (brain as? LocalModelLiveBrain)?.hasPendingOutline ?? false
+        return context
+    }
+
     /// model -> onDevice -> local, skipping `excluding`, cooled-down and switched-off kinds.
     /// The local grammar is the answer of last resort, even when excluded.
     public mutating func choose(_ inputs: Inputs, excluding: Set<LiveBrainKind> = []) -> LiveBrainKind {

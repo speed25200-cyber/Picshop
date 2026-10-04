@@ -97,6 +97,22 @@
         }
       }
     },
+    "%d bits": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d bits"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d bits"
+          }
+        }
+      }
+    },
     "%d cells cleared": {
       "localizations": {
         "en": {
@@ -241,6 +257,38 @@
         }
       }
     },
+    "%d px wide": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d px wide"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d px de large"
+          }
+        }
+      }
+    },
+    "%d selected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d selected"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d sélectionnés"
+          }
+        }
+      }
+    },
     "%d tok/s · first answer in %d ms": {
       "localizations": {
         "en": {
@@ -365,6 +413,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Canevas 120 Hz"
+          }
+        }
+      }
+    },
+    "8 bits": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "8 bits"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "8 bits"
           }
         }
       }
@@ -657,6 +721,22 @@
         }
       }
     },
+    "Add Photo Layer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Photo Layer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter un calque photo"
+          }
+        }
+      }
+    },
     "Add Shape": {
       "localizations": {
         "en": {
@@ -701,6 +781,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ajouter du texte"
+          }
+        }
+      }
+    },
+    "Add a layer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a layer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter un calque"
+          }
+        }
+      }
+    },
+    "Add a mask": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a mask"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter un masque"
           }
         }
       }
@@ -817,6 +929,22 @@
         }
       }
     },
+    "Adding the photo…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adding the photo…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J'ajoute la photo…"
+          }
+        }
+      }
+    },
     "Adjust": {
       "localizations": {
         "en": {
@@ -829,6 +957,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Réglages"
+          }
+        }
+      }
+    },
+    "Adjustment Layer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adjustment Layer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calque de réglage"
+          }
+        }
+      }
+    },
+    "Adjustment layer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adjustment layer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calque de réglage"
           }
         }
       }
@@ -877,6 +1037,102 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mode Avion : Live répond de la même façon."
+          }
+        }
+      }
+    },
+    "Align": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Align"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aligner"
+          }
+        }
+      }
+    },
+    "Align Layers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Align Layers"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aligner les calques"
+          }
+        }
+      }
+    },
+    "Align bottom": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Align bottom"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aligner en bas"
+          }
+        }
+      }
+    },
+    "Align left": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Align left"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aligner à gauche"
+          }
+        }
+      }
+    },
+    "Align right": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Align right"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aligner à droite"
+          }
+        }
+      }
+    },
+    "Align top": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Align top"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aligner en haut"
           }
         }
       }
@@ -1233,6 +1489,22 @@
         }
       }
     },
+    "Apply Mask": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply Mask"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appliquer le masque"
+          }
+        }
+      }
+    },
     "Apply paint": {
       "localizations": {
         "en": {
@@ -1281,6 +1553,22 @@
         }
       }
     },
+    "Applying the mask…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applying the mask…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J'applique le masque…"
+          }
+        }
+      }
+    },
     "Approximate mask: refine it with the brush.": {
       "localizations": {
         "en": {
@@ -1325,6 +1613,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ciel approximatif : affinez-le au pinceau."
+          }
+        }
+      }
+    },
+    "Area": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Area"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zone"
           }
         }
       }
@@ -1629,6 +1933,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Interruption"
+          }
+        }
+      }
+    },
+    "Barge-in restores: %d, p95": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barge-in restores: %d, p95"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reprises après interruption : %d, p95"
           }
         }
       }
@@ -2337,6 +2657,22 @@
         }
       }
     },
+    "Centre horizontally": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Centre horizontally"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Centrer horizontalement"
+          }
+        }
+      }
+    },
     "Centre it": {
       "localizations": {
         "en": {
@@ -2349,6 +2685,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Au centre"
+          }
+        }
+      }
+    },
+    "Centre vertically": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Centre vertically"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Centrer verticalement"
+          }
+        }
+      }
+    },
+    "ChatSession (W2)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatSession (W2)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatSession (W2)"
           }
         }
       }
@@ -2641,6 +3009,22 @@
         }
       }
     },
+    "Clipping Mask": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clipping Mask"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masque d'écrêtage"
+          }
+        }
+      }
+    },
     "Clone": {
       "localizations": {
         "en": {
@@ -2689,6 +3073,38 @@
         }
       }
     },
+    "Cold p50": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cold p50"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À froid, p50"
+          }
+        }
+      }
+    },
+    "Collapse": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapse"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replier"
+          }
+        }
+      }
+    },
     "Collapsed": {
       "localizations": {
         "en": {
@@ -2717,6 +3133,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couleur"
+          }
+        }
+      }
+    },
+    "Colour Grading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colour Grading"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Étalonnage"
+          }
+        }
+      }
+    },
+    "Colour Mixer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colour Mixer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mélangeur de couleurs"
           }
         }
       }
@@ -2849,6 +3297,22 @@
         }
       }
     },
+    "Compactions per 10 turns": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compactions per 10 turns"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compactions pour 10 tours"
+          }
+        }
+      }
+    },
     "Connect headphones to test it.": {
       "localizations": {
         "en": {
@@ -2861,6 +3325,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Branche des écouteurs pour le tester."
+          }
+        }
+      }
+    },
+    "Content-hash cache": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Content-hash cache"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache par empreinte du contenu"
           }
         }
       }
@@ -3297,6 +3777,22 @@
         }
       }
     },
+    "Decode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decode"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Génération"
+          }
+        }
+      }
+    },
     "Decontaminate colours": {
       "localizations": {
         "en": {
@@ -3345,6 +3841,22 @@
         }
       }
     },
+    "Delete Layer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Layer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer le calque"
+          }
+        }
+      }
+    },
     "Delete clip": {
       "localizations": {
         "en": {
@@ -3361,6 +3873,54 @@
         }
       }
     },
+    "Delete mask": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete mask"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer le masque"
+          }
+        }
+      }
+    },
+    "Delete the group": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete the group"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer le groupe"
+          }
+        }
+      }
+    },
+    "Delete the group and its contents?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete the group and its contents?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer le groupe et son contenu ?"
+          }
+        }
+      }
+    },
     "Delete the local brain?": {
       "localizations": {
         "en": {
@@ -3373,6 +3933,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Supprimer le cerveau local ?"
+          }
+        }
+      }
+    },
+    "Delete these layers, groups with their contents?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete these layers, groups with their contents?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer ces calques, les groupes avec leur contenu ?"
           }
         }
       }
@@ -3633,6 +4209,22 @@
         }
       }
     },
+    "Disable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disable"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactiver"
+          }
+        }
+      }
+    },
     "Dismiss": {
       "localizations": {
         "en": {
@@ -3661,6 +4253,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fondu enchaîné"
+          }
+        }
+      }
+    },
+    "Distort": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Distort"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déformer"
+          }
+        }
+      }
+    },
+    "Distribute horizontally": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Distribute horizontally"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Répartir horizontalement"
+          }
+        }
+      }
+    },
+    "Distribute vertically": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Distribute vertically"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Répartir verticalement"
           }
         }
       }
@@ -4033,6 +4673,54 @@
         }
       }
     },
+    "Drag a corner: its neighbour follows, as in perspective.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag a corner: its neighbour follows, as in perspective."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faites glisser un coin : son voisin suit, comme en perspective."
+          }
+        }
+      }
+    },
+    "Drag an edge to slant the layer.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag an edge to slant the layer."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faites glisser un bord pour incliner le calque."
+          }
+        }
+      }
+    },
+    "Drag each corner freely.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag each corner freely."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faites glisser chaque coin librement."
+          }
+        }
+      }
+    },
     "Drag on the picture to frame, pinch to zoom. The camera moves from the start framing to the end one.": {
       "localizations": {
         "en": {
@@ -4061,6 +4749,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Faites glisser sur l'image pour déplacer, pincez pour redimensionner."
+          }
+        }
+      }
+    },
+    "Drag the corners to resize, the knob to turn, the inside to move.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag the corners to resize, the knob to turn, the inside to move."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faites glisser les coins pour redimensionner, la poignée pour tourner, l'intérieur pour déplacer."
           }
         }
       }
@@ -4241,6 +4945,22 @@
         }
       }
     },
+    "Duplicate Layer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplicate Layer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dupliquer le calque"
+          }
+        }
+      }
+    },
     "Duration": {
       "localizations": {
         "en": {
@@ -4253,6 +4973,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Durée"
+          }
+        }
+      }
+    },
+    "Each layer stays editable in Photoshop.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each layer stays editable in Photoshop."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaque calque reste modifiable dans Photoshop."
           }
         }
       }
@@ -4465,6 +5201,22 @@
         }
       }
     },
+    "Enable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activer"
+          }
+        }
+      }
+    },
     "Enable Apple Intelligence in Settings to use this brain.": {
       "localizations": {
         "en": {
@@ -4541,6 +5293,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Énergique"
+          }
+        }
+      }
+    },
+    "Engine": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Engine"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moteur"
           }
         }
       }
@@ -5009,6 +5777,22 @@
         }
       }
     },
+    "Export cancelled.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export cancelled."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export annulé."
+          }
+        }
+      }
+    },
     "Export the Live log": {
       "localizations": {
         "en": {
@@ -5201,6 +5985,22 @@
         }
       }
     },
+    "Failed: ChatSession kept": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed: ChatSession kept"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Échoué : ChatSession conservé"
+          }
+        }
+      }
+    },
     "Far": {
       "localizations": {
         "en": {
@@ -5297,6 +6097,22 @@
         }
       }
     },
+    "Fill": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fill"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fond"
+          }
+        }
+      }
+    },
     "Fill Cells": {
       "localizations": {
         "en": {
@@ -5309,6 +6125,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remplir les cases"
+          }
+        }
+      }
+    },
+    "Fill Layer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fill Layer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calque de remplissage"
+          }
+        }
+      }
+    },
+    "Fill layer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fill layer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calque de remplissage"
+          }
+        }
+      }
+    },
+    "Fill the canvas": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fill the canvas"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remplir"
           }
         }
       }
@@ -5601,6 +6465,22 @@
         }
       }
     },
+    "First token from the request to the model's first word, in milliseconds, against the goals: warm 0.7 s (1.0 s with new cards), 1.2 s at p95, a picture 1.2 s, a restore 50 ms, at most one compaction per 10 turns.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First token from the request to the model's first word, in milliseconds, against the goals: warm 0.7 s (1.0 s with new cards), 1.2 s at p95, a picture 1.2 s, a restore 50 ms, at most one compaction per 10 turns."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Premier mot, de la demande au premier mot du modèle, en millisecondes, face aux objectifs : à chaud 0,7 s (1,0 s avec de nouvelles fiches), 1,2 s au p95, une image 1,2 s, une reprise 50 ms, au plus une compaction pour 10 tours."
+          }
+        }
+      }
+    },
     "First token p50 / p90": {
       "localizations": {
         "en": {
@@ -5633,6 +6513,38 @@
         }
       }
     },
+    "Flatten": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flatten"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aplatir"
+          }
+        }
+      }
+    },
+    "Flatten Image": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flatten Image"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aplatir l'image"
+          }
+        }
+      }
+    },
     "Flatten annotations": {
       "localizations": {
         "en": {
@@ -5649,6 +6561,22 @@
         }
       }
     },
+    "Flatten image": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flatten image"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aplatir l'image"
+          }
+        }
+      }
+    },
     "Flatten modified pages": {
       "localizations": {
         "en": {
@@ -5661,6 +6589,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aplatir les pages modifiées"
+          }
+        }
+      }
+    },
+    "Flatten the image? Hidden layers will be discarded.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flatten the image? Hidden layers will be discarded."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aplatir l'image ? Les calques masqués seront supprimés."
+          }
+        }
+      }
+    },
+    "Flattening…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flattening…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J'aplatis l'image…"
           }
         }
       }
@@ -5713,6 +6673,22 @@
         }
       }
     },
+    "Flip horizontally": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flip horizontally"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retourner horizontalement"
+          }
+        }
+      }
+    },
     "Flip vertical": {
       "localizations": {
         "en": {
@@ -5725,6 +6701,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Retourner à la verticale"
+          }
+        }
+      }
+    },
+    "Flip vertically": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flip vertically"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retourner verticalement"
           }
         }
       }
@@ -5905,6 +6897,38 @@
         }
       }
     },
+    "Free": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Libre"
+          }
+        }
+      }
+    },
+    "Free transform": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free transform"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transformation libre"
+          }
+        }
+      }
+    },
     "Freeze frame": {
       "localizations": {
         "en": {
@@ -5953,6 +6977,22 @@
         }
       }
     },
+    "From": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Depuis"
+          }
+        }
+      }
+    },
     "From the selection": {
       "localizations": {
         "en": {
@@ -5965,6 +7005,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Depuis la sélection"
+          }
+        }
+      }
+    },
+    "From the subject": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From the subject"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Depuis le sujet"
           }
         }
       }
@@ -6013,22 +7069,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aperçus pleine qualité au rythme de l'écran."
-          }
-        }
-      }
-    },
-    "Full resolution": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Full resolution"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pleine résolution"
           }
         }
       }
@@ -6093,6 +7133,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Générer dans la sélection"
+          }
+        }
+      }
+    },
+    "Generated inspector rows": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generated inspector rows"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réglages générés de l'inspecteur"
           }
         }
       }
@@ -6225,6 +7281,38 @@
         }
       }
     },
+    "Goal met": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Goal met"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Objectif atteint"
+          }
+        }
+      }
+    },
+    "Goal missed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Goal missed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Objectif manqué"
+          }
+        }
+      }
+    },
     "Goals": {
       "localizations": {
         "en": {
@@ -6269,6 +7357,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dégradé"
+          }
+        }
+      }
+    },
+    "Gradient angle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gradient angle"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Angle du dégradé"
+          }
+        }
+      }
+    },
+    "Gradient centre": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gradient centre"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Centre du dégradé"
+          }
+        }
+      }
+    },
+    "Gradient stops": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gradient stops"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couleurs du dégradé"
           }
         }
       }
@@ -6385,6 +7521,38 @@
         }
       }
     },
+    "Group": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Group"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grouper"
+          }
+        }
+      }
+    },
+    "Group Layers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Group Layers"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grouper les calques"
+          }
+        }
+      }
+    },
     "HD voice in AirPods": {
       "localizations": {
         "en": {
@@ -6497,6 +7665,22 @@
         }
       }
     },
+    "Hide": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquer"
+          }
+        }
+      }
+    },
     "Hide Captions": {
       "localizations": {
         "en": {
@@ -6509,6 +7693,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Masquer les sous-titres"
+          }
+        }
+      }
+    },
+    "Hide Layer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Layer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquer le calque"
+          }
+        }
+      }
+    },
+    "Hide all": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide all"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout masquer"
           }
         }
       }
@@ -6589,22 +7805,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Surligner les cases"
-          }
-        }
-      }
-    },
-    "Highlight · %d boxes": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Highlight · %d boxes"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Surlignage · %d zones"
           }
         }
       }
@@ -6833,6 +8033,22 @@
         }
       }
     },
+    "Import a LUT in Colour first.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import a LUT in Colour first."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importez d'abord un LUT dans Couleur."
+          }
+        }
+      }
+    },
     "Import a PDF": {
       "localizations": {
         "en": {
@@ -6961,6 +8177,22 @@
         }
       }
     },
+    "Instagram post": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Instagram post"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Post Instagram"
+          }
+        }
+      }
+    },
     "Install Generative Fill in Settings › On-device models to use prompts.": {
       "localizations": {
         "en": {
@@ -7037,6 +8269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Intensité"
+          }
+        }
+      }
+    },
+    "Interactive snapshot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interactive snapshot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Instantané interactif"
           }
         }
       }
@@ -7137,6 +8385,54 @@
         }
       }
     },
+    "KV engine": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KV engine"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moteur KV"
+          }
+        }
+      }
+    },
+    "KV self-test": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KV self-test"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-test KV"
+          }
+        }
+      }
+    },
+    "Keep the layers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep the layers"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Garder les calques"
+          }
+        }
+      }
+    },
     "Keyboard": {
       "localizations": {
         "en": {
@@ -7181,6 +8477,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Image clé à la tête de lecture"
+          }
+        }
+      }
+    },
+    "LLM layer operations": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM layer operations"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opérations de calques par l'IA"
           }
         }
       }
@@ -7361,6 +8673,22 @@
         }
       }
     },
+    "Latency": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Latency"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Latence"
+          }
+        }
+      }
+    },
     "Latency from the end of speech": {
       "localizations": {
         "en": {
@@ -7441,6 +8769,118 @@
         }
       }
     },
+    "Layer Mask": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Layer Mask"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masque de fusion"
+          }
+        }
+      }
+    },
+    "Layer mask": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Layer mask"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masque de fusion"
+          }
+        }
+      }
+    },
+    "Layer via Copy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Layer via Copy"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calque par copier"
+          }
+        }
+      }
+    },
+    "Layer via Cut": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Layer via Cut"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calque par couper"
+          }
+        }
+      }
+    },
+    "Layer via copy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Layer via copy"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calque par copier"
+          }
+        }
+      }
+    },
+    "Layer via cut": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Layer via cut"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calque par couper"
+          }
+        }
+      }
+    },
+    "Layered PSD": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Layered PSD"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PSD avec calques"
+          }
+        }
+      }
+    },
     "Layers": {
       "localizations": {
         "en": {
@@ -7453,6 +8893,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Calques"
+          }
+        }
+      }
+    },
+    "Layers column": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Layers column"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colonne des calques"
+          }
+        }
+      }
+    },
+    "Layers here": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Layers here"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calques à cet endroit"
           }
         }
       }
@@ -7597,6 +9069,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dégradé linéaire"
+          }
+        }
+      }
+    },
+    "Linked to the layer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linked to the layer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lié au calque"
           }
         }
       }
@@ -8049,6 +9537,54 @@
         }
       }
     },
+    "Lock": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lock"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verrouiller"
+          }
+        }
+      }
+    },
+    "Look": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Look"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filtre"
+          }
+        }
+      }
+    },
+    "Look Intensity": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Look Intensity"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intensité du filtre"
+          }
+        }
+      }
+    },
     "Look “%@” applied": {
       "localizations": {
         "en": {
@@ -8125,6 +9661,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sans perte"
+          }
+        }
+      }
+    },
+    "Lossless, print": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lossless, print"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sans perte, impression"
           }
         }
       }
@@ -8353,6 +9905,22 @@
         }
       }
     },
+    "Make it a gradient": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make it a gradient"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En faire un dégradé"
+          }
+        }
+      }
+    },
     "Making the mask…": {
       "localizations": {
         "en": {
@@ -8417,6 +9985,22 @@
         }
       }
     },
+    "Mask %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mask %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masque %@"
+          }
+        }
+      }
+    },
     "Mask models over cellular": {
       "localizations": {
         "en": {
@@ -8461,22 +10045,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Masques"
-          }
-        }
-      }
-    },
-    "Masks apply to the background photo.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Masks apply to the background photo."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Les masques s'appliquent à la photo de fond."
           }
         }
       }
@@ -8641,6 +10209,38 @@
         }
       }
     },
+    "Merge Down": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge Down"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fusionner avec le calque inférieur"
+          }
+        }
+      }
+    },
+    "Merge Layers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge Layers"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fusionner les calques"
+          }
+        }
+      }
+    },
     "Merge PDF": {
       "localizations": {
         "en": {
@@ -8653,6 +10253,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fusionner un PDF"
+          }
+        }
+      }
+    },
+    "Merge Visible": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge Visible"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fusionner les calques visibles"
+          }
+        }
+      }
+    },
+    "Merge down": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge down"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fusionner avec le calque inférieur"
+          }
+        }
+      }
+    },
+    "Merge visible layers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge visible layers"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fusionner les calques visibles"
+          }
+        }
+      }
+    },
+    "Merging the layers…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merging the layers…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je fusionne les calques…"
           }
         }
       }
@@ -8893,6 +10557,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Autres exemples"
+          }
+        }
+      }
+    },
+    "More layer actions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More layer actions"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autres actions de calque"
           }
         }
       }
@@ -9233,6 +10913,54 @@
         }
       }
     },
+    "New conversation p50": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New conversation p50"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouvelle conversation, p50"
+          }
+        }
+      }
+    },
+    "New layer (copy)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New layer (copy)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau calque (copier)"
+          }
+        }
+      }
+    },
+    "New layer (cut)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New layer (cut)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau calque (couper)"
+          }
+        }
+      }
+    },
     "New mask": {
       "localizations": {
         "en": {
@@ -9293,6 +11021,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nouvelles opérations à la voix"
+          }
+        }
+      }
+    },
+    "Newer part": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Newer part"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partie plus récente"
           }
         }
       }
@@ -9713,6 +11457,22 @@
         }
       }
     },
+    "Not enough free space for this PSD.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not enough free space for this PSD."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas assez d'espace libre pour ce PSD."
+          }
+        }
+      }
+    },
     "Not enough storage: %@ must be free.": {
       "localizations": {
         "en": {
@@ -9777,6 +11537,22 @@
         }
       }
     },
+    "Not moved (position locked): %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not moved (position locked): %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non déplacés (position verrouillée) : %@"
+          }
+        }
+      }
+    },
     "Not now": {
       "localizations": {
         "en": {
@@ -9805,6 +11581,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pas encore sur cet iPhone."
+          }
+        }
+      }
+    },
+    "Not run yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not run yet"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas encore lancé"
           }
         }
       }
@@ -10129,6 +11921,22 @@
         }
       }
     },
+    "On: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur : %@"
+          }
+        }
+      }
+    },
     "One moment…": {
       "localizations": {
         "en": {
@@ -10141,6 +11949,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Un instant…"
+          }
+        }
+      }
+    },
+    "One page": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One page"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une page"
           }
         }
       }
@@ -10333,6 +12157,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Contour"
+          }
+        }
+      }
+    },
+    "Outline then fill": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outline then fill"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plan puis exécution"
           }
         }
       }
@@ -10689,6 +12529,54 @@
         }
       }
     },
+    "Pass Through": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pass Through"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfert"
+          }
+        }
+      }
+    },
+    "Passed, pictures included": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passed, pictures included"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réussi, images comprises"
+          }
+        }
+      }
+    },
+    "Passed, pictures re-read": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passed, pictures re-read"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réussi, images relues"
+          }
+        }
+      }
+    },
     "Password": {
       "localizations": {
         "en": {
@@ -10781,6 +12669,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Autorisations"
+          }
+        }
+      }
+    },
+    "Persisted prefix": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Persisted prefix"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Préfixe conservé"
           }
         }
       }
@@ -10909,6 +12813,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Photos"
+          }
+        }
+      }
+    },
+    "Photos doesn't accept this format: save it to Files or share it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos doesn't accept this format: save it to Files or share it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos n'accepte pas ce format : enregistrez-le dans Fichiers ou partagez-le."
+          }
+        }
+      }
+    },
+    "Photo…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo…"
           }
         }
       }
@@ -11053,6 +12989,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choisissez quoi masquer, puis réglez ses curseurs. Deux doigts déplacent l'image."
+          }
+        }
+      }
+    },
+    "Picture turn p50": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Picture turn p50"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tour avec image, p50"
           }
         }
       }
@@ -11249,6 +13201,22 @@
         }
       }
     },
+    "Portrait 4:5": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portrait 4:5"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portrait 4:5"
+          }
+        }
+      }
+    },
     "Portrait blur": {
       "localizations": {
         "en": {
@@ -11309,6 +13277,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Précis"
+          }
+        }
+      }
+    },
+    "Prefill": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prefill"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lecture du contexte"
+          }
+        }
+      }
+    },
+    "Prefix snapshot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prefix snapshot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Instantané du préfixe"
           }
         }
       }
@@ -11393,6 +13393,22 @@
         }
       }
     },
+    "Preset: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preset: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Préréglage : %@"
+          }
+        }
+      }
+    },
     "Preview": {
       "localizations": {
         "en": {
@@ -11421,6 +13437,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Image précédente"
+          }
+        }
+      }
+    },
+    "Print": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Print"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impression"
           }
         }
       }
@@ -11457,6 +13489,70 @@
         }
       }
     },
+    "Pro export formats": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro export formats"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formats d'export pro"
+          }
+        }
+      }
+    },
+    "Pro layers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro layers"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calques pro"
+          }
+        }
+      }
+    },
+    "Product photo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Product photo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo produit"
+          }
+        }
+      }
+    },
+    "Project from a newer version: some edits are not shown.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Project from a newer version: some edits are not shown."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projet d'une version plus récente : certaines retouches ne s'affichent pas."
+          }
+        }
+      }
+    },
     "Prompt / cached tokens": {
       "localizations": {
         "en": {
@@ -11469,6 +13565,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jetons de contexte / en cache"
+          }
+        }
+      }
+    },
+    "Properties": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Properties"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Propriétés"
+          }
+        }
+      }
+    },
+    "Proportional": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proportional"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proportionnel"
           }
         }
       }
@@ -11533,6 +13661,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zoom avant"
+          }
+        }
+      }
+    },
+    "Putting it on a layer…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Putting it on a layer…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je le mets sur un calque…"
           }
         }
       }
@@ -11757,6 +13901,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Récents"
+          }
+        }
+      }
+    },
+    "Recipes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recipes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recettes"
           }
         }
       }
@@ -12225,6 +14385,38 @@
         }
       }
     },
+    "Rename Layer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Layer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renommer le calque"
+          }
+        }
+      }
+    },
+    "Rename layer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename layer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renommer le calque"
+          }
+        }
+      }
+    },
     "Rename the mask": {
       "localizations": {
         "en": {
@@ -12253,6 +14445,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rendu de l'effet portrait…"
+          }
+        }
+      }
+    },
+    "Reorder Layers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reorder Layers"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réordonner les calques"
           }
         }
       }
@@ -12337,6 +14545,22 @@
         }
       }
     },
+    "Restored turn p50": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restored turn p50"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tour restauré, p50"
+          }
+        }
+      }
+    },
     "Results": {
       "localizations": {
         "en": {
@@ -12381,6 +14605,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Réessayer"
+          }
+        }
+      }
+    },
+    "Reveal all": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reveal all"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout afficher"
           }
         }
       }
@@ -12609,6 +14849,22 @@
         }
       }
     },
+    "Running": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En cours"
+          }
+        }
+      }
+    },
     "Running the M lane…": {
       "localizations": {
         "en": {
@@ -12621,6 +14877,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Banc d'essai M en cours…"
+          }
+        }
+      }
+    },
+    "Running the recipe…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running the recipe…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recette en cours…"
           }
         }
       }
@@ -12705,6 +14977,22 @@
         }
       }
     },
+    "Save to Files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save to Files"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer dans Fichiers"
+          }
+        }
+      }
+    },
     "Save to Photos": {
       "localizations": {
         "en": {
@@ -12717,6 +15005,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enregistrer dans Photos"
+          }
+        }
+      }
+    },
+    "Saved to Files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved to Files"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistré dans Fichiers"
           }
         }
       }
@@ -12829,6 +15133,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Segment Anything 2.1 : une touche, un cadre ou un coup de pinceau sélectionne un objet."
+          }
+        }
+      }
+    },
+    "Select": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélectionner"
           }
         }
       }
@@ -13089,6 +15409,22 @@
         }
       }
     },
+    "Shape": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shape"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forme"
+          }
+        }
+      }
+    },
     "Shapes": {
       "localizations": {
         "en": {
@@ -13101,6 +15437,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Formes"
+          }
+        }
+      }
+    },
+    "Share": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partager"
           }
         }
       }
@@ -13245,6 +15597,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Afficher les sous-titres"
+          }
+        }
+      }
+    },
+    "Show Layer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Layer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher le calque"
           }
         }
       }
@@ -13537,6 +15905,38 @@
         }
       }
     },
+    "Size 4096": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Size 4096"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taille 4096"
+          }
+        }
+      }
+    },
+    "Skew": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skew"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incliner"
+          }
+        }
+      }
+    },
     "Skin": {
       "localizations": {
         "en": {
@@ -13713,6 +16113,22 @@
         }
       }
     },
+    "Smart guides": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smart guides"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Repères"
+          }
+        }
+      }
+    },
     "Smooth": {
       "localizations": {
         "en": {
@@ -13761,6 +16177,22 @@
         }
       }
     },
+    "Snapped": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Snapped"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aimanté"
+          }
+        }
+      }
+    },
     "Soft portrait": {
       "localizations": {
         "en": {
@@ -13789,6 +16221,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Adoucir"
+          }
+        }
+      }
+    },
+    "Solid colour": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solid colour"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couleur unie"
           }
         }
       }
@@ -14065,6 +16513,22 @@
         }
       }
     },
+    "Square 1:1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Square 1:1"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carré 1:1"
+          }
+        }
+      }
+    },
     "Stabilize": {
       "localizations": {
         "en": {
@@ -14109,6 +16573,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stable Diffusion : « remplace le ciel par un coucher de soleil », « ajoute un chapeau »."
+          }
+        }
+      }
+    },
+    "Stamp Visible": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stamp Visible"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tampon des calques visibles"
+          }
+        }
+      }
+    },
+    "Stamp visible layers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stamp visible layers"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tampon des calques visibles"
           }
         }
       }
@@ -14193,6 +16689,22 @@
         }
       }
     },
+    "Stop %d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop %d"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couleur %d"
+          }
+        }
+      }
+    },
     "Stop Live or dictation first, then test again.": {
       "localizations": {
         "en": {
@@ -14221,6 +16733,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Espace utilisé"
+          }
+        }
+      }
+    },
+    "Story 9:16": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Story 9:16"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Story 9:16"
           }
         }
       }
@@ -14417,6 +16945,22 @@
         }
       }
     },
+    "Swap paint and erase": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Swap paint and erase"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Échanger Peindre et Effacer"
+          }
+        }
+      }
+    },
     "Swipe up or down to adjust.": {
       "localizations": {
         "en": {
@@ -14477,22 +17021,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "TITRE"
-          }
-        }
-      }
-    },
-    "Table · %d cells": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Table · %d cells"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tableau · %d cases"
           }
         }
       }
@@ -14573,6 +17101,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Touchez un clip sur la timeline pour changer sa vitesse."
+          }
+        }
+      }
+    },
+    "Tap a layer to select it, drag it to move it. Hold to list the layers under your finger.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap a layer to select it, drag it to move it. Hold to list the layers under your finger."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez un calque pour le sélectionner, faites-le glisser pour le déplacer. Maintenez le doigt pour lister les calques dessous."
           }
         }
       }
@@ -15185,6 +17729,22 @@
         }
       }
     },
+    "The PSD couldn't be written.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The PSD couldn't be written."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le PSD n'a pas pu être écrit."
+          }
+        }
+      }
+    },
     "The audio configuration keeps changing.": {
       "localizations": {
         "en": {
@@ -15277,6 +17837,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "La grammaire intégrée répond aux commandes simples."
+          }
+        }
+      }
+    },
+    "The corners keep the proportions.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The corners keep the proportions."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les coins gardent les proportions."
           }
         }
       }
@@ -15389,6 +17965,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "La gomme et l'upscaler sont livrés avec l'app. Le Remplissage génératif est volumineux : il se télécharge seul en Wi‑Fi la première fois, et tout fonctionne sur votre iPhone. Le cerveau local se trouve dans Réglages › Intelligence."
+          }
+        }
+      }
+    },
+    "The group's mask was removed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The group's mask was removed."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le masque du groupe a été retiré."
           }
         }
       }
@@ -16145,6 +18737,22 @@
         }
       }
     },
+    "Tiled rendering": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tiled rendering"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rendu par tuiles"
+          }
+        }
+      }
+    },
     "Timecode": {
       "localizations": {
         "en": {
@@ -16221,6 +18829,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tolérance"
+          }
+        }
+      }
+    },
+    "Too heavy for a PSD.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too heavy for a PSD."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop lourd pour un PSD."
+          }
+        }
+      }
+    },
+    "Too large for a PSD.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too large for a PSD."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop grand pour un PSD."
           }
         }
       }
@@ -16353,6 +18993,22 @@
         }
       }
     },
+    "Transform": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transform"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transformer"
+          }
+        }
+      }
+    },
     "Transitions": {
       "localizations": {
         "en": {
@@ -16397,6 +19053,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Je traduis les sous-titres…"
+          }
+        }
+      }
+    },
+    "Transparency": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transparency"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transparence"
+          }
+        }
+      }
+    },
+    "Transparent background": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transparent background"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrière-plan transparent"
           }
         }
       }
@@ -16577,6 +19265,22 @@
         }
       }
     },
+    "Ungroup": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ungroup"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dissocier"
+          }
+        }
+      }
+    },
     "Universal": {
       "localizations": {
         "en": {
@@ -16589,6 +19293,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Universel"
+          }
+        }
+      }
+    },
+    "Unlock": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déverrouiller"
           }
         }
       }
@@ -16929,6 +19649,22 @@
         }
       }
     },
+    "Vlog cleanup": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vlog cleanup"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nettoyage vlog"
+          }
+        }
+      }
+    },
     "Voice": {
       "localizations": {
         "en": {
@@ -17009,6 +19745,22 @@
         }
       }
     },
+    "Waits for a quiet moment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waits for a quiet moment"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attend un moment calme"
+          }
+        }
+      }
+    },
     "Warm": {
       "localizations": {
         "en": {
@@ -17021,6 +19773,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tiède"
+          }
+        }
+      }
+    },
+    "Warm first token p50": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warm first token p50"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Premier mot à chaud, p50"
+          }
+        }
+      }
+    },
+    "Warm first token p95": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warm first token p95"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Premier mot à chaud, p95"
           }
         }
       }
@@ -17053,6 +19837,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Eau"
+          }
+        }
+      }
+    },
+    "Web": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Web"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Web"
           }
         }
       }
@@ -17117,6 +19917,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Blanc"
+          }
+        }
+      }
+    },
+    "White background": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "White background"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fond blanc"
           }
         }
       }

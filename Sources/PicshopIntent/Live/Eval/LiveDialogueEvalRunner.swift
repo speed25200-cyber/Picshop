@@ -320,6 +320,7 @@ import PicshopCore
             if ran != ops { failures.append("ran \(ran.sorted()) instead of \(ops.sorted())") }
         }
         if let count = expect.maskCount, masks.count != count { failures.append("\(masks.count) masks instead of \(count)") }
+        if let total = expect.layerTotal, host.document.layers.count != total { failures.append("\(host.document.layers.count) layers instead of \(total)") }
         func mask(_ index: Int) -> LocalAdjustment? { index >= 1 && index <= masks.count ? masks[index - 1] : nil }
         func previous(_ index: Int) -> LocalAdjustment? {
             guard let now = mask(index) else { return nil }

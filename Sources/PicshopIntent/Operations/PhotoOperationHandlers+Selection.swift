@@ -33,7 +33,8 @@ extension PhotoOperationHandlers {
             }
         }
         let area = MaskAreaArgs(call.args, key: "what")
-        let outcome = await resolveArea(area, call: call, document: document, context: context)
+        // W3: the selection is made on the active image layer's own pixels (its output space, D8).
+        let outcome = await resolveArea(area, call: call, document: document, context: context, layer: layerID)
         guard case .area(let resolved) = outcome else {
             if case .answer(let result) = outcome { return (document, result) }
             return (document, .failed(context.french ? "Je ne trouve pas cette zone." : "I can't find that area."))
@@ -173,26 +174,43 @@ extension PhotoOperationHandlers {
         guard let use = call.args["use"]?.string else {
             return (document, answer(context.french ? "Que faire de la sélection ?" : "What should the selection be used for?", reason: .nothingToDo))
         }
+        // W3: « calque par copier / couper » from the selection, on the layer it was made on (layerVia, D17).
+        if use == "copyToLayer" || use == "cutToLayer" {
+            var via = OperationCall("layerVia", args: ["mode": .string(use == "cutToLayer" ? "cut" : "copy"), "useSelection": .bool(true)], source: call.source)
+            if let name = call.args["name"] { via.args["name"] = name }
+            if let ref = LiveLayerLines.ref(of: selection.layerID, in: document, scene: context.intent.scene) { via.args["layer"] = .string(ref) }
+            var (updated, result) = await layerVia(via, document, context)
+            if result.outcome.isSuccess, call.args["keep"]?.bool != true {
+                updated.setSelection(nil)
+            }
+            if result.outcome.isSuccess { result.label = use == "cutToLayer" ? "Layer via Cut" : "Layer via Copy" }
+            return (updated, result)
+        }
         let keep = call.args["keep"]?.bool ?? !["erase", "fill", "cutout", "generate"].contains(use)
         var updated = document
         var label: String
         switch use {
         case "adjust", "mask":
             guard FeatureFlags.isOn(.masks) else { return notEnabled(document, context) }
-            guard document.canAddLocalAdjustment else {
+            // W3: the selection's own layer owns the mask (it lives in that layer's space, D8).
+            let owner = document.layer(id: selection.layerID)?.isImage == true ? selection.layerID : (document.localAdjustmentsLayerID ?? selection.layerID)
+            guard document.localAdjustments(on: owner).count < LocalAdjustment.maxPerLayer else {
                 return (document, answer(context.french ? "Il y a déjà 16 masques : supprime-en un." : "There are already 16 masks: delete one.", reason: .tooMany))
             }
+            guard LayerLockPolicy.allows(.content, on: owner, in: document) else {
+                return (document, refusal(.locked, layer: document.layer(id: owner), document: document, context: context))
+            }
             let adjustment = LocalAdjustment(region: .selection, stack: MaskStack.single(MaskComponent(.raster(selection.raster))))
-            updated.setLocalAdjustment(adjustment, label: maskLabel(adjustment))
+            updated.setLocalAdjustment(adjustment, label: maskLabel(adjustment), on: owner)
             if use == "adjust" {
                 var effect = call
                 if effect.args["parameter"] == nil { effect.args["parameter"] = .string(AdjustmentParameter.exposure.rawValue) }
                 switch effectEdits(effect, on: adjustment, context: context) {
-                case .value(let edits): for edit in edits { _ = updated.applyLocalEdit(edit, to: adjustment.id) }
+                case .value(let edits): for edit in edits { _ = updated.applyLocalEdit(edit, to: adjustment.id, on: owner) }
                 case .answer(let result): return (document, result)
                 }
             }
-            label = maskLabel(updated.localAdjustment(id: adjustment.id) ?? adjustment)
+            label = maskLabel(updated.localAdjustment(id: adjustment.id, on: owner) ?? adjustment)
         default:
             // The legacy executors take an aligned mask: a selection a crop moved is baked first.
             var mask = selection.mask
@@ -212,10 +230,11 @@ extension PhotoOperationHandlers {
                 guard let name = call.args["color"]?.string, let color = PSColor.named(name) ?? PSColor(hex: name) else {
                     return (document, answer(context.french ? "Remplir de quelle couleur ?" : "Fill with which colour?", reason: .nothingToDo))
                 }
-                let layer = Layer(name: "Remplissage", content: .fill(color), mask: mask)
-                updated.addLayer(layer)
-                if let base = updated.index(of: baseID) { updated.moveLayer(id: layer.id, to: base + 1) }
-                updated.selectedLayerID = layer.id
+                // W3 (D8, D17): a fill layer masked by the selection, just above the photo, numbered like any new layer.
+                var layer = Layer(name: "Remplissage", content: .fill(color))
+                if let stack = selectionStack(selection, in: document, to: .canvas(document)) { layer.maskStack = stack } else { layer.mask = mask }
+                let added = updated.applyStructureEdit(.add(layer, placement: .above(baseID)))
+                if case .refused(let reason) = added.outcome { return (document, refusal(reason, layer: nil, document: document, context: context)) }
                 label = "Fill Selection"
             case "recolor":
                 guard let name = call.args["color"]?.string, let color = PSColor.named(name) ?? PSColor(hex: name) else {

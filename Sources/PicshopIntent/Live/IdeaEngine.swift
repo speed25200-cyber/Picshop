@@ -199,8 +199,37 @@ public enum IdeaEngine {
             }
         }
         list += maskCandidates(scene, persons: persons, outdoor: outdoor)
+        list += layerCandidates(state, scene: scene, persons: persons)
         return list + [enhance, autoCrop, vivid]
     }
+
+    /// W3 (§8.6): the layer chips, when they fit: the subject on a layer of its own (a person or an animal), a black
+    /// gradient at the foot of an outdoor picture (room for a title), and the PSD export once there are layers.
+    static func layerCandidates(_ state: LiveEditorState, scene: SceneDescription, persons: Int) -> [Template] {
+        guard FeatureFlags.isOn(.layerOps) else { return [] }
+        var list: [Template] = []
+        if persons >= 1 || !scene.animals.isEmpty { list.append(subjectToLayer) }
+        let open: Set<String> = ["sky", "outdoor", "landscape", "beach", "mountain", "sea", "ocean", "cityscape", "skyline", "sunset"]
+        if !Set(scene.labels).isDisjoint(with: open) { list.append(bottomGradient) }
+        if state.layerCount > 1, FeatureFlags.isOn(.proExport), FeatureFlags.isOn(.psdExport) { list.append(psdExport) }
+        return list
+    }
+
+    static let subjectToLayer = Template(key: "subjectToLayer", french: "Mettre le sujet sur un calque", english: "Put the subject on a layer",
+                                         whyFrench: "Le sujet à part, pour le retoucher ou le déplacer seul.",
+                                         whyEnglish: "The subject apart, to retouch or move it on its own.", symbol: "square.2.layers.3d.top.filled",
+                                         steps: [RawIntentStep(action: "layerVia", extra: ["mode": .string("copy"), "where": .string("subject")])],
+                                         markers: ["layer via"])
+    static let bottomGradient = Template(key: "bottomGradient", french: "Ajouter un dégradé noir en bas", english: "Add a black gradient at the bottom",
+                                         whyFrench: "Un bas plus sombre pour poser un titre lisible.", whyEnglish: "A darker foot for a readable title.",
+                                         symbol: "rectangle.bottomthird.inset.filled",
+                                         steps: [RawIntentStep(action: "addFillLayer", extra: ["fill": .string("gradient"), "color": .string("black"),
+                                                                                                "angle": .number(90)])],
+                                         markers: ["gradient fill layer"])
+    static let psdExport = Template(key: "psdExport", french: "Exporter en PSD", english: "Export as PSD",
+                                    whyFrench: "Les calques gardés, à rouvrir dans un autre logiciel.", whyEnglish: "The layers kept, to open in other apps.",
+                                    symbol: "square.and.arrow.up", steps: [RawIntentStep(action: "exportPhoto", extra: ["format": .string("psd")])],
+                                    markers: [])
 
     /// W2 (§8.9): the catalog's local-adjustment chips, when masks are on: a deeper sky under a sky, the subject
     /// brought forward, a darker foot for a landscape, a soft vignette for a portrait or a landscape.

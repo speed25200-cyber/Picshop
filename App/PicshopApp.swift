@@ -49,13 +49,17 @@ struct PicshopApp: App {
 }
 
 #if DEBUG
-/// DEBUG launch scenarios (W2, §9.8): `-PicshopScenario masks3` (or maskHandles, selectOutline, colorRange,
-/// selectAndMask, graphiteOn) builds a procedural fixture photo with Core Image generators: a sky gradient, a
-/// ground band and a subject disc. No bundled photo, so no licence question; parametric masks only, so the
-/// simulator needs no model. RootView's scenario host builds it off the main thread, imports it, opens the photo
-/// editor and calls the session's `applyDebugScenario(_:)`, then logs « scenario ready ».
+/// DEBUG launch scenarios (W2, §9.8; W3, §9.12): `-PicshopScenario masks3` (or maskHandles, selectOutline, colorRange,
+/// selectAndMask, graphiteOn; W3: layers10, groupsClip, freeTransform, layersInspector, layerMaskPaint, exportPro)
+/// builds a procedural fixture photo with Core Image generators: a sky gradient, a ground band and a subject disc. No
+/// bundled photo, so no licence question; parametric masks only, so the simulator needs no model. RootView's scenario
+/// host builds it off the main thread, imports it, opens the photo editor and calls the session's
+/// `applyDebugScenario(_:)` (which builds the W3 layer fixtures), then logs « scenario ready ». CI screenshots all
+/// twelve, and reads the freeTransform drag's `layers.bodyCount` line.
 enum DebugScenario {
-    static let names: Set<String> = ["masks3", "maskHandles", "selectOutline", "colorRange", "selectAndMask", "graphiteOn"]
+    static let names: Set<String> = ["masks3", "maskHandles", "selectOutline", "colorRange", "selectAndMask", "graphiteOn",
+                                     // W3: the layer fixtures are built by the session's applyDebugScenario (L3).
+                                     "layers10", "groupsClip", "freeTransform", "layersInspector", "layerMaskPaint", "exportPro"]
 
     /// The scenario named after `-PicshopScenario`; nil without the argument or for an unknown name.
     static func name(_ arguments: [String] = ProcessInfo.processInfo.arguments) -> String? {

@@ -259,6 +259,8 @@ extension RuleBasedIntentEngine {
     /// "encore", "pareil pour le chien", "plus gros", "en rouge" after a step that was not an adjustment
     /// (those are `parseFollowUp`'s): the last step again, on something else, or restyled.
     func parseLastFollowUp(_ u: NormalizedUtterance, original: String, context: IntentContext) -> EditIntent? {
+        // W3 (D20): « continue » resumes the Live brain's pending outline.
+        if context.hasPendingOutline, GoalOutline.isContinue(u.original) { return nil }
         guard let last = context.lastIntent, last.action != .adjust else { return nil }
         let skipped: Set<IntentAction> = [.undo, .redo, .revert, .export, .share, .unknown, .help, .describe, .summarizeEdits, .saveVersion,
                                           .restoreVersion, .saveStyle, .applyStyle, .compare, .zoom, .confirm, .cancel, .chooseCandidate]

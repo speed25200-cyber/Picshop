@@ -54,7 +54,12 @@ public final class PerformanceGovernor {
 
     /// A finger is on the canvas (W2): a mask handle, a brush, a lasso or a dial drag. The photo editor sets it from
     /// the first touch to its end; the Live orb and the marching ants pause while it is set.
-    public var isCanvasInteracting = false
+    public var isCanvasInteracting = false {
+        didSet { if isCanvasInteracting != oldValue { lastCanvasInteraction = Date() } }
+    }
+    /// W3 (D22 step 5): when a canvas interaction last began or ended. Background model work (the KV self-test) waits
+    /// for 10 s without one. Not observed: nothing redraws for it.
+    @ObservationIgnored public private(set) var lastCanvasInteraction: Date?
 
     private var tokens: [NSObjectProtocol] = []
     @ObservationIgnored private var memoryReliefTask: Task<Void, Never>?

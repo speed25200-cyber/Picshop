@@ -76,6 +76,8 @@ public struct DialogueExpect: Sendable {
     public var regionsPresent: [MaskRegion] = []
     /// The dials of these masks moved further from neutral, all together.
     public var strengthened: [Int] = []
+    /// W3: the number of layers after the turn (the photo included).
+    public var layerTotal: Int?
 
     public static var any: DialogueExpect { DialogueExpect() }
 
@@ -116,6 +118,7 @@ public struct DialogueExpect: Sendable {
     public func reverted() -> Self { var copy = self; copy.reverts = true; return copy }
     public func hasRegion(_ region: MaskRegion) -> Self { var copy = self; copy.regionsPresent.append(region); return copy }
     public func stronger(_ index: Int) -> Self { var copy = self; copy.strengthened.append(index); return copy }
+    public func layerTotal(_ count: Int) -> Self { var copy = self; copy.layerTotal = count; return copy }
 }
 
 /// One thing the user says, one good model answer, and what it must do.
@@ -139,7 +142,7 @@ public struct DialogueTurn: Sendable {
 }
 
 public struct LiveDialogueCase: Sendable {
-    public enum Category: String, CaseIterable, Sendable { case table, text, followUp, reference, compound, question, recovery, verify, masks }
+    public enum Category: String, CaseIterable, Sendable { case table, text, followUp, reference, compound, question, recovery, verify, masks, layers }
 
     public let name: String
     public let category: Category
@@ -884,6 +887,104 @@ public enum LiveDialogueCases {
             turn("brighten the face", edit("Brightening the face.", mask(#""where":"face","parameter":"exposure","amount":15"#)), .any.masks(1).hasRegion(.face)),
             turn("again", edit("A little more.", mask(#""where":"face","parameter":"exposure","amount":15"#)), .any.masks(1).stronger(1)),
             turn("remove all the masks", edit("Removing them.", #"[{"action":"maskDelete","all":true}]"#), .any.masks(0)),
+        ]),
+    ]
+}
+
+// MARK: - W3 layer dialogues
+
+extension LiveDialogueCases {
+    /// W3 (§8.7): the layer dialogues on the lake (the 4B lane's scripted replay). Kept apart from `all`, whose
+    /// grammar-lane floors were measured before layers. The long goal (outline-then-fill) and vlogCleanup (a video)
+    /// run in OutlineTests and RecipeTests, which own those hosts.
+    public static let layers: [LiveDialogueCase] = [
+        many("subject on a layer, black gradient, merge down", .layers, .lake, [
+            turn("mets le sujet sur un calque à part", edit("Je mets le sujet sur un calque.", #"[{"action":"layerVia","mode":"copy","where":"subject"}]"#),
+                 .any.ran("layerVia").layerTotal(2)),
+            turn("ajoute un dégradé noir en bas", edit("J'ajoute un dégradé noir en bas.", #"[{"action":"addFillLayer","fill":"gradient","color":"black","angle":90}]"#),
+                 .any.ran("addFillLayer").layerTotal(3)),
+            turn("fusionne le dégradé vers le bas", edit("Je fusionne le dégradé avec le calque du dessous.", #"[{"action":"mergeLayers","mode":"down","ref":"j1"}]"#),
+                 .any.ran("mergeLayers").layerTotal(2)),
+        ]),
+        many("subject, gradient, merge down EN", .layers, .lake, [
+            turn("put the person on a layer of their own", edit("The person is on a new layer.", #"[{"action":"layerVia","mode":"copy","where":"person"}]"#),
+                 .any.ran("layerVia").layerTotal(2)),
+            turn("add a black gradient at the bottom", edit("A black gradient at the bottom.", #"[{"action":"addFillLayer","fill":"gradient","color":"black","angle":90}]"#),
+                 .any.ran("addFillLayer").layerTotal(3)),
+            turn("merge the gradient down", edit("Merging it down.", #"[{"action":"mergeLayers","mode":"down","ref":"j1"}]"#), .any.ran("mergeLayers").layerTotal(2)),
+        ]),
+        many("a curves layer clipped to the subject", .layers, .lake, [
+            turn("mets le sujet sur son propre calque", edit("Le sujet est sur un calque.", #"[{"action":"layerVia","mode":"copy","where":"subject"}]"#),
+                 .any.ran("layerVia").layerTotal(2)),
+            turn("ajoute un calque de courbes en S", edit("J'ajoute un calque Courbes.", #"[{"action":"addAdjustmentLayer","kind":"curves","preset":"sCurve"}]"#),
+                 .any.ran("addAdjustmentLayer").layerTotal(3)),
+            turn("écrête-le au calque du dessous", edit("Les courbes ne touchent plus que le sujet.", #"[{"action":"layerClip","ref":"j1","clip":true}]"#),
+                 .any.ran("layerClip").layerTotal(3)),
+        ]),
+        many("group two fills, then lower the group", .layers, .lake, [
+            turn("ajoute un dégradé noir en bas", edit("Un dégradé noir en bas.", #"[{"action":"addFillLayer","fill":"gradient","color":"black","angle":90}]"#),
+                 .any.ran("addFillLayer").layerTotal(2)),
+            turn("ajoute un aplat blanc à 20 %", edit("Un aplat blanc à 20 %.", #"[{"action":"addFillLayer","fill":"solid","color":"white","opacity":20}]"#),
+                 .any.ran("addFillLayer").layerTotal(3)),
+            turn("groupe le dégradé et l'aplat", edit("Je les groupe.", #"[{"action":"groupLayers","refs":["j1","j2"]}]"#), .any.ran("groupLayers").layerTotal(4)),
+            turn("baisse l'opacité du groupe à 60 %", edit("Le groupe passe à 60 %.", #"[{"action":"layerOpacity","ref":"g1","opacity":60}]"#),
+                 .any.layerTotal(4)),
+        ]),
+        many("crop then brighten the cup", .layers, .lake, [
+            turn("recadre en carré", edit("Je recadre en carré.", #"[{"action":"crop","aspect":"square"}]"#), .any.action(.crop)),
+            turn("éclaircis la tasse", edit("J'éclaircis la tasse.", #"[{"action":"maskAdjust","where":"object","target":"cup","parameter":"exposure","amount":20}]"#),
+                 .any.ran("maskAdjust").masks(1)),
+            turn("merci", "Avec plaisir.", .any.noChange()),
+        ]),
+        many("instagram post recipe", .layers, .lake, [
+            turn("prépare-la pour un post Instagram", edit("Je la prépare pour Instagram.", #"[{"action":"recipe","name":"instagramPost"}]"#), .any.ran("recipe")),
+            turn("c'est parfait", "Super !", .any.noChange()),
+            turn("annule", undo("J'annule la recette."), .any.reverted()),
+        ]),
+        many("product photo recipe EN", .layers, .lake, [
+            turn("make it a product shot on white", edit("Product photo on white.", #"[{"action":"recipe","name":"productPhoto","background":"white"}]"#),
+                 .any.ran("recipe")),
+            turn("looks great", "Glad you like it.", .any.noChange()),
+            turn("undo that", undo("Undoing it."), .any.reverted()),
+        ]),
+        many("portrait retouch recipe", .layers, .lake, [
+            turn("une retouche portrait toute légère", edit("Une retouche portrait légère.", #"[{"action":"recipe","name":"portraitRetouch","strength":30}]"#),
+                 .any.ran("recipe")),
+            turn("c'est naturel, merci", "Avec plaisir.", .any.noChange()),
+            turn("annule", undo("J'annule."), .any.reverted()),
+        ]),
+        many("export a layered PSD", .layers, .lake, [
+            turn("mets le sujet sur un calque à part", edit("Le sujet est sur un calque.", #"[{"action":"layerVia","mode":"copy","where":"subject"}]"#),
+                 .any.ran("layerVia")),
+            turn("exporte en PSD avec les calques", edit("J'ouvre l'export en PSD avec les calques.", #"[{"action":"exportPhoto","format":"psd","layers":true}]"#),
+                 .any.noChange()),
+            turn("merci", "Avec plaisir.", .any.noChange()),
+        ]),
+        many("a locked layer refused then unlocked", .layers, .lake, [
+            turn("mets le sujet sur un calque à part", edit("Le sujet est sur un calque.", #"[{"action":"layerVia","mode":"copy","where":"subject"}]"#),
+                 .any.ran("layerVia")),
+            turn("verrouille complètement le sujet", edit("Je verrouille le sujet.", #"[{"action":"layerProperties","ref":"i1","lock":"all"}]"#),
+                 .any.ran("layerProperties")),
+            turn("décale le sujet vers la gauche", edit("Je le décale.", #"[{"action":"layerTransform","ref":"i1","dx":-50}]"#),
+                 .any.noChange().said("verrouillé"), after: "Le calque est verrouillé : je le déverrouille si tu veux."),
+            turn("déverrouille le sujet", edit("Je déverrouille le sujet.", #"[{"action":"layerProperties","ref":"i1","lock":"none"}]"#),
+                 .any.ran("layerProperties")),
+            turn("décale le sujet vers la gauche", edit("Je le décale vers la gauche.", #"[{"action":"layerTransform","ref":"i1","dx":-50}]"#),
+                 .any.ran("layerTransform")),
+        ]),
+        many("a locked layer EN", .layers, .lake, [
+            turn("lift the person onto a new layer", edit("The person is on a new layer.", #"[{"action":"layerVia","mode":"copy","where":"person"}]"#),
+                 .any.ran("layerVia")),
+            turn("lock that layer completely", edit("Locking it.", #"[{"action":"layerProperties","ref":"i1","lock":"all"}]"#), .any.ran("layerProperties")),
+            turn("move it to the right", edit("Moving it.", #"[{"action":"layerTransform","ref":"i1","dx":50}]"#),
+                 .any.noChange().said("locked"), after: "That layer is locked: I can unlock it first."),
+        ]),
+        many("paint the layer mask by voice", .layers, .lake, [
+            turn("mets le ciel sur un calque à part", edit("Le ciel est sur un calque.", #"[{"action":"layerVia","mode":"copy","where":"sky"}]"#),
+                 .any.ran("layerVia")),
+            turn("je veux peindre le masque de ce calque", edit("Peins sur la photo.", #"[{"action":"layerMask","do":"paint","layer":"i1"}]"#),
+                 .any.noChange()),
+            turn("merci", "Avec plaisir.", .any.noChange()),
         ]),
     ]
 }

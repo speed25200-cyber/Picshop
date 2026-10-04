@@ -38,6 +38,8 @@ struct LiveDebugView: View {
 
             latencySection
 
+            LiveKVLatencySection()
+
             LiveBrainDebugSection()
 
             LiveUnderstandingEvalSection()
@@ -238,6 +240,111 @@ private struct LiveSelfTestSection: View {
         case .skipped:
             Image(systemName: "minus.circle").foregroundStyle(PSTheme.textTertiary)
         }
+    }
+}
+
+/// « Latence » (W3, D23): the model's first token per path (warm, picture, prefix or cold) against the goals, the
+/// barge-in restores, compactions per 10 turns, the measured prefill and decode rates, the engine and its self-test.
+/// A leaf: it redraws once per answered turn, and reads the runtime's KV state off the main actor every 5 s.
+private struct LiveKVLatencySection: View {
+    @State private var diagnostics = LocalKVDiagnostics()
+
+    var body: some View {
+        let stats = LocalBrainHub.shared.firstTokenStats
+        Section {
+            LiveDebugValue(title: L("Engine"), value: diagnostics.engine == .kvEngine ? L("KV engine") : L("ChatSession (W2)"))
+            LiveDebugValue(title: L("KV self-test"), value: Self.selfTest(diagnostics))
+            LiveDebugValue(title: L("Prefix snapshot"), value: diagnostics.prefix)
+            goal(L("Warm first token p50"), stats.percentile(50, path: "warm"), FirstTokenTargets.warmP50Ms)
+            goal(L("Warm first token p95"), stats.percentile(95, path: "warm"), FirstTokenTargets.warmP95Ms)
+            goal(L("Picture turn p50"), stats.percentile(50, path: "picture"), FirstTokenTargets.pictureP50Ms)
+            goal(L("Restored turn p50"), stats.percentile(50, path: "restored"), FirstTokenTargets.warmWithCardsP50Ms)
+            goal(L("New conversation p50"), stats.percentile(50, path: "prefix"), FirstTokenTargets.coldMs)
+            goal(L("Cold p50"), stats.percentile(50, path: "cold"), FirstTokenTargets.coldMs)
+            goal(String(format: L("Barge-in restores: %d, p95"), stats.restoreCount), stats.restorePercentile(95), FirstTokenTargets.restoreMs)
+            compactions(stats)
+            LiveDebugValue(title: L("Prefill"), value: Self.rates(stats))
+            LiveDebugValue(title: L("Decode"), value: stats.decodeTokensPerSecond.map { String(format: "%.1f tok/s", $0) } ?? "")
+        } header: {
+            Text(L("Latency"))
+        } footer: {
+            Text(L("First token from the request to the model's first word, in milliseconds, against the goals: warm 0.7 s (1.0 s with new cards), 1.2 s at p95, a picture 1.2 s, a restore 50 ms, at most one compaction per 10 turns."))
+        }
+        .task {
+            while !Task.isCancelled {
+                diagnostics = await LocalBrainHub.shared.kvDiagnostics()
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
+    }
+
+    private func goal(_ title: String, _ value: Int?, _ target: Int) -> some View {
+        LabeledContent(title) {
+            HStack(spacing: 6) {
+                Text(verbatim: value.map { "\($0) ms" } ?? "—")
+                    .font(PSFont.mono(13))
+                    .foregroundStyle(PSTheme.textSecondary)
+                Image(systemName: Self.symbol(FirstTokenStats.meets(value, goal: target)))
+                    .foregroundStyle(Self.tint(FirstTokenStats.meets(value, goal: target)))
+                    .accessibilityLabel(Self.verdict(FirstTokenStats.meets(value, goal: target)))
+            }
+        }
+    }
+
+    private func compactions(_ stats: FirstTokenStats) -> some View {
+        let rate = stats.compactionsPer10Turns
+        let met: Bool? = stats.turns == 0 ? nil : rate <= FirstTokenTargets.compactionsPer10Turns
+        return LabeledContent(L("Compactions per 10 turns")) {
+            HStack(spacing: 6) {
+                Text(verbatim: stats.turns == 0 ? "—" : String(format: "%.1f (%d / %d)", rate, stats.compactions, stats.turns))
+                    .font(PSFont.mono(13))
+                    .foregroundStyle(PSTheme.textSecondary)
+                Image(systemName: Self.symbol(met)).foregroundStyle(Self.tint(met)).accessibilityLabel(Self.verdict(met))
+            }
+        }
+    }
+
+    static func symbol(_ met: Bool?) -> String {
+        switch met {
+        case true?: return "checkmark.circle.fill"
+        case false?: return "xmark.circle.fill"
+        case nil: return "circle.dotted"
+        }
+    }
+
+    static func tint(_ met: Bool?) -> Color {
+        switch met {
+        case true?: return PSTheme.success
+        case false?: return PSTheme.danger
+        case nil: return PSTheme.textTertiary
+        }
+    }
+
+    static func verdict(_ met: Bool?) -> String {
+        switch met {
+        case true?: return L("Goal met")
+        case false?: return L("Goal missed")
+        case nil: return L("Not measured yet")
+        }
+    }
+
+    static func selfTest(_ diagnostics: LocalKVDiagnostics) -> String {
+        switch diagnostics.selfTest {
+        case "passed": return L("Passed, pictures included")
+        case "mediaFailed": return L("Passed, pictures re-read")
+        case "failed": return L("Failed: ChatSession kept")
+        case "running": return L("Running")
+        case "waiting": return L("Waits for a quiet moment")
+        case "pending": return L("Not run yet")
+        default: return L("Off")
+        }
+    }
+
+    /// "warm 840 · picture 610 · cold 520 tok/s".
+    static func rates(_ stats: FirstTokenStats) -> String {
+        FirstTokenStats.paths.compactMap { path in
+            stats.prefillTokensPerSecond(path: path).map { "\(path) \(Int($0.rounded()))" }
+        }.joined(separator: " · ").appending(stats.count(path: nil) > 0 ? " tok/s" : "")
     }
 }
 

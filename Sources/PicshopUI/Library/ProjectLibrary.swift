@@ -39,6 +39,8 @@ public final class ProjectLibrary {
     /// Cards whose file check is running, with the newest summary asked for meanwhile.
     @ObservationIgnored private var thumbnailChecks: [UUID: ProjectSummary?] = [:]
     @ObservationIgnored private var regenerated: Set<UUID> = []
+    /// W3 (D2): the load source of each project opened, until its editor takes it.
+    @ObservationIgnored private var loadSources: [UUID: DocumentCodec.LoadSource] = [:]
 
     /// A decoded 512 px thumbnail is about a megabyte: slots beyond this are dropped.
     static let slotLimit = 48
@@ -70,10 +72,19 @@ public final class ProjectLibrary {
         for id in slots.keys where !live.contains(id) { dropSlot(id) }
     }
 
-    /// Decodes a whole project off the main thread, for the editor about to open.
+    /// Decodes a whole project off the main thread, for the editor about to open. W3 (D2): where its photo document
+    /// came from is kept for that editor (`takeLoadSource(for:)`).
     public func load(_ id: UUID) async throws -> Project {
         let store = self.store
-        return try await Task.detached(priority: .userInitiated) { try store.load(id: id) }.value
+        let loaded = try await Task.detached(priority: .userInitiated) { try store.loadWithSource(id: id) }.value
+        loadSources[id] = loaded.source
+        return loaded.project
+    }
+
+    /// Where the last `load(_:)` of that project found its document (a newer build's file, an older build's save merged
+    /// back), handed once to the editor that opens it; nil when it was not loaded through here (a new project).
+    public func takeLoadSource(for id: UUID) -> DocumentCodec.LoadSource? {
+        loadSources.removeValue(forKey: id)
     }
 
     /// Saves a project from an editor: encode and atomic write off the main

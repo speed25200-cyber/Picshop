@@ -41,6 +41,8 @@ public enum ToolHints {
             return "Give box as [x1, y1, x2, y2] from 0 to 1000 inside the picture, at least 20 wide and high."
         case .noText:
             return "Use a text id (t or l) from the texts line."
+        case .locked:
+            return "Tell the user the layer is locked; unlock it with layerProperties lock none only if they ask."
         case .verifyFailed:
             switch action {
             case .fillCells: return "Fill only the failing cells again with cells all, or tell the user which cells did not come out."

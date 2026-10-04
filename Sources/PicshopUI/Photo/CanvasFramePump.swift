@@ -12,7 +12,8 @@ import PicshopImaging
 /// canvas sink, their mask overlay with them (`presentOverlay`, same
 /// generation); the sharp frame after 120 ms of stillness is published to
 /// SwiftUI, the histogram and Live. Behind the `displayLinkCanvas` flag; the
-/// session's sleep-paced loop stays for one wave as the fallback.
+/// session's sleep-paced loop stays for one wave as the fallback. W3: a drag
+/// with an interactive snapshot builds its frames on the main actor, no hop.
 @MainActor
 final class CanvasFramePump {
     private weak var session: PhotoEditorSession?
@@ -96,6 +97,16 @@ final class CanvasFramePump {
             pendingTouch = nil
         }
         session.isRendering = true
+        // W3 (D13): under a drag that has an interactive snapshot covering the document, the frame is built here on
+        // the main actor (graph construction only, ≤ 1 ms for 10 layers) and presented at once, same generation
+        // rules; touchToPhoton closes when it reaches the glass, as for the actor's frames. The settled frame always
+        // goes through the actor.
+        if interactive, let frame = session.snapshotFrame() {
+            session.frameRendered(frame.image, overlay: frame.overlay, interactive: true, generation: generation)
+            pacer.renderFinished(now: CACurrentMediaTime())
+            if pacer.phase == .idle { session.isRendering = false }
+            return
+        }
         renderTask = Task { [weak self, weak session] in
             // The frame and its mask or selection overlay (W2, D17): one render, one generation for both.
             let rendered = await session?.renderFrame(interactive: interactive)

@@ -3,7 +3,7 @@
 Generated from the Operation Catalog (`Sources/PicshopCore/Operations`); do not edit by hand. After changing an entry, run
 `PICSHOP_WRITE_OPERATIONS_DOC=1 swift test --filter CardTests/testOperationsDocIsUpToDate`; CI fails while this file is stale.
 
-112 operations: 57 photo, 59 video, 17 PDF. 19 run through a handler table (`IntentAction.operation`); the others lower to the IntentAction of the same name.
+125 operations: 70 photo, 60 video, 17 PDF. 32 run through a handler table (`IntentAction.operation`); the others lower to the IntentAction of the same name.
 
 A step is `{"action": id, …params}`. Points are `[x, y]` and boxes `[x1, y1, x2, y2]`, 0–1000 with a top-left origin. On a card, `*` is required, `{a / b}` is a one-of group, and `key:…` lists its values on a `key:` line.
 
@@ -62,12 +62,25 @@ A step is `{"action": id, …params}`. Points are `[x, y]` and boxes `[x1, y1, x
 | [`layerBlend`](#layerblend) | Blend mode / Mode de fusion | layers |  | none |  | layers |
 | [`layerVisibility`](#layervisibility) | Show or hide layer / Afficher ou masquer | layers |  | none |  | layers |
 | [`layerOrder`](#layerorder) | Layer order / Ordre des calques | layers |  | none |  | layers |
+| [`addImageLayer`](#addimagelayer) | Add a photo layer / Ajouter une photo en calque | layers |  | keywordsOnly |  | layers |
+| [`layerVia`](#layervia) | Layer via copy or cut / Calque par copier ou couper | layers |  | keywordsOnly |  | layers |
+| [`addFillLayer`](#addfilllayer) | Fill layer / Calque de remplissage | layers |  | keywordsOnly |  | layers |
+| [`fillLayer`](#filllayer) | Edit fill layer / Modifier le remplissage | layers |  | keywordsOnly |  | layers |
+| [`addAdjustmentLayer`](#addadjustmentlayer) | Adjustment layer / Calque de réglage | layers |  | keywordsOnly |  | layers |
+| [`layerMask`](#layermask) | Layer mask / Masque de fusion | layers |  | keywordsOnly |  | layers |
+| [`layerClip`](#layerclip) | Clipping mask / Masque d'écrêtage | layers |  | keywordsOnly |  | layers |
+| [`groupLayers`](#grouplayers) | Group layers / Grouper les calques | layers |  | keywordsOnly |  | layers |
+| [`mergeLayers`](#mergelayers) | Merge layers / Fusionner les calques | layers |  | keywordsOnly |  | layers |
+| [`layerTransform`](#layertransform) | Transform layer / Transformer le calque | layers |  | keywordsOnly |  | layers |
+| [`layerProperties`](#layerproperties) | Layer fill, lock and name / Fond, verrou et nom du calque | layers |  | keywordsOnly |  | layers |
+| [`exportPhoto`](#exportphoto) | Export as / Exporter en | export |  | keywordsOnly |  | export |
 | [`maskAdjust`](#maskadjust) | Mask adjustment / Réglage par masque | light | yes | keywordsOnly |  | masks |
 | [`maskEdit`](#maskedit) | Edit mask / Modifier le masque | selection |  | keywordsOnly |  | masks |
 | [`maskDelete`](#maskdelete) | Delete mask / Supprimer le masque | selection |  | keywordsOnly |  | masks |
 | [`select`](#select) | Select / Sélectionner | selection |  | keywordsOnly |  | select |
 | [`selectionModify`](#selectionmodify) | Modify selection / Modifier la sélection | selection |  | keywordsOnly |  | select |
 | [`selectionApply`](#selectionapply) | Use selection / Utiliser la sélection | selection |  | keywordsOnly |  | select |
+| [`recipe`](#recipe) | Recipe / Recette | effects |  | keywordsOnly |  | magic |
 
 ## Video
 
@@ -131,6 +144,7 @@ A step is `{"action": id, …params}`. Points are `[x, y]` and boxes `[x1, y1, x
 | [`syncToBeat`](#synctobeat) | Cut to the beat / Couper au rythme | audio |  | owned |  | audio |
 | [`fitMusic`](#fitmusic) | Fit the music / Ajuster la musique | audio |  | owned |  | audio |
 | [`enhanceVoice`](#enhancevoice) | Enhance voice / Voix claire | audio |  | owned |  | audio |
+| [`recipe`](#recipe) | Recipe / Recette | effects |  | keywordsOnly |  | magic |
 | [`seek`](#seek) | Go to time / Aller à un instant | cut |  | owned | yes | cut |
 
 ## PDF
@@ -168,6 +182,7 @@ Adjust / Réglage. One tone or colour setting. *Un réglage de ton ou de couleur
   - `parameter` one of `exposure`, `brightness`, `contrast`, `highlights`, `shadows`, `whites`, `blacks`, `saturation`, `vibrance`, `temperature`, `tint`, `sharpness`, `clarity`, `noiseReduction`, `vignette`, `grain`, `fade`, `hue`, `skinTone`, required: the setting (also `param`, `setting`)
   - `amount` number -100…100 (signedPercent), optional: relative ±; a bit 10, a lot 40 (also `value`, `strength`, `intensity`)
   - `amountMode` one of `relative`, `absolute`, `multiplier`, optional: relative more/less, absolute set to; off the card
+  - `layer` id in/jn, optional: i1 or j1; none: the selected (also `ref`); off the card
 - Triggers (fr): « luminosité », « plus lumineux », « plus clair », « éclaircis », « assombris », « plus sombre », « exposition », « contraste », « saturation », « plus de couleurs », « désature », « vibrance », « réchauffe », « plus chaud », « plus froid », « chaleur », « ombres », « hautes lumières », « noirs », « blancs », « netteté », « plus net », « clarté », « grain », « vignettage », « teinte », « nuance », « bruit », « terne », « délavé »
 - Triggers (en): « brighter », « darker », « brightness », « exposure », « contrast », « saturation », « more colour », « desaturate », « vibrance », « warmer », « cooler », « warmth », « shadows », « highlights », « blacks », « whites », « sharpness », « sharper », « clarity », « grain », « vignette », « tint », « hue », « noise », « dull », « washed out »
 - Examples:
@@ -179,6 +194,9 @@ Adjust / Réglage. One tone or colour setting. *Un réglage de ton ou de couleur
   - « make it brighter » → `{"action":"adjust","amount":20,"parameter":"brightness"}`
   - « less contrast » → `{"action":"adjust","amount":-20,"parameter":"contrast"}`
   - « rend la plus chaude » (paraphrase) → `{"action":"adjust","amount":20,"parameter":"temperature"}`
+  - « baisse l'exposition du calque de réglage j4 » → `{"action":"adjust","amount":-20,"layer":"j4","parameter":"exposure"}`
+  - « plus de contraste sur la tasse i1 » → `{"action":"adjust","amount":20,"layer":"i1","parameter":"contrast"}`
+  - « lower the exposure of the adjustment layer j4 » → `{"action":"adjust","amount":-20,"layer":"j4","parameter":"exposure"}`
   - « désature les bleus » is not this: `hsl`
   - « courbe en S » is not this: `curves`
 - Check: adjustment(parameter) changed.
@@ -262,6 +280,7 @@ Curves / Courbes. Tone curve per channel. *Courbe de tons par canal.*
   - `preset` one of `sCurve`, `strongS`, `matte`, `fade`, `invert`, `brighten`, `darken`, `linear`, one of group `shape`: a ready-made shape (also `shape`, `curve`)
   - `points` list of ≤ 16: point [x, y] 0–1000, one of group `shape`: [[in,out]…] 0-1000
   - `amount` number 0…100 (percent), default 50: strength (also `strength`, `intensity`)
+  - `layer` id in/jn, optional: i1 or a Courbes j1; none: selected (also `ref`); off the card
 - Triggers (fr): « courbe », « courbes », « courbe en S », « courbe de tons », « courbe des tons », « S léger », « contraste en S », « courbe mate », « inverse les tons »
 - Triggers (en): « curve », « curves », « S curve », « tone curve », « S-curve », « S contrast », « curves adjustment »
 - Examples:
@@ -273,6 +292,8 @@ Curves / Courbes. Tone curve per channel. *Courbe de tons par canal.*
   - « strong S curve on the red channel » → `{"action":"curves","channel":"red","preset":"strongS"}`
   - « mets une petite courbe en S » (paraphrase) → `{"action":"curves","amount":25,"preset":"sCurve"}`
   - « courbe en esse » (paraphrase) → `{"action":"curves","preset":"sCurve"}`
+  - « adoucis les courbes de j3 » → `{"action":"curves","amount":20,"layer":"j3","preset":"sCurve"}`
+  - « strong S curve on the curves layer j3 » → `{"action":"curves","layer":"j3","preset":"strongS"}`
   - « plus de contraste » is not this: `adjust`
 - Check: toneCurve changed.
 
@@ -290,6 +311,7 @@ Levels / Niveaux. Black, white and gamma points. *Points noir, blanc et gamma.*
   - `outBlack` number 0…254 (level255), one of group `values`: output black; off the card
   - `outWhite` number 1…255 (level255), one of group `values`: output white; off the card
   - `auto` true or false, one of group `values`: automatic levels
+  - `layer` id in/jn, optional: i1 or a Niveaux j1; none: selected (also `ref`); off the card
 - Triggers (fr): « niveaux », « niveaux automatiques », « point noir », « point blanc », « gamma », « niveaux du rouge », « réglage des niveaux »
 - Triggers (en): « levels », « auto levels », « black point », « white point », « gamma », « input levels », « output levels »
 - Examples:
@@ -300,6 +322,7 @@ Levels / Niveaux. Black, white and gamma points. *Points noir, blanc et gamma.*
   - « auto levels » → `{"action":"levels","auto":true}`
   - « set the levels gamma to 1.2 » → `{"action":"levels","gamma":1.2}`
   - « fais les niveaux tout seul » (paraphrase) → `{"action":"levels","auto":true}`
+  - « point blanc à 230 sur le calque de niveaux j5 » → `{"action":"levels","layer":"j5","white":230}`
   - « plus de noirs » is not this: `adjust`
 - Check: levels changed.
 
@@ -311,6 +334,7 @@ Auto tone / Tons auto. Levels from the histogram. *Niveaux tirés de l'histogram
 - Card: `autoTone: amount 0..100=100 — Levels from the histogram « auto tone »`
 - Params:
   - `amount` number 0…100 (percent), default 100: strength (also `strength`, `intensity`)
+  - `layer` id in/jn, optional: i1 or j1; none: the selected (also `ref`); off the card
 - Triggers (fr): « tons automatiques », « tonalité automatique », « ton auto », « tons auto », « corrige les tons », « étale l'histogramme »
 - Triggers (en): « auto tone », « automatic tone », « auto contrast », « stretch the histogram »
 - Examples:
@@ -319,6 +343,7 @@ Auto tone / Tons auto. Levels from the histogram. *Niveaux tirés de l'histogram
   - « tons auto à moitié » → `{"action":"autoTone","amount":50}`
   - « auto tone » → `{"action":"autoTone"}`
   - « auto tone, but gently » → `{"action":"autoTone","amount":40}`
+  - « tons auto sur le calque de niveaux j5 » → `{"action":"autoTone","layer":"j5"}`
   - « améliore la photo » is not this: `autoEnhance`
 - Check: levels changed.
 
@@ -333,6 +358,7 @@ Look / Filtre. A ready-made look. *Un look tout prêt.*
   - `look` one of `original`, `vivid`, `vividWarm`, `vividCool`, `dramatic`, `dramaticWarm`, `dramaticCool`, `cinematic`, `goldenHour`, `tealOrange`, `matte`, `vintage`, `film`, `mono`, `silvertone`, `noir`, `portrait`, `pastel`, `punch`, `fresh`, required: the look (also `preset`, `filter`)
   - `amount` number 0…100 (percent), optional: intensity (also `value`, `strength`, `intensity`)
   - `amountMode` one of `relative`, `absolute`, `multiplier`, optional: relative more/less, absolute set to; off the card
+  - `layer` id in/jn, optional: i1 or a Look j1; none: selected (also `ref`); off the card
 - Triggers (fr): « filtre », « look », « noir et blanc », « heure dorée », « vintage », « cinéma », « ciné », « argentique », « rétro », « pastel », « dramatique », « teal orange »
 - Triggers (en): « filter », « look », « black and white », « golden hour », « vintage », « cinematic », « film look », « retro », « pastel », « dramatic », « moody »
 - Examples:
@@ -342,6 +368,7 @@ Look / Filtre. A ready-made look. *Un look tout prêt.*
   - « apply the cinematic look » → `{"action":"applyLook","look":"cinematic"}`
   - « black and white » → `{"action":"applyLook","look":"mono"}`
   - « met en noir est blanc » (paraphrase) → `{"action":"applyLook","look":"mono"}`
+  - « mets le look vintage sur le calque j9 » → `{"action":"applyLook","layer":"j9","look":"vintage"}`
   - « ombres bleues » is not this: `colorGrade`
 - Check: unverifiable: a look is judged by eye.
 
@@ -355,6 +382,7 @@ Match colour / Harmoniser les couleurs. Colours of another photo or clip. *Les c
 - Params:
   - `clipNumber` integer -1…999, optional: video: the reference clip (also `clip`)
   - `scope` one of `current`, `all`, `selection`, optional: video: all clips
+  - `layer` id in, optional: photo: i1 an image layer (also `ref`); off the card
 - Triggers (fr): « copie les couleurs », « les couleurs d'une autre photo », « mêmes couleurs que », « harmonise les couleurs », « transfert de couleur », « la couleur du clip », « couleur du clip », « comme le clip »
 - Triggers (en): « match the colours », « match the colors », « colour transfer », « same colours as », « copy the colours », « match the clip »
 - Examples:
@@ -363,6 +391,7 @@ Match colour / Harmoniser les couleurs. Colours of another photo or clip. *Les c
   - « harmonise les couleurs avec le premier clip » → `{"action":"matchColor","clipNumber":1}`
   - « match the colours of another photo » → `{"action":"matchColor"}`
   - « copy the colours of another picture » → `{"action":"matchColor"}`
+  - « harmonise les couleurs de la tasse i1 avec une autre photo » → `{"action":"matchColor","layer":"i1"}`
   - « applique un filtre vintage » is not this: `applyLook`
 - Check: unverifiable: needs the reference picked by the user.
 
@@ -405,6 +434,7 @@ Colour mixer / Mélangeur de couleurs. Hue, saturation, lightness of one colour.
   - `saturation` number -100…100 (signedPercent), one of group `values`: less to more vivid
   - `luminance` number -100…100 (signedPercent), one of group `values`: darker to lighter (also `lightness`)
   - `amountMode` one of `relative`, `absolute`, default relative: relative adds; off the card
+  - `layer` id in/jn, optional: i1 or a TSL j1; none: selected (also `ref`); off the card
 - Triggers (fr): « mélangeur de couleurs », « TSL », « teinte saturation luminance », « désature les bleus », « sature les rouges », « les verts plus jaunes », « teinte des verts », « luminance des bleus », « saturation des oranges », « tons chair », « couleur de peau »
 - Triggers (en): « HSL », « colour mixer », « color mixer », « hue saturation luminance », « desaturate the blues », « the greens more yellow », « saturation of the reds », « skin tones », « skin tone »
 - Examples:
@@ -415,6 +445,7 @@ Colour mixer / Mélangeur de couleurs. Hue, saturation, lightness of one colour.
   - « desaturate the blues » → `{"action":"hsl","band":"blue","saturation":-40}`
   - « make the greens more yellow » → `{"action":"hsl","band":"green","hue":-30}`
   - « baisse la sat des bleus » (paraphrase) → `{"action":"hsl","band":"blue","saturation":-30}`
+  - « désature les rouges du calque j6 » → `{"action":"hsl","band":"red","layer":"j6","saturation":-30}`
   - « plus de saturation » is not this: `adjust`
 - Check: colorMixer changed.
 
@@ -431,6 +462,7 @@ Colour grade / Étalonnage. Tint shadows, midtones or highlights. *Teinte des om
   - `amount` number 0…100 (percent), default 30: tint strength
   - `luminance` number -100…100 (signedPercent), optional: darker to lighter
   - `balance` number -100…100 (signedPercent), optional: shadows ↔ highlights split; off the card
+  - `layer` id in/jn, optional: i1 or an Étalonnage j1 (also `ref`); off the card
 - Triggers (fr): « étalonnage », « ombres bleues », « ombres froides », « ombres chaudes », « hautes lumières orangées », « hautes lumières chaudes », « teinte les ombres », « virage partiel », « roues chromatiques », « étalonne », « ombres turquoise »
 - Triggers (en): « colour grade », « color grade », « color grading », « split toning », « teal shadows », « orange highlights », « warm highlights », « cool shadows », « blue shadows », « tint the shadows », « colour wheels », « color wheels »
 - Examples:
@@ -440,6 +472,7 @@ Colour grade / Étalonnage. Tint shadows, midtones or highlights. *Teinte des om
   - « teal shadows » → `{"action":"colorGrade","amount":30,"color":"teal","range":"shadows"}`
   - « split toning with orange highlights » → `{"action":"colorGrade","amount":30,"color":"orange","range":"highlights"}`
   - « des ombres un peu froides » (paraphrase) → `{"action":"colorGrade","amount":20,"color":"blue","range":"shadows"}`
+  - « hautes lumières orangées sur le calque d'étalonnage j7 » → `{"action":"colorGrade","color":"orange","layer":"j7","range":"highlights"}`
   - « teal and orange » is not this: `applyLook`
 - Check: colorGrade changed.
 
@@ -452,6 +485,7 @@ LUT intensity / Intensité du LUT. How strongly the imported LUT applies. *La fo
 - Card: `lutIntensity: amount* 0..100 — How strongly the imported LUT applies « LUT intensity 70 »`
 - Params:
   - `amount` number 0…100 (percent), required: 0 none, 100 full (also `intensity`, `strength`)
+  - `layer` id in/jn, optional: i1 or a LUT j1; none: selected (also `ref`); off the card
 - Triggers (fr): « LUT », « intensité du LUT », « force du LUT », « LUT à », « applique mon LUT », « dose du LUT »
 - Triggers (en): « LUT », « LUT intensity », « LUT strength », « apply my LUT », « LUT at »
 - Examples:
@@ -461,6 +495,7 @@ LUT intensity / Intensité du LUT. How strongly the imported LUT applies. *La fo
   - « LUT intensity 70 » → `{"action":"lutIntensity","amount":70}`
   - « mets un LUT » (paraphrase) → `{"action":"lutIntensity","amount":100}`
   - « set the LUT to half strength » → `{"action":"lutIntensity","amount":50}`
+  - « mets le calque LUT j8 à 40 % » → `{"action":"lutIntensity","amount":40,"layer":"j8"}`
   - « enlève le LUT » is not this: `removeLUT`
 - Check: lutIntensity equals `amount`.
 
@@ -471,6 +506,8 @@ Remove LUT / Retirer le LUT. Takes the imported LUT off. *Enlève le LUT import�
 - Domains: photo; core in: none; category color; phase color; runs as handler (IntentAction.operation).
 - Needs: an imported LUT.
 - Card: `removeLUT: — Takes the imported LUT off « remove the LUT »`
+- Params:
+  - `layer` id in/jn, optional: i1 or a LUT j1; none: selected (also `ref`); off the card
 - Triggers (fr): « enlève le LUT », « retire le LUT », « supprime le LUT », « sans LUT », « enlève la LUT »
 - Triggers (en): « remove the LUT », « no LUT », « turn off the LUT », « delete the LUT »
 - Examples:
@@ -480,6 +517,7 @@ Remove LUT / Retirer le LUT. Takes the imported LUT off. *Enlève le LUT import�
   - « enlève le filtre » is not this: `applyLook`
   - « supprime le LUT importé » → `{"action":"removeLUT"}`
   - « take the LUT off » → `{"action":"removeLUT"}`
+  - « enlève le LUT du calque j8 » → `{"action":"removeLUT","layer":"j8"}`
 - Check: lutIntensity decreased.
 
 ### removeObject
@@ -667,7 +705,7 @@ Generative fill / Remplissage génératif. Invents new content in a region. *Inv
   - `text` text ≤ 200, required: what to generate, in English
   - `target` text ≤ 40, optional: region to replace: sky (also `object`, `subject`)
 - Triggers (fr): « remplace le ciel par », « ajoute un chapeau », « rajoute », « rajoute un », « génère », « invente », « change le ciel », « mets un coucher de soleil »
-- Triggers (en): « replace the sky with », « add a hat », « generate », « the sky is boring », « make a sunset sky »
+- Triggers (en): « replace the sky with », « add a hat », « generate », « the sky is boring », « make a sunset sky », « put a bird in the sky », « add a moon in the sky »
 - Examples:
   - « remplace le ciel par un coucher de soleil » → `{"action":"generativeFill","target":"sky","text":"a sunset sky with warm clouds"}`
   - « ajoute un chapeau à la personne » → `{"action":"generativeFill","target":"person","text":"a hat"}`
@@ -1144,27 +1182,33 @@ Highlight cells / Surligner des cases. A translucent box over rows or columns. *
 Select layer / Sélectionner un calque. Picks the layer the next edits apply to. *Choisit le calque des prochaines retouches.*
 
 - Domains: photo; core in: none; category layers; phase composition; runs as IntentAction.selectLayer.
-- Card: `selectLayer: choiceIndex -1..99, text:text|image — Picks the layer the next edits apply to « select layer 2 »`
+- Card: `selectLayer: choiceIndex -1..99, text:text|image, ref:l1|s1|i1|j1|g1 — Picks the layer the next edits apply to « select layer 2 »`
 - Params:
   - `choiceIndex` integer -1…99, optional: layer number, -1 top
   - `text` one of `text`, `image`, optional: the text or the photo
-- Triggers (fr): « sélectionne le calque », « choisis le calque », « prends le calque », « active le calque », « va au calque », « passe au calque », « sélectionne le texte », « sélectionne la photo »
-- Triggers (en): « select the layer », « select layer », « go to layer », « take the layer », « select the text layer »
+  - `ref` id ln/sn/in/jn/gn, optional: l1, i1, j1, g1: that layer (also `layer`)
+- Triggers (fr): « sélectionne le calque », « choisis le calque », « prends le calque », « active le calque », « va au calque », « passe au calque », « sélectionne le texte », « sélectionne la photo », « va sur le groupe »
+- Triggers (en): « select the layer », « select layer », « go to layer », « take the layer », « select the text layer », « select the group »
 - Examples:
   - « sélectionne le calque 2 » → `{"action":"selectLayer","choiceIndex":2}`
   - « sélectionne le texte » → `{"action":"selectLayer","text":"text"}`
   - « select layer 2 » → `{"action":"selectLayer","choiceIndex":2}`
   - « passe au calque 1 » → `{"action":"selectLayer","choiceIndex":1}`
   - « select the text layer » → `{"action":"selectLayer","text":"text"}`
+  - « va sur le groupe g1 » → `{"action":"selectLayer","ref":"g1"}`
+  - « active le calque de réglage j3 » → `{"action":"selectLayer","ref":"j3"}`
+  - « select layer i1 » → `{"action":"selectLayer","ref":"i1"}`
   - « sélectionne la tasse rouge » is not this: `select`
-- Check: unverifiable: only the selection changes.
+- Check: selectedLayer equals `ref`.
 
 ### duplicateLayer
 
 Duplicate layer / Dupliquer le calque. Copies the selected layer. *Copie le calque sélectionné.*
 
 - Domains: photo; core in: none; category layers; phase composition; runs as IntentAction.duplicateLayer.
-- Card: `duplicateLayer: — Copies the selected layer « duplicate the layer »`
+- Card: `duplicateLayer: ref:l1|s1|i1|j1|g1 — Copies the selected layer « duplicate the layer »`
+- Params:
+  - `ref` id ln/sn/in/jn/gn, optional: l1, i1, j1, g1; none: the selected (also `layer`)
 - Triggers (fr): « duplique le calque », « copie le calque », « duplique », « calque »
 - Triggers (en): « duplicate the layer », « copy the layer », « duplicate », « layer »
 - Examples:
@@ -1173,6 +1217,8 @@ Duplicate layer / Dupliquer le calque. Copies the selected layer. *Copie le calq
   - « duplicate the layer » → `{"action":"duplicateLayer"}`
   - « fais une copie du calque » → `{"action":"duplicateLayer"}`
   - « copy this layer » → `{"action":"duplicateLayer"}`
+  - « duplique le logo i2 » → `{"action":"duplicateLayer","ref":"i2"}`
+  - « duplicate the group g1 » → `{"action":"duplicateLayer","ref":"g1"}`
   - « supprime le calque » is not this: `deleteLayer`
 - Check: layerCount increased.
 
@@ -1182,7 +1228,9 @@ Delete layer / Supprimer le calque. Removes the selected layer. *Supprime le cal
 
 - Domains: photo; core in: none; category layers; phase composition; runs as IntentAction.deleteLayer.
 - Needs: a layer above the photo, destructive.
-- Card: `deleteLayer: — Removes the selected layer « delete the layer »`
+- Card: `deleteLayer: ref:l1|s1|i1|j1|g1 — Removes the selected layer « delete the layer »`
+- Params:
+  - `ref` id ln/sn/in/jn/gn, optional: l1, i1, j1, g1; none: the selected (also `layer`)
 - Triggers (fr): « supprime le calque », « efface le calque », « enlève le calque », « calque »
 - Triggers (en): « delete the layer », « remove the layer », « delete layer », « layer »
 - Examples:
@@ -1191,6 +1239,8 @@ Delete layer / Supprimer le calque. Removes the selected layer. *Supprime le cal
   - « delete the layer » → `{"action":"deleteLayer"}`
   - « retire ce calque » → `{"action":"deleteLayer"}`
   - « remove this layer » → `{"action":"deleteLayer"}`
+  - « supprime le calque de réglage j3 » → `{"action":"deleteLayer","ref":"j3"}`
+  - « delete the layer s1 » → `{"action":"deleteLayer","ref":"s1"}`
   - « masque le calque » is not this: `layerVisibility`
 - Check: layerCount decreased.
 
@@ -1200,9 +1250,9 @@ Layer opacity / Opacité du calque. How see-through a layer is. *La transparence
 
 - Domains: photo; core in: none; category layers; phase composition; runs as handler (IntentAction.operation).
 - Needs: a layer above the photo.
-- Card: `layerOpacity: ref:l1|s1|i1, opacity* 0..100 — How see-through a layer is « set the layer opacity to 50 »`
+- Card: `layerOpacity: ref:l1|s1|i1|j1|g1, opacity* 0..100 — How see-through a layer is « set the layer opacity to 50 »`
 - Params:
-  - `ref` id ln/sn/in, optional: l2, s1, i1; none: selected (also `layer`)
+  - `ref` id ln/sn/in/jn/gn, optional: l2, s1, i1, j1, g1; none: selected (also `layer`)
   - `opacity` number 0…100 (percent), required: 0 invisible, 100 solid (also `amount`, `value`)
 - Triggers (fr): « opacité », « opacité du calque », « transparence du calque », « calque transparent », « rends le calque transparent »
 - Triggers (en): « opacity », « layer opacity », « transparency of the layer », « see-through »
@@ -1213,6 +1263,7 @@ Layer opacity / Opacité du calque. How see-through a layer is. *La transparence
   - « set the layer opacity to 50 » → `{"action":"layerOpacity","opacity":50}`
   - « opa du calque à 80 » (paraphrase) → `{"action":"layerOpacity","opacity":80}`
   - « make the layer half transparent » → `{"action":"layerOpacity","opacity":50}`
+  - « baisse l'opacité du groupe g1 à 60 % » → `{"action":"layerOpacity","opacity":60,"ref":"g1"}`
   - « cache le calque » is not this: `layerVisibility`
 - Check: layerOpacity equals `opacity`.
 
@@ -1222,10 +1273,10 @@ Blend mode / Mode de fusion. How a layer mixes with what is below. *Comment un c
 
 - Domains: photo; core in: none; category layers; phase composition; runs as handler (IntentAction.operation).
 - Needs: a layer above the photo.
-- Card: `layerBlend: ref:l1|s1|i1, mode*:… — How a layer mixes with what is below « set the blend mode to multiply »`
+- Card: `layerBlend: ref:l1|s1|i1|j1|g1, mode*:… — How a layer mixes with what is below « set the blend mode to multiply »`
   - `mode: normal|multiply|screen|overlay|softLight|hardLight|darken|lighten|difference|luminosity|color|hue|colorBurn|colorDodge|linearBurn|linearDodge|linearLight|vividLight|pinLight|hardMix|exclusion|subtract|divide|saturation|darkerColor|lighterColor|dissolve`
 - Params:
-  - `ref` id ln/sn/in, optional: l2, s1, i1; none: selected (also `layer`)
+  - `ref` id ln/sn/in/jn/gn, optional: l2, s1, i1, j1, g1; none: selected (also `layer`)
   - `mode` one of `normal`, `multiply`, `screen`, `overlay`, `softLight`, `hardLight`, `darken`, `lighten`, `difference`, `luminosity`, `color`, `hue`, `colorBurn`, `colorDodge`, `linearBurn`, `linearDodge`, `linearLight`, `vividLight`, `pinLight`, `hardMix`, `exclusion`, `subtract`, `divide`, `saturation`, `darkerColor`, `lighterColor`, `dissolve`, required: blend mode (also `blendMode`, `blend`)
 - Triggers (fr): « mode de fusion », « mode produit », « en mode produit », « mode superposition », « mode écran », « mode lumière tamisée », « mode incrustation », « mode différence », « fusion du calque », « calque en mode », « calque en produit », « calque en superposition », « calque en écran », « calque en éclaircir », « calque en obscurcir », « calque en incrustation », « calque en lumière tamisée »
 - Triggers (en): « blend mode », « blending mode », « multiply mode », « screen mode », « overlay mode », « soft light », « set to multiply », « layer to multiply », « layer to screen », « layer to overlay », « layer to lighten », « layer to darken »
@@ -1236,7 +1287,8 @@ Blend mode / Mode de fusion. How a layer mixes with what is below. *Comment un c
   - « set the blend mode to multiply » → `{"action":"layerBlend","mode":"multiply"}`
   - « screen blend mode for the text layer » → `{"action":"layerBlend","mode":"screen","ref":"l1"}`
   - « calque en lumière tamisée » (paraphrase) → `{"action":"layerBlend","mode":"softLight"}`
-  - « fusionne les calques » is not this: no operation yet
+  - « passe le calque de remplissage j1 en mode incrustation » → `{"action":"layerBlend","mode":"overlay","ref":"j1"}`
+  - « fusionne les calques » is not this: `mergeLayers`
 - Check: layerBlend equals `mode`.
 
 ### layerVisibility
@@ -1245,11 +1297,11 @@ Show or hide layer / Afficher ou masquer. Hides or shows a layer. *Masque ou aff
 
 - Domains: photo; core in: none; category layers; phase composition; runs as handler (IntentAction.operation).
 - Needs: a layer above the photo.
-- Card: `layerVisibility: ref:l1|s1|i1, visible*:true|false — Hides or shows a layer « hide the layer »`
+- Card: `layerVisibility: ref:l1|s1|i1|j1|g1, visible*:true|false — Hides or shows a layer « hide the layer »`
 - Params:
-  - `ref` id ln/sn/in, optional: l2, s1, i1; none: selected (also `layer`)
+  - `ref` id ln/sn/in/jn/gn, optional: l2, s1, i1, j1, g1; none: selected (also `layer`)
   - `visible` true or false, required: false hides it (also `shown`, `show`)
-- Triggers (fr): « masque le calque », « cache le calque », « affiche le calque », « réaffiche le calque », « calque invisible », « calque visible », « éteins le calque », « allume le calque », « calque éteint », « calque allumé »
+- Triggers (fr): « masque le calque », « cache le calque », « affiche le calque », « réaffiche le calque », « calque invisible », « calque visible », « éteins le calque », « allume le calque », « calque éteint », « calque allumé », « fais disparaître ce calque », « fais réapparaître le calque »
 - Triggers (en): « hide the layer », « show the layer », « layer visibility », « make the layer invisible », « unhide the layer », « turn the layer off », « turn off the layer », « turn the layer on », « turn on the layer », « layer off »
 - Examples:
   - « masque le calque » → `{"action":"layerVisibility","visible":false}`
@@ -1258,6 +1310,7 @@ Show or hide layer / Afficher ou masquer. Hides or shows a layer. *Masque ou aff
   - « hide the layer » → `{"action":"layerVisibility","visible":false}`
   - « supprime le calque » is not this: `deleteLayer`
   - « show layer l1 again » → `{"action":"layerVisibility","ref":"l1","visible":true}`
+  - « cache le groupe g1 » → `{"action":"layerVisibility","ref":"g1","visible":false}`
 - Check: layerVisibility equals `visible`.
 
 ### layerOrder
@@ -1266,20 +1319,444 @@ Layer order / Ordre des calques. Brings a layer forward or sends it back. *Avanc
 
 - Domains: photo; core in: none; category layers; phase composition; runs as handler (IntentAction.operation).
 - Needs: a layer above the photo.
-- Card: `layerOrder: ref:l1|s1|i1, position*:front|back|forward|backward — Brings a layer forward or sends it back « bring the layer forward »`
+- Card: `layerOrder: ref:l1|s1|i1|j1|g1, position:…* — Brings a layer forward or sends it back « bring the layer forward »`
+  - `position: front|back|forward|backward|above|below`
 - Params:
-  - `ref` id ln/sn/in, optional: l2, s1, i1; none: selected (also `layer`)
-  - `position` one of `front`, `back`, `forward`, `backward`, required: where it goes
-- Triggers (fr): « ordre des calques », « calque au premier plan », « calque en arrière-plan », « passe devant », « passe derrière », « monte le calque », « descends le calque », « calque au-dessus », « calque en dessous », « derrière tout », « devant tout », « tout derrière », « tout devant », « en haut de la pile », « en bas de la pile », « haut de la pile »
-- Triggers (en): « bring to front », « send to back », « bring forward », « send backward », « layer order », « move the layer up », « move the layer down », « behind everything », « in front of everything », « on top of everything », « top of the stack », « bottom of the stack »
+  - `ref` id ln/sn/in/jn/gn, optional: l2, s1, i1, j1, g1; none: selected (also `layer`)
+  - `position` one of `front`, `back`, `forward`, `backward`, `above`, `below`, one of group `where`: where it goes
+  - `target` id ln/sn/in/jn/gn, optional: with above/below: that layer; off the card
+  - `group` text ≤ 8, one of group `where`: g1 into that group, none: out; off the card
+- Triggers (fr): « ordre des calques », « calque au premier plan », « calque en arrière-plan », « passe devant », « passe derrière », « monte le calque », « descends le calque », « calque au-dessus », « calque en dessous », « derrière tout », « devant tout », « tout derrière », « tout devant », « en haut de la pile », « en bas de la pile », « haut de la pile », « dans le groupe », « sors du groupe », « au-dessus du calque », « en dessous du calque »
+- Triggers (en): « bring to front », « send to back », « bring forward », « send backward », « layer order », « move the layer up », « move the layer down », « behind everything », « in front of everything », « on top of everything », « top of the stack », « bottom of the stack », « into the group », « out of the group »
 - Examples:
   - « déplace le calque texte en arrière-plan » → `{"action":"layerOrder","position":"back","ref":"l1"}`
   - « mets ce calque au premier plan » → `{"action":"layerOrder","position":"front"}`
   - « passe le calque derrière » → `{"action":"layerOrder","position":"backward"}`
   - « bring the layer forward » → `{"action":"layerOrder","position":"forward"}`
   - « send the text layer to the back » → `{"action":"layerOrder","position":"back","ref":"l1"}`
+  - « mets le titre au-dessus du logo i2 » → `{"action":"layerOrder","position":"above","ref":"l1","target":"i2"}`
+  - « mets la forme dans le groupe g1 » → `{"action":"layerOrder","group":"g1","ref":"s1"}`
+  - « sors le texte l3 du groupe » → `{"action":"layerOrder","group":"none","ref":"l3"}`
+  - « put the text below layer i1 » → `{"action":"layerOrder","position":"below","ref":"l1","target":"i1"}`
   - « floute l'arrière-plan » is not this: `blurBackground`
 - Check: layerOrder changed.
+
+### addImageLayer
+
+Add a photo layer / Ajouter une photo en calque. Places another photo over this one. *Place une autre photo par-dessus.*
+
+- Domains: photo; core in: none; category layers; phase composition; runs as handler (IntentAction.operation).
+- Card: `addImageLayer: — Places another photo over this one « add a photo as a layer »`
+- Params:
+  - `fit` one of `fit`, `fill`, `original`, optional: fit 80 %, fill, original size; off the card
+  - `position` one of `top`, `aboveSelected`, optional: on top or above the selected; off the card
+- Triggers (fr): « ajoute une photo », « ajoute une image en calque », « importe une image », « place une photo par-dessus », « insère une image », « photo en calque », « image par-dessus », « ajoute une autre photo », « incruste une photo », « une deuxième image », « pose une image », « depuis ma galerie », « mon logo depuis »
+- Triggers (en): « add a photo as a layer », « place an image », « import a picture », « insert an image », « image layer », « add another photo », « photo on top », « drop in a picture », « from my photos », « my logo in », « a second photo »
+- Examples:
+  - « ajoute une photo en calque » → `{"action":"addImageLayer"}`
+  - « importe une image par-dessus tout » → `{"action":"addImageLayer","position":"top"}`
+  - « insère une image qui remplit toute la photo » → `{"action":"addImageLayer","fit":"fill"}`
+  - « place une autre photo à sa taille d'origine » → `{"action":"addImageLayer","fit":"original"}`
+  - « add a photo as a layer » → `{"action":"addImageLayer"}`
+  - « place an image at its original size » → `{"action":"addImageLayer","fit":"original"}`
+  - « rajoute une image par dessus » (paraphrase) → `{"action":"addImageLayer"}`
+  - « ajoute du texte » is not this: `addText`
+  - « remplace le fond par une plage » is not this: `replaceBackground`
+- Check: unverifiable: the person picks the photo.
+
+### layerVia
+
+Layer via copy or cut / Calque par copier ou couper. Puts an area on a layer of its own. *Met une zone sur un calque à part.*
+
+- Domains: photo; core in: none; category layers; phase composition; runs as handler (IntentAction.operation).
+- Card: `layerVia: mode*:copy|cut, where:…* — Puts an area on a layer of its own « put the subject on its own layer »`
+  - `where: subject|background|sky|people|person|object|vegetation|water|face|faceSkin|eyes|lips|teeth|hair|bodySkin|top|bottom|left|right|center|edges|color|shadows|midtones|highlights|skinTones|near|far|selection`
+- Params:
+  - `mode` one of `copy`, `cut`, required: copy keeps it, cut takes it out
+  - `where` one of `subject`, `background`, `sky`, `people`, `person`, `object`, `vegetation`, `water`, `face`, `faceSkin`, `eyes`, `lips`, `teeth`, `hair`, `bodySkin`, `top`, `bottom`, `left`, `right`, `center`, `edges`, `color`, `shadows`, `midtones`, `highlights`, `skinTones`, `near`, `far`, `selection`, one of group `region`: area: subject, sky, bottom… (also `region`, `area`)
+  - `ref` id on/an, one of group `region`: a1 a mask, o1 an object (also `mask`); off the card
+  - `target` text ≤ 40, one of group `region`: object noun: cup, dog (also `object`, `subject`); off the card
+  - `box` box [x1, y1, x2, y2] 0–1000, one of group `region`: [x1,y1,x2,y2] 0-1000 of the thing; off the card
+  - `point` point [x, y] 0–1000, one of group `region`: [x,y] 0-1000 on the thing; off the card
+  - `useSelection` true or false, one of group `region`: the current selection; off the card
+  - `layer` id in, optional: i1 source; none: active image; off the card
+  - `name` text ≤ 30, optional: the new layer's name; off the card
+- Triggers (fr): « calque par copier », « calque par couper », « copie la sélection sur un nouveau calque », « mets le sujet sur un calque », « coupe le ciel sur un nouveau calque », « isole le sujet sur son propre calque », « sur un nouveau calque », « sur son propre calque », « sur un calque à part », « nouveau calque avec », « calque séparé », « sur un calque séparé », « sors le sujet »
+- Triggers (en): « layer via copy », « layer via cut », « put the subject on its own layer », « copy the selection to a new layer », « on a new layer », « on its own layer », « cut to a new layer »
+- Examples:
+  - « mets le sujet sur un calque » → `{"action":"layerVia","mode":"copy","where":"subject"}`
+  - « calque par copier de la sélection » → `{"action":"layerVia","mode":"copy","useSelection":true}`
+  - « coupe le ciel sur un nouveau calque » → `{"action":"layerVia","mode":"cut","where":"sky"}`
+  - « isole la tasse sur son propre calque » → `{"action":"layerVia","mode":"copy","target":"cup","where":"object"}`
+  - « calque par copier du masque a1 » → `{"action":"layerVia","mode":"copy","ref":"a1"}`
+  - « calque par couper du chien, nomme-le Chien » → `{"action":"layerVia","mode":"cut","name":"Chien","ref":"o1"}`
+  - « put the subject on its own layer » → `{"action":"layerVia","mode":"copy","where":"subject"}`
+  - « layer via cut from the selection » → `{"action":"layerVia","mode":"cut","useSelection":true}`
+  - « copy the dog to a new layer » → `{"action":"layerVia","mode":"copy","ref":"o1"}`
+  - « duplique le sujet sur un calque à part » (paraphrase) → `{"action":"layerVia","mode":"copy","where":"subject"}`
+  - « détoure le sujet » is not this: `removeBackground`
+  - « duplique le calque » is not this: `duplicateLayer`
+- Check: layerCount increased; pixels layerMaskCoverageInRange changed (from W2); pixels compositeUnchanged unchanged (from W2).
+
+### addFillLayer
+
+Fill layer / Calque de remplissage. A solid colour or a gradient layer. *Un calque de couleur unie ou de dégradé.*
+
+- Domains: photo; core in: none; category layers; phase composition; runs as handler (IntentAction.operation).
+- Card: `addFillLayer: fill*:solid|gradient, color:name|#hex, position:top|below|above, ref:l1|s1|i1|j1|g1 — A solid colour or a gradient layer`
+- Params:
+  - `fill` one of `solid`, `gradient`, required: solid colour or gradient
+  - `color` colour name or #RRGGBB, optional: colour name or #RRGGBB (also `colour`, `couleur`)
+  - `color2` colour name or #RRGGBB, optional: gradient: second colour (none: clear) (also `to`); off the card
+  - `style` one of `linear`, `radial`, `reflected`, optional: gradient: linear, radial, reflected; off the card
+  - `angle` number -180…180 (degrees), optional: gradient angle, 90 bottom → top; off the card
+  - `opacity` number 0…100 (percent), optional: layer opacity; off the card
+  - `blend` one of `normal`, `multiply`, `screen`, `overlay`, `softLight`, `hardLight`, `darken`, `lighten`, `difference`, `luminosity`, `color`, `hue`, `colorBurn`, `colorDodge`, `linearBurn`, `linearDodge`, `linearLight`, `vividLight`, `pinLight`, `hardMix`, `exclusion`, `subtract`, `divide`, `saturation`, `darkerColor`, `lighterColor`, `dissolve`, optional: blend mode (also `mode`, `blendMode`); off the card
+  - `position` one of `top`, `below`, `above`, optional: where: top, below or above a ref
+  - `ref` id ln/sn/in/jn/gn, optional: the layer below/above which
+  - `useSelection` true or false, optional: masked by the selection; off the card
+- Triggers (fr): « calque de remplissage », « couleur unie », « ajoute un fond blanc en calque », « ajoute un dégradé », « dégradé du noir vers transparent », « dégradé radial », « calque de couleur », « dégradé noir en bas », « voile de couleur »
+- Triggers (en): « fill layer », « solid color layer », « solid colour layer », « add a gradient », « gradient overlay », « gradient layer », « colour overlay », « color overlay », « backdrop layer », « white backdrop », « color layer »
+- Examples:
+  - « ajoute un calque de remplissage blanc » → `{"action":"addFillLayer","color":"white","fill":"solid"}`
+  - « ajoute un dégradé noir vers transparent en bas » → `{"action":"addFillLayer","angle":90,"color":"black","fill":"gradient"}`
+  - « dégradé radial bleu et rose » → `{"action":"addFillLayer","color":"blue","color2":"pink","fill":"gradient","style":"radial"}`
+  - « couleur unie rouge à 30 % en mode produit » → `{"action":"addFillLayer","blend":"multiply","color":"red","fill":"solid","opacity":30}`
+  - « ajoute un fond blanc en calque sous la tasse » → `{"action":"addFillLayer","color":"white","fill":"solid","position":"below","ref":"i1"}`
+  - « dégradé reflété orange » → `{"action":"addFillLayer","color":"orange","fill":"gradient","style":"reflected"}`
+  - « add a solid white fill layer » → `{"action":"addFillLayer","color":"white","fill":"solid"}`
+  - « add a black to transparent gradient » → `{"action":"addFillLayer","color":"black","fill":"gradient"}`
+  - « gradient overlay from orange to purple » → `{"action":"addFillLayer","color":"orange","color2":"purple","fill":"gradient"}`
+  - « blue colour overlay through the selection » → `{"action":"addFillLayer","color":"blue","fill":"solid","useSelection":true}`
+  - « mets un voile de couleur jaune » (paraphrase) → `{"action":"addFillLayer","color":"yellow","fill":"solid","opacity":40}`
+  - « remplace l'arrière-plan par du blanc » is not this: `replaceBackground`
+  - « remplis la sélection de rouge » is not this: `selectionApply`
+- Check: layerCount increased; pixels compositeChanged changed (from W2).
+
+### fillLayer
+
+Edit fill layer / Modifier le remplissage. Colour or gradient of a fill layer. *Couleur ou dégradé d'un calque de remplissage.*
+
+- Domains: photo; core in: none; category layers; phase composition; runs as handler (IntentAction.operation).
+- Needs: a layer above the photo.
+- Card: `fillLayer: ref:j1, {color:name|#hex / style:linear|radial|reflected / angle -180..180}* — Colour or gradient of a fill layer « make the fill j1 blue »`
+- Params:
+  - `ref` id jn, optional: j1; none: the selected (also `layer`)
+  - `color` colour name or #RRGGBB, one of group `change`: colour (gradient: first stop) (also `colour`, `couleur`)
+  - `color2` colour name or #RRGGBB, one of group `change`: gradient: last stop (also `to`); off the card
+  - `stops` list of ≤ 8: text ≤ 24, one of group `change`: ["red@0","blue@100"] 2-8; off the card
+  - `style` one of `linear`, `radial`, `reflected`, one of group `change`: linear, radial, reflected
+  - `angle` number -180…180 (degrees), one of group `change`: angle, 90 bottom → top
+  - `scale` number 10…150 (percent), one of group `change`: gradient length, %; off the card
+  - `center` point [x, y] 0–1000, one of group `change`: gradient centre [x,y] 0-1000; off the card
+  - `reverse` true or false, one of group `change`: true flips the direction; off the card
+  - `dither` true or false, one of group `change`: smooth banding; off the card
+- Triggers (fr): « change la couleur du calque de remplissage », « passe le dégradé en radial », « inverse le dégradé », « angle du dégradé », « adoucis le dégradé », « couleur du remplissage », « modifie le dégradé », « dégradé en radial »
+- Triggers (en): « make the fill blue », « make the gradient radial », « reverse the gradient », « gradient angle », « change the fill colour », « change the fill color », « softer gradient »
+- Examples:
+  - « change la couleur du calque de remplissage j1 en bleu » → `{"action":"fillLayer","color":"blue","ref":"j1"}`
+  - « passe le dégradé j2 en radial » → `{"action":"fillLayer","ref":"j2","style":"radial"}`
+  - « inverse le dégradé j2 » → `{"action":"fillLayer","ref":"j2","reverse":true}`
+  - « mets l'angle du dégradé j2 à 45 degrés » → `{"action":"fillLayer","angle":45,"ref":"j2"}`
+  - « adoucis le dégradé j2 » → `{"action":"fillLayer","ref":"j2","scale":150}`
+  - « le dégradé j2 du bleu au violet » → `{"action":"fillLayer","ref":"j2","stops":["blue@0","purple@100"]}`
+  - « make the fill j1 blue » → `{"action":"fillLayer","color":"blue","ref":"j1"}`
+  - « make the gradient j2 radial » → `{"action":"fillLayer","ref":"j2","style":"radial"}`
+  - « reverse the gradient j2 » → `{"action":"fillLayer","ref":"j2","reverse":true}`
+  - « le remplissage j1 en vert » (paraphrase) → `{"action":"fillLayer","color":"green","ref":"j1"}`
+  - « ajoute un dégradé » is not this: `addFillLayer`
+  - « remplace le fond par du bleu » is not this: `replaceBackground`
+- Check: pixels compositeChanged changed (from W2).
+
+### addAdjustmentLayer
+
+Adjustment layer / Calque de réglage. A tone or colour edit on its own layer. *Un réglage de ton ou de couleur sur un calque.*
+
+- Domains: photo; core in: none; category layers; phase tone; runs as handler (IntentAction.operation).
+- Card: `addAdjustmentLayer: kind*:…, parameter:…, amount -100..100 — A tone or colour edit on its own layer « add a curves adjustment layer »`
+  - `kind: light|curves|levels|hsl|colorGrade|lut|look`
+  - `parameter: exposure|brightness|contrast|highlights|shadows|whites|blacks|saturation|vibrance|temperature|tint|sharpness|clarity|noiseReduction|vignette|grain|fade|hue|skinTone`
+- Params:
+  - `kind` one of `light`, `curves`, `levels`, `hsl`, `colorGrade`, `lut`, `look`, required: the kind of adjustment (also `type`)
+  - `parameter` one of `exposure`, `brightness`, `contrast`, `highlights`, `shadows`, `whites`, `blacks`, `saturation`, `vibrance`, `temperature`, `tint`, `sharpness`, `clarity`, `noiseReduction`, `vignette`, `grain`, `fade`, `hue`, `skinTone`, optional: light: the setting (also `param`, `setting`)
+  - `amount` number -100…100 (signedPercent), optional: light ±, colorGrade strength (also `value`)
+  - `preset` one of `sCurve`, `strongS`, `matte`, `fade`, `invert`, `brighten`, `darken`, `linear`, optional: curves: a ready-made shape; off the card
+  - `auto` true or false, optional: levels: automatic; off the card
+  - `band` one of `red`, `orange`, `yellow`, `green`, `aqua`, `blue`, `purple`, `magenta`, optional: hsl: the colour; off the card
+  - `hue` number -100…100 (signedPercent), optional: hsl: the band's hue; off the card
+  - `saturation` number -100…100 (signedPercent), optional: hsl: the band's saturation; off the card
+  - `luminance` number -100…100 (signedPercent), optional: hsl: the band's lightness; off the card
+  - `shadows` colour name or #RRGGBB, optional: colorGrade: shadows tint; off the card
+  - `midtones` colour name or #RRGGBB, optional: colorGrade: midtones tint; off the card
+  - `highlights` colour name or #RRGGBB, optional: colorGrade: highlights tint; off the card
+  - `look` one of `original`, `vivid`, `vividWarm`, `vividCool`, `dramatic`, `dramaticWarm`, `dramaticCool`, `cinematic`, `goldenHour`, `tealOrange`, `matte`, `vintage`, `film`, `mono`, `silvertone`, `noir`, `portrait`, `pastel`, `punch`, `fresh`, optional: look: the look (also `filter`); off the card
+  - `intensity` number 0…100 (percent), optional: look or lut strength; off the card
+  - `clip` true or false, optional: clip to the layer below; off the card
+  - `opacity` number 0…100 (percent), optional: layer opacity; off the card
+  - `blend` one of `normal`, `multiply`, `screen`, `overlay`, `softLight`, `hardLight`, `darken`, `lighten`, `difference`, `luminosity`, `color`, `hue`, `colorBurn`, `colorDodge`, `linearBurn`, `linearDodge`, `linearLight`, `vividLight`, `pinLight`, `hardMix`, `exclusion`, `subtract`, `divide`, `saturation`, `darkerColor`, `lighterColor`, `dissolve`, optional: blend mode (also `mode`, `blendMode`); off the card
+  - `where` one of `subject`, `background`, `sky`, `people`, `person`, `object`, `vegetation`, `water`, `face`, `faceSkin`, `eyes`, `lips`, `teeth`, `hair`, `bodySkin`, `top`, `bottom`, `left`, `right`, `center`, `edges`, `color`, `shadows`, `midtones`, `highlights`, `skinTones`, `near`, `far`, `selection`, optional: area: subject, sky, bottom… (also `region`, `area`); off the card
+  - `ref` id on/an, optional: a1 a mask, o1 an object (also `mask`); off the card
+  - `target` text ≤ 40, optional: object noun: cup, dog (also `object`, `subject`); off the card
+  - `box` box [x1, y1, x2, y2] 0–1000, optional: [x1,y1,x2,y2] 0-1000 of the thing; off the card
+  - `point` point [x, y] 0–1000, optional: [x,y] 0-1000 on the thing; off the card
+  - `useSelection` true or false, optional: the current selection; off the card
+- Triggers (fr): « calque de réglage », « calque d'ajustement », « ajoute un calque de courbes », « calque de niveaux », « calque teinte saturation », « calque de luminosité », « calque d'étalonnage », « calque de look », « calque LUT », « calque de courbes »
+- Triggers (en): « adjustment layer », « curves layer », « levels adjustment layer », « hue saturation layer », « brightness layer », « levels layer », « colour grade layer », « color grade layer », « LUT layer », « look layer »
+- Examples:
+  - « ajoute un calque de courbes en S » → `{"action":"addAdjustmentLayer","kind":"curves","preset":"sCurve"}`
+  - « calque de réglage luminosité plus 20 » → `{"action":"addAdjustmentLayer","amount":20,"kind":"light","parameter":"brightness"}`
+  - « ajoute un calque de niveaux automatiques » → `{"action":"addAdjustmentLayer","auto":true,"kind":"levels"}`
+  - « calque teinte saturation qui désature les verts » → `{"action":"addAdjustmentLayer","band":"green","kind":"hsl","saturation":-40}`
+  - « calque d'étalonnage avec des ombres bleues » → `{"action":"addAdjustmentLayer","amount":30,"kind":"colorGrade","shadows":"blue"}`
+  - « ajoute un calque de look noir et blanc » → `{"action":"addAdjustmentLayer","kind":"look","look":"mono"}`
+  - « un calque de courbes écrêté au calque du dessous » → `{"action":"addAdjustmentLayer","clip":true,"kind":"curves","preset":"sCurve"}`
+  - « calque de luminosité qui assombrit seulement le ciel » → `{"action":"addAdjustmentLayer","amount":-20,"kind":"light","parameter":"exposure","where":"sky"}`
+  - « add a curves adjustment layer » → `{"action":"addAdjustmentLayer","kind":"curves","preset":"sCurve"}`
+  - « levels adjustment layer » → `{"action":"addAdjustmentLayer","auto":true,"kind":"levels"}`
+  - « hue saturation layer with less saturated reds » → `{"action":"addAdjustmentLayer","band":"red","kind":"hsl","saturation":-30}`
+  - « add a LUT layer at 60 » → `{"action":"addAdjustmentLayer","intensity":60,"kind":"lut"}`
+  - « ajoute un calque de réglage pour réchauffer » (paraphrase) → `{"action":"addAdjustmentLayer","amount":20,"kind":"light","parameter":"temperature"}`
+  - « mets les courbes en S » is not this: `curves`
+- Check: layerCount increased; pixels compositeChanged changed (from W2).
+
+### layerMask
+
+Layer mask / Masque de fusion. Hides parts of a layer with a mask. *Cache des parties d'un calque par un masque.*
+
+- Domains: photo; core in: none; category layers; phase composition; runs as handler (IntentAction.operation).
+- Card: `layerMask: do*:…, where:…, layer:l1|s1|i1|j1|g1 — Hides parts of a layer with a mask « add a layer mask from the selection »`
+  - `do: add|edit|invert|enable|disable|delete|apply|paint`
+  - `where: subject|background|sky|people|person|object|vegetation|water|face|faceSkin|eyes|lips|teeth|hair|bodySkin|top|bottom|left|right|center|edges|color|shadows|midtones|highlights|skinTones|near|far|selection`
+- Params:
+  - `do` one of `add`, `edit`, `invert`, `enable`, `disable`, `delete`, `apply`, `paint`, required: what to do with the mask
+  - `reveal` true or false, optional: add: true shows only the area; off the card
+  - `where` one of `subject`, `background`, `sky`, `people`, `person`, `object`, `vegetation`, `water`, `face`, `faceSkin`, `eyes`, `lips`, `teeth`, `hair`, `bodySkin`, `top`, `bottom`, `left`, `right`, `center`, `edges`, `color`, `shadows`, `midtones`, `highlights`, `skinTones`, `near`, `far`, `selection`, optional: area: subject, sky, bottom… (also `region`, `area`)
+  - `ref` id on/an, optional: a1 a mask, o1 an object (also `mask`); off the card
+  - `target` text ≤ 40, optional: object noun: cup, dog (also `object`, `subject`); off the card
+  - `box` box [x1, y1, x2, y2] 0–1000, optional: [x1,y1,x2,y2] 0-1000 of the thing; off the card
+  - `point` point [x, y] 0–1000, optional: [x,y] 0-1000 on the thing; off the card
+  - `useSelection` true or false, optional: the current selection; off the card
+  - `combine` one of `add`, `subtract`, `intersect`, optional: edit: add, subtract, intersect; off the card
+  - `feather` number 0…100 (percent), optional: edge softness; off the card
+  - `density` number 0…100 (percent), optional: mask strength; off the card
+  - `expand` number -100…100 (signedPercent), optional: grow +, shrink −; off the card
+  - `layer` id ln/sn/in/jn/gn, optional: i1, j1, g1; none: the selected
+- Triggers (fr): « masque de fusion », « ajoute un masque au calque », « masque le calque sauf le sujet », « cache le haut du calque », « inverse le masque du calque », « désactive le masque », « applique le masque », « peins le masque du calque », « masque du calque », « réactive le masque »
+- Triggers (en): « layer mask », « add a layer mask », « hide the top of the layer », « invert the layer mask », « apply the mask », « disable the layer mask », « paint the layer mask »
+- Examples:
+  - « ajoute un masque de fusion qui garde le sujet » → `{"action":"layerMask","do":"add","reveal":true,"where":"subject"}`
+  - « cache le haut du logo i2 » → `{"action":"layerMask","do":"add","layer":"i2","reveal":false,"where":"top"}`
+  - « inverse le masque du calque i1 » → `{"action":"layerMask","do":"invert","layer":"i1"}`
+  - « désactive le masque de fusion de i1 » → `{"action":"layerMask","do":"disable","layer":"i1"}`
+  - « réactive le masque de fusion de i1 » → `{"action":"layerMask","do":"enable","layer":"i1"}`
+  - « applique le masque du calque i1 » → `{"action":"layerMask","do":"apply","layer":"i1"}`
+  - « supprime le masque de fusion de i1 » → `{"action":"layerMask","do":"delete","layer":"i1"}`
+  - « peins le masque du calque » → `{"action":"layerMask","do":"paint"}`
+  - « adoucis le bord du masque de fusion de i1 » → `{"action":"layerMask","do":"edit","feather":60,"layer":"i1"}`
+  - « ajoute le ciel au masque de fusion de i1 » → `{"action":"layerMask","combine":"add","do":"edit","layer":"i1","where":"sky"}`
+  - « add a layer mask from the selection » → `{"action":"layerMask","do":"add","useSelection":true}`
+  - « invert the layer mask of i1 » → `{"action":"layerMask","do":"invert","layer":"i1"}`
+  - « apply the layer mask of i1 » → `{"action":"layerMask","do":"apply","layer":"i1"}`
+  - « masque de fusion qui cache le bas » (paraphrase) → `{"action":"layerMask","do":"add","reveal":false,"where":"bottom"}`
+  - « masque le calque » is not this: `layerVisibility`
+  - « éclaircis le ciel » is not this: `selectiveAdjust`
+- Check: layerMasks changed; pixels layerMaskCoverageInRange changed (from W2); pixels compositeUnchanged unchanged (from W2); unverifiable: the person paints.
+
+### layerClip
+
+Clipping mask / Masque d'écrêtage. Clips a layer to the one below. *Écrête un calque sur celui du dessous.*
+
+- Domains: photo; core in: none; category layers; phase composition; runs as handler (IntentAction.operation).
+- Needs: a layer above the photo.
+- Card: `layerClip: ref:l1|s1|i1|j1|g1, clip*:true|false — Clips a layer to the one below « clip the text to the layer below »`
+- Params:
+  - `ref` id ln/sn/in/jn/gn, optional: l1, i1, j1; none: the selected (also `layer`)
+  - `clip` true or false, required: true clips, false releases
+- Triggers (fr): « masque d'écrêtage », « écrête au calque du dessous », « attache le calque au calque du dessous », « détache l'écrêtage », « clipping », « écrêtage », « écrête le calque »
+- Triggers (en): « clipping mask », « clip to the layer below », « release clipping mask », « clip the layer », « release the clipping », « unclip », « unclip it »
+- Examples:
+  - « écrête le titre au calque du dessous » → `{"action":"layerClip","clip":true,"ref":"l1"}`
+  - « masque d'écrêtage sur le calque l2 » → `{"action":"layerClip","clip":true,"ref":"l2"}`
+  - « attache la forme au calque du dessous » → `{"action":"layerClip","clip":true,"ref":"s1"}`
+  - « détache l'écrêtage du calque l2 » → `{"action":"layerClip","clip":false,"ref":"l2"}`
+  - « clip the text to the layer below » → `{"action":"layerClip","clip":true,"ref":"l1"}`
+  - « release the clipping mask of l2 » → `{"action":"layerClip","clip":false,"ref":"l2"}`
+  - « clippe le texte sur la photo » (paraphrase) → `{"action":"layerClip","clip":true,"ref":"l1"}`
+  - « recadre » is not this: `crop`
+- Check: layerClipping changed.
+
+### groupLayers
+
+Group layers / Grouper les calques. Puts layers in a group, or ungroups. *Met des calques dans un groupe, ou dissocie.*
+
+- Domains: photo; core in: none; category layers; phase composition; runs as handler (IntentAction.operation).
+- Card: `groupLayers: refs:[l1|s1|i1|j1|g1…] ≤16, ungroup:true|false, ref:g1 — Puts layers in a group, or ungroups « group layers l1 and s1 »`
+- Params:
+  - `refs` list of ≤ 16: id ln/sn/in/jn/gn, optional: the layers: l1, s1, i1… (also `layers`)
+  - `all` true or false, optional: every layer above the photo; off the card
+  - `ungroup` true or false, optional: dissolve the group ref
+  - `ref` id gn, optional: g1: the group
+  - `name` text ≤ 30, optional: the group's name; off the card
+  - `collapse` true or false, optional: fold the group in the list; off the card
+- Triggers (fr): « groupe les calques », « mets dans un groupe », « regroupe », « dissocie le groupe », « crée un groupe », « dégroupe », « nouveau groupe », « replie le groupe », « dans un dossier », « range les calques », « nouveau dossier »
+- Triggers (en): « group layers », « put these layers in a group », « ungroup », « make a group », « new group », « collapse the group », « in a group », « into one folder », « layer folder », « put in a folder »
+- Examples:
+  - « groupe les calques l1 et s1 » → `{"action":"groupLayers","refs":["l1","s1"]}`
+  - « mets le titre et le sous-titre dans un groupe » → `{"action":"groupLayers","refs":["l1","l2"]}`
+  - « groupe tous les calques » → `{"action":"groupLayers","all":true}`
+  - « dissocie le groupe g1 » → `{"action":"groupLayers","ref":"g1","ungroup":true}`
+  - « crée un groupe Textes avec l1 et l2 » → `{"action":"groupLayers","name":"Textes","refs":["l1","l2"]}`
+  - « replie le groupe g1 » → `{"action":"groupLayers","collapse":true,"ref":"g1"}`
+  - « group layers l1 and s1 » → `{"action":"groupLayers","refs":["l1","s1"]}`
+  - « ungroup g1 » → `{"action":"groupLayers","ref":"g1","ungroup":true}`
+  - « regroupe le texte et la forme » (paraphrase) → `{"action":"groupLayers","refs":["l1","s1"]}`
+  - « fusionne les calques » is not this: `mergeLayers`
+- Check: layerStructure changed.
+
+### mergeLayers
+
+Merge layers / Fusionner les calques. Merge down, merge visible, flatten, stamp. *Fusionne vers le bas, aplatit, tamponne.*
+
+- Domains: photo; core in: none; category layers; phase composition; runs as handler (IntentAction.operation).
+- Needs: heavy to run.
+- Card: `mergeLayers: mode*:down|visible|flatten|stamp|selected, ref:l1|s1|i1|j1|g1 — Merge down, merge visible, flatten, stamp « merge down »`
+- Params:
+  - `mode` one of `down`, `visible`, `flatten`, `stamp`, `selected`, required: down, visible, flatten, stamp, selected
+  - `ref` id ln/sn/in/jn/gn, optional: down: the upper layer; none: selected
+  - `refs` list of ≤ 16: id ln/sn/in/jn/gn, optional: selected: the layers to merge; off the card
+  - `confirm` true or false, optional: flatten: hidden layers may go; off the card
+- Triggers (fr): « fusionne avec le calque du dessous », « fusionne vers le bas », « fusionne les calques visibles », « aplatis l'image », « fusionne tout », « tampon des calques visibles », « aplatis », « fusionne ces calques », « fusionner les calques »
+- Triggers (en): « merge down », « merge visible », « flatten image », « stamp visible », « flatten », « merge these layers », « merge layers »
+- Examples:
+  - « fusionne avec le calque du dessous » → `{"action":"mergeLayers","mode":"down"}`
+  - « fusionne les calques visibles » → `{"action":"mergeLayers","mode":"visible"}`
+  - « aplatis l'image » → `{"action":"mergeLayers","mode":"flatten"}`
+  - « tampon des calques visibles » → `{"action":"mergeLayers","mode":"stamp"}`
+  - « fusionne l1 et s1 ensemble » → `{"action":"mergeLayers","mode":"selected","refs":["l1","s1"]}`
+  - « fusionne le sous-titre vers le bas » → `{"action":"mergeLayers","mode":"down","ref":"l2"}`
+  - « merge down » → `{"action":"mergeLayers","mode":"down"}`
+  - « flatten the image » → `{"action":"mergeLayers","mode":"flatten"}`
+  - « stamp visible » → `{"action":"mergeLayers","mode":"stamp"}`
+  - « aplatis tout » (paraphrase) → `{"action":"mergeLayers","mode":"flatten"}`
+  - « groupe les calques » is not this: `groupLayers`
+- Check: layerCount decreased; layerCount increased; pixels compositeUnchanged unchanged (from W2).
+
+### layerTransform
+
+Transform layer / Transformer le calque. Moves, scales, rotates, skews a layer. *Déplace, redimensionne, tourne, incline un calque.*
+
+- Domains: photo; core in: none; category layers; phase composition; runs as handler (IntentAction.operation).
+- Needs: a layer above the photo.
+- Card: `layerTransform: ref:l1|s1|i1|j1|g1, dx -1000..1000, dy -1000..1000, scaleBy 10..1000, rotation -360..360, skewX -60..60 — Moves, scales, rotates, skews a layer`
+- Params:
+  - `ref` id ln/sn/in/jn/gn, optional: l1, s1, i1; none: the selected (also `layer`)
+  - `refs` list of ≤ 16: id ln/sn/in/jn/gn, optional: align: the layers; off the card
+  - `center` point [x, y] 0–1000, optional: new centre [x,y] 0-1000; off the card
+  - `x` number 0…1000 (none), optional: bounds centre x 0-1000; off the card
+  - `y` number 0…1000 (none), optional: bounds centre y 0-1000; off the card
+  - `dx` number -1000…1000 (none), optional: move right +, left − (0-1000)
+  - `dy` number -1000…1000 (none), optional: move down +, up − (0-1000)
+  - `scale` number 1…1000 (percent), optional: % of the natural size; off the card
+  - `scaleBy` number 10…1000 (percent), optional: multiplies the scale, %
+  - `scaleX` number 1…1000 (percent), optional: width, % of natural; off the card
+  - `scaleY` number 1…1000 (percent), optional: height, % of natural; off the card
+  - `rotation` number -360…360 (degrees), optional: degrees, clockwise
+  - `relative` true or false, optional: rotation and scales add up; off the card
+  - `skewX` number -60…60 (degrees), optional: horizontal skew
+  - `skewY` number -60…60 (degrees), optional: vertical skew; off the card
+  - `corners` list of ≤ 4: point [x, y] 0–1000, optional: 4 corners TL,TR,BR,BL 0-1000; off the card
+  - `mode` one of `free`, `skew`, `distort`, `perspective`, optional: handles: free, skew, distort…; off the card
+  - `flip` one of `horizontal`, `vertical`, optional: mirror the layer; off the card
+  - `fit` one of `fit`, `fill`, `reset`, optional: fit, fill the canvas, or reset; off the card
+  - `align` one of `left`, `centerH`, `right`, `top`, `centerV`, `bottom`, `distributeH`, `distributeV`, `center`, optional: align or distribute; off the card
+- Triggers (fr): « agrandis le calque », « réduis le logo », « déplace le calque à gauche », « tourne le calque de 15 degrés », « incline le calque », « déforme le calque », « mets en perspective le calque », « centre le calque », « étire en largeur », « transforme le calque », « aligne les calques », « retourne le calque », « décale le calque », « décale vers la droite », « pousse le calque »
+- Triggers (en): « scale the layer », « move the layer left », « rotate the layer », « skew the layer », « distort the layer », « center the layer », « stretch it wider », « transform the layer », « align the layers », « flip the layer », « nudge the layer », « layer bigger », « make the layer smaller », « shift the layer »
+- Examples:
+  - « agrandis le calque » → `{"action":"layerTransform","scaleBy":120}`
+  - « réduis le logo i1 de moitié » → `{"action":"layerTransform","ref":"i1","scaleBy":50}`
+  - « déplace le calque à gauche » → `{"action":"layerTransform","dx":-50}`
+  - « tourne le calque de 15 degrés » → `{"action":"layerTransform","relative":true,"rotation":15}`
+  - « incline le calque de 10 degrés » → `{"action":"layerTransform","skewX":10}`
+  - « mets le calque en perspective » → `{"action":"layerTransform","mode":"perspective"}`
+  - « centre le calque » → `{"action":"layerTransform","align":"center"}`
+  - « étire le calque en largeur » → `{"action":"layerTransform","relative":true,"scaleX":20}`
+  - « aligne l1 et s1 à gauche » → `{"action":"layerTransform","align":"left","refs":["l1","s1"]}`
+  - « retourne le calque horizontalement » → `{"action":"layerTransform","flip":"horizontal"}`
+  - « mets le logo i1 à 150 % » → `{"action":"layerTransform","ref":"i1","scale":150}`
+  - « place les coins du logo i1 » → `{"action":"layerTransform","corners":[[200,200],[800,250],[780,800],[220,760]],"ref":"i1"}`
+  - « réinitialise la transformation du calque » → `{"action":"layerTransform","fit":"reset"}`
+  - « scale the layer to 150 % » → `{"action":"layerTransform","scale":150}`
+  - « move the layer left » → `{"action":"layerTransform","dx":-50}`
+  - « rotate the layer 30 degrees » → `{"action":"layerTransform","relative":true,"rotation":30}`
+  - « center the layer » → `{"action":"layerTransform","align":"center"}`
+  - « distort the layer » → `{"action":"layerTransform","mode":"distort"}`
+  - « rapetisse le calque » (paraphrase) → `{"action":"layerTransform","scaleBy":83}`
+  - « tourne la photo » is not this: `rotate`
+  - « corrige la perspective » is not this: `perspective`
+- Check: layerTransform changed; unverifiable: the person drags the corners.
+
+### layerProperties
+
+Layer fill, lock and name / Fond, verrou et nom du calque. Fill opacity, locks and the layer's name. *Opacité du fond, verrous et nom du calque.*
+
+- Domains: photo; core in: none; category layers; phase composition; runs as handler (IntentAction.operation).
+- Card: `layerProperties: ref:l1|s1|i1|j1|g1, {fill 0..100 / lock:… / name:"…"}* — Fill opacity, locks and the layer's name « set the fill opacity to 40 »`
+  - `lock: all|position|pixels|transparency|none`
+- Params:
+  - `ref` id ln/sn/in/jn/gn, optional: l1, i1, g1; none: the selected (also `layer`)
+  - `fill` number 0…100 (percent), one of group `change`: fill opacity, % (also `fillOpacity`)
+  - `lock` one of `all`, `position`, `pixels`, `transparency`, `none`, one of group `change`: what is locked
+  - `name` text ≤ 40, one of group `change`: rename the layer (also `rename`)
+  - `passThrough` true or false, one of group `change`: group: pass through; off the card
+  - `maskLinked` true or false, one of group `change`: mask moves with the layer; off the card
+- Triggers (fr): « fond du calque à 50 % », « opacité du fond », « verrouille le calque », « déverrouille », « verrouille la position », « renomme le calque », « mode transfert », « fond du calque », « nom du calque », « lie le masque »
+- Triggers (en): « fill opacity », « lock the layer », « unlock », « rename the layer », « pass through », « lock position », « layer name »
+- Examples:
+  - « fond du calque à 50 % » → `{"action":"layerProperties","fill":50}`
+  - « verrouille le calque » → `{"action":"layerProperties","lock":"all"}`
+  - « verrouille la position du titre » → `{"action":"layerProperties","lock":"position","ref":"l1"}`
+  - « déverrouille le calque » → `{"action":"layerProperties","lock":"none"}`
+  - « renomme le calque en Titre principal » → `{"action":"layerProperties","name":"Titre principal"}`
+  - « mets le groupe g1 en mode transfert » → `{"action":"layerProperties","passThrough":true,"ref":"g1"}`
+  - « verrouille la transparence de la forme » → `{"action":"layerProperties","lock":"transparency","ref":"s1"}`
+  - « set the fill opacity to 40 » → `{"action":"layerProperties","fill":40}`
+  - « lock the layer » → `{"action":"layerProperties","lock":"all"}`
+  - « rename the layer to Logo » → `{"action":"layerProperties","name":"Logo"}`
+  - « le fond du calque à moitié » (paraphrase) → `{"action":"layerProperties","fill":50}`
+  - « opacité du calque à 50 » is not this: `layerOpacity`
+- Check: layerFillOpacity equals `fill`; layerLock changed; unverifiable: names and settings.
+
+### exportPhoto
+
+Export as / Exporter en. Opens the export sheet on a format. *Ouvre l'export sur un format.*
+
+- Domains: photo; core in: none; category export; phase output; runs as handler (IntentAction.operation).
+- Card: `exportPhoto: {format:jpeg|heic|png|tiff|pdf|psd / preset:instagram|print|web}*, bitDepth:8|10|16 — Opens the export sheet on a format « export as a 16-bit PNG »`
+- Params:
+  - `format` one of `jpeg`, `heic`, `png`, `tiff`, `pdf`, `psd`, one of group `what`: file format
+  - `bitDepth` one of `8`, `10`, `16`, optional: bits per channel
+  - `colorSpace` one of `displayP3`, `sRGB`, optional: colour space; off the card
+  - `size` one of `full`, `4096`, `2048`, `1080`, optional: long side in pixels; off the card
+  - `layers` true or false, optional: PSD: keep the layers; off the card
+  - `preset` one of `instagram`, `print`, `web`, one of group `what`: ready-made settings
+- Triggers (fr): « exporte en PNG 16 bits », « enregistre en TIFF », « exporte en PSD avec les calques », « fais un PDF de la photo », « HEIC 10 bits », « exporte pour l'impression », « exporte en », « exporte pour le web », « exporte pour Instagram », « fichier PSD »
+- Triggers (en): « export as a 16-bit PNG », « save as TIFF », « export a layered PSD », « export as PDF », « export as », « export for print », « export for the web », « PSD file »
+- Examples:
+  - « exporte en PNG 16 bits » → `{"action":"exportPhoto","bitDepth":"16","format":"png"}`
+  - « enregistre en TIFF » → `{"action":"exportPhoto","format":"tiff"}`
+  - « exporte en PSD avec les calques » → `{"action":"exportPhoto","format":"psd","layers":true}`
+  - « fais un PDF de la photo » → `{"action":"exportPhoto","format":"pdf"}`
+  - « exporte en HEIC 10 bits » → `{"action":"exportPhoto","bitDepth":"10","format":"heic"}`
+  - « exporte pour l'impression » → `{"action":"exportPhoto","preset":"print"}`
+  - « exporte en JPEG sRGB en 2048 » → `{"action":"exportPhoto","colorSpace":"sRGB","format":"jpeg","size":"2048"}`
+  - « export as a 16-bit PNG » → `{"action":"exportPhoto","bitDepth":"16","format":"png"}`
+  - « export a layered PSD » → `{"action":"exportPhoto","format":"psd","layers":true}`
+  - « export for Instagram » → `{"action":"exportPhoto","preset":"instagram"}`
+  - « export for the web » → `{"action":"exportPhoto","preset":"web"}`
+  - « sors-moi un TIFF 16 bits » (paraphrase) → `{"action":"exportPhoto","bitDepth":"16","format":"tiff"}`
+  - « partage la photo » is not this: `share`
+  - « enregistre cette version » is not this: `saveVersion`
+- Check: unverifiable: the person confirms the export.
 
 ### maskAdjust
 
@@ -1316,6 +1793,7 @@ Mask adjustment / Réglage par masque. A setting on one area, through a mask. *U
   - `amount` number -100…100 (signedPercent), optional: relative ±; a bit 10, a lot 40 (also `value`, `strength`, `intensity`)
   - `amountMode` one of `relative`, `absolute`, default relative: relative adds, absolute sets; off the card
   - `feather` number 0…100 (percent), optional: mask edge softness; off the card
+  - `layer` id in, optional: i1 owner of a new mask; none: active; off the card
 - Triggers (fr): « le ciel », « éclaircis le ciel », « assombris le bas », « le haut », « en bas de la photo », « dégradé », « sur le sujet », « le fond plus sombre », « l'arrière-plan », « les ombres seulement », « les tons chair », « au premier plan », « au loin », « masque », « filtre gradué », « filtre radial », « seulement le sujet », « assombris le haut », « réglage local », « par zone », « sur les bords », « le bas de la photo », « plus de contraste sur », « sur la personne », « sur l'eau », « sur la végétation »
 - Triggers (en): « darken the bottom », « brighten the sky », « on the subject », « graduated filter », « radial filter », « only the sky », « the background darker », « local adjustment », « the top of the photo », « the bottom of the photo », « more contrast on », « on the edges », « in the shadows only », « the foreground », « in the distance », « through a mask »
 - Examples:
@@ -1356,6 +1834,8 @@ Mask adjustment / Réglage par masque. A setting on one area, through a mask. *U
   - « assombris le côté droit » → `{"action":"maskAdjust","amount":-20,"parameter":"exposure","where":"right"}`
   - « more contrast in the midtones only » → `{"action":"maskAdjust","amount":15,"parameter":"contrast","where":"midtones"}`
   - « calme les zones claires » → `{"action":"maskAdjust","amount":-15,"parameter":"exposure","where":"highlights"}`
+  - « assombris le haut de la tasse i1 » → `{"action":"maskAdjust","amount":-20,"layer":"i1","parameter":"exposure","where":"top"}`
+  - « brighten the sky of layer i1 » → `{"action":"maskAdjust","amount":20,"layer":"i1","parameter":"exposure","where":"sky"}`
   - « ajoute un vignettage » is not this: `adjust`
   - « remplace le ciel par un coucher de soleil » is not this: `generativeFill`
   - « désature les bleus » is not this: `hsl`
@@ -1405,6 +1885,7 @@ Edit mask / Modifier le masque. Changes a mask's shape or strength. *Change la f
   - `roundness` number 0…100 (percent), one of group `change`: radial: 100 a circle; off the card
   - `localColor` colour name or #RRGGBB, one of group `change`: tint the area: colour name; off the card
   - `localColorAmount` number 0…100 (percent), optional: tint strength; off the card
+  - `layer` id in, optional: i1: its last mask; a ref wins; off the card
 - Triggers (fr): « ajoute au masque », « retire du masque », « inverse le masque », « adoucis le masque », « étends le masque », « contour du masque », « agrandis le masque », « réduis le masque », « masque plus doux », « renomme le masque », « duplique le masque », « montre le masque », « cache le réglage », « intensité du masque », « le masque 2 », « sur le masque »
 - Triggers (en): « subtract from the mask », « add to the mask », « invert the mask », « feather the mask », « expand the mask », « contract the mask », « rename the mask », « duplicate the mask », « show the mask », « mask strength », « soften the mask »
 - Examples:
@@ -1438,6 +1919,7 @@ Edit mask / Modifier le masque. Changes a mask's shape or strength. *Change la f
   - « add the reds to the mask » → `{"action":"maskEdit","color":"red","combine":"add","where":"color"}`
   - « rétrécis le masque » (paraphrase) → `{"action":"maskEdit","expand":-20}`
   - « make the mask weaker » (paraphrase) → `{"action":"maskEdit","amount":50}`
+  - « adoucis le dernier masque de la tasse i1 » → `{"action":"maskEdit","feather":50,"layer":"i1"}`
   - « inverse la sélection » is not this: `selectionModify`
   - « masque le calque » is not this: `layerVisibility`
 - Check: localAdjustments changed; pixels maskCoverage changed (from W2).
@@ -1452,8 +1934,9 @@ Delete mask / Supprimer le masque. Removes a mask and its adjustment. *Supprime 
 - Params:
   - `ref` id an, optional: a1; none: the last edited (also `mask`)
   - `all` true or false, optional: every mask
+  - `layer` id in, optional: i1: that layer's masks; off the card
 - Triggers (fr): « supprime le masque », « enlève le masque », « efface le masque », « retire le masque », « supprime tous les masques », « plus de masque »
-- Triggers (en): « delete the mask », « remove the mask », « delete all masks », « remove every mask »
+- Triggers (en): « delete the mask », « remove the mask », « delete all masks », « remove every mask », « get rid of the mask », « clear all the masks »
 - Examples:
   - « supprime le masque » → `{"action":"maskDelete"}`
   - « enlève le masque a2 » → `{"action":"maskDelete","ref":"a2"}`
@@ -1461,6 +1944,7 @@ Delete mask / Supprimer le masque. Removes a mask and its adjustment. *Supprime 
   - « delete the mask » → `{"action":"maskDelete"}`
   - « remove all the masks » → `{"action":"maskDelete","all":true}`
   - « vire le masque a1 » (paraphrase) → `{"action":"maskDelete","ref":"a1"}`
+  - « supprime tous les masques de la tasse i1 » → `{"action":"maskDelete","all":true,"layer":"i1"}`
   - « supprime le calque » is not this: `deleteLayer`
   - « supprime le fond » is not this: `removeBackground`
 - Check: localAdjustments decreased.
@@ -1487,8 +1971,8 @@ Select / Sélectionner. Selects part of the photo. *Sélectionne une partie de l
   - `contiguous` true or false, optional: wand: touching pixels only; off the card
   - `sampleSize` integer 1…5, optional: wand: sample 1, 3 or 5 px; off the card
   - `mode` one of `new`, `add`, `subtract`, `intersect`, default new: new, or add, subtract, intersect
-- Triggers (fr): « sélectionne », « sélection », « choisis la tasse », « à la baguette magique », « sélectionne cette couleur », « sélectionne le sujet », « sélectionne le ciel », « sélectionne la tasse », « sélectionne tout », « ajoute à la sélection », « retire de la sélection », « sélectionne les personnes », « sélectionne l'arrière-plan », « détoure la sélection de »
-- Triggers (en): « select the », « select subject », « select sky », « magic wand », « select everything », « add to the selection », « subtract from the selection », « select this colour », « select the people »
+- Triggers (fr): « sélectionne », « sélection », « choisis la tasse », « à la baguette magique », « sélectionne cette couleur », « sélectionne le sujet », « sélectionne le ciel », « sélectionne la tasse », « sélectionne tout », « ajoute à la sélection », « retire de la sélection », « sélectionne les personnes », « sélectionne l'arrière-plan », « détoure la sélection de », « sélectionne l'animal », « sélectionne la personne », « prends toutes les zones bleues », « sélectionne le chien »
+- Triggers (en): « select the », « select subject », « select sky », « magic wand », « select everything », « add to the selection », « subtract from the selection », « select this colour », « select the people », « pick the person », « pick out the », « select the dog »
 - Examples:
   - « sélectionne le sujet » → `{"action":"select","what":"subject"}`
   - « sélectionne tous les gens » → `{"action":"select","what":"people"}`
@@ -1581,16 +2065,16 @@ Use selection / Utiliser la sélection. Uses the selection for an edit. *Se sert
 - Domains: photo; core in: none; category selection; phase composition; runs as handler (IntentAction.operation).
 - Needs: a selection.
 - Card: `selectionApply: use*:…, parameter:…, amount -100..100, color:name|#hex, prompt:"…" — Uses the selection for an edit « fill the selection with blue »`
-  - `use: adjust|mask|erase|fill|recolor|blur|cutout|generate`
+  - `use: adjust|mask|erase|fill|recolor|blur|cutout|generate|copyToLayer|cutToLayer`
   - `parameter: exposure|brightness|contrast|highlights|shadows|whites|blacks|saturation|vibrance|temperature|tint|sharpness|clarity|noiseReduction|vignette|grain|fade|hue|skinTone`
 - Params:
-  - `use` one of `adjust`, `mask`, `erase`, `fill`, `recolor`, `blur`, `cutout`, `generate`, required: what to do with the selection (also `for`)
+  - `use` one of `adjust`, `mask`, `erase`, `fill`, `recolor`, `blur`, `cutout`, `generate`, `copyToLayer`, `cutToLayer`, required: what to do with the selection (also `for`)
   - `parameter` one of `exposure`, `brightness`, `contrast`, `highlights`, `shadows`, `whites`, `blacks`, `saturation`, `vibrance`, `temperature`, `tint`, `sharpness`, `clarity`, `noiseReduction`, `vignette`, `grain`, `fade`, `hue`, `skinTone`, optional: the setting (also `param`, `setting`)
   - `amount` number -100…100 (signedPercent), optional: adjust ±; blur 0-100 (also `value`, `strength`, `intensity`)
   - `color` colour name or #RRGGBB, optional: fill or recolour colour (also `colour`, `couleur`)
   - `prompt` text ≤ 80, optional: generate: what to put there (also `text`)
   - `keep` true or false, optional: keep the selection afterwards; off the card
-- Triggers (fr): « efface la sélection », « remplis la sélection », « floute la sélection », « recolore la sélection », « fais-en un masque », « éclaircis la sélection », « remplace la sélection par », « détoure la sélection », « utilise la sélection », « dans la sélection », « assombris la sélection », « supprime la sélection », « ce qui est sélectionné »
+- Triggers (fr): « efface la sélection », « remplis la sélection », « floute la sélection », « recolore la sélection », « fais-en un masque », « éclaircis la sélection », « remplace la sélection par », « détoure la sélection », « utilise la sélection », « dans la sélection », « assombris la sélection », « supprime la sélection », « ce qui est sélectionné », « la sélection sur un nouveau calque »
 - Triggers (en): « fill the selection », « erase the selection », « blur the selection », « recolour the selection », « make it a mask », « brighten the selection », « use the selection », « cut out the selection », « replace the selection with »
 - Examples:
   - « efface la sélection » → `{"action":"selectionApply","use":"erase"}`
@@ -1608,6 +2092,9 @@ Use selection / Utiliser la sélection. Uses the selection for an edit. *Se sert
   - « make it a mask » → `{"action":"selectionApply","use":"mask"}`
   - « efface ce qui est sélectionné » (paraphrase) → `{"action":"selectionApply","use":"erase"}`
   - « put a hat where the selection is » (paraphrase) → `{"action":"selectionApply","prompt":"a hat","use":"generate"}`
+  - « copie la sélection sur un nouveau calque » → `{"action":"selectionApply","use":"copyToLayer"}`
+  - « coupe la sélection sur un nouveau calque » → `{"action":"selectionApply","use":"cutToLayer"}`
+  - « cut the selection to a new layer » → `{"action":"selectionApply","use":"cutToLayer"}`
   - « efface le chien » is not this: `removeObject`
   - « floute le fond » is not this: `blurBackground`
 - Check: pixels selectionUse changed (from W2).
@@ -2004,7 +2491,7 @@ Follow subject / Suivre le sujet. An overlay follows the moving subject. *Un él
   - `text` one of `text`, `image`, `video`, `shape`, optional: which overlay (also `overlay`)
   - `amount` number 0…100 (percent), optional: 0 stops following (also `value`, `strength`, `intensity`); off the card
 - Triggers (fr): « suit le visage », « fais suivre », « suivi », « suit la personne », « suis-le », « colle au sujet »
-- Triggers (en): « follow the subject », « track », « track the subject », « track the person », « tracking », « follow the face », « pin to the person »
+- Triggers (en): « follow the subject », « track », « track the subject », « track the person », « tracking », « follow the face », « pin to the person », « track the cyclist »
 - Examples:
   - « fais suivre le titre au visage » → `{"action":"trackSubject","text":"text"}`
   - « le texte doit suivre la personne » → `{"action":"trackSubject","text":"text"}`
@@ -2694,6 +3181,36 @@ Merge / Fusionner. Adds another PDF or an image. *Ajoute un autre PDF ou une ima
   - « add another PDF to this one » → `{"action":"mergeDocument"}`
   - « insère une page blanche » is not this: `insertBlankPage`
 - Check: unverifiable: needs the file picked by the user.
+
+### recipe
+
+Recipe / Recette. A ready-made sequence of edits. *Une suite de retouches toute prête.*
+
+- Domains: photo, video; core in: none; category effects; phase geometry; runs as handler (IntentAction.operation).
+- Card: `recipe: name*:…, format:portrait4x5|square|story9x16 — A ready-made sequence of edits « make it Instagram ready »`
+  - `name: instagramPost|productPhoto|portraitRetouch|vlogCleanup`
+- Params:
+  - `name` one of `instagramPost`, `productPhoto`, `portraitRetouch`, `vlogCleanup`, required: the recipe (also `recipe`)
+  - `format` one of `portrait4x5`, `square`, `story9x16`, optional: instagramPost: 4:5, 1:1, 9:16
+  - `background` colour name or #RRGGBB, optional: productPhoto: background colour (also `color`, `colour`); off the card
+  - `strength` number 0…100 (percent), optional: portraitRetouch: 0 subtle, 100 strong; off the card
+  - `captions` true or false, optional: vlogCleanup: add captions; off the card
+- Triggers (fr): « prépare pour Instagram », « post Instagram », « format story », « photo produit », « fond blanc pour la boutique », « retouche portrait », « embellis le portrait », « nettoie mon vlog », « nettoyage vlog », « recette », « prête pour Instagram », « pour vendre », « leboncoin », « vinted », « annonce de vente »
+- Triggers (en): « make it Instagram ready », « product photo », « portrait retouch », « clean up my vlog », « Instagram post », « vlog cleanup », « recipe », « listing photo », « for my shop », « to sell online »
+- Examples:
+  - « prépare pour Instagram » → `{"action":"recipe","name":"instagramPost"}`
+  - « post Instagram au format story » → `{"action":"recipe","format":"story9x16","name":"instagramPost"}`
+  - « photo produit sur fond blanc » → `{"action":"recipe","background":"white","name":"productPhoto"}`
+  - « retouche portrait légère » → `{"action":"recipe","name":"portraitRetouch","strength":30}`
+  - « nettoie mon vlog » → `{"action":"recipe","name":"vlogCleanup"}`
+  - « prépare un post Instagram carré » → `{"action":"recipe","format":"square","name":"instagramPost"}`
+  - « make it Instagram ready » → `{"action":"recipe","name":"instagramPost"}`
+  - « product photo » → `{"action":"recipe","name":"productPhoto"}`
+  - « clean up my vlog with captions » → `{"action":"recipe","captions":true,"name":"vlogCleanup"}`
+  - « portrait retouch, strong » → `{"action":"recipe","name":"portraitRetouch","strength":80}`
+  - « embellis le portrait » (paraphrase) → `{"action":"recipe","name":"portraitRetouch"}`
+  - « exporte pour Instagram » is not this: `exportPhoto`
+- Check: unverifiable: each step carries its own check.
 
 ### seek
 

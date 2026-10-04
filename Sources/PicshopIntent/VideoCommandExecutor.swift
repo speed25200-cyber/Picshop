@@ -894,6 +894,12 @@ public struct VideoCommandExecutor: Sendable {
         case .summarizeEdits: return (timeline, .effect(.message("summary"), label: ""))
         case .restoreVersion: return (timeline, .effect(.message("version:restore:" + (intent.text ?? "")), label: ""))
         case .unknown: return (timeline, ExecutionResult(outcome: .info(message: Replies.reply(for: intent, language: language))))
+        case .operation where intent.operation?.id == RecipeExecution.recipeID:
+            // W3 (D21): the only catalog operation a video runs is a recipe (vlogCleanup; the photo ones answer honestly).
+            guard let call = intent.operation else { return (timeline, .failed(PicshopError.unsupportedOperation(intent.summary).message(french: language == .french))) }
+            return await RecipeExecution.run(call, on: timeline, context: context, language: language) { step, current, stepContext in
+                await self.execute(step, on: current, context: stepContext)
+            }
         default: return (timeline, .failed(PicshopError.unsupportedOperation(intent.summary).message(french: language == .french)))
         }
     }

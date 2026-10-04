@@ -143,6 +143,16 @@ struct OperationPhotoServices: PhotoAIServices {
     func pixelProbes(_ requests: [PixelProbeRequest], before: PhotoDocument, after: PhotoDocument) async -> [PixelProbeResult] {
         masks.pixelProbes(requests, before: before, after: after)
     }
+    // W3: layers (synthetic rasters, the layer's own pixels as the photo's, text sizes from the font size).
+    func aiMask(_ request: AIMaskRequest, in document: PhotoDocument, layer: UUID?) async throws -> AIMaskResult {
+        try masks.aiMask(request, in: document, layer: layer)
+    }
+    func rasterizeLayers(_ request: LayerRasterRequest, in document: PhotoDocument) async throws -> LayerRasterResult {
+        masks.rasterizeLayers(request, in: document)
+    }
+    func contentSize(of layerID: UUID, in document: PhotoDocument) async -> PSSize? {
+        masks.contentSize(of: layerID, in: document)
+    }
     func groundBox(_ phrase: String, in document: PhotoDocument) async -> PSRect? { grounds ? masks.groundBox(phrase) : nil }
 
     /// A low-contrast picture: values between 40 and 200.

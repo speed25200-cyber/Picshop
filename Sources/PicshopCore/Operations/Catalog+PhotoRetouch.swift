@@ -207,7 +207,7 @@ enum CatalogPhotoRetouch {
             s.requires = needs(generativeEngine: true, cost: .heavy)
             s.triggers = [
                 .fr: ["remplace le ciel par", "ajoute un chapeau", "rajoute", "rajoute un", "génère", "invente", "change le ciel", "mets un coucher de soleil"],
-                .en: ["replace the sky with", "add a hat", "generate", "the sky is boring", "make a sunset sky"],
+                .en: ["replace the sky with", "add a hat", "generate", "the sky is boring", "make a sunset sky", "put a bird in the sky", "add a moon in the sky"],
             ]
             s.examples = [
                 fr("remplace le ciel par un coucher de soleil", ["target": "sky", "text": "a sunset sky with warm clouds"]),

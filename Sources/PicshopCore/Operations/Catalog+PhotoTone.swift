@@ -9,7 +9,11 @@ enum CatalogPhotoTone {
         legacy(.adjust, in: [.photo, .video], .light, .tone,
                title: t("Adjust", "Réglage"), summary: t("One tone or colour setting", "Un réglage de ton ou de couleur")) { s in
             s.coreIn = [.photo, .video]
-            s.params = [Step.parameter(), Step.amount(-100...100, .signedPercent, doc: "relative ±; a bit 10, a lot 40"), Step.amountMode]
+            s.params = [Step.parameter().labelled("Setting", "Réglage"),
+                        Step.amount(-100...100, .signedPercent, doc: "relative ±; a bit 10, a lot 40").labelled("Amount", "Valeur"),
+                        Step.amountMode.labelled("Mode", "Mode"),
+                        // W3 (D9): the layer the dial lands on: an image layer, or a « Lumière » adjustment layer (its own dials).
+                        CatalogPhotoLayerOps.toneLayer()]
             s.triggers = [
                 .fr: ["luminosité", "plus lumineux", "plus clair", "éclaircis", "assombris", "plus sombre", "exposition", "contraste", "saturation",
                       "plus de couleurs", "désature", "vibrance", "réchauffe", "plus chaud", "plus froid", "chaleur", "ombres", "hautes lumières",
@@ -27,6 +31,9 @@ enum CatalogPhotoTone {
                 en("make it brighter", ["parameter": "brightness", "amount": 20]),
                 en("less contrast", ["parameter": "contrast", "amount": -20]),
                 para("rend la plus chaude", .fr, ["parameter": "temperature", "amount": 20]),
+                fr("baisse l'exposition du calque de réglage j4", ["parameter": "exposure", "amount": -20, "layer": "j4"]),
+                fr("plus de contraste sur la tasse i1", ["parameter": "contrast", "amount": 20, "layer": "i1"]),
+                en("lower the exposure of the adjustment layer j4", ["parameter": "exposure", "amount": -20, "layer": "j4"]),
                 near("désature les bleus", .fr, expected: "hsl"),
                 near("courbe en S", .fr, expected: "curves"),
             ]
@@ -121,15 +128,17 @@ enum CatalogPhotoTone {
            title: t("Curves", "Courbes"), summary: t("Tone curve per channel", "Courbe de tons par canal")) { s in
             s.params = [
                 enumParam("channel", ToneCurve.Channel.self, .optional("rgb"), doc: "channel")
-                    .aliases(["rvb": "rgb", "master": "rgb", "tout": "rgb", "all": "rgb", "rouge": "red", "vert": "green", "bleu": "blue"]),
-                enumParam("preset", curvePresets, doc: "a ready-made shape").inGroup("shape").keys("shape", "curve")
+                    .aliases(["rvb": "rgb", "master": "rgb", "tout": "rgb", "all": "rgb", "rouge": "red", "vert": "green", "bleu": "blue"])
+                    .labelled("Channel", "Canal"),
+                enumParam("preset", curvePresets, doc: "a ready-made shape").inGroup("shape").keys("shape", "curve").labelled("Preset", "Préréglage")
                     .aliases(["s": "sCurve", "en s": "sCurve", "s curve": "sCurve", "courbe en s": "sCurve", "s leger": "sCurve",
                               "s fort": "strongS", "strong s": "strongS", "s prononce": "strongS", "mat": "matte", "mate": "matte",
                               "delave": "fade", "faded": "fade", "inverse": "invert", "negatif": "invert", "negative": "invert",
                               "eclaircir": "brighten", "plus clair": "brighten", "lighten": "brighten", "assombrir": "darken",
                               "plus sombre": "darken", "lineaire": "linear", "plate": "linear", "reset": "linear", "flat": "linear"]),
                 ParamSpec("points", .list(.point, max: ToneCurve.maxPoints), .oneOf(group: "shape"), doc: "[[in,out]…] 0-1000"),
-                percent("amount", 0...100, .optional(50), doc: "strength").keys("strength", "intensity"),
+                percent("amount", 0...100, .optional(50), doc: "strength").keys("strength", "intensity").labelled("Strength", "Force"),
+                CatalogPhotoLayerOps.toneLayer("i1 or a Courbes j1; none: selected"),
             ]
             s.exclusiveGroups = ["shape"]
             s.triggers = [
@@ -145,6 +154,8 @@ enum CatalogPhotoTone {
                 en("strong S curve on the red channel", ["channel": "red", "preset": "strongS"]),
                 para("mets une petite courbe en S", .fr, ["preset": "sCurve", "amount": 25]),
                 para("courbe en esse", .fr, ["preset": "sCurve"]),
+                fr("adoucis les courbes de j3", ["preset": "sCurve", "amount": 20, "layer": "j3"]),
+                en("strong S curve on the curves layer j3", ["preset": "strongS", "layer": "j3"]),
                 near("plus de contraste", .fr, expected: "adjust"),
             ]
             s.verify = [.structural(.toneCurve, .changed)]
@@ -157,13 +168,17 @@ enum CatalogPhotoTone {
            title: t("Levels", "Niveaux"), summary: t("Black, white and gamma points", "Points noir, blanc et gamma")) { s in
             s.params = [
                 enumParam("channel", ToneCurve.Channel.self, .optional("rgb"), doc: "channel")
-                    .aliases(["rvb": "rgb", "master": "rgb", "tout": "rgb", "rouge": "red", "vert": "green", "bleu": "blue"]),
-                number("black", 0...254, .level255, .oneOf(group: "values"), doc: "input black").keys("blackPoint", "inBlack"),
-                number("white", 1...255, .level255, .oneOf(group: "values"), doc: "input white").keys("whitePoint", "inWhite"),
-                number("gamma", 0.1...9.99, .none, .oneOf(group: "values"), doc: "midtones, 1 neutral").keys("midtones"),
-                number("outBlack", 0...254, .level255, .oneOf(group: "values"), doc: "output black").offCard,
-                number("outWhite", 1...255, .level255, .oneOf(group: "values"), doc: "output white").offCard,
-                boolean("auto", .oneOf(group: "values"), doc: "automatic levels"),
+                    .aliases(["rvb": "rgb", "master": "rgb", "tout": "rgb", "rouge": "red", "vert": "green", "bleu": "blue"])
+                    .labelled("Channel", "Canal"),
+                number("black", 0...254, .level255, .oneOf(group: "values"), doc: "input black").keys("blackPoint", "inBlack")
+                    .labelled("Black point", "Point noir"),
+                number("white", 1...255, .level255, .oneOf(group: "values"), doc: "input white").keys("whitePoint", "inWhite")
+                    .labelled("White point", "Point blanc"),
+                number("gamma", 0.1...9.99, .none, .oneOf(group: "values"), doc: "midtones, 1 neutral").keys("midtones").labelled("Gamma", "Gamma"),
+                number("outBlack", 0...254, .level255, .oneOf(group: "values"), doc: "output black").offCard.labelled("Output black", "Noir de sortie"),
+                number("outWhite", 1...255, .level255, .oneOf(group: "values"), doc: "output white").offCard.labelled("Output white", "Blanc de sortie"),
+                boolean("auto", .oneOf(group: "values"), doc: "automatic levels").labelled("Auto", "Auto"),
+                CatalogPhotoLayerOps.toneLayer("i1 or a Niveaux j1; none: selected"),
             ]
             s.triggers = [
                 .fr: ["niveaux", "niveaux automatiques", "point noir", "point blanc", "gamma", "niveaux du rouge", "réglage des niveaux"],
@@ -177,6 +192,7 @@ enum CatalogPhotoTone {
                 en("auto levels", ["auto": true]),
                 en("set the levels gamma to 1.2", ["gamma": 1.2]),
                 para("fais les niveaux tout seul", .fr, ["auto": true]),
+                fr("point blanc à 230 sur le calque de niveaux j5", ["white": 230, "layer": "j5"]),
                 near("plus de noirs", .fr, expected: "adjust"),
             ]
             s.verify = [.structural(.levels, .changed)]
@@ -187,7 +203,8 @@ enum CatalogPhotoTone {
     static var autoTone: OperationSpec {
         op("autoTone", .handler, in: [.photo], .light, .tone,
            title: t("Auto tone", "Tons auto"), summary: t("Levels from the histogram", "Niveaux tirés de l'histogramme")) { s in
-            s.params = [percent("amount", 0...100, .optional(100), doc: "strength").keys("strength", "intensity")]
+            s.params = [percent("amount", 0...100, .optional(100), doc: "strength").keys("strength", "intensity").labelled("Strength", "Force"),
+                        CatalogPhotoLayerOps.toneLayer()]
             s.triggers = [
                 .fr: ["tons automatiques", "tonalité automatique", "ton auto", "tons auto", "corrige les tons", "étale l'histogramme"],
                 .en: ["auto tone", "automatic tone", "auto contrast", "stretch the histogram"],
@@ -198,6 +215,7 @@ enum CatalogPhotoTone {
                 fr("tons auto à moitié", ["amount": 50]),
                 en("auto tone"),
                 en("auto tone, but gently", ["amount": 40]),
+                fr("tons auto sur le calque de niveaux j5", ["layer": "j5"]),
                 near("améliore la photo", .fr, expected: "autoEnhance"),
             ]
             // Unverifiable when the histogram already spans the full range (no change is right then).

@@ -120,6 +120,51 @@ final class LocalAdjustmentStackTests: XCTestCase {
         XCTAssertFalse(empty.removeLocalAdjustment(id: adjustment.id))
     }
 
+    /// W3: a selected image layer owns its own local adjustments; `a<n>` numbers them all, the base first; a lock
+    /// refuses an edit; a crop of that layer remaps its masks and leaves the base's alone.
+    func testASelectedImageLayerOwnsItsLocalAdjustments() throws {
+        var document = self.document()
+        let cup = Layer(name: "Tasse", content: .image(MediaAsset(kind: .image, relativePath: "media/cup.png", pixelSize: PSSize(width: 1200, height: 1600))))
+        document.addLayer(cup)
+        XCTAssertEqual(document.localAdjustmentsLayerID, cup.id, "the selected image layer")
+        let onBase = sky(0.2), onCup = sky(0.5)
+        document.setLocalAdjustment(onBase, on: document.baseLayerID!)
+        document.setLocalAdjustment(onCup)
+        XCTAssertEqual(document.localAdjustments, [onCup])
+        XCTAssertEqual(document.localAdjustments(on: document.baseLayerID!), [onBase])
+        XCTAssertEqual(document.allLocalAdjustments.map(\.adjustment.id), [onBase.id, onCup.id], "the base first")
+        XCTAssertEqual(document.localAdjustmentOwner(of: onCup.id), cup.id)
+        XCTAssertEqual(document.localAdjustmentOwner(of: onBase.id), document.baseLayerID)
+        XCTAssertNil(document.localAdjustmentOwner(of: UUID()))
+        XCTAssertEqual(document.localAdjustmentsAspect(on: cup.id), 0.75, accuracy: 1e-12)
+        // Edits go to the owner; a text layer owns none.
+        XCTAssertTrue(document.applyLocalEdit(.setDial(.exposure, -0.2), to: onCup.id, on: cup.id))
+        XCTAssertEqual(document.localAdjustment(id: onCup.id, on: cup.id)?.adjustments[.exposure], -0.2)
+        XCTAssertFalse(document.applyLocalEdit(.setDial(.exposure, -0.2), to: onCup.id, on: document.baseLayerID!))
+        let text = Layer(name: "Titre", content: .text(TextElement(text: "Titre")))
+        document.addLayer(text, select: false)
+        document.setLocalAdjustment(onBase, on: text.id)
+        XCTAssertEqual(document.localAdjustments(on: text.id), [])
+        // A lock refusing pixels refuses the edit, a new adjustment and a removal.
+        document.update(layerID: cup.id) { $0.lockOptions = [.pixels] }
+        XCTAssertFalse(document.applyLocalEdit(.setDial(.exposure, 0.4), to: onCup.id, on: cup.id))
+        document.setLocalAdjustment(sky(0.9), on: cup.id)
+        XCTAssertEqual(document.localAdjustments(on: cup.id).count, 1)
+        XCTAssertFalse(document.removeLocalAdjustment(id: onCup.id, on: cup.id))
+        document.update(layerID: cup.id) { $0.lockOptions = [] }
+        // Cropping the layer's left half remaps its mask; the base's stays.
+        let before = try XCTUnwrap(document.localAdjustment(id: onCup.id, on: cup.id))
+        XCTAssertTrue(document.apply(.crop(PSRect(x: 0.5, y: 0, width: 0.5, height: 1)), to: cup.id))
+        let after = try XCTUnwrap(document.localAdjustment(id: onCup.id, on: cup.id))
+        XCTAssertNotEqual(after.stack, before.stack)
+        XCTAssertEqual(document.localAdjustment(id: onBase.id, on: document.baseLayerID!), onBase)
+        XCTAssertEqual(document.localAdjustmentsAspect(on: cup.id), 0.375, accuracy: 1e-12)
+        // Removal on the owner only.
+        XCTAssertFalse(document.removeLocalAdjustment(id: onCup.id, on: document.baseLayerID!))
+        XCTAssertTrue(document.removeLocalAdjustment(id: onCup.id, on: cup.id))
+        XCTAssertEqual(document.allLocalAdjustments.map(\.adjustment.id), [onBase.id])
+    }
+
     func testSettingAndRemovingTouchTheDocument() {
         var document = self.document()
         document.modifiedAt = Date(timeIntervalSince1970: 0)

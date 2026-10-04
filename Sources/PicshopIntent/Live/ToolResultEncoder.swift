@@ -193,6 +193,7 @@ public enum ToolResultEncoder {
         case .badRegion: return "the box is off the picture or too small."
         case .noText: return "no text there."
         case .verifyFailed: return step.verification?.summary ?? "the result does not read as asked."
+        case .locked: return "the layer is locked; nothing changed."
         }
     }
 }

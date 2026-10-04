@@ -6,9 +6,9 @@ import PicshopCore
 /// hit-testing (`textBounds`) and the executors move `TextElement.center` and turn `.rotation`; every
 /// other overlay (image, shape, fill) follows its layer transform. Scale and flips always stay the
 /// layer's. Pure, so the rule is tested on Linux; `PhotoRenderer` composites with it.
+/// W3: the rule lives in Core (`LayerPlacement.textPlacement`, D10); this delegates to it unchanged.
 public enum OverlayPlacement {
     public static func placement(of layer: Layer) -> (center: PSPoint, rotation: Double) {
-        if let element = layer.textElement { return (element.center, element.rotation) }
-        return (layer.transform.center, layer.transform.rotation)
+        LayerPlacement.textPlacement(of: layer)
     }
 }

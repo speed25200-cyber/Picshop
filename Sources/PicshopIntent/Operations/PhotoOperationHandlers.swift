@@ -9,12 +9,16 @@ public struct OperationRunContext: Sendable {
     /// The candidates the person picked after a mask or selection call asked which one (chooseCandidate): the
     /// call runs again on them instead of asking again.
     public var chosen: [ObjectCandidate]?
+    /// W3: the layer tone and colour handlers write to (adjustment layers, inspector rows); nil = activeImageLayerID.
+    public var targetLayerID: UUID?
 
-    public init(intent: IntentContext, language: NormalizedUtterance.Language, services: any PhotoAIServices, chosen: [ObjectCandidate]? = nil) {
+    public init(intent: IntentContext, language: NormalizedUtterance.Language, services: any PhotoAIServices, chosen: [ObjectCandidate]? = nil,
+                targetLayerID: UUID? = nil) {
         self.intent = intent
         self.language = language
         self.services = services
         self.chosen = chosen
+        self.targetLayerID = targetLayerID
     }
 
     var french: Bool { language == .french }
@@ -48,6 +52,26 @@ public enum PhotoOperationHandlers {
         "select": { call, document, context in await select(call, document, context) },
         "selectionModify": { call, document, context in await selectionModify(call, document, context) },
         "selectionApply": { call, document, context in await selectionApply(call, document, context) },
+        // W3: layers (PhotoOperationHandlers+Layers, +LayerMasks).
+        "addImageLayer": { call, document, context in addImageLayer(call, document, context) },
+        "layerVia": { call, document, context in await layerVia(call, document, context) },
+        "addFillLayer": { call, document, context in addFillLayer(call, document, context) },
+        "fillLayer": { call, document, context in fillLayer(call, document, context) },
+        "addAdjustmentLayer": { call, document, context in await addAdjustmentLayer(call, document, context) },
+        "layerMask": { call, document, context in await layerMask(call, document, context) },
+        "layerClip": { call, document, context in layerClip(call, document, context) },
+        "groupLayers": { call, document, context in groupLayers(call, document, context) },
+        "mergeLayers": { call, document, context in await mergeLayers(call, document, context) },
+        "layerTransform": { call, document, context in await layerTransform(call, document, context) },
+        "layerProperties": { call, document, context in await layerProperties(call, document, context) },
+        "exportPhoto": { call, document, context in exportPhoto(call, document, context) },
+        // W3: legacy actions the validator lowers here when they carry a stored layer ref (D19).
+        "selectLayer": { call, document, context in layerAction(call, document, context) },
+        "duplicateLayer": { call, document, context in layerAction(call, document, context) },
+        "deleteLayer": { call, document, context in layerAction(call, document, context) },
+        "adjust": { call, document, context in adjustLayer(call, document, context) },
+        "applyLook": { call, document, context in lookOnLayer(call, document, context) },
+        "matchColor": { call, document, context in matchColorOnLayer(call, document, context) },
     ]
 
     public static func run(_ call: OperationCall, on document: PhotoDocument, context: OperationRunContext) async -> (PhotoDocument, ExecutionResult) {
@@ -69,13 +93,24 @@ public enum PhotoOperationHandlers {
         (document, ExecutionResult(outcome: .failed(message: message), effects: [reason.effect]))
     }
 
+    /// The D7 answer when the tone target's lock refuses a content change (nil: it may change).
+    static func lockedTone(_ layerID: UUID, _ document: PhotoDocument, _ context: OperationRunContext) -> (PhotoDocument, ExecutionResult)? {
+        guard !LayerLockPolicy.allows(.content, on: layerID, in: document) else { return nil }
+        return (document, refusal(.locked, layer: document.layer(id: layerID), document: document, context: context))
+    }
+
     // MARK: Tone
 
     /// curves: a preset shape at a strength, or the given points, on one channel; the other channels kept.
     static func curves(_ call: OperationCall, _ document: PhotoDocument, _ context: OperationRunContext) -> (PhotoDocument, ExecutionResult) {
-        guard let layerID = document.activeImageLayerID, let edits = document.layer(id: layerID)?.edits else {
-            return unavailable(context.french ? "Il faut une photo." : "This needs a photo.", document)
+        // W3 (D9): the run's target layer, the call's `layer`, else the selected adjustment layer of this family.
+        let layerID: UUID
+        switch toneLayer(call, document, context) {
+        case .value(let id): layerID = id
+        case .answer(let result): return (document, result)
         }
+        guard let edits = document.layer(id: layerID)?.edits else { return unavailable(context.french ? "Il faut une photo." : "This needs a photo.", document) }
+        if let locked = lockedTone(layerID, document, context) { return locked }
         let channel = call.args["channel"]?.string.flatMap(ToneCurve.Channel.init(rawValue:)) ?? .rgb
         let strength = ((call.args["amount"]?.double ?? 50) / 100).clamped(to: 0...1)
         let points: [ToneCurve.Point]
@@ -145,10 +180,19 @@ public enum PhotoOperationHandlers {
 
     /// levels: the given handles (0…255, gamma) merged into the channel; `auto` takes autoTone's path.
     static func levels(_ call: OperationCall, _ document: PhotoDocument, _ context: OperationRunContext) async -> (PhotoDocument, ExecutionResult) {
-        if call.args["auto"]?.bool == true { return await autoTone(OperationCall("autoTone", args: ["amount": .number(100)], source: call.source), document, context, label: label(call)) }
-        guard let layerID = document.activeImageLayerID, let edits = document.layer(id: layerID)?.edits else {
-            return unavailable(context.french ? "Il faut une photo." : "This needs a photo.", document)
+        if call.args["auto"]?.bool == true {
+            var auto = OperationCall("autoTone", args: ["amount": .number(100)], source: call.source)
+            if let layer = call.args["layer"] { auto.args["layer"] = layer }
+            return await autoTone(auto, document, context, label: label(call))
         }
+        // W3 (D9): the run's target layer, the call's `layer`, else the selected adjustment layer of this family.
+        let layerID: UUID
+        switch toneLayer(call, document, context) {
+        case .value(let id): layerID = id
+        case .answer(let result): return (document, result)
+        }
+        guard let edits = document.layer(id: layerID)?.edits else { return unavailable(context.french ? "Il faut une photo." : "This needs a photo.", document) }
+        if let locked = lockedTone(layerID, document, context) { return locked }
         let channel = call.args["channel"]?.string.flatMap(ToneCurve.Channel.init(rawValue:)) ?? .rgb
         var levels = edits.resolvedLevels
         var handles = levels[channel]
@@ -171,7 +215,12 @@ public enum PhotoOperationHandlers {
 
     /// autoTone: levels from the rendered histogram (0.1 % clipped), blended toward identity by amount.
     static func autoTone(_ call: OperationCall, _ document: PhotoDocument, _ context: OperationRunContext, label override: String? = nil) async -> (PhotoDocument, ExecutionResult) {
-        guard let layerID = document.activeImageLayerID else { return unavailable(context.french ? "Il faut une photo." : "This needs a photo.", document) }
+        let layerID: UUID
+        switch toneLayer(call, document, context) {
+        case .value(let id): layerID = id
+        case .answer(let result): return (document, result)
+        }
+        if let locked = lockedTone(layerID, document, context) { return locked }
         guard let histogram = await context.services.histogram(of: document) else {
             return unavailable(context.french ? "Je ne peux pas lire l'histogramme de la photo pour l'instant. Essaie l'outil Niveaux."
                                               : "I can't read the photo's histogram right now. Try the Levels tool.", document)
@@ -199,9 +248,14 @@ public enum PhotoOperationHandlers {
 
     /// hsl: one band's hue, saturation and luminance (−100…100), added (relative) or set (absolute).
     static func hsl(_ call: OperationCall, _ document: PhotoDocument, _ context: OperationRunContext) -> (PhotoDocument, ExecutionResult) {
-        guard let layerID = document.activeImageLayerID, let edits = document.layer(id: layerID)?.edits else {
-            return unavailable(context.french ? "Il faut une photo." : "This needs a photo.", document)
+        // W3 (D9): the run's target layer, the call's `layer`, else the selected adjustment layer of this family.
+        let layerID: UUID
+        switch toneLayer(call, document, context) {
+        case .value(let id): layerID = id
+        case .answer(let result): return (document, result)
         }
+        guard let edits = document.layer(id: layerID)?.edits else { return unavailable(context.french ? "Il faut une photo." : "This needs a photo.", document) }
+        if let locked = lockedTone(layerID, document, context) { return locked }
         guard let name = call.args["band"]?.string,
               let band = ColorMixer.Band.allCases.first(where: { $0.englishName.lowercased() == name.lowercased() }) ?? ColorMixer.Band.matching(name) else {
             return unavailable(context.french ? "Quelle couleur ? Rouges, oranges, jaunes, verts, cyans, bleus, violets ou magentas." : "Which colour band?", document)
@@ -237,9 +291,14 @@ public enum PhotoOperationHandlers {
 
     /// colorGrade: one range's wheel (a colour name or a hue), its strength, its luminance, and the balance.
     static func colorGrade(_ call: OperationCall, _ document: PhotoDocument, _ context: OperationRunContext) -> (PhotoDocument, ExecutionResult) {
-        guard let layerID = document.activeImageLayerID, let edits = document.layer(id: layerID)?.edits else {
-            return unavailable(context.french ? "Il faut une photo." : "This needs a photo.", document)
+        // W3 (D9): the run's target layer, the call's `layer`, else the selected adjustment layer of this family.
+        let layerID: UUID
+        switch toneLayer(call, document, context) {
+        case .value(let id): layerID = id
+        case .answer(let result): return (document, result)
         }
+        guard let edits = document.layer(id: layerID)?.edits else { return unavailable(context.french ? "Il faut une photo." : "This needs a photo.", document) }
+        if let locked = lockedTone(layerID, document, context) { return locked }
         guard let range = call.args["range"]?.string.flatMap(ColorGrade.Range.init(rawValue:)) else {
             return unavailable(context.french ? "Les ombres, les tons moyens ou les hautes lumières ?" : "Shadows, midtones or highlights?", document)
         }
@@ -266,9 +325,14 @@ public enum PhotoOperationHandlers {
 
     /// lutIntensity / removeLUT: the imported LUT's strength (0 takes it off). Needs an imported LUT.
     static func lut(_ call: OperationCall, _ document: PhotoDocument, _ context: OperationRunContext, remove: Bool) -> (PhotoDocument, ExecutionResult) {
-        guard let layerID = document.activeImageLayerID, let edits = document.layer(id: layerID)?.edits else {
-            return unavailable(context.french ? "Il faut une photo." : "This needs a photo.", document)
+        // W3 (D9): the run's target layer, the call's `layer`, else the selected adjustment layer of this family.
+        let layerID: UUID
+        switch toneLayer(call, document, context) {
+        case .value(let id): layerID = id
+        case .answer(let result): return (document, result)
         }
+        guard let edits = document.layer(id: layerID)?.edits else { return unavailable(context.french ? "Il faut une photo." : "This needs a photo.", document) }
+        if let locked = lockedTone(layerID, document, context) { return locked }
         guard let reference = lastLUT(edits) else {
             return unavailable(context.french ? "Il n'y a pas de LUT sur la photo : importe-en un dans Couleur › LUT." : "There is no LUT on the photo: import one in Color › LUT.", document)
         }
@@ -370,29 +434,15 @@ public enum PhotoOperationHandlers {
         layer(ref: call.args["ref"]?.string, in: document, scene: context.intent.scene)
     }
 
+    /// W3: a forwarder to `LiveLayerLines.layer(ref:in:scene:)` (D19 stored refs: l text, s shape, i image, j adjustment
+    /// and fill, g group); no ref, the selected layer above the photo, or the only one there is.
     static func layer(ref: String?, in document: PhotoDocument, scene: SceneMap?) -> Layer? {
         guard let raw = ref?.trimmingCharacters(in: .whitespaces).lowercased(), !raw.isEmpty else {
             if let selected = document.selectedLayer, selected.id != document.baseLayerID { return selected }
             let others = document.layers.filter { $0.id != document.baseLayerID }
             return others.count == 1 ? others[0] : nil
         }
-        guard let kind = raw.first, let number = Int(raw.dropFirst()), number >= 1 else { return nil }
-        switch kind {
-        case "l":
-            if let id = scene?.block(.layer(number))?.layerID, let layer = document.layer(id: id) { return layer }
-            let free = document.layers.filter { $0.group == nil && $0.textElement != nil }
-            let shown = free.filter(\.isVisible)
-            if number <= shown.count { return shown[number - 1] }
-            return number <= free.count ? free[number - 1] : nil
-        case "s":
-            let shapes = document.layers.filter(\.isShape)
-            return number <= shapes.count ? shapes[number - 1] : nil
-        case "i":
-            let images = document.layers.filter { $0.isImage && $0.id != document.baseLayerID }
-            return number <= images.count ? images[number - 1] : nil
-        default:
-            return nil
-        }
+        return LiveLayerLines.layer(ref: raw, in: document, scene: scene)
     }
 
     static func noLayer(_ call: OperationCall, _ document: PhotoDocument, _ context: OperationRunContext) -> (PhotoDocument, ExecutionResult) {
@@ -412,49 +462,94 @@ public enum PhotoOperationHandlers {
     static func layerProperty(_ call: OperationCall, _ document: PhotoDocument, _ context: OperationRunContext) -> (PhotoDocument, ExecutionResult) {
         guard let layer = layer(for: call, in: document, context: context), layer.id != document.baseLayerID else { return noLayer(call, document, context) }
         var updated = document
+        let edit: LayerEdit
         switch call.id.raw {
         case "layerOpacity":
             guard let value = call.args["opacity"]?.double else { return unavailable(context.french ? "Quelle opacité ?" : "What opacity?", document) }
-            updated.update(layerID: layer.id) { $0.opacity = (value / 100).clamped(to: 0...1) }
+            edit = .opacity((value / 100).clamped(to: 0...1))
         case "layerBlend":
             guard let mode = call.args["mode"]?.string.flatMap(BlendMode.init(rawValue:)) else {
                 return unavailable(context.french ? "Quel mode de fusion ?" : "Which blend mode?", document)
             }
-            updated.update(layerID: layer.id) { $0.blendMode = mode }
+            edit = .blendMode(mode)
         case "layerVisibility":
             guard let visible = call.args["visible"]?.bool else { return unavailable(context.french ? "Afficher ou masquer ?" : "Show or hide?", document) }
-            updated.update(layerID: layer.id) { $0.isVisible = visible }
+            edit = .visible(visible)
         default:
             return run(call, on: document, context: context, fallback: true)
         }
-        guard updated.layers != document.layers else {
+        // W3 (D7, D1): through the single edit path, so locks refuse and a table bundle changes as one.
+        switch updated.applyLayerEdit(edit, to: layer.id) {
+        case .refused(let reason): return (document, refusal(reason, layer: layer, document: document, context: context))
+        case .unchanged:
             return (document, ExecutionResult(outcome: .info(message: context.french ? "Le calque est déjà ainsi." : "The layer is already like that.")))
+        case .applied:
+            return (updated, .applied(label(call)))
         }
-        return (updated, .applied(label(call)))
     }
 
-    /// layerOrder: front, back (just above the photo), forward, backward.
+    /// layerOrder: front, back (just above the photo), forward, backward among its siblings (inside a group, within the
+    /// group); W3: above or below another layer (`target`), into a group or out of it (`group`). One structure edit
+    /// (D17), so a clip base moves with its clipped layers and a group with its children.
     static func layerOrder(_ call: OperationCall, _ document: PhotoDocument, _ context: OperationRunContext) -> (PhotoDocument, ExecutionResult) {
         guard let layer = layer(for: call, in: document, context: context), layer.id != document.baseLayerID,
               let index = document.index(of: layer.id) else { return noLayer(call, document, context) }
-        let floor = (document.baseLayerID.flatMap { document.index(of: $0) } ?? -1) + 1
-        let last = document.layers.count - 1
-        let target: Int
-        switch call.args["position"]?.string {
-        case "front": target = last
-        case "back": target = floor
-        case "forward": target = min(last, index + 1)
-        case "backward": target = max(floor, index - 1)
-        default: return unavailable(context.french ? "Devant ou derrière ?" : "Forward or back?", document)
-        }
-        guard target != index else {
-            let message = target == last ? (context.french ? "Le calque est déjà au premier plan." : "The layer is already in front.")
-                : (context.french ? "Le calque est déjà tout derrière." : "The layer is already at the back.")
-            return (document, ExecutionResult(outcome: .info(message: message)))
+        let siblings = document.layers.filter { $0.parentID == layer.parentID && $0.id != document.baseLayerID }
+        let placement: LayerPlacementSpec
+        var message: String?
+        if let group = call.args["group"]?.string?.lowercased() {
+            if ["none", "out", "aucun", "dehors"].contains(group) {
+                guard let parent = layer.parentID else {
+                    return (document, info(context.french ? "Ce calque n'est dans aucun groupe." : "That layer isn't in a group."))
+                }
+                placement = .above(parent)
+            } else {
+                guard let target = LiveLayerLines.layer(ref: group, in: document, scene: context.intent.scene), target.isGroup else {
+                    return (document, unknownLayer(group, document, context, kinds: [.layerGroup]))
+                }
+                placement = .into(groupID: target.id)
+            }
+        } else {
+            switch call.args["position"]?.string {
+            case "front":
+                if layer.parentID != nil, let top = siblings.last, top.id != layer.id { placement = .above(top.id) } else if layer.parentID == nil { placement = .top } else { placement = .above(layer.id) }
+                message = context.french ? "Le calque est déjà au premier plan." : "The layer is already in front."
+            case "back":
+                if layer.parentID != nil, let bottom = siblings.first, bottom.id != layer.id { placement = .below(bottom.id) }
+                else if layer.parentID == nil, let base = document.baseLayerID { placement = .above(base) } else { placement = .above(layer.id) }
+                message = context.french ? "Le calque est déjà tout derrière." : "The layer is already at the back."
+            case "forward":
+                guard let next = document.layers[(index + 1)...].first(where: { $0.parentID == layer.parentID }) else {
+                    return (document, info(context.french ? "Le calque est déjà au premier plan." : "The layer is already in front."))
+                }
+                placement = .above(next.id)
+            case "backward":
+                guard let previous = document.layers[..<index].last(where: { $0.parentID == layer.parentID && $0.id != document.baseLayerID }) else {
+                    return (document, info(context.french ? "Le calque est déjà tout derrière." : "The layer is already at the back."))
+                }
+                placement = .below(previous.id)
+            case let position? where position == "above" || position == "below":
+                guard let raw = call.args["target"]?.string else {
+                    return unavailable(context.french ? "Au-dessus ou en dessous de quel calque ?" : "Above or below which layer?", document, reason: .needsSelection)
+                }
+                guard let target = LiveLayerLines.layer(ref: raw, in: document, scene: context.intent.scene) else { return (document, unknownLayer(raw, document, context)) }
+                if position == "below", target.id == document.baseLayerID {
+                    return (document, answer(context.french ? "Rien ne passe sous la photo de base." : "Nothing goes below the base photo.", reason: .nothingToDo))
+                }
+                placement = position == "above" ? .above(target.id) : .below(target.id)
+            default:
+                return unavailable(context.french ? "Devant ou derrière ?" : "Forward or back?", document)
+            }
         }
         var updated = document
-        updated.moveLayer(id: layer.id, to: target)
-        return (updated, .applied(label(call)))
+        let result = updated.applyStructureEdit(.move(layer.id, to: placement))
+        switch result.outcome {
+        case .refused(let reason): return (document, refusal(reason, layer: layer, document: document, context: context))
+        case .unchanged:
+            return (document, ExecutionResult(outcome: .info(message: message ?? (context.french ? "Le calque est déjà à cette place." : "The layer is already there."))))
+        case .applied:
+            return (updated, .applied(label(call)))
+        }
     }
 
     /// An id the table does not hold, reached from a handler that serves several ids.

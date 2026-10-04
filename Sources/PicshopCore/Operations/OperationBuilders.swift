@@ -38,10 +38,12 @@ func legacy(_ action: IntentAction, in domains: Set<OpDomain>, _ category: OpCat
 
 /// Requirements, set in one expression.
 func needs(subject: Bool = false, selection: Bool = false, table: Bool = false, captions: Bool = false, generativeEngine: Bool = false,
-           importedLUT: Bool = false, nonBaseLayer: Bool = false, localMask: Bool = false, referenceAsset: AssetKind? = nil, cost: OpCost = .instant,
-           geometryChange: Bool = false, destructive: Bool = false) -> OpRequirements {
+           importedLUT: Bool = false, nonBaseLayer: Bool = false, localMask: Bool = false, layerMask: Bool = false, layerAboveBase: Bool = false,
+           referenceAsset: AssetKind? = nil, cost: OpCost = .instant, geometryChange: Bool = false, destructive: Bool = false) -> OpRequirements {
     var requirements = OpRequirements()
     requirements.localMask = localMask
+    requirements.layerMask = layerMask
+    requirements.layerAboveBase = layerAboveBase
     requirements.subject = subject
     requirements.selection = selection
     requirements.table = table
@@ -113,6 +115,20 @@ extension ParamSpec {
     func keys(_ aliases: String...) -> ParamSpec {
         var copy = self
         copy.keyAliases += aliases
+        return copy
+    }
+
+    /// W3 (D18): the inspector row's label, English then French.
+    func labelled(_ en: String, _ fr: String) -> ParamSpec {
+        var copy = self
+        copy.label = Bilingual(en: en, fr: fr)
+        return copy
+    }
+
+    /// W3 (D18): kept out of the generated inspector rows (refs, points, boxes, lists, text, internal flags).
+    var noInspector: ParamSpec {
+        var copy = self
+        copy.inspector = false
         return copy
     }
 }

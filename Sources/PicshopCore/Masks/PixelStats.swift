@@ -91,3 +91,39 @@ public struct PixelStats: Hashable, Sendable {
                           meanA: sumA / total, meanB: sumB / total, weight: total)
     }
 }
+
+// MARK: - W3: per-pixel composite delta (§4.8)
+
+public extension PixelStats {
+    /// Per-pixel CIE ΔE76 between two renders of the same size: its mean and its 99th percentile. The composite
+    /// postconditions read it, so pixels that moved without changing the average colour still count (a merge placed
+    /// at the wrong offset).
+    struct CompositeDelta: Hashable, Sendable {
+        public var mean: Double
+        public var p99: Double
+
+        public init(mean: Double, p99: Double) {
+            self.mean = mean
+            self.p99 = p99
+        }
+    }
+
+    /// The delta between two gamma sRGB RGBA8 renders (alpha ignored, as `regions` does); nil when either is short
+    /// of `width × height` pixels or empty.
+    static func compositeDelta(before: [UInt8], after: [UInt8], width: Int, height: Int) -> CompositeDelta? {
+        let count = width * height
+        guard width > 0, height > 0, before.count >= count * 4, after.count >= count * 4 else { return nil }
+        var deltas = [Double](repeating: 0, count: count)
+        var sum = 0.0
+        for index in 0..<count {
+            let i = index * 4
+            let delta = MaskMath.deltaE(MaskMath.lab(bytes: before[i], before[i + 1], before[i + 2]),
+                                        MaskMath.lab(bytes: after[i], after[i + 1], after[i + 2]))
+            deltas[index] = delta
+            sum += delta
+        }
+        deltas.sort()
+        let p99 = deltas[min(count - 1, Int((Double(count) * 0.99).rounded(.down)))]
+        return CompositeDelta(mean: sum / Double(count), p99: p99)
+    }
+}

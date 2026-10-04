@@ -36,6 +36,9 @@ public protocol LiveEditingHost: AnyObject {
     /// (`PhotoAIServices.verify`). One report per request, in order; empty when the editor cannot
     /// check (video, PDF) or the check could not run. Never throws, never changes the document.
     func liveVerify(_ requests: [VerificationRequest]) async -> [VerificationReport]
+    /// W3 (D19): the photo document now, for re-grounding a plan's later steps after a step that changed the photo's
+    /// geometry (`RefRegrounder`); nil for editors without a photo (the default).
+    var liveGeometryAnchor: PhotoDocument? { get }
 }
 
 extension LiveEditingHost {
@@ -43,13 +46,30 @@ extension LiveEditingHost {
 
     public var liveIsPlaying: Bool { false }
 
+    /// Editors without a photo: no re-grounding.
+    public var liveGeometryAnchor: PhotoDocument? { nil }
+
     /// Editors that cannot look at their result: nothing is verified.
     public func liveVerify(_ requests: [VerificationRequest]) async -> [VerificationReport] { [] }
 
     /// Runs the intents in order through liveRun; stops after failed or needsClarification; later steps are skipped.
     public func execute(steps: [EditIntent]) async -> LiveExecution {
         var results: [LiveStepResult] = []
-        for (index, intent) in steps.enumerated() {
+        let anchor = liveGeometryAnchor
+        for (index, original) in steps.enumerated() {
+            // D19: a step after one that changed the photo's geometry aims where its target went.
+            var intent = original
+            if let anchor, let now = liveGeometryAnchor, let map = RefRegrounder.geometryMap(from: anchor, to: now) {
+                guard let moved = RefRegrounder.regrounded(intent, by: map) else {
+                    var lost = LiveStepResult(index: index, action: intent.action, status: .failed,
+                                              message: RefRegrounder.leftTheCanvas(french: liveIntentContext().preferredLanguage?.hasPrefix("fr") ?? true))
+                    lost.reason = .badRegion
+                    results.append(lost)
+                    results += steps.indices.dropFirst(index + 1).map { LiveStepResult(index: $0, action: steps[$0].action, status: .skipped) }
+                    break
+                }
+                intent = moved
+            }
             let result = LiveStepResult(index: index, intent: intent, run: await liveRun(intent))
             results.append(result)
             if result.stopsTheRun {

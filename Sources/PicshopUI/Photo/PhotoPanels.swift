@@ -45,14 +45,33 @@ struct PhotoToolPanel: View {
             MaskOverlayMenu(session: session)
         case .select:
             SelectionOverlayMenu(session: session)
+        case .layers:
+            LayersInspectorAccessory(session: session)
         default:
             EmptyView()
         }
     }
 
-    /// Done keeps the work: the crop is committed, painted strokes are erased on the way out.
+    /// Done keeps the work: the crop is committed, painted strokes are erased on the way out. In Calques it first
+    /// ends transform mode (OK) or the layer-mask brush, keeping the panel open.
     private func done() {
         if tool == .crop { session.commitCrop() }
+        if tool == .layers {
+            switch session.layerState.mode {
+            case .transform:
+                session.endTransformMode()
+                Haptics.confirm()
+                return
+            case .maskPaint:
+                session.endLayerMaskPaint()
+                return
+            case .select:
+                if session.layerState.isSelecting {
+                    session.setSelecting(false)
+                    return
+                }
+            }
+        }
         session.activeTool = nil
     }
 }
@@ -68,11 +87,15 @@ private struct PhotoToolContent: View {
         case .focus: FocusPanel(session: session)
         case .adjust: AdjustPanel(session: session)
         case .color:
-            ColorControls(mixer: session.colorMixer, grade: session.colorGrade,
-                          onMixer: { session.setColorMixer($0) }, onGrade: { session.setColorGrade($0) },
-                          onBegin: { session.beginColorInteraction($0) }, onEnd: { session.endColorInteraction() },
-                          lut: session.lut, onImportLUT: { session.importLUT(from: $0) },
-                          onLUTIntensity: { session.setLUTIntensity($0) }, onRemoveLUT: { session.removeLUT() })
+            VStack(spacing: 12) {
+                // W3 (D9): the layer the colour controls edit.
+                ToneTargetChip(session: session, op: "hsl", controlID: "color.target")
+                ColorControls(mixer: session.colorMixer, grade: session.colorGrade,
+                              onMixer: { session.setColorMixer($0) }, onGrade: { session.setColorGrade($0) },
+                              onBegin: { session.beginColorInteraction($0) }, onEnd: { session.endColorInteraction() },
+                              lut: session.lut, onImportLUT: { session.importLUT(from: $0) },
+                              onLUTIntensity: { session.setLUTIntensity($0) }, onRemoveLUT: { session.removeLUT() })
+            }
         case .looks: LooksPanel(session: session)
         case .erase: ErasePanel(session: session)
         case .precise: PrecisePanel(session: session)
@@ -80,7 +103,7 @@ private struct PhotoToolContent: View {
         case .crop: CropPanel(session: session)
         case .text: TextPanel(session: session)
         case .shapes: ShapesPanel(session: session)
-        case .layers: LayersPanel(session: session)
+        case .layers: LayersInspector(session: session)
         case .curves: CurvesPanel(session: session)
         case .levels: LevelsPanel(session: session)
         case .masks: MasksPanel(session: session)
@@ -809,7 +832,8 @@ private struct ShapeOpacityDial: View {
     var body: some View {
         DialSlider(value: $opacity, range: 0...1, neutral: 1, label: L("Opacity"), units: 50, format: { "\(Int(($0 * 100).rounded()))%" }) { editing in
             isDragging = editing
-            if editing { session.beginInteraction(label: "Opacity") } else { session.endInteraction() }
+            // W3: through the layer path (locks, the `.layerPlacement` snapshot).
+            if editing { session.beginLayerPropertyDrag(layer.id, label: "Opacity") } else { session.endInteraction() }
         }
         .onChange(of: opacity) { _, value in
             // Every frame of a drag goes to the session; a tap or a VoiceOver step only when it changes.
@@ -820,147 +844,6 @@ private struct ShapeOpacityDial: View {
         .onChange(of: layer.opacity) { _, value in
             // Undo, a voice edit: follow the document unless a drag is under way.
             if !isDragging, abs(value - opacity) > 0.0005 { opacity = value }
-        }
-    }
-}
-
-struct LayersPanel: View {
-    @Bindable var session: PhotoEditorSession
-    /// Groups opened to show their cells, one row each.
-    @State private var expanded: Set<UUID> = []
-
-    /// Top layer first. A group (a table's cells, a highlight's boxes) is one row where its top layer
-    /// stands; opened, its layers follow it, indented.
-    private enum Row: Identifiable {
-        case layer(Layer, index: Int, inGroup: Bool)
-        case group(LayerGroup, members: [Layer])
-
-        var id: UUID {
-            switch self {
-            case .layer(let layer, _, _): return layer.id
-            case .group(let group, _): return group.id
-            }
-        }
-    }
-
-    private var rows: [Row] {
-        let layers = session.document.layers
-        var rows: [Row] = []
-        var shown: Set<UUID> = []
-        for (index, layer) in layers.enumerated().reversed() {
-            guard let group = layer.group else {
-                rows.append(.layer(layer, index: index, inGroup: false))
-                continue
-            }
-            guard !shown.contains(group.id) else { continue }
-            shown.insert(group.id)
-            let members = layers.enumerated().filter { $0.element.group?.id == group.id }.reversed()
-            rows.append(.group(group, members: members.map { $0.element }))
-            if expanded.contains(group.id) {
-                rows += members.map { Row.layer($0.element, index: $0.offset, inGroup: true) }
-            }
-        }
-        return rows
-    }
-
-    var body: some View {
-        VStack(spacing: 8) {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 6) {
-                    ForEach(rows) { row in
-                        switch row {
-                        case .layer(let layer, let index, let inGroup):
-                            layerRow(layer, index: index, inGroup: inGroup)
-                        case .group(let group, let members):
-                            groupRow(group, members: members)
-                        }
-                    }
-                }
-            }
-            .frame(maxHeight: 148)
-            if let selected = session.document.selectedLayer, session.document.index(of: selected.id) != 0 {
-                // Opacity (one undo step per drag) and the blend menu (27 modes in sections).
-                LayerBlendControls(session: session, layer: selected)
-            }
-        }
-    }
-
-    /// One layer. A table cell (opened group) is indented and only shown, hidden or deleted: its place
-    /// in the stack is its group's.
-    private func layerRow(_ layer: Layer, index: Int, inGroup: Bool) -> some View {
-        let selected = session.document.selectedLayerID == layer.id
-        let isBase = index == 0
-        let count = session.document.layers.count
-        return HStack(spacing: 10) {
-            Image(systemName: layer.symbolName)
-                .font(.system(size: inGroup ? 13 : 15, weight: .medium))
-                .foregroundStyle(PSTheme.textSecondary)
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(Color.white.opacity(0.08)))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(inGroup ? (layer.textElement?.text ?? layer.name) : layer.name).font(.subheadline.weight(.medium)).lineLimit(1)
-                Text(inGroup ? layer.name : (isBase ? L("Photo") : (layer.isText ? L("Text") : (layer.isShape ? L("Shapes") : L("Layers")))))
-                    .font(.caption2).foregroundStyle(PSTheme.textTertiary).lineLimit(1)
-            }
-            Spacer(minLength: 4)
-            if !isBase, !inGroup {
-                LayerRowButton(symbol: "chevron.up", enabled: index < count - 1) { session.moveLayer(layer.id, to: min(count - 1, index + 1)) }
-                LayerRowButton(symbol: "chevron.down", enabled: index > 1) { session.moveLayer(layer.id, to: max(1, index - 1)) }
-            }
-            LayerRowButton(symbol: layer.isVisible ? "eye" : "eye.slash", enabled: true) { session.updateLayer(layer.id) { $0.isVisible.toggle() } }
-            if !isBase {
-                LayerRowButton(symbol: "trash", enabled: true, tint: PSTheme.danger) { Haptics.warning(); session.removeLayer(layer.id) }
-            }
-        }
-        .foregroundStyle(PSTheme.textPrimary)
-        .padding(.horizontal, 10).padding(.vertical, inGroup ? 6 : 8)
-        .background(Color.white.opacity(selected ? 0.16 : 0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .padding(.leading, inGroup ? 22 : 0)
-        .opacity(layer.isVisible ? 1 : 0.55)
-        .contentShape(Rectangle())
-        .animation(PSMotion.quick, value: selected)
-        .onTapGesture { Haptics.tick(); session.selectLayer(layer.id) }
-    }
-
-    /// A group as one row: "Tableau · 45 cases". Tapping it opens it (its cells) and selects the
-    /// table, so "plus gros" or "en rouge" then apply to every cell; the eye and the bin act on all.
-    private func groupRow(_ group: LayerGroup, members: [Layer]) -> some View {
-        let isOpen = expanded.contains(group.id)
-        let selected = members.contains { $0.id == session.document.selectedLayerID }
-        let visible = members.contains(where: \.isVisible)
-        let title = group.kind == .tableCells ? String(format: L("Table · %d cells"), members.count) : String(format: L("Highlight · %d boxes"), members.count)
-        return HStack(spacing: 10) {
-            Image(systemName: group.kind == .tableCells ? "tablecells" : "highlighter")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(PSTheme.textSecondary)
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(Color.white.opacity(0.08)))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.subheadline.weight(.medium)).lineLimit(1)
-                Text(group.kind == .tableCells ? L("Text") : L("Shapes")).font(.caption2).foregroundStyle(PSTheme.textTertiary)
-            }
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(PSTheme.textTertiary)
-                .rotationEffect(.degrees(isOpen ? 90 : 0))
-            Spacer(minLength: 4)
-            LayerRowButton(symbol: visible ? "eye" : "eye.slash", enabled: true) { session.setGroupVisible(group.id, !visible) }
-            LayerRowButton(symbol: "trash", enabled: true, tint: PSTheme.danger) {
-                expanded.remove(group.id)
-                session.removeGroup(group.id)
-            }
-        }
-        .foregroundStyle(PSTheme.textPrimary)
-        .padding(.horizontal, 10).padding(.vertical, 8)
-        .background(Color.white.opacity(selected ? 0.16 : 0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .opacity(visible ? 1 : 0.55)
-        .contentShape(Rectangle())
-        .animation(PSMotion.quick, value: selected)
-        .animation(PSMotion.quick, value: isOpen)
-        .onTapGesture {
-            Haptics.tick()
-            if isOpen { expanded.remove(group.id) } else { expanded.insert(group.id) }
-            session.selectGroup(group.id)
         }
     }
 }

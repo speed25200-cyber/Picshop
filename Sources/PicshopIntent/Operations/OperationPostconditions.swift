@@ -50,8 +50,9 @@ public enum OperationPostconditions {
     public static func check(_ call: OperationCall, before: PhotoDocument, after: PhotoDocument) -> Report {
         guard let spec = OperationCatalog.shared.spec(call.id) else { return Report(unverifiable: 1) }
         let target = layerTarget(call.args, before: before, after: after)
-        return evaluate(spec.verify, args: call.args, before: before, after: after) { probe, document in
-            photoValue(probe, args: call.args, document: document, layerID: target)
+        let tone = toneTarget(call.args, op: spec.id, before: before)
+        return evaluate(LayerPostconditions.conditions(for: call, spec: spec), args: call.args, before: before, after: after) { probe, document in
+            photoValue(probe, args: call.args, document: document, layerID: target, toneLayerID: tone)
         }
     }
 
@@ -61,8 +62,9 @@ public enum OperationPostconditions {
         guard let spec = OperationCatalog.shared.spec(lowering: intent.action) else { return Report(unverifiable: 1) }
         let args = arguments(of: intent)
         let target = layerTarget(args, before: before, after: after)
+        let tone = toneTarget(args, op: spec.id, before: before)
         return evaluate(spec.verify, args: args, before: before, after: after) { probe, document in
-            photoValue(probe, args: args, document: document, layerID: target)
+            photoValue(probe, args: args, document: document, layerID: target, toneLayerID: tone)
         }
     }
 
@@ -217,6 +219,13 @@ public enum OperationPostconditions {
         case .localAdjustments: return "localAdjustments"
         case .selection: return "selection"
         case .selectionCoverage: return "selectionCoverage"
+        case .layerStructure: return "layerStructure"
+        case .layerMasks: return "layerMasks"
+        case .layerClipping: return "layerClipping"
+        case .layerTransform: return "layerTransform"
+        case .layerFillOpacity: return "layerFillOpacity"
+        case .layerLock: return "layerLock"
+        case .selectedLayer: return "selectedLayer"
         }
     }
 
@@ -234,19 +243,32 @@ public enum OperationPostconditions {
             guard let old = before.layer(id: layer.id) else { return false }
             return old.opacity != layer.opacity || old.blendMode != layer.blendMode || old.isVisible != layer.isVisible
                 || before.index(of: layer.id) != after.index(of: layer.id)
+                // W3: the layer whose transform, fill, lock or mask changed.
+                || old.transform != layer.transform || old.content != layer.content || old.fillOpacity != layer.fillOpacity
+                || old.lockOptions != layer.lockOptions || old.isLocked != layer.isLocked || old.maskStack != layer.maskStack
         }
         if changed.count == 1 { return changed[0].id }
-        return PhotoOperationHandlers.layer(ref: args["ref"]?.string, in: after, scene: nil)?.id
+        if let raw = args["ref"]?.string ?? args["layer"]?.string, let named = LiveLayerLines.layer(ref: raw, in: before, scene: nil) { return named.id }
+        return PhotoOperationHandlers.layer(ref: nil, in: after, scene: nil)?.id
     }
 
-    static func photoValue(_ probe: StateProbe, args: [String: OpValue], document: PhotoDocument, layerID: UUID?) -> ProbeValue? {
-        let active = document.activeImageLayerID.flatMap { document.layer(id: $0) }
+    /// The layer a tone or colour call writes to, as its handler resolves it (D9): the `layer` ref, else the
+    /// selected adjustment layer of the op's family, else the active image layer.
+    static func toneTarget(_ args: [String: OpValue], op: OpID, before: PhotoDocument) -> UUID? {
+        if let raw = args["layer"]?.string, let layer = LiveLayerLines.layer(ref: raw, in: before, scene: nil) { return layer.id }
+        return before.toneTarget(for: op)
+    }
+
+    static func photoValue(_ probe: StateProbe, args: [String: OpValue], document: PhotoDocument, layerID: UUID?, toneLayerID: UUID? = nil) -> ProbeValue? {
+        let active = (toneLayerID ?? document.activeImageLayerID).flatMap { document.layer(id: $0) }
         let base = document.baseLayer
         let layer = layerID.flatMap { document.layer(id: $0) }
         switch probe {
         case .adjustment(let key):
             let name = args[key]?.string ?? key
             guard let parameter = AdjustmentParameter(rawValue: name), let active else { return nil }
+            // W3 (D9): a « Lumière » adjustment layer keeps its dials in its content.
+            if case .adjustment(let dials) = active.content { return .number(dials[parameter]) }
             return .number(active.edits.resolvedAdjustments[parameter])
         case .toneCurve:
             return active.map { .state(String(describing: PhotoOperationHandlers.userToneCurve($0.edits))) }
@@ -285,12 +307,55 @@ public enum OperationPostconditions {
         case .clipCount, .timelineDuration, .captions, .overlayCount, .audioTrackCount, .pageCount, .markupCount:
             return nil
         case .localAdjustments:
-            let masks = document.localAdjustments
-            return .counted(Double(masks.count), String(describing: masks))
+            // W3 (D19): every image layer's masks (a call may name its owner with `layer` or an a<n> ref).
+            let masks = document.allLocalAdjustments
+            return .counted(Double(masks.count), String(describing: masks.map { "\($0.layerID)|\($0.adjustment)" }))
         case .selection:
             return .counted(document.selection == nil ? 0 : 1, document.selection.map { String(describing: $0) } ?? "none")
         case .selectionCoverage:
             return .number((document.selection?.coverage ?? 0) * 100)
+        // W3 (§4.8): digests compare by equality, counts under increased/decreased.
+        case .layerStructure:
+            let rows = document.layers.map { "\($0.id)|\(layerKindName($0.content))|\($0.parentID?.uuidString ?? "-")|\($0.isClipped)" }
+            return .counted(Double(document.layers.count), StableHash.hex(rows.joined(separator: ";")))
+        case .layerMasks:
+            let rows = document.layers.map { "\($0.id)|\($0.maskStack?.contentKey ?? "-")|\($0.mask?.relativePath ?? "-")|\($0.isMaskEnabled)|\($0.isMaskLinked)" }
+            return .state(StableHash.hex(rows.joined(separator: ";")))
+        case .layerClipping:
+            return .number(Double(document.layers.filter(\.isClipped).count))
+        case .layerTransform:
+            // Aligning several layers: the transforms of all of them.
+            if case .list(let items)? = args["refs"], items.count > 1 {
+                let named = items.compactMap { $0.string }.compactMap { LiveLayerLines.layer(ref: $0, in: document, scene: nil) }
+                return .state(named.map { "\($0.id)|" + transformDigest($0) }.joined(separator: ";"))
+            }
+            return layer.map { .state(transformDigest($0)) }
+        case .layerFillOpacity:
+            return layer.map { .number($0.fillOpacity * 100) }
+        case .layerLock:
+            return layerID.map { .state(String(document.effectiveLock(of: $0).rawValue)) }
+        case .selectedLayer:
+            return document.selectedLayerID.flatMap { LiveLayerLines.ref(of: $0, in: document, scene: nil) }.map { .text($0) }
+        }
+    }
+
+    /// A layer's placement as one string: its transform, and a text layer's centre and rotation (kept in its element).
+    static func transformDigest(_ layer: Layer) -> String {
+        let text = layer.textElement.map { "\($0.center.x),\($0.center.y),\($0.rotation)" } ?? "-"
+        return String(describing: layer.transform) + "|" + text
+    }
+
+    /// The content kind's name for the structure digest (the case, not its payload).
+    static func layerKindName(_ content: Layer.Content) -> String {
+        switch content {
+        case .image: return "image"
+        case .text: return "text"
+        case .shape: return "shape"
+        case .adjustment: return "adjustment"
+        case .fill: return "fill"
+        case .group: return "group"
+        case .gradientFill: return "gradientFill"
+        case .unsupported: return "unsupported"
         }
     }
 

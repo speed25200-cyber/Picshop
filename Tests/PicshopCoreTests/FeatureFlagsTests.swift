@@ -1,7 +1,7 @@
 import XCTest
 @testable import PicshopCore
 
-/// The W1 and W2 kill switches and the signpost facade.
+/// The W1, W2 and W3 kill switches and the signpost facade.
 final class FeatureFlagsTests: XCTestCase {
     override func tearDown() {
         for flag in FeatureFlag.allCases { FeatureFlags.set(flag, nil) }
@@ -29,6 +29,9 @@ final class FeatureFlagsTests: XCTestCase {
             // W2
             "masks", "aiSelection", "samModel", "depthModel", "pixelPostconditions", "fmDynamicSchema", "commandPalette", "metalOrb",
             "graphiteSurround", "modelBroker",
+            // W3
+            "proLayers", "freeTransform", "layersColumn", "paramInspector", "contentHashCache", "interactiveSnapshot", "tiledRendering",
+            "proExport", "psdExport", "layerOps", "outlineFill", "recipes", "kvEngine", "persistedPrefix",
         ])
     }
 
@@ -38,7 +41,7 @@ final class FeatureFlagsTests: XCTestCase {
         let w2: [FeatureFlag] = [.masks, .aiSelection, .samModel, .depthModel, .pixelPostconditions, .fmDynamicSchema,
                                  .commandPalette, .metalOrb, .graphiteSurround, .modelBroker]
         XCTAssertEqual(w2.count, 10)
-        XCTAssertEqual(FeatureFlag.allCases.count, 16)
+        XCTAssertEqual(FeatureFlag.allCases.count, 30)
         for flag in w2 {
             XCTAssertTrue(flag.releaseDefault, flag.rawValue)
             XCTAssertEqual(FeatureFlags.key(flag), "picshop.flag.\(flag.rawValue)")
@@ -47,6 +50,24 @@ final class FeatureFlagsTests: XCTestCase {
             FeatureFlags.set(flag, false)
             XCTAssertFalse(FeatureFlags.isOn(flag), flag.rawValue)
             for other in w2 where other != flag {
+                XCTAssertEqual(FeatureFlags.isOn(other), FeatureFlags.defaultValue(other), "\(flag.rawValue) moved \(other.rawValue)")
+            }
+            FeatureFlags.set(flag, nil)
+        }
+    }
+
+    /// D24: the fourteen W3 switches, each its own key, each on in Release (P2 turns off what a lane reports
+    /// unfinished; `kvEngine` and `persistedPrefix` are also gated at run time by the KV self-test).
+    func testTheFourteenW3FlagsShipOnAndSwitchOffAlone() {
+        let w3: [FeatureFlag] = [.proLayers, .freeTransform, .layersColumn, .paramInspector, .contentHashCache, .interactiveSnapshot,
+                                 .tiledRendering, .proExport, .psdExport, .layerOps, .outlineFill, .recipes, .kvEngine, .persistedPrefix]
+        XCTAssertEqual(Set(w3).count, 14)
+        for flag in w3 {
+            XCTAssertTrue(flag.releaseDefault, flag.rawValue)
+            XCTAssertEqual(FeatureFlags.key(flag), "picshop.flag.\(flag.rawValue)")
+            FeatureFlags.set(flag, false)
+            XCTAssertFalse(FeatureFlags.isOn(flag), flag.rawValue)
+            for other in w3 where other != flag {
                 XCTAssertEqual(FeatureFlags.isOn(other), FeatureFlags.defaultValue(other), "\(flag.rawValue) moved \(other.rawValue)")
             }
             FeatureFlags.set(flag, nil)

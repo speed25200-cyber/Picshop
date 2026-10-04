@@ -11,6 +11,13 @@ options:
   generateEmptyDirectories: true
   defaultConfig: Release
   groupSortPosition: top
+  # W3: App/AppIcon.icon (Icon Composer) is a folder that must reach the target as one file, in the resources phase,
+  # where actool compiles it with the asset catalog; without this XcodeGen would add icon.json and the SVGs as loose
+  # resources. CI checks its reference is `folder.iconcomposer.icon` (and patches it) right after `xcodegen generate`.
+  fileTypes:
+    icon:
+      file: true
+      buildPhase: resources
 
 settings:
   base:
@@ -23,6 +30,8 @@ settings:
     IPHONEOS_DEPLOYMENT_TARGET: "26.0"
     TARGETED_DEVICE_FAMILY: "1"
     ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    # W3: AppIcon is the Icon Composer icon (App/AppIcon.icon: light, dark, tinted and clear from one layered file).
+    # Fallback when it does not compile: AppIconLegacy, the PNG set Scripts/generate_icon.py renders in the same design.
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     DEVELOPMENT_TEAM: ""
   configs:

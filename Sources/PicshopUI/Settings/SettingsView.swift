@@ -100,7 +100,7 @@ public struct SettingsView: View {
             }
             SettingsRow(systemName: "photo.fill", tint: PSTheme.textPrimary) {
                 Picker(L("Photo format"), selection: Binding(get: { app.settings.photoExportFormat }, set: { app.settings.photoExportFormat = $0 })) {
-                    ForEach(ExportOptions.Format.allCases) { Text($0.displayName).tag($0) }
+                    ForEach(ExportOptions.Format.defaultChoices.filter { $0 != .tiff || FeatureFlags.isOn(.proExport) }) { Text($0.displayName).tag($0) }
                 }
             }
             SettingsRow(systemName: "film.fill", tint: PSTheme.textPrimary) {

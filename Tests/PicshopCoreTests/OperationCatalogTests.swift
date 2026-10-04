@@ -90,8 +90,21 @@ final class OperationCatalogTests: XCTestCase {
             XCTAssertEqual(spec.domains, [.photo], "\(id)")
             XCTAssertFalse(raw.contains(id.raw), "\(id) must not collide with an IntentAction")
         }
+        // W3 (§8.1): twelve photo layer operations and the recipe (photo and video), all keywordsOnly, never on the fast lane.
+        let layers: [OpID] = ["addImageLayer", "layerVia", "addFillLayer", "fillLayer", "addAdjustmentLayer", "layerMask", "layerClip", "groupLayers",
+                              "mergeLayers", "layerTransform", "layerProperties", "exportPhoto"]
+        for id in layers + ["recipe"] {
+            let spec = try XCTUnwrap(OperationCatalog.shared.spec(id), "\(id)")
+            XCTAssertEqual(spec.lowering, .handler, "\(id)")
+            XCTAssertEqual(spec.grammar, .keywordsOnly, "\(id)")
+            XCTAssertFalse(spec.fastLane, "\(id)")
+            XCTAssertEqual(spec.coreIn, [], "\(id)")
+            XCTAssertEqual(spec.domains, id == "recipe" ? [.photo, .video] : [.photo], "\(id)")
+            XCTAssertEqual(spec.uiTool, id == "exportPhoto" ? "export" : (id == "recipe" ? "magic" : "layers"), "\(id)")
+            XCTAssertFalse(raw.contains(id.raw), "\(id) must not collide with an IntentAction")
+        }
         let handlers = OperationCatalog.shared.specs.filter { $0.lowering == .handler }.map(\.id)
-        XCTAssertEqual(Set(handlers), Set(ids + masks), "W1 and W2 have exactly these handler operations")
+        XCTAssertEqual(Set(handlers), Set(ids + masks + layers + ["recipe"]), "W1, W2 and W3 have exactly these handler operations")
         // An existing action keeps its raw value as id.
         for spec in OperationCatalog.shared.specs {
             if case .intent(let action) = spec.lowering { XCTAssertEqual(spec.id.raw, action.rawValue) }
@@ -206,7 +219,7 @@ final class OperationCatalogTests: XCTestCase {
     /// the UI module does not build on Linux, so they are listed here).
     static let panels: [OpDomain: Set<String>] = [
         .photo: ["magic", "focus", "adjust", "looks", "color", "erase", "precise", "cutout", "crop", "text", "shapes", "layers", "curves", "levels",
-                 "masks", "select"],
+                 "masks", "select", "export"],
         .video: ["magic", "transcript", "cut", "speed", "motion", "audio", "looks", "adjust", "color", "text", "overlay", "transitions", "frame"],
         .pdf: ["pages", "draw", "highlight", "redact", "text", "signature", "image"],
     ]

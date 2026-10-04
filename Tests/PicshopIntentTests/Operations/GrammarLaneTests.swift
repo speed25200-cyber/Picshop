@@ -63,6 +63,26 @@ final class GrammarLaneTests: XCTestCase {
         }
     }
 
+    /// W3 (§8.7): precision at confidence ≥ 0.85 stays 1.0 on the layer probes (abstention included): every confident
+    /// answer is a gold one. ≥ 40 probes, ≥ 20 of them `UnsupportedLayerRequests` families.
+    func testW3ProbesAreNeverConfidentlyWrong() {
+        XCTAssertGreaterThanOrEqual(ProbeCorpus.w3.count - ProbeCorpus.w3.filter { $0.audit.hasSuffix("unsupported") }.count, 40)
+        XCTAssertGreaterThanOrEqual(ProbeCorpus.w3.filter { $0.audit.hasSuffix("unsupported") }.count, 20)
+        var wrong: [String] = []
+        var owned = 0
+        for probe in ProbeCorpus.w3 {
+            let plan = OperationAbstention.capped(engine.parse(probe.text, context: Self.context(probe.domain)), utterance: probe.text, domain: probe.domain)
+            let ops = answered(plan)
+            guard !ops.isEmpty, plan.confidence >= 0.85 else { continue }
+            if ops.isDisjoint(with: probe.gold) { wrong.append("\(probe.domain) « \(probe.text) » → \(ops.sorted())") } else { owned += 1 }
+        }
+        XCTAssertEqual(wrong, [])
+        XCTAssertGreaterThanOrEqual(owned, 25, "the owned phrases answer")
+        for probe in ProbeCorpus.w3 where probe.audit.hasSuffix("unsupported") {
+            XCTAssertNotNil(UnsupportedLayerRequests.match(probe.text, domain: probe.domain), probe.text)
+        }
+    }
+
     /// The grammar's own W2 patterns (§8.4) answer at 0.9 with the right operation and arguments.
     func testTheSignaturePatternsAnswer() {
         let cases: [(String, String, [String: OpValue])] = [

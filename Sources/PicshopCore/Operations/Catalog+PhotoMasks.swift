@@ -117,6 +117,8 @@ enum CatalogPhotoMasks {
                     Step.amount(-100...100, .signedPercent, doc: "relative ±; a bit 10, a lot 40"),
                     enumParam("amountMode", ["relative", "absolute"], .optional("relative"), doc: "relative adds, absolute sets").offCard,
                     percent("feather", doc: "mask edge softness").offCard,
+                    // W3 (D19): the image layer a new mask goes on; an `a<n>` ref carries its owner, which wins.
+                    CatalogPhotoLayerOps.maskOwnerLayer,
                 ]
             s.triggers = [
                 .fr: ["le ciel", "éclaircis le ciel", "assombris le bas", "le haut", "en bas de la photo", "dégradé", "sur le sujet", "le fond plus sombre",
@@ -169,6 +171,8 @@ enum CatalogPhotoMasks {
                 fr("assombris le côté droit", ["where": "right", "parameter": "exposure", "amount": -20]),
                 en("more contrast in the midtones only", ["where": "midtones", "parameter": "contrast", "amount": 15]),
                 fr("calme les zones claires", ["where": "highlights", "parameter": "exposure", "amount": -15]),
+                fr("assombris le haut de la tasse i1", ["where": "top", "parameter": "exposure", "amount": -20, "layer": "i1"]),
+                en("brighten the sky of layer i1", ["where": "sky", "parameter": "exposure", "amount": 20, "layer": "i1"]),
                 near("ajoute un vignettage", .fr, expected: "adjust"),
                 near("remplace le ciel par un coucher de soleil", .fr, expected: "generativeFill"),
                 near("désature les bleus", .fr, expected: "hsl"),
@@ -212,6 +216,7 @@ enum CatalogPhotoMasks {
             ] + area + shapeParams(group: "change") + [
                 ParamSpec("localColor", .color, .oneOf(group: "change"), doc: "tint the area: colour name").offCard,
                 percent("localColorAmount", doc: "tint strength").offCard,
+                ref("layer", [.imageLayer], doc: "i1: its last mask; a ref wins").offCard.noInspector,
             ]
             s.requires = needs(localMask: true)
             s.triggers = [
@@ -252,6 +257,7 @@ enum CatalogPhotoMasks {
                 en("add the reds to the mask", ["combine": "add", "where": "color", "color": "red"]),
                 para("rétrécis le masque", .fr, ["expand": -20]),
                 para("make the mask weaker", .en, ["amount": 50]),
+                fr("adoucis le dernier masque de la tasse i1", ["feather": 50, "layer": "i1"]),
                 near("inverse la sélection", .fr, expected: "selectionModify"),
                 near("masque le calque", .fr, expected: "layerVisibility"),
             ]
@@ -267,11 +273,12 @@ enum CatalogPhotoMasks {
             s.params = [
                 ref("ref", [.mask], doc: "a1; none: the last edited").keys("mask"),
                 boolean("all", doc: "every mask"),
+                ref("layer", [.imageLayer], doc: "i1: that layer's masks").offCard.noInspector,
             ]
             s.requires = needs(localMask: true, destructive: true)
             s.triggers = [
                 .fr: ["supprime le masque", "enlève le masque", "efface le masque", "retire le masque", "supprime tous les masques", "plus de masque"],
-                .en: ["delete the mask", "remove the mask", "delete all masks", "remove every mask"],
+                .en: ["delete the mask", "remove the mask", "delete all masks", "remove every mask", "get rid of the mask", "clear all the masks"],
             ]
             s.examples = [
                 fr("supprime le masque"),
@@ -280,6 +287,7 @@ enum CatalogPhotoMasks {
                 en("delete the mask"),
                 en("remove all the masks", ["all": true]),
                 para("vire le masque a1", .fr, ["ref": "a1"]),
+                fr("supprime tous les masques de la tasse i1", ["all": true, "layer": "i1"]),
                 near("supprime le calque", .fr, expected: "deleteLayer"),
                 near("supprime le fond", .fr, expected: "removeBackground"),
             ]
@@ -311,9 +319,10 @@ enum CatalogPhotoMasks {
             s.triggers = [
                 .fr: ["sélectionne", "sélection", "choisis la tasse", "à la baguette magique", "sélectionne cette couleur", "sélectionne le sujet",
                       "sélectionne le ciel", "sélectionne la tasse", "sélectionne tout", "ajoute à la sélection", "retire de la sélection",
-                      "sélectionne les personnes", "sélectionne l'arrière-plan", "détoure la sélection de"],
+                      "sélectionne les personnes", "sélectionne l'arrière-plan", "détoure la sélection de", "sélectionne l'animal",
+                      "sélectionne la personne", "prends toutes les zones bleues", "sélectionne le chien"],
                 .en: ["select the", "select subject", "select sky", "magic wand", "select everything", "add to the selection", "subtract from the selection",
-                      "select this colour", "select the people"],
+                      "select this colour", "select the people", "pick the person", "pick out the", "select the dog"],
             ]
             s.avoid = [
                 .fr: ["calque", "sélectionne le calque", "sélectionne le texte"],
@@ -418,7 +427,7 @@ enum CatalogPhotoMasks {
     }
 
     /// « Utiliser la sélection pour », in menu order.
-    static let useValues = ["adjust", "mask", "erase", "fill", "recolor", "blur", "cutout", "generate"]
+    static let useValues = ["adjust", "mask", "erase", "fill", "recolor", "blur", "cutout", "generate", "copyToLayer", "cutToLayer"]
 
     static var selectionApply: OperationSpec {
         op("selectionApply", .handler, in: [.photo], .selection, .composition,
@@ -428,7 +437,11 @@ enum CatalogPhotoMasks {
                     .aliases(["efface": "erase", "effacer": "erase", "supprime": "erase", "remplis": "fill", "remplir": "fill", "recolore": "recolor",
                               "change la couleur": "recolor", "recolorer": "recolor", "floute": "blur", "flouter": "blur", "detoure": "cutout",
                               "detourer": "cutout", "masque": "mask", "un masque": "mask", "regle": "adjust", "eclaircis": "adjust", "reglage": "adjust",
-                              "genere": "generate", "remplace par": "generate", "remove": "erase", "delete": "erase", "cut out": "cutout"])
+                              "genere": "generate", "remplace par": "generate", "remove": "erase", "delete": "erase", "cut out": "cutout",
+                              "nouveau calque": "copyToLayer", "sur un calque": "copyToLayer", "copie sur un calque": "copyToLayer",
+                              "calque par copier": "copyToLayer", "couper sur un calque": "cutToLayer", "coupe sur un calque": "cutToLayer",
+                              "calque par couper": "cutToLayer", "new layer": "copyToLayer", "copy to a layer": "copyToLayer",
+                              "cut to a layer": "cutToLayer"])
                     .keys("for"),
                 Step.parameter(.optional(nil)),
                 Step.amount(-100...100, .signedPercent, doc: "adjust ±; blur 0-100"),
@@ -440,7 +453,7 @@ enum CatalogPhotoMasks {
             s.triggers = [
                 .fr: ["efface la sélection", "remplis la sélection", "floute la sélection", "recolore la sélection", "fais-en un masque",
                       "éclaircis la sélection", "remplace la sélection par", "détoure la sélection", "utilise la sélection", "dans la sélection",
-                      "assombris la sélection", "supprime la sélection", "ce qui est sélectionné"],
+                      "assombris la sélection", "supprime la sélection", "ce qui est sélectionné", "la sélection sur un nouveau calque"],
                 .en: ["fill the selection", "erase the selection", "blur the selection", "recolour the selection", "make it a mask",
                       "brighten the selection", "use the selection", "cut out the selection", "replace the selection with"],
             ]
@@ -460,6 +473,9 @@ enum CatalogPhotoMasks {
                 en("make it a mask", ["use": "mask"]),
                 para("efface ce qui est sélectionné", .fr, ["use": "erase"]),
                 para("put a hat where the selection is", .en, ["use": "generate", "prompt": "a hat"]),
+                fr("copie la sélection sur un nouveau calque", ["use": "copyToLayer"]),
+                fr("coupe la sélection sur un nouveau calque", ["use": "cutToLayer"]),
+                en("cut the selection to a new layer", ["use": "cutToLayer"]),
                 near("efface le chien", .fr, expected: "removeObject"),
                 near("floute le fond", .fr, expected: "blurBackground"),
             ]

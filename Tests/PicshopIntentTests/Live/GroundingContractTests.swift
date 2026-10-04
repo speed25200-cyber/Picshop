@@ -155,7 +155,7 @@ final class GroundingContractTests: XCTestCase {
     func testPhotoFieldsOnlyInThePhotoSchema() {
         let photoKeys = Set(LiveToolSchema.stepSchema(for: .photo)["properties"]?.object?.keys.map { $0 } ?? [])
         let videoKeys = Set(LiveToolSchema.stepSchema(for: .video)["properties"]?.object?.keys.map { $0 } ?? [])
-        XCTAssertEqual(LiveToolSchema.photoFields.count, 14)
+        XCTAssertEqual(LiveToolSchema.photoFields.count, 15, "W3 added `layer` (D9: the layer a tone step lands on)")
         XCTAssertTrue(LiveToolSchema.photoFields.isSubset(of: photoKeys))
         XCTAssertTrue(LiveToolSchema.photoFields.isDisjoint(with: videoKeys))
         XCTAssertTrue(LiveToolSchema.photoFields.isDisjoint(with: LiveToolSchema.videoFields))

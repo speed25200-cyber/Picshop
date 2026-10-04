@@ -138,6 +138,22 @@ public final class PhotoEditorSession {
     let maskState: PhotoMaskState
     /// Sélection (W2): the mode, how a new selection combines, the marching ants, the two sheets.
     let selectionState: PhotoSelectionState
+    /// Calques (W3): the layer tool mode, guides, multi-selection, the column's coarse mirror, the transform readout.
+    let layerState: PhotoLayerState
+    /// What the drag in progress moves (W3, D13): the interactive snapshot's scope; nil outside a drag.
+    @ObservationIgnored var interactionScope: InteractionScope?
+    /// The nonisolated snapshot of the drag in progress (D13): the frame pump builds frames from it on the main actor
+    /// (graph only, no actor hop) while it covers the dragged document. Dropped when the drag ends, on a memory warning,
+    /// and when it stops covering.
+    @ObservationIgnored var interactionSnapshot: RenderSnapshot?
+    /// The column's mirror waits for the end of a transaction (a text drag) before it is rebuilt.
+    @ObservationIgnored var layersNeedRefresh = false
+    /// Bumped by every begin, end and cancel: a snapshot that arrives for an older drag is thrown away.
+    @ObservationIgnored var interactionToken = 0
+    /// The snapshot being built for the drag in progress (or prewarmed for the tool's next one).
+    @ObservationIgnored var snapshotTask: Task<Void, Never>?
+    /// The scope of the capture on its way; nil when none is.
+    @ObservationIgnored var snapshotTaskScope: InteractionScope?
     /// Where the frame pump presents frames directly (E4's MetalCanvasView), bypassing `preview`.
     @ObservationIgnored weak var canvasSink: (any CanvasSink)?
     /// Picshop Live in this editor, attached at the end of init.
@@ -336,6 +352,10 @@ public final class PhotoEditorSession {
     public var pendingCommand: String?
     public var exportedURL: URL?
     public var exportProgress: Double?
+    /// W3 (D16): the preset the export sheet opens on (the `exportPreset:` effect, a recipe); nil: the remembered choices.
+    public var exportPreset: ExportPreset?
+    /// The file being written, for « Annuler ».
+    @ObservationIgnored var exportTask: Task<URL, Error>?
     public var showsHelp = false
     public var isVoiceReady = false
 
@@ -385,6 +405,7 @@ public final class PhotoEditorSession {
         tone = PhotoToneState()
         maskState = PhotoMaskState()
         selectionState = PhotoSelectionState()
+        layerState = PhotoLayerState()
         live = LiveSession(app: app, mode: .photo, canGoLive: true)
         live.attach(self)
     }
@@ -420,6 +441,10 @@ public final class PhotoEditorSession {
         if document.baseOrientation.isVerticallyFlipped, pendingCommand == nil {
             showToast(L("This photo is upside down."), action: .rightWayUp)
         }
+        // W3 (D2): where the document came from. A newer build's file is opened from its v1 projection and never
+        // overwritten; an older build's save was merged back, and both files are rewritten.
+        documentDidLoad(from: app.library.takeLoadSource(for: projectID))
+        layersDidChange(document)
         if let command = pendingCommand {
             pendingCommand = nil
             Task { [weak self] in await self?.handleTranscript(command) }
@@ -455,6 +480,7 @@ public final class PhotoEditorSession {
         live.teardown()
         app.voice.cancel()
         masksTeardown()
+        layersTeardown()
         renderTask?.cancel()
         framePump?.stop()
         framePump = nil
@@ -512,6 +538,13 @@ public final class PhotoEditorSession {
         }
     }
 
+    /// Saves soon even when nothing changed since the last save (W3, D2): a document merged from an older build's
+    /// save rewrites both files.
+    func forceAutosave() {
+        lastSavedDocument = nil
+        scheduleAutosave()
+    }
+
     private func autosave(synchronously: Bool) {
         let document = self.document
         guard document != lastSavedDocument else { return }
@@ -523,6 +556,8 @@ public final class PhotoEditorSession {
             library.saveNow(project)
         } else {
             Task { await library.persist(project) }
+            // W3 (D8, "should"): the changed layer masks baked for the v1 projection, stored without a new step.
+            bakeLayerMasksAfterSave(document)
         }
     }
 
@@ -548,6 +583,10 @@ public final class PhotoEditorSession {
         maskState.thumbnails = [:]
         maskState.thumbnailKeys = [:]
         if compareSplit == nil { originalPreview = nil }
+        // W3: the snapshot (64 MB at most), the layer thumbnails and the detail tile go too (D15).
+        dropInteractionSnapshot()
+        layerState.thumbnails.trim()
+        clearDetail()
         Diagnostics.shared.note("editor trimmed its caches")
         if let renderer { Task { await renderer.trimForMemoryPressure() } }
     }
@@ -612,11 +651,15 @@ public final class PhotoEditorSession {
     @ObservationIgnored private var dirtyInteractive = false
     @ObservationIgnored private var renderGeneration = 0
 
-    /// What the canvas shows: the dragged copy during a dial drag, with the crop tool's pending geometry.
-    private func previewDocument() -> PhotoDocument {
+    /// What the canvas shows: the dragged copy during a dial drag, with the crop tool's pending geometry (on the
+    /// photo: the canvas and every layer follow it, D10b).
+    func previewDocument() -> PhotoDocument {
         var document = interactiveDocument ?? self.document
-        if straightenPreview != 0 { document.apply(.straighten(degrees: straightenPreview)) }
-        if perspectiveHorizontal != 0 || perspectiveVertical != 0 { document.apply(.perspective(horizontal: perspectiveHorizontal, vertical: perspectiveVertical)) }
+        let baseID = document.baseLayerID
+        if straightenPreview != 0 { document.apply(.straighten(degrees: straightenPreview), to: baseID) }
+        if perspectiveHorizontal != 0 || perspectiveVertical != 0 {
+            document.apply(.perspective(horizontal: perspectiveHorizontal, vertical: perspectiveVertical), to: baseID)
+        }
         return document
     }
 
@@ -678,6 +721,8 @@ public final class PhotoEditorSession {
     func attachCanvas(_ view: MetalCanvasView) {
         canvasSink = view
         applySurround()
+        // W3: the checkerboard under transparent areas, as « Transparence » left it.
+        view.setShowsTransparencyGrid(layerState.showsTransparency)
         view.onPresented = { [weak self] generation, time in
             self?.framePump?.framePresented(generation: generation, at: time)
         }
@@ -724,6 +769,98 @@ public final class PhotoEditorSession {
         if !interactive { tone.didSettle(image) }
     }
 
+    // MARK: - Interactive snapshot frames (W3, D13)
+
+    /// The drag's frame (and the overlay it carries) from its interactive snapshot, built here on the main actor
+    /// (graph construction only, no actor hop), or nil when the actor path must draw it: no snapshot yet, a crop or
+    /// compare on screen, a mask or selection overlay that must ride the frame, or a document the snapshot does not
+    /// cover (then it is dropped). The layer mask being painted is the exception: a `.layerMask` snapshot draws it.
+    func snapshotFrame() -> (image: CIImage, overlay: CIImage?)? {
+        guard let snapshot = interactionSnapshot, interaction != nil else { return nil }
+        guard !showsOriginal, compareSplit == nil, straightenPreview == 0, perspectiveHorizontal == 0, perspectiveVertical == 0 else { return nil }
+        guard maskInteractionTarget == nil else { return nil }
+        // Any other overlay (a local adjustment's mask, the selection) comes from the actor's render with its frame (D17).
+        let overlay = overlayRequest
+        if let overlay {
+            guard case .layerMask(let id) = snapshot.scope, overlay.target == .layerMask(id) else { return nil }
+        }
+        let document = previewDocument()
+        guard snapshot.covers(document) else {
+            dropInteractionSnapshot()
+            return nil
+        }
+        let signpost = PSSignpost.begin("snapshot.frame")
+        defer { PSSignpost.end(signpost) }
+        return snapshot.frameAndOverlay(document, overlay: overlay)
+    }
+
+    // MARK: - Detail tiles (W3, D14)
+
+    @ObservationIgnored private var detailTask: Task<Void, Never>?
+    /// The region and density of the tile on screen (or being drawn), so a re-request for the same view does nothing.
+    @ObservationIgnored private var detailKey: String?
+
+    /// After a settle, with the picture zoomed past 1.25 device pixels per preview pixel: the visible region
+    /// (canvas-normalised) at native density, drawn over the preview by the canvas. `devicePixelsAcross` is the
+    /// visible region's width on the glass. Behind `tiledRendering`.
+    func requestDetail(visibleRect: PSRect, devicePixelsAcross: Double) {
+        guard FeatureFlags.isOn(.tiledRendering), let renderer, canvasSink != nil, let preview, interaction == nil, !isCropping,
+              compareSplit == nil, !showsOriginal, devicePixelsAcross.isFinite, devicePixelsAcross > 0 else {
+            clearDetail()
+            return
+        }
+        let extent = preview.extent
+        let visible = visibleRect.clampedToUnit()
+        guard extent.width > 0, extent.height > 0, visible.width > 1e-4, visible.height > 1e-4 else { return }
+        let previewPixelsAcross = visible.width * Double(extent.width)
+        guard devicePixelsAcross / max(1, previewPixelsAcross) > 1.25 else {
+            clearDetail()
+            return
+        }
+        let canvas = document.canvasSize
+        guard canvas.width > 0, canvas.height > 0 else { return }
+        // Expanded by 25 % and snapped to a 512-pixel grid of the full-resolution canvas, so small pans reuse it.
+        let grid = 512.0
+        let expandX = visible.width * 0.125, expandY = visible.height * 0.125
+        let minX = max(0, (((visible.minX - expandX) * canvas.width) / grid).rounded(.down) * grid)
+        let minY = max(0, (((visible.minY - expandY) * canvas.height) / grid).rounded(.down) * grid)
+        let maxX = min(canvas.width, (((visible.maxX + expandX) * canvas.width) / grid).rounded(.up) * grid)
+        let maxY = min(canvas.height, (((visible.maxY + expandY) * canvas.height) / grid).rounded(.up) * grid)
+        guard maxX > minX, maxY > minY else { return }
+        let region = PSRect(x: minX / canvas.width, y: minY / canvas.height, width: (maxX - minX) / canvas.width, height: (maxY - minY) / canvas.height)
+        let density = devicePixelsAcross / visible.width
+        let pixelsAcross = Int(min(2048, max(16, (density * region.width).rounded())))
+        let key = "\(revision)|\(region.minX),\(region.minY),\(region.width),\(region.height)|\(pixelsAcross)"
+        guard key != detailKey else { return }
+        detailKey = key
+        detailTask?.cancel()
+        let document = self.document
+        let generation = previewGeneration
+        detailTask = Task { [weak self] in
+            let tile: CIImage
+            do {
+                tile = try await renderer.renderDetail(document, region: region, pixelsAcross: pixelsAcross)
+            } catch {
+                PSLog.debug("detail skipped: \(error)", category: .ui)
+                return
+            }
+            guard let self, !Task.isCancelled, self.detailKey == key, self.document == document, self.interaction == nil else { return }
+            // The preview's extent is bottom-up (Core Image); the region is top-down.
+            let rect = CGRect(x: extent.minX + region.minX * extent.width, y: extent.minY + (1 - region.maxY) * extent.height,
+                              width: region.width * extent.width, height: region.height * extent.height)
+            self.canvasSink?.presentDetail(tile, rect: rect, generation: generation)
+        }
+    }
+
+    /// A pan or a zoom starts, a drag begins, memory is short: the tile goes (the canvas also drops it on a newer frame).
+    func clearDetail() {
+        detailTask?.cancel()
+        detailTask = nil
+        guard detailKey != nil else { return }
+        detailKey = nil
+        canvasSink?.presentDetail(nil, rect: nil, generation: previewGeneration)
+    }
+
     // MARK: - History
 
     /// The one place the mirrors are brought up to date, after every write to
@@ -763,6 +900,13 @@ public final class PhotoEditorSession {
             }
             // Masks and the selection follow (W2): the selected mask, the thumbnails, the ants.
             masksDidChange(present)
+            // W3: the column's and the inspector's coarse mirror, the multi-selection, transform and mask modes;
+            // a text or shape drag (a transaction) refreshes them once, when it ends.
+            layersNeedRefresh = true
+        }
+        if layersNeedRefresh, !history.isInTransaction {
+            layersNeedRefresh = false
+            layersDidChange(present)
         }
         // A text drag is one change, told when it ends.
         guard changed, !history.isInTransaction else { return }
@@ -905,33 +1049,132 @@ public final class PhotoEditorSession {
     // MARK: - Direct (touch) edits
 
     public func beginSliderInteraction(_ parameter: AdjustmentParameter) {
-        beginInteraction(label: parameter.englishName)
-        setDial(parameter: parameter, group: nil, value: document.activeAdjustments[parameter])
+        beginInteraction(label: parameter.englishName, scope: toneScope(for: "adjust"))
+        setDial(parameter: parameter, group: nil, value: adjustmentValue(parameter))
     }
 
     public func endSliderInteraction() {
         endInteraction()
     }
 
+    /// A Réglages dial (W3, D9): on the selected « Lumière » adjustment layer its own dials (`LayerEdit.adjustments`,
+    /// never an `.adjust` operation in its edits), else on the active image layer as before.
     public func setAdjustment(_ parameter: AdjustmentParameter, value: Double) {
-        guard let layerID = document.activeImageLayerID else { return }
-        let previous = (interactiveDocument ?? document).activeAdjustments[parameter]
+        guard let layerID = toneTargetID(for: "adjust") else { return }
+        let previous = Self.adjustments(of: layerID, in: interactiveDocument ?? document)[parameter]
         if abs(value - previous) > 0.0005 { lastAdjustment = (parameter, value > previous ? 1 : -1) }
+        guard toneTargetAllows(layerID) else { return }
         if interaction != nil { setDial(parameter: parameter, group: nil, value: value) }
+        let isAdjustmentLayer = document.layer(id: layerID)?.isAdjustment == true
         interactiveEdit(label: parameter.englishName) { document in
-            document.update(layerID: layerID) { $0.edits.setAdjustment(parameter, value: value) }
+            if isAdjustmentLayer {
+                var dials = Self.adjustments(of: layerID, in: document)
+                dials[parameter] = value
+                document.applyLayerEdit(.adjustments(dials), to: layerID)
+            } else {
+                document.update(layerID: layerID) { $0.edits.setAdjustment(parameter, value: value) }
+            }
         }
     }
 
     // MARK: - Dial drags
 
-    /// Starts a drag: the document stays as it is until the drag ends.
-    func beginInteraction(label: String) {
+    /// Starts a drag: the document stays as it is until the drag ends. With a `scope` (W3, D13) the renderer builds
+    /// the interactive snapshot of what the drag moves, in a task; until it arrives (10–30 ms) frames go through the
+    /// actor, then the pump builds them from it on the main actor with no actor hop.
+    func beginInteraction(label: String, scope: InteractionScope? = nil) {
         if interaction != nil, interactiveDocument != document { endInteraction() }
         interaction = (label, nil)
         interactiveDocument = document
         // A finger is on the canvas or a dial: the orb and the ants pause (W2).
         if !app.performance.isCanvasInteracting { app.performance.isCanvasInteracting = true }
+        requestInteractionSnapshot(scope)
+    }
+
+    /// The snapshot of `scope` for the drag that just began (behind `interactiveSnapshot`); nil drops the last one.
+    /// The snapshot kept from the tool's last drag of the same target, or the one on its way (a prewarm, a capture a
+    /// short nudge left behind), serves this drag: only the first drag after entering a tool pays for a capture.
+    func requestInteractionSnapshot(_ scope: InteractionScope?) {
+        if let scope, Self.reusesSnapshot(scope) {
+            if let current = interactionSnapshot, current.scope == scope, current.covers(document) {
+                interactionScope = scope
+                return
+            }
+            if snapshotTask != nil, snapshotTaskScope == scope {
+                interactionScope = scope
+                return
+            }
+        }
+        interactionToken += 1
+        dropInteractionSnapshot()
+        interactionScope = scope
+        guard let scope, FeatureFlags.isOn(.interactiveSnapshot), let renderer else { return }
+        let token = interactionToken
+        let captured = document
+        let options = PhotoRenderer.Options(targetLongestSide: app.performance.interactivePreviewSide, showOriginal: false,
+                                            allowExpensiveWork: false, isDisplayed: true)
+        snapshotTaskScope = scope
+        snapshotTask = Task { [weak self] in
+            let signpost = PSSignpost.begin("snapshot.capture")
+            defer { PSSignpost.end(signpost) }
+            do {
+                let snapshot = try await renderer.interactiveSnapshot(captured, scope: scope, options: options)
+                // Wanted by the drag in progress, or kept for the tool's next one; otherwise its bitmaps go now.
+                guard let self, !Task.isCancelled, self.interactionToken == token,
+                      self.interaction != nil || self.snapshotTaskScope == scope else {
+                    snapshot.discard()
+                    return
+                }
+                self.snapshotTask = nil
+                self.snapshotTaskScope = nil
+                self.interactionSnapshot = snapshot
+            } catch {
+                // Too many live nodes, too many bytes, or no snapshot for this scope: the actor path draws the drag.
+                if let self, self.interactionToken == token {
+                    self.snapshotTask = nil
+                    self.snapshotTaskScope = nil
+                }
+                PSLog.debug("snapshot skipped: \(error)", category: .ui)
+            }
+        }
+    }
+
+    /// Scopes whose snapshot stays valid across committed drags (`covers` ignores exactly what they move); a develop
+    /// drag's local masks are frozen from the developed pixels, so it always captures afresh.
+    static func reusesSnapshot(_ scope: InteractionScope) -> Bool {
+        switch scope {
+        case .layerPlacement, .adjustmentLayer, .fillLayer, .layerMask: return true
+        case .layerDevelop: return false
+        }
+    }
+
+    /// W3 (D13): the snapshot outlives the drag while the tool that made it stays open on its target (the transform
+    /// handles, the layer-mask brush), so the next drag of that layer starts on it with no capture.
+    var keepsInteractionSnapshot: Bool {
+        guard FeatureFlags.isOn(.interactiveSnapshot), activeTool == .layers,
+              let scope = interactionSnapshot?.scope ?? snapshotTaskScope else { return false }
+        switch (layerState.mode, scope) {
+        case (.transform, .layerPlacement(let id)): return layerState.transformTarget == id
+        case (.maskPaint, .layerMask(let id)): return layerState.editingMaskOf == id
+        default: return false
+        }
+    }
+
+    /// Drops the interactive snapshot (the drag ended, memory is short, or it stopped covering the document); its
+    /// bitmaps go at once.
+    func dropInteractionSnapshot() {
+        snapshotTask?.cancel()
+        snapshotTask = nil
+        snapshotTaskScope = nil
+        interactionSnapshot?.discard()
+        interactionSnapshot = nil
+    }
+
+    /// The tool that kept the snapshot between drags closed (transform mode, the layer-mask brush, Calques): it goes.
+    func releaseKeptInteractionSnapshot() {
+        guard interaction == nil, interactionSnapshot != nil || snapshotTask != nil else { return }
+        interactionToken += 1
+        dropInteractionSnapshot()
     }
 
     /// Applies a dial's latest value: to the dragged copy during a drag (the
@@ -955,6 +1198,12 @@ public final class PhotoEditorSession {
     func endInteraction() {
         if app.performance.isCanvasInteracting { app.performance.isCanvasInteracting = false }
         maskInteractionTarget = nil
+        interactionScope = nil
+        // Kept (or still on its way) for the tool's next drag of the same layer; dropped otherwise.
+        if !keepsInteractionSnapshot {
+            interactionToken += 1
+            dropInteractionSnapshot()
+        }
         guard let current = interaction else {
             setDial(parameter: nil, group: nil, value: dial.value)
             requestPreview()
@@ -975,6 +1224,11 @@ public final class PhotoEditorSession {
     func cancelInteraction() {
         if app.performance.isCanvasInteracting { app.performance.isCanvasInteracting = false }
         maskInteractionTarget = nil
+        interactionScope = nil
+        if !keepsInteractionSnapshot {
+            interactionToken += 1
+            dropInteractionSnapshot()
+        }
         interaction = nil
         interactiveDocument = nil
         setDial(parameter: nil, group: nil, value: dial.value)
@@ -1102,27 +1356,28 @@ public final class PhotoEditorSession {
 
     // MARK: - Colour (mixer and wheels)
 
-    /// The active layer's colour mixer, neutral when none.
+    /// The colour mixer of the tone target (the selected « Teinte/Saturation » layer, else the active image layer).
     public var colorMixer: ColorMixer {
-        document.activeImageLayerID.flatMap { document.layer(id: $0)?.edits.resolvedColorMixer } ?? .neutral
+        toneTargetID(for: "hsl").flatMap { document.layer(id: $0)?.edits.resolvedColorMixer } ?? .neutral
     }
 
-    /// The active layer's three-way grade, neutral when none.
+    /// The three-way grade of the tone target (the selected « Étalonnage » layer, else the active image layer).
     public var colorGrade: ColorGrade {
-        document.activeImageLayerID.flatMap { document.layer(id: $0)?.edits.resolvedColorGrade } ?? .neutral
+        toneTargetID(for: "colorGrade").flatMap { document.layer(id: $0)?.edits.resolvedColorGrade } ?? .neutral
     }
 
     public func beginColorInteraction(_ label: String) {
-        beginInteraction(label: label)
+        let op: OpID = label == "Colour Grading" ? "colorGrade" : (label.hasPrefix("LUT") ? "lutIntensity" : "hsl")
+        beginInteraction(label: label, scope: toneScope(for: op))
     }
 
     public func endColorInteraction() {
         endInteraction()
     }
 
-    /// The active layer's imported look, nil when none.
+    /// The tone target's imported look (the selected « LUT » layer, else the active image layer), nil when none.
     public var lut: LUTReference? {
-        document.activeImageLayerID.flatMap { document.layer(id: $0)?.edits.resolvedLUT }
+        toneTargetID(for: "lutIntensity").flatMap { document.layer(id: $0)?.edits.resolvedLUT }
     }
 
     public func importLUT(from url: URL) {
@@ -1152,23 +1407,33 @@ public final class PhotoEditorSession {
 
     public func setColorMixer(_ mixer: ColorMixer) {
         if interaction != nil { setDial(parameter: nil, group: "colorMixer", value: dial.value) }
-        setColor(.colorMixer(mixer), label: "Colour Mixer")
+        setColor(.colorMixer(mixer), label: "Colour Mixer", op: "hsl")
     }
 
     public func setColorGrade(_ grade: ColorGrade) {
         if interaction != nil { setDial(parameter: nil, group: "colorGrade", value: dial.value) }
-        setColor(.colorGrade(grade), label: "Colour Grading")
+        setColor(.colorGrade(grade), label: "Colour Grading", op: "colorGrade")
     }
 
-    private func setColor(_ kind: EditOperation.Kind, label: String) {
-        guard let layerID = document.activeImageLayerID else { return }
+    /// A colour edit on the tone target of `op` (D9): an adjustment layer of its family, else the active image layer.
+    private func setColor(_ kind: EditOperation.Kind, label: String, op: OpID = "lutIntensity") {
+        guard let layerID = toneTargetID(for: op), toneTargetAllows(layerID) else { return }
         interactiveEdit(label: label) { document in
             document.update(layerID: layerID) { $0.edits.setColor(kind) }
         }
     }
 
+    /// What a Réglages dial shows: the tone target's value (D9).
     public func adjustmentValue(_ parameter: AdjustmentParameter) -> Double {
-        document.activeAdjustments[parameter]
+        guard let layerID = toneTargetID(for: "adjust") else { return document.activeAdjustments[parameter] }
+        return Self.adjustments(of: layerID, in: document)[parameter]
+    }
+
+    /// A layer's dials: an adjustment layer's own (its `content`), an image layer's resolved ones.
+    static func adjustments(of layerID: UUID, in document: PhotoDocument) -> Adjustments {
+        guard let layer = document.layer(id: layerID) else { return .neutral }
+        if case .adjustment(let dials) = layer.content { return dials }
+        return layer.edits.resolvedAdjustments
     }
 
     public func apply(_ kind: EditOperation.Kind, label: String? = nil) {
@@ -1202,6 +1467,7 @@ public final class PhotoEditorSession {
     private func toolDidChange(from previous: Tool?) {
         guard previous != activeTool else { return }
         masksToolDidChange(from: previous)
+        layersToolDidChange(from: previous)
         if previous == .erase { commitBrushErase() }
         if previous == .precise { brushStrokes = []; lassoPoints = [] }
         // One selection UI (W2): Précis's wand and lasso live in Sélection, so Précis opens on Générer.
@@ -1285,22 +1551,29 @@ public final class PhotoEditorSession {
         Haptics.tick()
     }
 
-    /// Commits the straighten angle and the crop rectangle as edits.
+    /// Commits the straighten angle and the crop rectangle as edits, on the photo whatever layer is selected: the
+    /// canvas changes and every layer follows (D10b). A locked photo refuses it with the lock's toast.
     public func commitCrop() {
         guard let rect = cropRect else { return }
         var document = self.document
+        let baseID = document.baseLayerID
         var labels: [String] = []
+        func refused() {
+            cancelCrop()
+            refuseLayerEdit(.locked, layerID: baseID)
+            requestPreview()
+        }
         if abs(straightenPreview) > 0.01 {
-            document.apply(.straighten(degrees: straightenPreview))
+            guard document.apply(.straighten(degrees: straightenPreview), to: baseID) else { return refused() }
             labels.append(L("Straighten"))
         }
         if abs(perspectiveHorizontal) > 0.005 || abs(perspectiveVertical) > 0.005 {
-            document.apply(.perspective(horizontal: perspectiveHorizontal, vertical: perspectiveVertical))
+            guard document.apply(.perspective(horizontal: perspectiveHorizontal, vertical: perspectiveVertical), to: baseID) else { return refused() }
             labels.append(L("Perspective"))
         }
         let clamped = rect.clampedToUnit()
         if clamped.width < 0.999 || clamped.height < 0.999 || clamped.minX > 0.001 || clamped.minY > 0.001 {
-            document.apply(.crop(clamped))
+            guard document.apply(.crop(clamped), to: baseID) else { return refused() }
             labels.append(L("Crop"))
         }
         straightenPreview = 0
@@ -1316,16 +1589,28 @@ public final class PhotoEditorSession {
 
     /// Quarter-turn and flips apply immediately and reset the crop frame.
     public func rotateQuarterTurn() {
-        apply(.rotate(degrees: 90), label: L("Rotate"))
+        applyToCanvas(.rotate(degrees: 90), label: L("Rotate"))
         if isCropping { cropRect = .unit; cropAspect = .free }
     }
 
     public func flipHorizontally() {
-        apply(.flip(.horizontal), label: L("Flip"))
+        applyToCanvas(.flip(.horizontal), label: L("Flip"))
     }
 
     public func flipVertically() {
-        apply(.flip(.vertical), label: L("Flip Vertical"))
+        applyToCanvas(.flip(.vertical), label: L("Flip Vertical"))
+    }
+
+    /// The crop tool's geometry on the photo, whatever layer is selected: the canvas turns and every layer follows
+    /// (D10b). A locked photo refuses it with the lock's toast.
+    private func applyToCanvas(_ kind: EditOperation.Kind, label: String) {
+        var updated = document
+        guard updated.apply(kind, label: label, to: updated.baseLayerID) else {
+            refuseLayerEdit(.locked, layerID: updated.baseLayerID)
+            return
+        }
+        commit(updated, label: label)
+        Haptics.tick()
     }
 
     public func autoLevel() {
@@ -1730,15 +2015,23 @@ public final class PhotoEditorSession {
         history.commit(document, label: "Select")
     }
 
+    /// The text and shape panels' delete (W3: the structure path, so the base, locks and groups refuse as everywhere).
     public func removeLayer(_ id: UUID) {
-        var document = self.document
-        guard document.removeLayer(id: id) != nil else { return }
-        commit(document, label: "Delete Layer")
+        guard document.layer(id: id) != nil else { return }
+        if document.layer(id: id)?.isGroup == true {
+            requestDeleteLayers([id])
+            return
+        }
+        applyStructureEdit(.remove(id), label: "Delete Layer")
     }
 
+    /// A move to a stack index (W1 callers); the order lock refuses it (D7). The panels move by row slot
+    /// (`moveLayer(_:toSlot:)`).
     public func moveLayer(_ id: UUID, to index: Int) {
+        guard layerAllows(.order, on: id) else { return }
         var document = self.document
         document.moveLayer(id: id, to: index)
+        guard document != self.document else { return }
         commit(document, label: "Reorder Layers")
     }
 
@@ -1933,6 +2226,8 @@ public final class PhotoEditorSession {
             // "Efface ça" points here: Live hears of it.
             live.noteContextChanged()
         }
+        // W3: with Calques open, a tap picks the layer under the finger (select mode) or leaves transform mode.
+        if activeTool == .layers, pendingClarification == nil, handleLayerTap(at: point) { return }
         if activeTool == .focus {
             Task { await setFocus(at: point) }
             return
@@ -2069,8 +2364,20 @@ public final class PhotoEditorSession {
         /// Act-then-verify: what the applied steps should show, checked once the reply is out.
         var checks: [VerificationRequest] = []
         defer { checkInBackground(checks, language: replyLanguage) }
-        steps: for intent in plan.intents where intent.action != .unknown {
+        // D19: the photo before the plan; a step after one that changed its geometry aims where its target went.
+        let anchor = document
+        steps: for original in plan.intents where original.action != .unknown {
             lastOutcomeNeedsHand = false
+            var intent = original
+            if let map = RefRegrounder.geometryMap(from: anchor, to: document) {
+                guard let moved = RefRegrounder.regrounded(intent, by: map) else {
+                    told = RefRegrounder.leftTheCanvas(french: replyLanguage == .french)
+                    lastReplyIsProblem = true
+                    lastReplyIsError = true
+                    break steps
+                }
+                intent = moved
+            }
             let step = await runStep(intent)
             if let request = step.verification { checks.append(request) }
             switch step.outcome {
@@ -2281,7 +2588,25 @@ public final class PhotoEditorSession {
 
     static func findsMasks(_ intent: EditIntent) -> Bool {
         guard intent.action == .operation, let call = intent.operation else { return false }
-        return maskOperations.contains(call.id.raw)
+        return maskOperations.contains(call.id.raw) || rendersLayers(intent)
+    }
+
+    /// W3 layer steps that render (`rasterizeLayers`) or find an area (an AI mask): merges, layer via, a recipe's
+    /// steps, apply mask, a layer mask from a named region. Long steps, one at a time, confirmed once done.
+    static func rendersLayers(_ intent: EditIntent) -> Bool {
+        guard intent.action == .operation, let call = intent.operation else { return false }
+        switch call.id.raw {
+        case "mergeLayers", "layerVia", "recipe":
+            return true
+        case "layerMask":
+            let action = call.args["do"]?.string ?? "add"
+            if action == "apply" { return true }
+            guard action == "add" || action == "edit" else { return false }
+            if call.args["target"] != nil || call.args["ref"] != nil { return true }
+            return call.args["where"]?.string.flatMap(MaskRegion.init(rawValue:))?.isAI == true
+        default:
+            return false
+        }
     }
 
     /// A step that runs the generative engine: the legacy action, or a selection used as the place to generate.
@@ -2372,6 +2697,10 @@ public final class PhotoEditorSession {
             switch intent.operation?.id.raw {
             case "select", "selectionModify": return L("Selecting…")
             case "maskAdjust", "maskEdit": return L("Making the mask…")
+            case "mergeLayers": return L("Merging the layers…")
+            case "layerVia": return L("Putting it on a layer…")
+            case "layerMask": return L("Applying the mask…")
+            case "recipe": return L("Running the recipe…")
             default: return L("Working…")
             }
         default: return L("Working…")
@@ -2461,11 +2790,12 @@ public final class PhotoEditorSession {
             case .export, .share: showsExport = true
             case .help: showsHelp = true
             case .selectLayer(let id):
-                var document = updatedDocument
+                var document = self.document
                 document.selectedLayerID = id
                 if document != self.document { history.commit(document, label: "Select") }
-                // A table step never opens the text tool over its cells.
-                if !Self.tableActions.contains(intent.action) { activeTool = .text }
+                // A table step never opens the text tool over its cells; a new image, fill or adjustment layer (W3)
+                // opens nothing either: the column shows it selected.
+                if !Self.tableActions.contains(intent.action), document.layer(id: id)?.isText == true { activeTool = .text }
             case .pickBackground: activeTool = .cutout
             case .pickColorReference:
                 activeTool = .magic
@@ -2492,6 +2822,15 @@ public final class PhotoEditorSession {
                 openControl(String(message.dropFirst("openTool:".count)))
             case .message(let message) where message.hasPrefix("showMask:"):
                 if let id = UUID(uuidString: String(message.dropFirst("showMask:".count))) { showMask(id) }
+            // W3: the photo picker for a new image layer, the export sheet on a preset, the layer-mask brush, transform mode.
+            case .message("pickImageLayer"):
+                openImageLayerPicker()
+            case .message(let message) where message.hasPrefix("exportPreset:"):
+                presentExport(presetJSON: String(message.dropFirst("exportPreset:".count)))
+            case .message(let message) where message.hasPrefix("paintLayerMask:"):
+                if let id = UUID(uuidString: String(message.dropFirst("paintLayerMask:".count))) { beginLayerMaskPaint(id) }
+            case .message(let message) where message.hasPrefix("transformLayer:"):
+                handleTransformEffect(String(message.dropFirst("transformLayer:".count)))
             default: break
             }
         }
@@ -2633,23 +2972,11 @@ public final class PhotoEditorSession {
         document.baseLayer?.imageAsset.map { app.store.url(for: $0.relativePath, in: projectID) }
     }
 
-    /// True once the file is written (and saved to Photos when asked).
+    /// True once the file is written (and saved to Photos when asked and the format allows it). W3: progress,
+    /// cancel and the Files destination live in PhotoEditorSession+Export.
     @discardableResult
     public func export(options: ExportOptions) async -> Bool {
-        guard let renderer, exportProgress == nil else { return false }
-        exportProgress = 0.05
-        defer { exportProgress = nil }
-        do {
-            let url = try await PhotoExporter.export(document, renderer: renderer, options: options, source: exportSourceURL)
-            exportedURL = url
-            Haptics.success()
-            showToast(options.saveToPhotos ? L("Saved to Photos") : L("Exported"))
-            return true
-        } catch {
-            Haptics.error()
-            showToast((error as? PicshopError)?.message ?? error.localizedDescription, isError: true)
-            return false
-        }
+        await runExport(options: options)
     }
 
     // MARK: - Toast

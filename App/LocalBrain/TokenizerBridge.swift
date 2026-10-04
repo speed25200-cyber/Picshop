@@ -18,6 +18,7 @@
 import Foundation
 import MLXLMCommon
 import PicshopCore
+import PicshopIntent
 import Tokenizers
 
 /// Loads the tokenizer from the model's own folder; nothing is fetched.
@@ -27,7 +28,29 @@ struct TokenizerBridge: MLXLMCommon.TokenizerLoader {
 
     func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
         let upstream = try await Tokenizers.AutoTokenizer.from(modelFolder: directory)
-        return Adapter(upstream, template: Self.patchedTemplate(in: directory))
+        let template = Self.patchedTemplate(in: directory)
+        Self.recordTemplate(template)
+        return Adapter(upstream, template: template)
+    }
+
+    // MARK: The template's hash (W3, D22 step 3)
+
+    private final class TemplateBox: @unchecked Sendable {
+        let lock = NSLock()
+        var hash = LivePrefixKey.templateHash("")
+    }
+
+    private static let templateBox = TemplateBox()
+
+    /// `LivePrefixKey.templateHash` of the template the loaded tokenizer renders with (the patched text, or a marker
+    /// for the tokenizer's own): a template change invalidates every persisted prefix.
+    static var templateHash: String {
+        templateBox.lock.withLock { templateBox.hash }
+    }
+
+    private static func recordTemplate(_ template: String?) {
+        let hash = LivePrefixKey.templateHash(template ?? "unpatched")
+        templateBox.lock.withLock { templateBox.hash = hash }
     }
 
     /// The folder's chat_template.jinja with the think block on every assistant turn;

@@ -25,12 +25,15 @@ public enum LiveTurnRouter {
     /// `mode`: the editor, for abstention. A grammar plan for words that name an operation the grammar
     /// does not own ("mets le calque en mode produit", "courbe en S") is capped below the fast lane, so the
     /// model answers; with no model, the turn goes to the local planners (an honest "pas encore").
+    /// `pendingYesNo`: the editor asked a question with no candidates (« On aplatit ? »); « oui » answers it locally,
+    /// as the executor re-runs the pending step (the model never sees that step's confirmation).
     public static func route(_ text: String, grammar original: EditPlan, brain: LiveBrainKind, ideasOnScreen: Int, jobRunning: Bool, fastLane: Bool,
-                             mode: EditorMode = .photo) -> LiveLane {
+                             mode: EditorMode = .photo, pendingYesNo: Bool = false) -> LiveLane {
         let utterance = NormalizedUtterance(text)
         let tokens = utterance.tokens
         if let command = control(tokens, ideasOnScreen: ideasOnScreen, jobRunning: jobRunning) { return .control(command) }
         if answersPendingChoice(original) { return .local(original) }
+        if pendingYesNo, !original.isEmpty, original.intents.allSatisfy({ $0.action == .confirm }) { return .local(original) }
         let grammar = FeatureFlags.isOn(.catalogOps) ? OperationAbstention.capped(original, utterance: text, domain: mode.opDomain) : original
         let abstained = grammar.confidence < original.confidence
         if brain == .local { return .local(abstained ? .unknown(text) : original) }

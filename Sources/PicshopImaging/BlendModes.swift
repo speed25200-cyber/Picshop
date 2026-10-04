@@ -26,8 +26,14 @@ public enum BlendModes {
     /// `opacity` (0…1) scales the layer's coverage. `seed` moves dissolve's noise (one per layer).
     /// `legacy`: the 12 modes before W1 blend as they did then, on linear values (the proTone
     /// kill switch); the 15 newer ones always blend the new way.
-    public static func composite(_ top: CIImage, over bottom: CIImage, mode: BlendMode, opacity: Double, seed: UInt64 = 0, legacy: Bool = false) -> CIImage {
-        let opacity = opacity.clamped(to: 0...1)
+    /// W3 (D6): `fill` (0…1) scales the layer's alpha before the blend and `opacity` mixes the result after; without
+    /// layer styles they give the same pixels, so the coverage is alpha × fill × opacity. `backdropIsOpaque: false`
+    /// (isolated groups, clipping groups, rasterising layers onto transparent) blends every mode but normal and
+    /// dissolve with W3C Compositing's source-over formula, in gamma-encoded values, so a multiply child over nothing
+    /// stays the child instead of turning black.
+    public static func composite(_ top: CIImage, over bottom: CIImage, mode: BlendMode, opacity: Double, seed: UInt64 = 0, legacy: Bool = false,
+                                 fill: Double = 1, backdropIsOpaque: Bool = true) -> CIImage {
+        let opacity = (opacity.clamped(to: 0...1) * fill.clamped(to: 0...1)).clamped(to: 0...1)
         guard opacity > 0.0005 else { return bottom }
         let bounds = bottom.extent
         if mode == .normal {
@@ -38,6 +44,13 @@ public enum BlendModes {
         }
         let area = top.extent.isInfinite ? bounds : top.extent.intersection(bounds)
         guard !area.isEmpty, !area.isNull else { return bottom }
+        if !backdropIsOpaque, mode != .dissolve, !bounds.isInfinite {
+            // D6 over a backdrop of any alpha: both sides gamma-encoded, the W3C formula, back to linear.
+            let source = encoded(top.cropped(to: area), in: area)
+            let backdrop = encoded(bottom, in: bounds)
+            let blended = compositeEncoded(source, over: backdrop, mode: mode, coverage: opacity, seed: seed, backdropIsOpaque: false)
+            return decoded(blended, in: bounds)
+        }
         // The layer's own colours, opaque over its area.
         let colours = top.cropped(to: area).unpremultiplyingAlpha().settingAlphaOne(in: area)
         let coverage = faded(top.cropped(to: area), opacity)
@@ -68,6 +81,84 @@ public enum BlendModes {
 
     /// The modes PhotoRenderer had before W1.
     static let legacyModes: Set<BlendMode> = [.multiply, .screen, .overlay, .softLight, .hardLight, .darken, .lighten, .difference, .luminosity, .color, .hue]
+
+    // MARK: - W3: the v2 compositor's space (D6)
+
+    /// One layer composited in gamma-encoded Display P3 (the v2 compositor's space, D6), W3C Compositing Level 1:
+    /// co = cs·αs·(1 − αb) + cb·αb·(1 − αs) + αs·αb·B(cb, cs), αo = αs + αb·(1 − αs), with
+    /// `BlendMath.compositeRGBA` as the CPU reference. `source` and `backdrop` are premultiplied gamma-encoded values;
+    /// `coverage` (fill × opacity) scales the source's alpha. Normal is a plain source-over of those values, which is
+    /// the formula with B = cs. A known-opaque backdrop skips the (1 − αb)·Cs term, which is then zero.
+    static func compositeEncoded(_ source: CIImage, over backdrop: CIImage, mode: BlendMode, coverage: Double, seed: UInt64,
+                                 backdropIsOpaque: Bool) -> CIImage {
+        let amount = coverage.clamped(to: 0...1)
+        guard amount > 0.0005 else { return backdrop }
+        let bounds = backdrop.extent
+        let fadedSource = faded(source, amount)
+        if mode == .normal {
+            return fadedSource.composited(over: backdrop).cropped(to: bounds)
+        }
+        let area = source.extent.isInfinite ? bounds : source.extent.intersection(bounds)
+        guard !area.isEmpty, !area.isNull, !area.isInfinite else { return backdrop }
+        // The layer's own colours, opaque over its area.
+        let colours = opaqueColours(source.cropped(to: area), in: area)
+        let coverageImage = fadedSource.cropped(to: area)
+        if mode == .dissolve {
+            // Coordinate-seeded noise (absolute canvas coordinates): strips and tiles take the same pixels.
+            let mask = dissolveMask(coverage: coverageImage, area: area, seed: seed)
+            return blendWithMask(colours, over: backdrop, mask: mask).cropped(to: bounds)
+        }
+        let backdropArea = backdrop.cropped(to: area)
+        let base = backdropIsOpaque ? backdropArea.settingAlphaOne(in: area) : opaqueColours(backdropArea, in: area)
+        let blended: CIImage
+        switch mode {
+        case .darkerColor, .lighterColor:
+            let choose = sumMask(top: colours, bottom: base, topIsLighter: mode == .lighterColor)
+            blended = blendWithMask(colours, over: base, mask: choose)
+        default:
+            blended = separable(mode, top: colours, bottom: base, area: area)
+        }
+        // Cs′ = (1 − αb)·Cs + αb·B: where nothing lies beneath, the layer keeps its own colour.
+        let mixed = backdropIsOpaque ? blended.cropped(to: area) : alphaMix(blended.cropped(to: area), background: colours, alphaOf: backdropArea)
+        // Cs′ with the layer's coverage, source-over onto the backdrop.
+        let piece = withAlpha(mixed, from: coverageImage, in: area)
+        return piece.composited(over: backdrop).cropped(to: bounds)
+    }
+
+    /// Premultiplied linear values → premultiplied gamma-encoded values (the sRGB transfer curve, which Display P3
+    /// shares). The colour is made opaque before the curve and its alpha put back after, so the curve never sees a
+    /// premultiplied value whatever the filter does with alpha.
+    static func encoded(_ image: CIImage, in rect: CGRect) -> CIImage {
+        guard !rect.isEmpty, !rect.isInfinite, !rect.isNull else { return image }
+        let straight = image.cropped(to: rect).unpremultiplyingAlpha()
+        return withAlpha(gamma(straight.settingAlphaOne(in: rect)), from: straight, in: rect)
+    }
+
+    /// The inverse of `encoded`.
+    static func decoded(_ image: CIImage, in rect: CGRect) -> CIImage {
+        guard !rect.isEmpty, !rect.isInfinite, !rect.isNull else { return image }
+        let straight = image.cropped(to: rect).unpremultiplyingAlpha()
+        return withAlpha(linear(straight.settingAlphaOne(in: rect)), from: straight, in: rect)
+    }
+
+    /// The straight colour of a premultiplied image, opaque over `rect` (black where it is transparent).
+    static func opaqueColours(_ image: CIImage, in rect: CGRect) -> CIImage {
+        image.cropped(to: rect).unpremultiplyingAlpha().settingAlphaOne(in: rect)
+    }
+
+    /// An opaque colour image given the alpha of `alphaSource`: premultiplied (c·α, α) over `rect`, clear elsewhere.
+    static func withAlpha(_ opaque: CIImage, from alphaSource: CIImage, in rect: CGRect) -> CIImage {
+        alphaMix(opaque.cropped(to: rect), background: CIImage(color: .clear).cropped(to: rect), alphaOf: alphaSource.cropped(to: rect))
+    }
+
+    /// `image` × α + `background` × (1 − α), α being `alphaOf`'s alpha (CIBlendWithAlphaMask).
+    static func alphaMix(_ image: CIImage, background: CIImage, alphaOf mask: CIImage) -> CIImage {
+        let filter = CIFilter.blendWithAlphaMask()
+        filter.inputImage = image
+        filter.backgroundImage = background
+        filter.maskImage = mask
+        return filter.outputImage ?? background
+    }
 
     // MARK: - Pieces
 

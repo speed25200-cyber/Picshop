@@ -2,7 +2,7 @@
 # Stable Diffusion "Generative Fill" runtime.
 #   xcodegen generate --spec project-pro.yml
 include:
-  - project.yml
+  - project.yml   # with its options (the .icon file type) and settings (AppIcon)
 packages:
   StableDiffusion:
     url: https://github.com/apple/ml-stable-diffusion

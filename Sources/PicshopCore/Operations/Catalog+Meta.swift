@@ -31,10 +31,24 @@ enum CatalogMeta {
 }
 
 extension OperationCatalog {
-    /// Every entry, photo first, then video, PDF and meta. Retrieval breaks ties in this order.
+    /// Every entry, photo first, then video, PDF, recipes and meta. Retrieval breaks ties in this order.
     static var entries: [OperationSpec] {
-        CatalogPhotoTone.all + CatalogPhotoColor.all + CatalogPhotoRetouch.all + CatalogPhotoGeometry.all + CatalogPhotoText.all
-            + CatalogPhotoTable.all + CatalogPhotoLayers.all + CatalogPhotoMasks.all + CatalogVideoEdit.all + CatalogVideoMagic.all + CatalogVideoAudio.all
-            + CatalogPDF.all + CatalogMeta.all
+        let specs = CatalogPhotoTone.all + CatalogPhotoColor.all + CatalogPhotoRetouch.all + CatalogPhotoGeometry.all + CatalogPhotoText.all
+            + CatalogPhotoTable.all + CatalogPhotoLayers.all + CatalogPhotoLayerOps.all + CatalogPhotoMasks.all
+            + CatalogVideoEdit.all + CatalogVideoMagic.all + CatalogVideoAudio.all
+            + CatalogPDF.all + CatalogRecipes.all + CatalogMeta.all
+        return specs.map(withInspectorFlags)
+    }
+
+    /// W3 (D18): refs, points, boxes, lists and text never give an inspector row, so their `inspector` flag says so.
+    static func withInspectorFlags(_ spec: OperationSpec) -> OperationSpec {
+        var spec = spec
+        for index in spec.params.indices {
+            switch spec.params[index].kind {
+            case .ref, .point, .box, .list, .text: spec.params[index].inspector = false
+            case .enumeration, .number, .integer, .boolean, .color: break
+            }
+        }
+        return spec
     }
 }

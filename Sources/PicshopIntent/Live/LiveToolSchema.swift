@@ -32,7 +32,7 @@ public enum LiveToolSchema {
     /// Fields only the photo schema has: the table steps' (cells … decimals) and the text and region
     /// primitives' (ref … match).
     public static let photoFields: Set<String> = [
-        "cells", "row", "column", "values", "min", "max", "decimals", "ref", "box", "size", "weight", "align", "font", "match",
+        "cells", "row", "column", "values", "min", "max", "decimals", "ref", "box", "size", "weight", "align", "font", "match", "layer",
     ]
     /// Exact values of the photo enums (the validator refuses anything else).
     public static let cellsValues = ["empty", "all"]
@@ -158,7 +158,9 @@ public enum LiveToolSchema {
             properties["max"] = ["type": "number", "description": "fillCells random: the largest value."]
             properties["decimals"] = ["type": "integer", "minimum": 0, "maximum": 3, "description": "fillCells random: decimal places."]
             properties["ref"] = ["type": "string", "maxLength": 8,
-                                 "description": "An id from the scene lines: t3 (printed text), l2 (text layer), o1 (object), f1 (free area)."]
+                                 "description": "An id from the scene lines: t3 (printed text), l2 (text layer), o1 (object), f1 (free area); selectLayer, duplicateLayer and deleteLayer also take a layer id from the layers line (i1, j1, s1, g1)."]
+            properties["layer"] = ["type": "string", "maxLength": 8,
+                                   "description": "adjust, applyLook, matchColor: the layer they change, an id from the layers line (i1 an image layer, j1 an adjustment layer; i0 the photo)."]
             properties["box"] = ["type": "array", "minItems": 4, "maxItems": 4, "items": ["type": "number", "minimum": 0, "maximum": 1],
                                  "description": "[x1, y1, x2, y2] from 0 to 1, top-left origin: the area eraseRegion erases, or where addText and moveText write."]
             properties["size"] = ["type": "string", "maxLength": 12,

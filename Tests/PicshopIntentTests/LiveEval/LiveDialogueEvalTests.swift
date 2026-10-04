@@ -197,6 +197,23 @@ final class LiveDialogueEvalTests: XCTestCase {
         name.utf8.reduce(UInt64(0xcbf29ce484222325)) { ($0 ^ UInt64($1)) &* 0x100000001b3 }
     }
 
+    /// W3 (§8.7): the 12 layer dialogues, French and English, pass with the scripted 4B on the lake.
+    func testTheLayerDialoguesPassWithTheScriptedModel() async throws {
+        let cases = LiveDialogueCases.layers
+        XCTAssertGreaterThanOrEqual(cases.count, 12)
+        XCTAssertGreaterThanOrEqual(cases.filter { $0.language == .english }.count, 3)
+        XCTAssertEqual(Set(cases.map(\.name)).count, cases.count)
+        var failures: [String] = []
+        for testCase in cases {
+            let oracle = DialogueOracle()
+            let results = await LiveDialogueEvalRunner.run(testCase, brain: Self.scriptedBrain(oracle: oracle, seed: 3), onTurn: { oracle.set($0) })
+            for (index, result) in results.enumerated() where !result.passed || !result.gates.isEmpty {
+                failures.append("\(testCase.name) #\(index + 1): \((result.failures + result.gates).joined(separator: "; ")) — said '\(result.spoken)'")
+            }
+        }
+        XCTAssertEqual(failures, [])
+    }
+
     static func scriptedBrain(oracle: DialogueOracle, seed: UInt64) -> any LiveBrain {
         let factory: LocalChatEngineFactory = { _ in ScriptedQwenEngine(info: ScriptedQwenEngine.modelInfo, seed: seed, answer: { oracle.answer($0) }) }
         return LocalModelLiveBrain(mode: .photo, info: ScriptedQwenEngine.modelInfo, makeEngine: factory, fallback: nil)

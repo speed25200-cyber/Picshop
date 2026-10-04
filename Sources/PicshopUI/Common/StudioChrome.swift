@@ -118,6 +118,8 @@ struct StudioContext: Equatable {
     var title: String
     /// The zoom to show when no StudioZoomMirror is in the environment; nil hides it.
     var zoomPercent: Int?
+    /// W3: « Transparence » in the zoom menu, checked when the checkerboard shows; nil hides the item (video, PDF).
+    var showsTransparency: Bool? = nil
 }
 
 /// A choice in the title's zoom menu.
@@ -129,6 +131,8 @@ enum StudioZoom: Equatable {
     /// « 100 % »: one image pixel per device pixel (W2), the menu's last item; PhotoEditorView maps it to
     /// `PhotoEditorSession.zoomToActualPixels()`.
     case actualPixels
+    /// W3: « Transparence » toggles the checkerboard under transparent areas (view only).
+    case transparency
 
     /// The menu's zoom levels besides Ajuster.
     static let levels = [200, 400]
@@ -447,6 +451,13 @@ struct StudioContextMenu: View {
                     onZoom(.actualPixels)
                 } label: {
                     Label(L("100 % (actual pixels)"), systemImage: "1.magnifyingglass")
+                }
+                if let shows = context.showsTransparency {
+                    Divider()
+                    Toggle(isOn: Binding(get: { shows }, set: { _ in onZoom(.transparency) })) {
+                        Label(L("Transparency"), systemImage: "checkerboard.rectangle")
+                    }
+                    .accessibilityIdentifier("canvas.transparency")
                 }
             } label: {
                 label(percent: percent, showsChevron: true)

@@ -2,9 +2,9 @@
 import SwiftUI
 import PicshopCore
 
-/// The selected layer's opacity dial and blend menu, in the Layers panel. The
-/// dial owns the dragged value (one undo step per drag); the menu lists the
-/// 27 blend modes in Photoshop's sections (Normal, Darken, Lighten, Contrast,
+/// The selected layer's opacity dial and blend menu: W3's Layers inspector shows them when its generated rows are off
+/// (`paramInspector`). The dial owns the dragged value (one undo step per drag, through `applyLayerEdit`, so locks
+/// refuse it); the menu lists the 27 blend modes in Photoshop's sections (Normal, Darken, Lighten, Contrast,
 /// Inversion, Component), or the 12 of before with pro tone off.
 struct LayerBlendControls: View {
     let session: PhotoEditorSession
@@ -16,7 +16,8 @@ struct LayerBlendControls: View {
         HStack(spacing: 10) {
             DialSlider(value: $opacity, range: 0...1, neutral: 1, label: L("Opacity"), format: { "\(Int(($0 * 100).rounded()))%" }) { editing in
                 isDragging = editing
-                if editing { session.beginInteraction(label: "Opacity") } else { session.endInteraction() }
+                // W3: through the layer path (locks, the `.layerPlacement` snapshot).
+                if editing { session.beginLayerPropertyDrag(layer.id, label: "Opacity") } else { session.endInteraction() }
             }
             .onChange(of: opacity) { _, value in
                 // Every frame of a drag goes to the session (back to the start too); a tap only when it changes.

@@ -8,8 +8,9 @@ import PicshopImaging
 /// add, subtract or intersect, inverted or not), its stack (feather, expand, density, invert), the canvas tool in
 /// use (handles, brush, range editor, object pick) and what it does (MaskAdjustmentControls).
 ///
-/// Masks act on the background photo in W2. Every control carries its MaskPanelInventory id, and every change goes
-/// through the session's `applyLocalEdit` path, the one the voice uses.
+/// Masks act on the active image layer (W3: the selected image layer, else the background photo). Every control
+/// carries its MaskPanelInventory id, and every change goes through the session's `applyLocalEdit` path, the one the
+/// voice uses.
 struct MasksPanel: View {
     @Bindable var session: PhotoEditorSession
 
@@ -17,8 +18,9 @@ struct MasksPanel: View {
         let state = session.maskState
         let masks = session.document.localAdjustments
         VStack(alignment: .leading, spacing: PSSpacing.medium) {
-            if session.masksActOnAnotherLayer {
-                MaskCaption(text: L("Masks apply to the background photo."), symbol: "info.circle")
+            // W3: masks act on the active image layer; on another layer than the photo the panel names it.
+            if let target = session.masksTargetName {
+                MaskCaption(text: String(format: L("On: %@"), target), symbol: "square.3.layers.3d")
             }
             if let working = state.aiWorking {
                 AIMaskWorkingRow(session: session, region: working.region)

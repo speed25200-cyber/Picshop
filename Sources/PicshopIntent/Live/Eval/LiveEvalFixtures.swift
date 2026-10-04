@@ -306,6 +306,21 @@ public struct LiveEvalServices: PhotoAIServices {
         try simulation().rasterize(stack, in: document)
     }
 
+    // W3: layers (the synthetic rasters keep the structural checks meaningful, §8.7).
+    public func aiMask(_ request: AIMaskRequest, in document: PhotoDocument, layer: UUID?) async throws -> AIMaskResult {
+        calls.hit("aiMask")
+        return try simulation().aiMask(request, in: document, layer: layer)
+    }
+
+    public func rasterizeLayers(_ request: LayerRasterRequest, in document: PhotoDocument) async throws -> LayerRasterResult {
+        calls.hit("rasterizeLayers")
+        return (masks ?? MaskSimulation()).rasterizeLayers(request, in: document)
+    }
+
+    public func contentSize(of layerID: UUID, in document: PhotoDocument) async -> PSSize? {
+        (masks ?? MaskSimulation()).contentSize(of: layerID, in: document)
+    }
+
     public func combineSelection(_ current: PhotoSelection?, with new: RasterRef, mode: CombineMode?, in document: PhotoDocument) async throws -> PhotoSelection {
         try simulation().combineSelection(current, with: new, mode: mode, in: document)
     }
@@ -597,6 +612,103 @@ public struct MaskSimulation: Sendable {
         return (objects + groundable).first { words.contains($0.label) }?.boundingBox
     }
 
+    // MARK: Layers (W3)
+
+    /// `aiMask(_:in:layer:)`: the same simulated regions on a layer's own pixels (its content space).
+    public func aiMask(_ request: AIMaskRequest, in document: PhotoDocument, layer: UUID?) throws -> AIMaskResult {
+        var result = try aiMask(request, in: document)
+        // Made for that layer's own state, as the renderer's content-space proxy stamps it.
+        result.raster.stateKey = document.maskStateKey(on: layer)
+        return result
+    }
+
+    /// `rasterizeLayers`: a synthetic canvas-sized asset whose opaque bounds are the union of the flattened layers'
+    /// placed bounds (the whole canvas for the visible composite), so the structure edits place it as a renderer would.
+    public func rasterizeLayers(_ request: LayerRasterRequest, in document: PhotoDocument) -> LayerRasterResult {
+        let bounds: PSRect
+        let key: String
+        switch request {
+        case .visible:
+            bounds = .unit
+            key = "visible-\(document.layers.map(\.id.uuidString).joined())"
+        case .layers(let ids), .merged(let ids):
+            let boxes = ids.compactMap { document.layer(id: $0) }.map { layer -> PSRect in
+                guard layer.id != document.baseLayerID, let size = LayerPlacement.contentSize(of: layer, canvasSize: document.canvasSize) else { return .unit }
+                return LayerPlacement.bounds(for: layer, contentSize: size, canvasSize: document.canvasSize, isBase: false).clampedToUnit()
+            }
+            bounds = boxes.dropFirst().reduce(boxes.first ?? .unit) { $0.union($1) }
+            key = ids.map(\.uuidString).joined(separator: ",")
+        }
+        let pixels = PSSize(width: (bounds.width * document.canvasSize.width).rounded(), height: (bounds.height * document.canvasSize.height).rounded())
+        let asset = MediaAsset(kind: .image, relativePath: "media/raster-\(StableHash.hex(key)).png", pixelSize: pixels.isEmpty ? document.canvasSize : pixels)
+        return LayerRasterResult(asset: asset, opaqueBounds: bounds)
+    }
+
+    /// Text and shape sizes at the canvas size: a shape's relative size, a text's from its font size.
+    public func contentSize(of layerID: UUID, in document: PhotoDocument) -> PSSize? {
+        guard let layer = document.layer(id: layerID) else { return nil }
+        if let size = LayerPlacement.contentSize(of: layer, canvasSize: document.canvasSize) { return size }
+        guard let element = layer.textElement else { return nil }
+        let em = max(2, element.relativeSize * document.canvasSize.height)
+        return PSSize(width: min(Double(max(1, element.text.count)) * 0.55 * em, element.maxRelativeWidth * document.canvasSize.width), height: em * 1.25)
+    }
+
+    /// The W3 probes from document facts: merges, stamps, via copy/cut and an applied mask keep the composite; a new or
+    /// edited fill, gradient or non-neutral adjustment layer changes it; a layer mask covers what its stack covers.
+    func layerProbe(_ request: PixelProbeRequest, before: PhotoDocument, after: PhotoDocument) -> PixelProbeResult? {
+        let probe = request.probe
+        if probe == .compositeUnchanged {
+            let stats = global(Self.base, document: before)
+            let regions = PixelStats.Regions(inside: stats, outside: stats, coverage: 1)
+            return PixelProbeResult(request: request, before: regions, after: regions)
+        }
+        if probe == .compositeChanged {
+            let stats = global(Self.base, document: before)
+            var changed = stats
+            let old = Dictionary(before.layers.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            for layer in after.layers where layer.isVisible && (old[layer.id] == nil || old[layer.id] != layer) {
+                switch layer.content {
+                case .fill(let color):
+                    let lab = MaskMath.lab(color)
+                    changed.meanL += (lab.l - stats.meanL) * 0.5 * layer.opacity
+                    changed.meanA += (lab.a - stats.meanA) * 0.5 * layer.opacity
+                    changed.meanB += (lab.b - stats.meanB) * 0.5 * layer.opacity
+                case .gradientFill(let gradient):
+                    for t in [0.0, 0.5, 1.0] {
+                        let colour = gradient.color(at: t)
+                        let lab = MaskMath.lab(colour), weight = 0.15 * colour.alpha * layer.opacity
+                        changed.meanL += (lab.l - stats.meanL) * weight
+                        changed.meanA += (lab.a - stats.meanA) * weight
+                        changed.meanB += (lab.b - stats.meanB) * weight
+                    }
+                case .adjustment(let dials):
+                    let recipe = layer.edits.operations.count
+                    changed.meanL += 30 * (dials[.exposure] + dials[.brightness]) * layer.opacity + Double(min(recipe, 1)) * 2
+                    changed.stdL += 15 * dials[.contrast] * layer.opacity
+                    changed.meanChroma += 25 * (dials[.saturation] + dials[.vibrance]) * layer.opacity
+                    changed.meanB += 25 * dials[.temperature] * layer.opacity
+                    changed.meanA += 25 * dials[.tint] * layer.opacity
+                case .image, .text, .shape, .group, .unsupported:
+                    changed.meanL += 1
+                }
+            }
+            return PixelProbeResult(request: request, before: PixelStats.Regions(inside: stats, outside: stats, coverage: 1),
+                                    after: PixelStats.Regions(inside: changed, outside: changed, coverage: 1))
+        }
+        if probe == .layerMaskCoverageInRange {
+            let old = Dictionary(before.layers.map { ($0.id, $0.maskStack) }, uniquingKeysWith: { first, _ in first })
+            let touched = after.layers.filter { layer in layer.maskStack != nil && (old[layer.id] == nil || old[layer.id]! != layer.maskStack) }
+            guard let layer = touched.first(where: { $0.id == after.selectedLayerID }) ?? touched.last, let stack = layer.maskStack else {
+                return PixelProbeResult(request: request, before: nil, after: nil)
+            }
+            let stats = global(Self.base, document: after)
+            let previous = old[layer.id].flatMap { $0 }.map { coverage(of: $0) }
+            return PixelProbeResult(request: request, before: previous.map { PixelStats.Regions(inside: stats, outside: stats, coverage: $0) },
+                                    after: PixelStats.Regions(inside: stats, outside: stats, coverage: coverage(of: stack)))
+        }
+        return nil
+    }
+
     // MARK: Pixel probes
 
     /// The probe proxy's pixel count (256 × 256).
@@ -606,14 +718,18 @@ public struct MaskSimulation: Sendable {
 
     public func pixelProbes(_ requests: [PixelProbeRequest], before: PhotoDocument, after: PhotoDocument) -> [PixelProbeResult] {
         requests.map { request in
+            // W3: the composite and layer-mask probes, from document facts (§8.7).
+            if let layered = layerProbe(request, before: before, after: after) { return layered }
             let oneMask = request.probe == .maskedParameter || request.probe == .selectionUse
             switch request.region {
             case .localAdjustment(let id):
-                let old = before.localAdjustment(id: id), new = after.localAdjustment(id: id)
+                // W3: the adjustment on whichever image layer owns it.
+                let old = before.allLocalAdjustments.first { $0.adjustment.id == id }?.adjustment
+                let new = after.allLocalAdjustments.first { $0.adjustment.id == id }?.adjustment
                 let maskBefore = oneMask ? (new ?? old) : old
                 let maskAfter = oneMask ? (new ?? old) : new
                 return PixelProbeResult(request: request,
-                                        before: maskBefore.map { regions(document: before, mask: $0, adjustment: before.localAdjustment(id: id)) },
+                                        before: maskBefore.map { regions(document: before, mask: $0, adjustment: old) },
                                         after: maskAfter.map { regions(document: after, mask: $0, adjustment: new) })
             case .selection:
                 let old = before.selection, new = after.selection

@@ -1,6 +1,8 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
+import UIKit
 import Observation
+import PicshopCore
 
 /// The inspector's three heights.
 enum InspectorDetent: CaseIterable, Comparable {
@@ -290,6 +292,171 @@ struct InspectorRow: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
         .accessibilityValue(value)
+    }
+}
+
+// MARK: - W3: the generated rows' other control kinds (D18)
+
+/// A boolean param: the label and a switch (« Écrêter au calque du dessous », « Transfert », « Inverser »).
+struct InspectorToggleRow: View {
+    let label: String
+    let isOn: Bool
+    /// The PhotoPanelInventory id (the row's accessibility identifier).
+    var controlID = ""
+    var isEnabled = true
+    let onChange: (Bool) -> Void
+
+    var body: some View {
+        Toggle(isOn: Binding(get: { isOn }, set: { onChange($0) })) {
+            Text(label)
+                .font(PSFontRole.inspectorLabel)
+                .foregroundStyle(Color.psTextSecondary)
+        }
+        .disabled(!isEnabled)
+        .frame(minHeight: PSMetrics.inspectorRow)
+        .accessibilityIdentifier(controlID)
+    }
+}
+
+/// One choice among a few (a segmented control, ≤ 4 values) or many (a menu chip): « Verrouillage », « Style ».
+struct InspectorChoiceRow: View {
+    struct Option: Hashable {
+        var value: String
+        var title: String
+    }
+
+    let label: String
+    let options: [Option]
+    let selection: String?
+    var asMenu = false
+    var controlID = ""
+    var isEnabled = true
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        let current = options.first { $0.value == selection }
+        Group {
+            if asMenu {
+                HStack(spacing: PSSpacing.small) {
+                    Text(label)
+                        .font(PSFontRole.inspectorLabel)
+                        .foregroundStyle(Color.psTextSecondary)
+                    Spacer(minLength: PSSpacing.small)
+                    Menu {
+                        ForEach(options, id: \.self) { option in
+                            Button {
+                                Haptics.tick()
+                                onSelect(option.value)
+                            } label: {
+                                if option.value == selection {
+                                    Label(option.title, systemImage: "checkmark")
+                                } else {
+                                    Text(option.title)
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: PSSpacing.xSmall) {
+                            Text(current?.title ?? "–")
+                                .font(PSFontRole.inspectorValue)
+                                .lineLimit(1)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(Color.psTextTertiary)
+                        }
+                        .foregroundStyle(Color.psTextPrimary)
+                        .padding(.horizontal, PSSpacing.medium)
+                        .frame(minHeight: PSMetrics.chip)
+                        .background(Capsule().fill(Color.psFillControl))
+                        .contentShape(Capsule())
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(PSPressStyle(scale: 0.97))
+                }
+                .frame(minHeight: PSMetrics.inspectorRow)
+            } else {
+                VStack(alignment: .leading, spacing: PSSpacing.small) {
+                    Text(label)
+                        .font(PSFontRole.inspectorLabel)
+                        .foregroundStyle(Color.psTextSecondary)
+                    Picker(label, selection: Binding(get: { selection ?? "" }, set: { onSelect($0) })) {
+                        ForEach(options, id: \.self) { option in
+                            Text(option.title).tag(option.value)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .sensoryFeedback(.selection, trigger: selection)
+                }
+                .padding(.vertical, PSSpacing.xSmall)
+            }
+        }
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.4)
+        .accessibilityIdentifier(controlID)
+        .accessibilityValue(current?.title ?? "")
+    }
+}
+
+/// A colour param: the label and the system colour well.
+struct InspectorColorRow: View {
+    let label: String
+    let color: PSColor
+    var supportsOpacity = true
+    var controlID = ""
+    let onChange: (PSColor) -> Void
+
+    var body: some View {
+        HStack(spacing: PSSpacing.small) {
+            Text(label)
+                .font(PSFontRole.inspectorLabel)
+                .foregroundStyle(Color.psTextSecondary)
+            Spacer(minLength: PSSpacing.small)
+            ColorPicker(label, selection: Binding(get: { Color(psColor: color) }, set: { onChange(PSColor(swiftUIColor: $0)) }),
+                        supportsOpacity: supportsOpacity)
+                .labelsHidden()
+        }
+        .frame(minHeight: PSMetrics.inspectorRow)
+        .accessibilityIdentifier(controlID)
+    }
+}
+
+/// An integer param: the label, the value and a stepper.
+struct InspectorStepperRow: View {
+    let label: String
+    let value: Int
+    let range: ClosedRange<Int>
+    var controlID = ""
+    let onChange: (Int) -> Void
+
+    var body: some View {
+        Stepper(value: Binding(get: { value }, set: { onChange($0.clamped(to: range)) }), in: range) {
+            HStack {
+                Text(label)
+                    .font(PSFontRole.inspectorLabel)
+                    .foregroundStyle(Color.psTextSecondary)
+                Spacer(minLength: PSSpacing.small)
+                Text(verbatim: "\(value)")
+                    .font(PSFontRole.inspectorValue)
+                    .foregroundStyle(Color.psTextPrimary)
+            }
+        }
+        .frame(minHeight: PSMetrics.inspectorRow)
+        .accessibilityIdentifier(controlID)
+    }
+}
+
+private extension Int {
+    func clamped(to range: ClosedRange<Int>) -> Int { Swift.min(Swift.max(self, range.lowerBound), range.upperBound) }
+}
+
+extension PSColor {
+    /// A SwiftUI colour (the colour well's) in sRGB components, clamped to 0…1.
+    init(swiftUIColor color: Color) {
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 1
+        UIColor(color).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        func unit(_ value: CGFloat) -> Double { Swift.min(1, Swift.max(0, Double(value))) }
+        self.init(red: unit(red), green: unit(green), blue: unit(blue), alpha: unit(alpha))
     }
 }
 #endif

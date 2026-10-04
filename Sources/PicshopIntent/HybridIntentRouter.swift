@@ -180,6 +180,10 @@ public actor HybridIntentRouter {
 
         guard preferredEngine != .rules, let engine = llmEngines[preferredEngine], await engine.isAvailable() else {
             lastResolvedEngine = .rules
+            // W3 (§8.4): a layer request W3 does not do: the honest answer and the nearest operation (or the one that does it).
+            if abstains, FeatureFlags.isOn(.layerOps), let family = UnsupportedLayerRequests.match(trimmed, domain: context.mode.opDomain) {
+                return UnsupportedLayerRequests.plan(family, utterance: trimmed, language: NormalizedUtterance(trimmed).language)
+            }
             // No model: an operation only the model can reach gets an honest answer, not the grammar's guess.
             if let unowned { return Self.notWithoutModel(unowned, utterance: trimmed, context: context, plan: fast) }
             return fast

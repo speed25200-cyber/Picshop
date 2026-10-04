@@ -230,6 +230,75 @@ final class ModelBrokerPolicyTests: XCTestCase {
         XCTAssertEqual(ModelBrokerPolicy.exportReleases(residents: busyLLM, megapixels: 48, availableBytes: nil), [.sam])
     }
 
+    // MARK: Export with the estimate (W3, D15)
+
+    private var exportResidents: [ModelResident] {
+        [ModelResident(client: .llm, bytes: llm4B, priority: .interactive),
+         ModelResident(client: .depth, bytes: depth, priority: .interactive),
+         ModelResident(client: .sam, bytes: sam, priority: .interactive),
+         ModelResident(client: .lama, bytes: 380 * mib, priority: .interactive)]
+    }
+
+    func testTheEstimateKeepsTheLLMWhenTheExportFits() {
+        let jpeg48 = ExportBudget.peakBytes(format: .jpeg, bitDepth: 8, width: 8_064, height: 6_048, layers: 1, streaming: true)
+        // 48 MP no longer releases the LLM by itself: a streamed JPEG needs ≈ 40 MB.
+        XCTAssertEqual(ModelBrokerPolicy.exportReleases(residents: exportResidents, peakBytes: jpeg48, megapixels: 48, availableBytes: 1_400 * mib),
+                       [.sam, .depth])
+        let png16 = ExportBudget.peakBytes(format: .png, bitDepth: 16, width: 8_064, height: 6_048, layers: 1, streaming: true)
+        XCTAssertEqual(ModelBrokerPolicy.exportReleases(residents: exportResidents, peakBytes: png16, megapixels: 48, availableBytes: 1_500 * mib),
+                       [.sam, .depth])
+        XCTAssertFalse(ModelBrokerPolicy.exportNeedsLLMMemory(peakBytes: png16, availableBytes: 1_500 * mib))
+    }
+
+    func testA48MPTenBitHEICUnder1Point5GBReleasesTheLLMThroughTheEstimateAlone() {
+        let heic10 = ExportBudget.peakBytes(format: .heic, bitDepth: 10, width: 8_064, height: 6_048, layers: 1, streaming: true)
+        XCTAssertEqual(ModelBrokerPolicy.exportReleases(residents: exportResidents, peakBytes: heic10, megapixels: 48, availableBytes: 1_400 * mib),
+                       [.sam, .depth, .llm])
+        XCTAssertEqual(ModelBrokerPolicy.exportReleases(residents: exportResidents, peakBytes: heic10, megapixels: 48, availableBytes: 1_499_000_000),
+                       [.sam, .depth, .llm])
+        // The same export with room to spare keeps it: there is no format or size clause.
+        XCTAssertEqual(ModelBrokerPolicy.exportReleases(residents: exportResidents, peakBytes: heic10, megapixels: 48, availableBytes: 2_500 * mib),
+                       [.sam, .depth])
+        // A small export on a short phone keeps it too, unlike W2's 1.5 GB clause.
+        let jpeg12 = ExportBudget.peakBytes(format: .jpeg, bitDepth: 8, width: 4_032, height: 3_024, layers: 1, streaming: false)
+        XCTAssertEqual(ModelBrokerPolicy.exportReleases(residents: exportResidents, peakBytes: jpeg12, megapixels: 12, availableBytes: 1_200 * mib),
+                       [.sam, .depth])
+    }
+
+    func testTheExportInequality() {
+        let available = 2_000 * mib
+        let room = available - floor - ModelBrokerPolicy.exportMarginBytes
+        XCTAssertEqual(ModelBrokerPolicy.exportMarginBytes, 300 * mib)
+        XCTAssertFalse(ModelBrokerPolicy.exportNeedsLLMMemory(peakBytes: room, availableBytes: available))
+        XCTAssertTrue(ModelBrokerPolicy.exportNeedsLLMMemory(peakBytes: room + 1, availableBytes: available))
+        // Unknown memory (macOS, tests) never releases the LLM; SAM and Depth still go.
+        XCTAssertFalse(ModelBrokerPolicy.exportNeedsLLMMemory(peakBytes: Int.max / 2, availableBytes: nil))
+        XCTAssertEqual(ModelBrokerPolicy.exportReleases(residents: exportResidents, peakBytes: Int.max / 2, megapixels: 200, availableBytes: nil),
+                       [.sam, .depth])
+        // Only what is loaded, and never a busy model.
+        XCTAssertEqual(ModelBrokerPolicy.exportReleases(residents: [], peakBytes: 1 << 40, megapixels: 48, availableBytes: 100), [])
+        let busyLLM = [ModelResident(client: .llm, bytes: llm4B, priority: .interactive, isBusy: true),
+                       ModelResident(client: .sam, bytes: sam, priority: .interactive)]
+        XCTAssertEqual(ModelBrokerPolicy.exportReleases(residents: busyLLM, peakBytes: 1 << 40, megapixels: 48, availableBytes: 100), [.sam])
+    }
+
+    func testTheLedgerWaitsForABusyLLMThenReleasesIt() {
+        var ledger = ModelBrokerLedger()
+        ledger.noteLoaded(.llm, bytes: llm4B, now: 0)
+        ledger.noteLoaded(.sam, bytes: sam, now: 1)
+        ledger.markBusy(.llm, true, now: 2)
+        let heavy = 1_000 * mib
+        XCTAssertTrue(ledger.exportWaitsForLLM(peakBytes: heavy, availableBytes: 1_400 * mib))
+        XCTAssertFalse(ledger.exportWaitsForLLM(peakBytes: 10 * mib, availableBytes: 3_000 * mib), "it fits: nothing to wait for")
+        XCTAssertFalse(ledger.exportWaitsForLLM(peakBytes: heavy, availableBytes: nil))
+        XCTAssertEqual(ledger.releaseForExport(peakBytes: heavy, megapixels: 48, availableBytes: 1_400 * mib), [.sam], "never mid-turn")
+        XCTAssertTrue(ledger.isResident(.llm))
+        ledger.markBusy(.llm, false, now: 3)
+        XCTAssertFalse(ledger.exportWaitsForLLM(peakBytes: heavy, availableBytes: 1_400 * mib))
+        XCTAssertEqual(ledger.releaseForExport(peakBytes: heavy, megapixels: 48, availableBytes: 1_400 * mib), [.llm])
+        XCTAssertTrue(ledger.residents.isEmpty)
+    }
+
     // MARK: The ledger
 
     func testLedgerTracksLoadsBusyMarksAndEvictions() {

@@ -129,6 +129,9 @@ public enum LocalChatEvent: Sendable, Equatable {
     case finished(LiveGenerationStats, LocalStopReason)
 }
 
+/// Which engine runs a conversation (W3, D22): W2's ChatSession engine, or the KV engine with checkpoints.
+public enum LocalEngineKind: String, Sendable, Codable { case chatSession, kvEngine }
+
 /// One conversation with a loaded model: one KV cache, reused turn after turn.
 public protocol LocalChatEngine: Sendable {
     var info: LocalModelInfo { get }
@@ -139,6 +142,15 @@ public protocol LocalChatEngine: Sendable {
     /// Tokens held in the conversation's cache.
     func contextTokens() async -> Int
     func close() async
+    /// W3: which engine this is; the brain picks its D23 limits from it.
+    var engineKind: LocalEngineKind { get }
+    /// The KV self-test's picture bit (D22 step 5); the brain picks its D23 limits from it.
+    var mediaAppendVerified: Bool { get }
+}
+
+public extension LocalChatEngine {
+    var engineKind: LocalEngineKind { .chatSession }
+    var mediaAppendVerified: Bool { false }
 }
 
 /// Makes a fresh engine: at the start of a conversation and after each compaction.

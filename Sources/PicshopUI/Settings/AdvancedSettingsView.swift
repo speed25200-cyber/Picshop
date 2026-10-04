@@ -247,6 +247,20 @@ struct AdvancedSettingsView: View {
         case .metalOrb: return L("Metal orb")
         case .graphiteSurround: return L("Graphite surround")
         case .modelBroker: return L("Model broker")
+        case .proLayers: return L("Pro layers")
+        case .freeTransform: return L("Free transform")
+        case .layersColumn: return L("Layers column")
+        case .paramInspector: return L("Generated inspector rows")
+        case .contentHashCache: return L("Content-hash cache")
+        case .interactiveSnapshot: return L("Interactive snapshot")
+        case .tiledRendering: return L("Tiled rendering")
+        case .proExport: return L("Pro export formats")
+        case .psdExport: return L("Layered PSD")
+        case .layerOps: return L("LLM layer operations")
+        case .outlineFill: return L("Outline then fill")
+        case .recipes: return L("Recipes")
+        case .kvEngine: return L("KV engine")
+        case .persistedPrefix: return L("Persisted prefix")
         }
     }
 

@@ -9,7 +9,8 @@ enum CatalogPhotoColor {
         legacy(.applyLook, in: [.photo, .video], .color, .color,
                title: t("Look", "Filtre"), summary: t("A ready-made look", "Un look tout prêt")) { s in
             s.coreIn = [.photo, .video]
-            s.params = [Step.look(), Step.amount(0...100, .percent, doc: "intensity"), Step.amountMode]
+            s.params = [Step.look().labelled("Look", "Filtre"), Step.amount(0...100, .percent, doc: "intensity").labelled("Intensity", "Intensité"),
+                        Step.amountMode.labelled("Mode", "Mode"), CatalogPhotoLayerOps.toneLayer("i1 or a Look j1; none: selected")]
             s.triggers = [
                 .fr: ["filtre", "look", "noir et blanc", "heure dorée", "vintage", "cinéma", "ciné", "argentique", "rétro", "pastel", "dramatique", "teal orange"],
                 .en: ["filter", "look", "black and white", "golden hour", "vintage", "cinematic", "film look", "retro", "pastel", "dramatic", "moody"],
@@ -21,6 +22,7 @@ enum CatalogPhotoColor {
                 en("apply the cinematic look", ["look": "cinematic"]),
                 en("black and white", ["look": "mono"]),
                 para("met en noir est blanc", .fr, ["look": "mono"]),
+                fr("mets le look vintage sur le calque j9", ["look": "vintage", "layer": "j9"]),
                 near("ombres bleues", .fr, expected: "colorGrade"),
             ]
             s.verify = [.unverifiable("a look is judged by eye")]
@@ -33,7 +35,8 @@ enum CatalogPhotoColor {
     static var matchColor: OperationSpec {
         legacy(.matchColor, in: [.photo, .video], .color, .color,
                title: t("Match colour", "Harmoniser les couleurs"), summary: t("Colours of another photo or clip", "Les couleurs d'une autre photo ou d'un clip")) { s in
-            s.params = [Step.clipNumber(doc: "video: the reference clip"), Step.scope(doc: "video: all clips")]
+            s.params = [Step.clipNumber(doc: "video: the reference clip"), Step.scope(doc: "video: all clips"),
+                        ref("layer", [.imageLayer], doc: "photo: i1 an image layer").keys("ref").offCard.noInspector]
             s.requires = needs(referenceAsset: .image, cost: .fast)
             s.triggers = [
                 .fr: ["copie les couleurs", "les couleurs d'une autre photo", "mêmes couleurs que", "harmonise les couleurs", "transfert de couleur",
@@ -46,6 +49,7 @@ enum CatalogPhotoColor {
                 fr("harmonise les couleurs avec le premier clip", ["clipNumber": 1]),
                 en("match the colours of another photo"),
                 en("copy the colours of another picture"),
+                fr("harmonise les couleurs de la tasse i1 avec une autre photo", ["layer": "i1"]),
                 near("applique un filtre vintage", .fr, expected: "applyLook"),
             ]
             s.verify = [.unverifiable("needs the reference picked by the user")]
@@ -96,11 +100,12 @@ enum CatalogPhotoColor {
         op("hsl", .handler, in: [.photo], .color, .color,
            title: t("Colour mixer", "Mélangeur de couleurs"), summary: t("Hue, saturation, lightness of one colour", "Teinte, saturation, luminance d'une couleur")) { s in
             s.params = [
-                enumParam("band", bandValues, .required, doc: "the colour").aliases(bandAliases).keys("color", "colour"),
-                signedPercent("hue", .oneOf(group: "values"), doc: "shift toward the next colour"),
-                signedPercent("saturation", .oneOf(group: "values"), doc: "less to more vivid"),
-                signedPercent("luminance", .oneOf(group: "values"), doc: "darker to lighter").keys("lightness"),
-                enumParam("amountMode", ["relative", "absolute"], .optional("relative"), doc: "relative adds").offCard,
+                enumParam("band", bandValues, .required, doc: "the colour").aliases(bandAliases).keys("color", "colour").labelled("Colour", "Couleur"),
+                signedPercent("hue", .oneOf(group: "values"), doc: "shift toward the next colour").labelled("Hue", "Teinte"),
+                signedPercent("saturation", .oneOf(group: "values"), doc: "less to more vivid").labelled("Saturation", "Saturation"),
+                signedPercent("luminance", .oneOf(group: "values"), doc: "darker to lighter").keys("lightness").labelled("Luminance", "Luminance"),
+                enumParam("amountMode", ["relative", "absolute"], .optional("relative"), doc: "relative adds").offCard.labelled("Mode", "Mode"),
+                CatalogPhotoLayerOps.toneLayer("i1 or a TSL j1; none: selected"),
             ]
             s.triggers = [
                 .fr: ["mélangeur de couleurs", "TSL", "teinte saturation luminance", "désature les bleus", "sature les rouges", "les verts plus jaunes",
@@ -116,6 +121,7 @@ enum CatalogPhotoColor {
                 en("desaturate the blues", ["band": "blue", "saturation": -40]),
                 en("make the greens more yellow", ["band": "green", "hue": -30]),
                 para("baisse la sat des bleus", .fr, ["band": "blue", "saturation": -30]),
+                fr("désature les rouges du calque j6", ["band": "red", "saturation": -30, "layer": "j6"]),
                 near("plus de saturation", .fr, expected: "adjust"),
             ]
             s.verify = [.structural(.colorMixer, .changed)]
@@ -129,12 +135,13 @@ enum CatalogPhotoColor {
             s.params = [
                 enumParam("range", ColorGrade.Range.self, .required, doc: "tonal range")
                     .aliases(["ombres": "shadows", "tons moyens": "midtones", "demi teintes": "midtones", "hautes lumieres": "highlights",
-                              "lumieres": "highlights", "mids": "midtones"]),
-                ParamSpec("color", .color, .oneOf(group: "tint"), doc: "tint colour name").keys("colour", "couleur"),
-                number("hue", 0...360, .degrees, .oneOf(group: "tint"), doc: "tint hue, 0 red"),
-                percent("amount", 0...100, .optional(30), doc: "tint strength"),
-                signedPercent("luminance", doc: "darker to lighter"),
-                signedPercent("balance", doc: "shadows ↔ highlights split").offCard,
+                              "lumieres": "highlights", "mids": "midtones"]).labelled("Range", "Plage"),
+                ParamSpec("color", .color, .oneOf(group: "tint"), doc: "tint colour name").keys("colour", "couleur").labelled("Tint", "Teinte"),
+                number("hue", 0...360, .degrees, .oneOf(group: "tint"), doc: "tint hue, 0 red").labelled("Hue", "Teinte"),
+                percent("amount", 0...100, .optional(30), doc: "tint strength").labelled("Strength", "Force"),
+                signedPercent("luminance", doc: "darker to lighter").labelled("Luminance", "Luminance"),
+                signedPercent("balance", doc: "shadows ↔ highlights split").offCard.labelled("Balance", "Balance"),
+                CatalogPhotoLayerOps.toneLayer("i1 or an Étalonnage j1"),
             ]
             s.exclusiveGroups = ["tint"]
             s.triggers = [
@@ -150,6 +157,7 @@ enum CatalogPhotoColor {
                 en("teal shadows", ["range": "shadows", "color": "teal", "amount": 30]),
                 en("split toning with orange highlights", ["range": "highlights", "color": "orange", "amount": 30]),
                 para("des ombres un peu froides", .fr, ["range": "shadows", "color": "blue", "amount": 20]),
+                fr("hautes lumières orangées sur le calque d'étalonnage j7", ["range": "highlights", "color": "orange", "layer": "j7"]),
                 near("teal and orange", .en, expected: "applyLook"),
             ]
             s.verify = [.structural(.colorGrade, .changed)]
@@ -160,7 +168,8 @@ enum CatalogPhotoColor {
     static var lutIntensity: OperationSpec {
         op("lutIntensity", .handler, in: [.photo], .color, .color,
            title: t("LUT intensity", "Intensité du LUT"), summary: t("How strongly the imported LUT applies", "La force du LUT importé")) { s in
-            s.params = [percent("amount", 0...100, .required, doc: "0 none, 100 full").keys("intensity", "strength")]
+            s.params = [percent("amount", 0...100, .required, doc: "0 none, 100 full").keys("intensity", "strength").labelled("Intensity", "Intensité"),
+                        CatalogPhotoLayerOps.toneLayer("i1 or a LUT j1; none: selected")]
             s.requires = needs(importedLUT: true)
             s.triggers = [
                 .fr: ["LUT", "intensité du LUT", "force du LUT", "LUT à", "applique mon LUT", "dose du LUT"],
@@ -173,6 +182,7 @@ enum CatalogPhotoColor {
                 en("LUT intensity 70", ["amount": 70]),
                 para("mets un LUT", .fr, ["amount": 100]),
                 en("set the LUT to half strength", ["amount": 50]),
+                fr("mets le calque LUT j8 à 40 %", ["amount": 40, "layer": "j8"]),
                 near("enlève le LUT", .fr, expected: "removeLUT"),
             ]
             s.verify = [.structural(.lutIntensity, .equalsParam("amount"))]
@@ -183,6 +193,7 @@ enum CatalogPhotoColor {
     static var removeLUT: OperationSpec {
         op("removeLUT", .handler, in: [.photo], .color, .color,
            title: t("Remove LUT", "Retirer le LUT"), summary: t("Takes the imported LUT off", "Enlève le LUT importé")) { s in
+            s.params = [CatalogPhotoLayerOps.toneLayer("i1 or a LUT j1; none: selected")]
             s.requires = needs(importedLUT: true)
             s.triggers = [
                 .fr: ["enlève le LUT", "retire le LUT", "supprime le LUT", "sans LUT", "enlève la LUT"],
@@ -195,6 +206,7 @@ enum CatalogPhotoColor {
                 near("enlève le filtre", .fr, expected: "applyLook"),
                 fr("supprime le LUT importé"),
                 en("take the LUT off"),
+                fr("enlève le LUT du calque j8", ["layer": "j8"]),
             ]
             s.verify = [.structural(.lutIntensity, .decreased)]
             s.uiTool = "color"

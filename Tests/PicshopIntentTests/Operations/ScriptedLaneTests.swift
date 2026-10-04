@@ -31,6 +31,10 @@ final class ScriptedLaneTests: XCTestCase {
     }
 
     static func fits(_ example: OpExample, in domain: OpDomain, spec: OperationSpec) -> Bool {
+        // W3: a recipe runs in its own editor (the other one answers « Ça se fait dans une vidéo », RecipeTests).
+        if spec.id == RecipeExecution.recipeID, let name = example.args["name"]?.string.flatMap(RecipeName.init(rawValue:)) {
+            return RecipeBook.domain(of: name) == domain
+        }
         guard spec.domains.count > 1, case .intent = spec.lowering else { return true }
         let keys = Set(example.args.keys)
         switch domain {
@@ -64,8 +68,9 @@ final class ScriptedLaneTests: XCTestCase {
         let step = stepObject(spec, example)
         switch domain {
         case .photo:
-            // W2: the poster with two masks (a1, a2) and a selection, so refs and the selection operations run.
-            let document = OperationFixtures.photoWithMasks()
+            // W2: the poster with two masks (a1, a2) and a selection, so refs and the selection operations run; W3: with
+            // its layers (i1, i2, j1…j9, g1), so every stored ref of the examples names a layer.
+            let document = OperationFixtures.photoWithLayers()
             let context = OperationFixtures.photoContext(document)
             let use = ToolArgumentCoercer.rawToolUse(id: "s", name: "apply_edits", arguments: ["steps": [step]])
             let grounding = ToolInputValidator.Grounding(imageAspect: 4.0 / 3.0, canvasAspect: 4.0 / 3.0)
@@ -78,6 +83,15 @@ final class ScriptedLaneTests: XCTestCase {
             let executor = PhotoCommandExecutor(services: OperationPhotoServices(), language: .english)
             let (after, result) = await executor.execute(intent, on: document, context: context)
             if let problem = problem(result, intent: intent) { return fail("executor", problem) }
+            // W3: the layer examples run on the layered poster, so they must apply (or answer with what they open).
+            if isStrict(spec, example) {
+                switch result.outcome {
+                case .failed(let message): return fail("executor", "failed: \(message)")
+                case .needsClarification(let request): return fail("executor", "asked: \(request.question)")
+                case .ignored: return fail("executor", "ignored")
+                case .applied, .info: break
+                }
+            }
             guard result.outcome.isSuccess else { return nil }
             // The executor's report (structural and, from W2, pixel postconditions on the fake host's probes).
             if let carried = OperationPostconditions.report(in: result.effects), !carried.failed.isEmpty {
@@ -118,6 +132,14 @@ final class ScriptedLaneTests: XCTestCase {
             let report = OperationPostconditions.check(intent, before: document, after: after)
             return report.failed.isEmpty ? nil : fail("postconditions", report.failed.joined(separator: "; "))
         }
+    }
+
+    /// W3: the layer operations, the export sheet, the recipes and every example that names a layer by its stored ref.
+    static func isStrict(_ spec: OperationSpec, _ example: OpExample) -> Bool {
+        if OperationGate.layerOperations.contains(spec.id) || ["exportPhoto", "recipe"].contains(spec.id.raw) { return true }
+        if example.args["layer"] != nil { return true }
+        if let ref = example.args["ref"]?.string, let letter = ref.first, "ijg".contains(letter) { return true }
+        return false
     }
 
     /// A failure of the contract: the executor has no case for the step (its "not here" for the step's

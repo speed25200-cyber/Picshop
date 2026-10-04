@@ -29,7 +29,7 @@ final class CardTests: XCTestCase {
 
     func testCardFormat() {
         XCTAssertEqual(OperationCards.card(catalog.spec("layerOpacity")!, language: .en),
-                       "layerOpacity: ref:l1|s1|i1, opacity* 0..100 — How see-through a layer is « set the layer opacity to 50 »")
+                       "layerOpacity: ref:l1|s1|i1|j1|g1, opacity* 0..100 — How see-through a layer is « set the layer opacity to 50 »")
         XCTAssertEqual(OperationCards.card(catalog.spec("curves")!, language: .fr),
                        "curves: channel:rgb|red|green|blue=rgb, {preset:… / points:[[x,y]…] 0-1000 ≤16}*, amount 0..100=50 — Courbe de tons par canal",
                        "the example gives way to the 160 characters")

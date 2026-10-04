@@ -2,29 +2,55 @@ import Foundation
 import PicshopCore
 
 /// The `masks:` and `selection:` state lines Live sends with a photo turn (W2, §8.6). They count against the
-/// per-turn budget, not the stable prefix. The model names a mask by its ref ("a1" is the first local adjustment)
-/// and reads which dials it already moved, so « encore », « sur le masque 2 » and « inverse-le » need no question.
+/// per-turn budget, not the stable prefix. The model names a mask by its ref and reads which dials it already moved,
+/// so « encore », « sur le masque 2 » and « inverse-le » need no question.
+///
+/// W3 (D19): local adjustments live on every image layer, so `a<n>` numbers every local adjustment of every image
+/// layer in document order, the base first (`PhotoDocument.allLocalAdjustments`), and the line prints the owner
+/// (`a2 Peau (faceSkin, i2) …`) as soon as one mask is on another layer than the photo; `mask(ref:in:)` resolves a
+/// ref to its owner and its adjustment.
 public enum LiveMaskLines {
     /// The most masks the line lists (the newest), and its length.
     public static let maxMasks = 6
     public static let budget = 240
 
+    /// The local adjustment an `a<n>` ref names, with the image layer that owns it (D19); nil when there is none.
+    public static func mask(ref raw: String, in document: PhotoDocument) -> (layerID: UUID, adjustmentID: UUID)? {
+        let ref = raw.trimmingCharacters(in: .whitespaces).lowercased()
+        guard ref.first == "a", let number = Int(ref.dropFirst()), number >= 1 else { return nil }
+        let all = document.allLocalAdjustments
+        guard number <= all.count else { return nil }
+        return (all[number - 1].layerID, all[number - 1].adjustment.id)
+    }
+
+    /// The `a<n>` ref of a local adjustment, nil when it is not in the document.
+    public static func ref(of adjustmentID: UUID, in document: PhotoDocument) -> String? {
+        document.allLocalAdjustments.firstIndex { $0.adjustment.id == adjustmentID }.map { "a\($0 + 1)" }
+    }
+
     /// One entry per mask, newest last: "a1 Ciel (sky) exposure +0.30", at most 6 entries and 240 characters in all
-    /// (joined with " · "). The name is in the reply language; the region and the dials as the model writes them.
+    /// (joined with " · "). The name is in the reply language; the region and the dials as the model writes them. With
+    /// a mask on another layer than the photo, each entry names its owner: "a2 Peau (faceSkin, i2) …".
     public static func lines(for document: PhotoDocument, language: OpLanguage) -> [String] {
-        let masks = document.localAdjustments
-        guard !masks.isEmpty else { return [] }
+        let all = document.allLocalAdjustments
+        guard !all.isEmpty else { return [] }
+        let masks = all.map(\.adjustment)
         let names = MaskAccessibility.displayNames(for: masks, language: language)
-        var entries = masks.indices.map { index in entry(masks[index], ref: "a\(index + 1)", name: names[index]) }
+        let baseID = document.baseLayerID
+        let showsOwner = all.contains { $0.layerID != baseID }
+        let owners = showsOwner ? LiveLayerLines.refs(in: document, scene: nil) : [:]
+        var entries = masks.indices.map { index in
+            entry(masks[index], ref: "a\(index + 1)", name: names[index], owner: showsOwner ? owners[all[index].layerID] : nil)
+        }
         if entries.count > maxMasks { entries = Array(entries.suffix(maxMasks)) }
         while entries.count > 1, entries.joined(separator: " · ").count > budget { entries.removeFirst() }
         if let only = entries.first, entries.count == 1, only.count > budget { entries = [String(only.prefix(budget - 1)) + "…"] }
         return entries
     }
 
-    /// "a2 Bas (bottom) exposure -0.20, contrast +0.10".
-    static func entry(_ adjustment: LocalAdjustment, ref: String, name: String) -> String {
-        var text = "\(ref) \(clean(name)) (\(kind(adjustment)))"
+    /// "a2 Bas (bottom) exposure -0.20, contrast +0.10"; with its owner "a2 Bas (bottom, i2) …".
+    static func entry(_ adjustment: LocalAdjustment, ref: String, name: String, owner: String? = nil) -> String {
+        var text = "\(ref) \(clean(name)) (\(kind(adjustment))\(owner.map { ", " + $0 } ?? ""))"
         let dials = MaskAccessibility.dialOrder.filter { abs(adjustment.adjustments[$0]) > 0.0005 }.prefix(2)
         var effects = dials.map { "\($0.rawValue) \(signed(adjustment.adjustments[$0]))" }
         if dials.isEmpty {

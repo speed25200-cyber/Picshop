@@ -29,16 +29,28 @@ extension VisionPhotoServices {
         guard let beforeFrame = try? await maskRenderer.renderedSRGB(before, options: options), !Task.isCancelled,
               let afterFrame = try? await maskRenderer.renderedSRGB(after, options: options), !Task.isCancelled else { return unmeasured }
         var results: [PixelProbeResult] = []
+        // W3 (§4.8): the composite probes compare the two renders pixel by pixel, once for every such request.
+        var delta: PixelStats.CompositeDelta?
+        if requests.contains(where: { $0.probe == .compositeUnchanged || $0.probe == .compositeChanged }),
+           beforeFrame.width == afterFrame.width, beforeFrame.height == afterFrame.height {
+            delta = PixelStats.compositeDelta(before: beforeFrame.bytes, after: afterFrame.bytes, width: afterFrame.width, height: afterFrame.height)
+        }
         for request in requests {
             guard !Task.isCancelled else {
                 results.append(PixelProbeResult(request: request, before: nil, after: nil))
+                continue
+            }
+            if request.probe == .layerMaskCoverageInRange {
+                // W3: measured in the layer's own content space, so `coverage` is the share of the layer its mask keeps.
+                results.append(await layerMaskProbe(request, before: before, after: after))
                 continue
             }
             let masks = await probeMasks(request, before: before, after: after, beforeSize: (beforeFrame.width, beforeFrame.height),
                                          afterSize: (afterFrame.width, afterFrame.height))
             let beforeStats = masks.before.map { PixelStats.regions(rgba: beforeFrame.bytes, width: beforeFrame.width, height: beforeFrame.height, mask: $0) }
             let afterStats = masks.after.map { PixelStats.regions(rgba: afterFrame.bytes, width: afterFrame.width, height: afterFrame.height, mask: $0) }
-            results.append(PixelProbeResult(request: request, before: beforeStats, after: afterStats))
+            let isComposite = request.probe == .compositeUnchanged || request.probe == .compositeChanged
+            results.append(PixelProbeResult(request: request, before: beforeStats, after: afterStats, compositeDelta: isComposite ? delta : nil))
         }
         return results
     }
@@ -53,7 +65,40 @@ extension VisionPhotoServices {
         switch probe {
         case .maskedParameter, .selectionUse: return true
         case .maskCoverageInRange, .maskCoverage, .maskInverted, .maskSoftness, .maskPeak, .selectionCoverageInRange, .selectionCoverage: return false
+        // W3: whole-composite and layer-mask probes are not measured through a shared region mask.
+        case .compositeUnchanged, .compositeChanged, .layerMaskCoverageInRange: return false
         }
+    }
+
+    /// W3 `layerMaskCoverageInRange`: the layer whose mask the call made or changed (the selected one first), its
+    /// content and mask in its content space at the probe size, measured on each side that has it.
+    func layerMaskProbe(_ request: PixelProbeRequest, before: PhotoDocument, after: PhotoDocument) async -> PixelProbeResult {
+        guard let layerID = Self.layerWithChangedMask(before: before, after: after) else { return PixelProbeResult(request: request, before: nil, after: nil) }
+        func measure(_ document: PhotoDocument) async -> PixelStats.Regions? {
+            guard let probe = try? await maskRenderer.layerMaskProbe(document, layerID: layerID, side: Self.probeSide) else { return nil }
+            return PixelStats.regions(rgba: probe.bytes, width: probe.width, height: probe.height, mask: probe.values)
+        }
+        let beforeStats = await measure(before)
+        let afterStats = await measure(after)
+        return PixelProbeResult(request: request, before: beforeStats, after: afterStats)
+    }
+
+    /// The layer whose mask differs between the two documents (legacy, stack, enabled, linked): the selected layer
+    /// when it is one of them, else the topmost; nil when no mask changed.
+    static func layerWithChangedMask(before: PhotoDocument, after: PhotoDocument) -> UUID? {
+        let changed = after.layers.filter { layer in
+            let hasMask = layer.mask != nil || (layer.maskStack.map { !$0.isEmpty } ?? false)
+            guard let old = before.layer(id: layer.id) else { return hasMask }
+            return old.mask != layer.mask || old.maskStack != layer.maskStack || old.isMaskEnabled != layer.isMaskEnabled || old.isMaskLinked != layer.isMaskLinked
+        }
+        if let selected = after.selectedLayerID, changed.contains(where: { $0.id == selected }) { return selected }
+        return changed.last?.id
+    }
+
+    /// W3 (compositeUnchanged): per-pixel CIE ΔE76 between two gamma sRGB RGBA8 renders of the same size: the mean and
+    /// the 99th percentile; nil when the sizes differ. Core's `PixelStats.compositeDelta`, which `pixelProbes` uses.
+    public static func compositeDelta(before: [UInt8], after: [UInt8], width: Int, height: Int) -> (mean: Double, p99: Double)? {
+        PixelStats.compositeDelta(before: before, after: after, width: width, height: height).map { ($0.mean, $0.p99) }
     }
 
     /// The masks a probe measures `before` and `after` through, each at its render's size.

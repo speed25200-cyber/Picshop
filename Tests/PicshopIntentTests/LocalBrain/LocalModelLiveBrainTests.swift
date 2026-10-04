@@ -474,7 +474,12 @@ final class LocalModelLiveBrainTests: XCTestCase {
         XCTAssertEqual(factory.engines.count, 2)
         let fresh = try XCTUnwrap(factory.engines.last?.sent.first?.last)
         guard case .user(let text, _) = fresh else { return XCTFail("a user message") }
-        XCTAssertEqual(text, LocalLivePrompt.userMessage(BrainTurns.speech("plus chaud", id: 2), previous: nil, imageAttached: false),
+        // The retrieved cards (<ops>…</ops>) depend on the catalog; the editor state around them must be whole.
+        var withoutCards = text
+        if let start = withoutCards.range(of: "<ops>\n"), let end = withoutCards.range(of: "</ops>\n", range: start.upperBound..<withoutCards.endIndex) {
+            withoutCards.removeSubrange(start.lowerBound..<end.upperBound)
+        }
+        XCTAssertEqual(withoutCards, LocalLivePrompt.userMessage(BrainTurns.speech("plus chaud", id: 2), previous: nil, imageAttached: false),
                        "a fresh conversation reads the whole editor state")
     }
 

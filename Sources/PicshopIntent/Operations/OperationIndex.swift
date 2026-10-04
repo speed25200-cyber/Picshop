@@ -472,10 +472,22 @@ final class EmbeddingCache: @unchecked Sendable {
 public enum OperationGate {
     static let maskOperations: Set<OpID> = ["maskAdjust", "maskEdit", "maskDelete"]
     static let selectionOperations: Set<OpID> = ["select", "selectionModify", "selectionApply"]
+    /// W3 (§8.3): the layer operations the LLM reaches behind `layerOps`; the ones that create v2-only state
+    /// (groups, clipping, fill opacity, partial locks, gradients, layer masks, via copy/cut, merges) also need `proLayers`.
+    static let layerOperations: Set<OpID> = ["addImageLayer", "layerVia", "addFillLayer", "fillLayer", "addAdjustmentLayer", "layerMask", "layerClip",
+                                              "groupLayers", "mergeLayers", "layerTransform", "layerProperties"]
+    static let proLayerOperations: Set<OpID> = ["layerVia", "addFillLayer", "fillLayer", "layerMask", "layerClip", "groupLayers", "mergeLayers",
+                                                 "layerProperties"]
 
-    public static func isEnabled(_ id: OpID) -> Bool {
-        if maskOperations.contains(id) { return FeatureFlags.isOn(.masks) }
-        if selectionOperations.contains(id) { return FeatureFlags.isOn(.aiSelection) }
+    /// `isOn` reads the flags (tests pass their own, so they never flip the shared defaults).
+    public static func isEnabled(_ id: OpID, flags isOn: (FeatureFlag) -> Bool = FeatureFlags.isOn) -> Bool {
+        if maskOperations.contains(id) { return isOn(.masks) }
+        if selectionOperations.contains(id) { return isOn(.aiSelection) }
+        if layerOperations.contains(id) {
+            return isOn(.layerOps) && (!proLayerOperations.contains(id) || isOn(.proLayers))
+        }
+        if id == "recipe" { return isOn(.recipes) }
+        if id == "exportPhoto" { return isOn(.layerOps) && isOn(.proExport) }
         return true
     }
 
@@ -484,6 +496,7 @@ public enum OperationGate {
         var off: Set<OpID> = []
         if !FeatureFlags.isOn(.masks) { off.formUnion(maskOperations) }
         if !FeatureFlags.isOn(.aiSelection) { off.formUnion(selectionOperations) }
+        for id in layerOperations.union(["recipe", "exportPhoto"]) where !isEnabled(id) { off.insert(id) }
         return off
     }
 

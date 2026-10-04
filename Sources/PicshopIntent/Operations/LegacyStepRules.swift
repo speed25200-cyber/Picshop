@@ -211,3 +211,37 @@ public enum LegacyStepRules {
         }
     }
 }
+
+/// W3 (D19, §8.1): legacy actions that name a stored layer. selectLayer, duplicateLayer and deleteLayer with a `ref`
+/// (i, j, s, l, g; the base is i0), and adjust, applyLook and matchColor with a `layer`, are validated against their
+/// catalog params and lowered onto the operation path (`IntentAction.operation`), whose handlers resolve the ref
+/// (`PhotoOperationHandlers.layerAction`, `adjustLayer`, `lookOnLayer`, `matchColorOnLayer`). Without one they stay
+/// legacy steps, exactly as before.
+public enum LayeredLegacy {
+    /// The actions whose `ref` names a layer.
+    static let refActions: Set<String> = ["selectLayer", "duplicateLayer", "deleteLayer"]
+    /// The tone and colour actions with a `layer` target.
+    static let layerActions: Set<String> = ["adjust", "applyLook", "matchColor"]
+
+    /// The catalog spec a legacy step object is lowered with, nil when it stays a legacy step.
+    public static func spec(for action: String, object: [String: JSONValue], mode: EditorMode) -> OperationSpec? {
+        guard mode == .photo, FeatureFlags.isOn(.catalogOps), FeatureFlags.isOn(.layerOps) else { return nil }
+        func given(_ key: String) -> Bool { object[key].map { $0 != .null } ?? false }
+        let lowers: Bool
+        if layerActions.contains(action) {
+            lowers = given("layer")
+        } else if refActions.contains(action) {
+            let raw = object["ref"]?.string ?? object["layer"]?.string
+            lowers = raw.flatMap(LiveLayerLines.normalized) != nil
+        } else {
+            lowers = false
+        }
+        guard lowers else { return nil }
+        return OperationCatalog.shared.spec(OpID(action))
+    }
+
+    /// Whether a decoded step was lowered (its arguments ride in `extra`).
+    static func isLowered(_ step: RawIntentStep) -> Bool {
+        step.extra != nil && (refActions.contains(step.action) || layerActions.contains(step.action))
+    }
+}

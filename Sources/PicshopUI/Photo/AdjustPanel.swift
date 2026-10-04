@@ -27,6 +27,8 @@ struct AdjustPanel: View {
         #endif
         let selected = session.selectedParameter
         VStack(spacing: 12) {
+            // W3 (D9): the layer the dials edit, when there is a choice.
+            ToneTargetChip(session: session, op: "adjust", controlID: "adjust.target")
             ParameterCarousel(parameters: Self.order, centered: $centered) { parameter in
                 AdjustRing(session: session, parameter: parameter, isSelected: selected == parameter)
             }

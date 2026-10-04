@@ -191,6 +191,32 @@ public enum ModelBrokerPolicy {
             return !held.isEmpty && !held.contains(where: \.isBusy)
         }
     }
+
+    /// The margin an export keeps above the floor besides its own peak (D15): Core Image's intermediates and the
+    /// caches the export does not pin, 300 MB.
+    public static let exportMarginBytes: Int = 300 * 1_048_576
+
+    /// W3 (D15): whether an export whose estimate is `peakBytes` needs the LLM's memory: the peak does not fit in
+    /// `availableBytes − freeFloorBytes − exportMarginBytes`. Unknown memory (macOS, tests) never does. There is no
+    /// format or size clause: `ExportBudget.peakBytes` already counts the 10-bit HEIC surface, the non-streaming
+    /// fallback bitmap and the pinned results.
+    public static func exportNeedsLLMMemory(peakBytes: Int, availableBytes: Int?) -> Bool {
+        guard let availableBytes else { return false }
+        return peakBytes > availableBytes - freeFloorBytes - exportMarginBytes
+    }
+
+    /// W3 (D15): the export rule with the export's own estimate (`ExportBudget.peakBytes`): SAM and Depth always,
+    /// the LLM only when `exportNeedsLLMMemory` says so. Only residents that are loaded and idle are listed; a busy
+    /// LLM is never evicted mid-turn, and the broker waits for its turn to end instead (LocalBrainHub+Broker).
+    /// `megapixels` is kept for the log and for callers that have no estimate; it decides nothing here.
+    public static func exportReleases(residents: [ModelResident], peakBytes: Int, megapixels: Double, availableBytes: Int?) -> [ModelClient] {
+        let releasesLLM = exportNeedsLLMMemory(peakBytes: peakBytes, availableBytes: availableBytes)
+        let wanted: [ModelClient] = releasesLLM ? [.sam, .depth, .llm] : [.sam, .depth]
+        return wanted.filter { client in
+            let held = residents.filter { $0.client == client }
+            return !held.isEmpty && !held.contains(where: \.isBusy)
+        }
+    }
 }
 
 /// The broker's bookkeeping (W2, D12), pure so that Linux tests it: who is loaded, how big, how busy, when last
@@ -276,6 +302,22 @@ public struct ModelBrokerLedger: Sendable, Equatable {
         let released = ModelBrokerPolicy.exportReleases(residents: residents, megapixels: megapixels, availableBytes: availableBytes)
         for client in released { remove(client) }
         return released
+    }
+
+    /// W3 (D15): the residents to release before an export with its `ExportBudget.peakBytes` estimate, removed from
+    /// the ledger. A busy LLM stays (the broker waits for its turn, then asks again).
+    public mutating func releaseForExport(peakBytes: Int, megapixels: Double, availableBytes: Int?) -> [ModelClient] {
+        let released = ModelBrokerPolicy.exportReleases(residents: residents, peakBytes: peakBytes, megapixels: megapixels,
+                                                        availableBytes: availableBytes)
+        for client in released { remove(client) }
+        return released
+    }
+
+    /// Whether an export with this estimate is waiting on a busy LLM: it needs the LLM's memory, the LLM is loaded,
+    /// and it is mid-turn.
+    public func exportWaitsForLLM(peakBytes: Int, availableBytes: Int?) -> Bool {
+        guard let llm = resident(.llm), llm.isBusy else { return false }
+        return ModelBrokerPolicy.exportNeedsLLMMemory(peakBytes: peakBytes, availableBytes: availableBytes)
     }
 
     /// Whether an idle `client` should be unloaded now (Depth, D12).

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Kill switches for the W1 and W2 features, one per feature.
+/// Kill switches for the W1, W2 and W3 features, one per feature.
 public enum FeatureFlag: String, CaseIterable, Sendable {
     /// Catalog operations (IntentAction.operation) in Live and the planner (E2).
     case catalogOps
@@ -37,6 +37,37 @@ public enum FeatureFlag: String, CaseIterable, Sendable {
     /// The model broker: memory floor, priorities and eviction for SAM, Depth, LaMa, the upscaler, SD and the LLM (M5).
     case modelBroker
 
+    // W3: layers, render latency, pro export, LLM layer ops, Live latency (D24). There is deliberately no flag on
+    // writing document-v2.json: proLayers off only stops creating v2-only state.
+    /// Groups, clipping, fill opacity, partial locks, gradient fills, layer masks, via copy/cut, merges (L1–L4).
+    case proLayers
+    /// Non-uniform scale, skew, distort and perspective handles, smart guides and snapping (L1, L3).
+    case freeTransform
+    /// The 52 pt Layers column on the canvas edge (L3).
+    case layersColumn
+    /// Inspector rows generated from the catalog's ParamSpec (L1, L3).
+    case paramInspector
+    /// Content-hash render cache keys and the byte-bounded caches (L1, L2).
+    case contentHashCache
+    /// The nonisolated interactive snapshot for drags (L2, L3).
+    case interactiveSnapshot
+    /// Detail tiles at deep zoom and strip rendering from 24 MP (L2).
+    case tiledRendering
+    /// 16-bit PNG and TIFF, 10-bit HEIC, PDF of the photo, presets (L2, L3).
+    case proExport
+    /// The layered PSD export (L1, L2).
+    case psdExport
+    /// The LLM's layer operations, layer refs and the layers line (L4).
+    case layerOps
+    /// Outline-then-fill for long goals on the 4B (L4).
+    case outlineFill
+    /// The four recipes (L1, L4).
+    case recipes
+    /// The KV engine: checkpoint and restore, prefix snapshot, picture turns appended (L5).
+    case kvEngine
+    /// The prefix snapshot persisted across launches (L5).
+    case persistedPrefix
+
     /// On in Release when nobody overrode it. Testers get each wave through TestFlight, so a
     /// finished feature ships on; a feature left unfinished is turned off here, and
     /// its owner says so. Debug builds have every flag on.
@@ -45,6 +76,10 @@ public enum FeatureFlag: String, CaseIterable, Sendable {
         case .catalogOps, .retrievalCards, .displayLinkCanvas, .proTone, .studioWorkspace, .psBackdrop: return true
         case .masks, .aiSelection, .samModel, .depthModel, .pixelPostconditions, .fmDynamicSchema, .commandPalette, .metalOrb,
              .graphiteSurround, .modelBroker:
+            return true
+        // W3 (D24): on; L5 turns off in P2 anything a lane reports unfinished.
+        case .proLayers, .freeTransform, .layersColumn, .paramInspector, .contentHashCache, .interactiveSnapshot, .tiledRendering,
+             .proExport, .psdExport, .layerOps, .outlineFill, .recipes, .kvEngine, .persistedPrefix:
             return true
         }
     }

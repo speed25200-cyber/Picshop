@@ -2,7 +2,12 @@ import Foundation
 
 /// A complete, serialisable photo project.
 public struct PhotoDocument: Hashable, Codable, Sendable, Identifiable {
-    public static let formatVersion = 1
+    /// W3 (D1): every document is format 2 once loaded (`DocumentCodec.migrated`). project.json keeps the v1
+    /// projection (format 1); document-v2.json holds this format losslessly.
+    public static let formatVersion = 2
+    /// D1 invariant 5: at most 64 layer units (a layer outside any table bundle, or one whole bundle). Checked by
+    /// structure edits only.
+    public static let maxLayers = 64
 
     public var id: UUID
     public var formatVersion: Int
@@ -20,6 +25,8 @@ public struct PhotoDocument: Hashable, Codable, Sendable, Identifiable {
     /// The one selection (W2, D7): undoable, remapped by geometry like the masks. Older projects decode it as
     /// nil, older builds ignore the key, and a selection this build cannot read opens as nil.
     public var selection: PhotoSelection?
+    /// Unknown keys as sorted-keys JSON text, written back as read (D2). Not a key of its own.
+    public var retainedFields: [String: String]
 
     public init(id: UUID = UUID(), title: String, canvasSize: PSSize, backgroundColor: PSColor = .clear,
                 layers: [Layer] = [], selectedLayerID: UUID? = nil, createdAt: Date = Date(), modifiedAt: Date = Date()) {
@@ -33,6 +40,7 @@ public struct PhotoDocument: Hashable, Codable, Sendable, Identifiable {
         self.createdAt = createdAt
         self.modifiedAt = modifiedAt
         self.selection = nil
+        self.retainedFields = [:]
     }
 
     // MARK: Codable — the synthesized layout, with a selection that can never stop a document from opening.
@@ -42,8 +50,7 @@ public struct PhotoDocument: Hashable, Codable, Sendable, Identifiable {
     }
 
     /// Exactly the synthesized decoder for every key a W1 build writes, then `selection` through `try?` (D7): a
-    /// selection a newer build wrote (W3 plans layer masks and document v2) decodes as nil. The encoder stays
-    /// synthesized, so a document without a selection writes the same bytes as W1.
+    /// selection a newer build wrote decodes as nil. W3 (D2): every other key goes into `retainedFields`.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
@@ -57,7 +64,31 @@ public struct PhotoDocument: Hashable, Codable, Sendable, Identifiable {
         modifiedAt = try c.decode(Date.self, forKey: .modifiedAt)
         tableMemory = try c.decodeIfPresent(TableMemory.self, forKey: .tableMemory)
         selection = try? c.decodeIfPresent(PhotoSelection.self, forKey: .selection)
+        retainedFields = RetainedFields.read(from: try decoder.container(keyedBy: DynamicCodingKey.self), known: Self.knownKeys)
     }
+
+    /// The synthesized layout (optionals only when present), then `retainedFields`: a document without unknown keys
+    /// writes the same bytes as W2.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: DynamicCodingKey.self)
+        func key(_ name: CodingKeys) -> DynamicCodingKey { DynamicCodingKey(name.stringValue) }
+        try c.encode(id, forKey: key(.id))
+        try c.encode(formatVersion, forKey: key(.formatVersion))
+        try c.encode(title, forKey: key(.title))
+        try c.encode(canvasSize, forKey: key(.canvasSize))
+        try c.encode(backgroundColor, forKey: key(.backgroundColor))
+        try c.encode(layers, forKey: key(.layers))
+        try c.encodeIfPresent(selectedLayerID, forKey: key(.selectedLayerID))
+        try c.encode(createdAt, forKey: key(.createdAt))
+        try c.encode(modifiedAt, forKey: key(.modifiedAt))
+        try c.encodeIfPresent(tableMemory, forKey: key(.tableMemory))
+        try c.encodeIfPresent(selection, forKey: key(.selection))
+        try RetainedFields.write(retainedFields, to: &c, known: Self.knownKeys)
+    }
+
+    /// Every key this build reads (the W1/W2 keys; W3 adds none at the document level).
+    static let knownKeys: Set<String> = ["id", "formatVersion", "title", "canvasSize", "backgroundColor", "layers", "selectedLayerID",
+                                         "createdAt", "modifiedAt", "tableMemory", "selection"]
 
     /// Convenience: a document with a single image layer.
     public init(title: String, baseImage: MediaAsset) {
@@ -106,45 +137,41 @@ public struct PhotoDocument: Hashable, Codable, Sendable, Identifiable {
     }
 
     /// Appends an operation to the active image layer.
-    /// A geometric kind on the base layer remaps the local adjustments and the selection (D3). A local adjustment
-    /// keeps one operation per id (D2): one that exists is replaced in place.
-    public mutating func apply(_ kind: EditOperation.Kind, label: String? = nil, to layerID: UUID? = nil) {
-        guard let target = layerID ?? activeImageLayerID else { return }
+    /// A geometric kind remaps that layer's local adjustments, its linked mask and the selection drawn on it (D3);
+    /// on the base it also moves the canvas and every other layer with the photo (D10b). A local adjustment keeps one
+    /// operation per id (D2): one that exists is replaced in place.
+    /// W3 (D7): returns false when nothing was applied: no target, or a lock refuses it (`.content`, or `.alpha` for
+    /// removeBackground, a transparent replaceBackground and expand).
+    @discardableResult
+    public mutating func apply(_ kind: EditOperation.Kind, label: String? = nil, to layerID: UUID? = nil) -> Bool {
+        guard let target = layerID ?? activeImageLayerID, layer(id: target) != nil else { return false }
+        guard LayerLockPolicy.allows(LayerLockPolicy.mutation(for: kind), on: target, in: self) else { return false }
         if case .localAdjust(let adjustment) = kind {
-            if target == localAdjustmentsLayerID {
-                setLocalAdjustment(adjustment, label: label)
-            } else {
-                update(layerID: target) { $0.edits.setLocalAdjustment(adjustment, label: label) }
-            }
-            return
+            setLocalAdjustment(adjustment, label: label, on: target)
+            return true
         }
         append(EditOperation(kind: kind, label: label), to: target)
+        return true
     }
 
-    /// `apply` for an operation that already exists (the rebase replays a command's steps with their ids): the
-    /// canvas follows a crop, expand, upscale or quarter turn of the base, and masks follow its geometry (D3).
+    /// `apply` for an operation that already exists (the rebase replays a command's steps with their ids). A geometric
+    /// kind remaps the layer's own masks (`reconcileMasks(layerID:previousEdits:)`); on the base, the canvas follows
+    /// (`EditOperation.Kind.outputPixelSize(from:)`, the renderer's extents) and so does every other layer (D10b).
     mutating func append(_ operation: EditOperation, to target: UUID) {
-        guard layer(id: target) != nil else { return }
+        guard let layer = layer(id: target) else { return }
         let kind = operation.kind
-        let previousBaseEdits = kind.isGeometric && target == baseLayerID ? layer(id: target)?.edits : nil
+        let previousEdits = kind.isGeometric ? layer.edits : nil
+        let isBase = target == baseLayerID
+        let previousCanvas = canvasSize
         update(layerID: target) { layer in
             layer.edits.operations.append(operation)
         }
-        if case .crop(let rect) = kind, target == baseLayerID {
-            canvasSize = PSSize(width: (canvasSize.width * rect.width).rounded(), height: (canvasSize.height * rect.height).rounded())
+        if kind.isGeometric, isBase {
+            canvasSize = kind.outputPixelSize(from: canvasSize)
         }
-        if case .expand(let placement) = kind, target == baseLayerID, placement.width > 0.05, placement.height > 0.05 {
-            canvasSize = PSSize(width: (canvasSize.width / placement.width).rounded(), height: (canvasSize.height / placement.height).rounded())
-        }
-        if case .upscale(let factor) = kind, target == baseLayerID {
-            canvasSize = PSSize(width: (canvasSize.width * factor).rounded(), height: (canvasSize.height * factor).rounded())
-        }
-        if case .rotate(let degrees) = kind, target == baseLayerID, degrees.isFinite, abs(degrees) < 1e9,
-           Int(degrees.rounded()) % 180 == 90 || Int(degrees.rounded()) % 180 == -90 {
-            canvasSize = PSSize(width: canvasSize.height, height: canvasSize.width)
-        }
-        if let previousBaseEdits {
-            reconcileMasks(previousBaseEdits: previousBaseEdits)
+        if let previousEdits {
+            reconcileMasks(layerID: target, previousEdits: previousEdits)
+            if isBase { followBaseGeometry(previousBaseEdits: previousEdits, previousCanvas: previousCanvas) }
         }
     }
 
@@ -188,9 +215,12 @@ public struct PhotoDocument: Hashable, Codable, Sendable, Identifiable {
     /// The photo as it was imported: every edit on it gone, the frame back to
     /// its own size. Added layers stay, except the cut-out laid over a title
     /// behind the subject: it copies the photo's edits and would no longer line up.
+    /// W3: the other layers follow the photo back to its own frame (D10b), and the tree stays normalised.
     public func restoredToImport() -> PhotoDocument {
         var document = self
         guard let baseID = baseLayerID, let base = baseLayer, let asset = base.imageAsset else { return document }
+        let previousEdits = base.edits
+        let previousCanvas = canvasSize
         if !base.edits.isEmpty || base.mask != nil {
             document.layers.removeAll { $0.name == Self.subjectLayerName && $0.id != baseID }
             if let selected = document.selectedLayerID, document.layer(id: selected) == nil { document.selectedLayerID = baseID }
@@ -198,33 +228,53 @@ public struct PhotoDocument: Hashable, Codable, Sendable, Identifiable {
         document.update(layerID: baseID) { layer in
             layer.edits = EditStack()
             layer.mask = nil
+            layer.maskStack = nil
         }
         document.canvasSize = asset.pixelSize
         // The selection was drawn on the edited picture (D3): it goes with the edits.
         document.selection = nil
+        document.followBaseGeometry(previousBaseEdits: previousEdits, previousCanvas: previousCanvas)
+        document.normalizeLayerTree()
         return document
     }
 
+    /// Adds a layer on top (the W1 path; structure edits use `applyStructureEdit`). It gets its stored ref number
+    /// (D19) and the tree stays normalised; the 64-unit cap is never checked here (table fills).
     public mutating func addLayer(_ layer: Layer, select: Bool = true) {
         layers.append(layer)
+        assignMissingRefNumbers()
+        normalizeLayerTree()
         if select { selectedLayerID = layer.id }
         touch()
     }
 
+    /// Removes one layer (the W1 primitive; `applyStructureEdit(.remove)` removes a group with its contents and a
+    /// table bundle whole). Nil for the base photo, a missing layer, or a layer whose lock refuses `.delete` (D7). A
+    /// removed group's children stay, at the top level.
     @discardableResult
     public mutating func removeLayer(id: UUID) -> Layer? {
-        guard let index = index(of: id), !(layers[index].isImage && index == 0) else { return nil }
+        guard let index = index(of: id), id != baseLayerID, !(layers[index].isImage && index == 0),
+              LayerLockPolicy.allows(.delete, on: id, in: self) else { return nil }
         let removed = layers.remove(at: index)
         if selectedLayerID == id { selectedLayerID = baseLayerID }
+        normalizeLayerTree()
         touch()
         return removed
     }
 
-    public mutating func moveLayer(id: UUID, to newIndex: Int) {
-        guard let index = index(of: id), newIndex >= 0, newIndex < layers.count, index != newIndex else { return }
+    /// Moves one layer to an index (the W1 primitive; `applyStructureEdit(.move)` moves groups, clip runs and bundles
+    /// whole). False when nothing moved: the base photo never moves and nothing goes below it, and a lock refusing
+    /// `.order` refuses it (D7). The tree is normalised afterwards.
+    @discardableResult
+    public mutating func moveLayer(id: UUID, to newIndex: Int) -> Bool {
+        guard let index = index(of: id), newIndex >= 0, newIndex < layers.count, index != newIndex else { return false }
+        if let baseID = baseLayerID, id == baseID || newIndex == 0 { return false }
+        guard LayerLockPolicy.allows(.order, on: id, in: self) else { return false }
         let layer = layers.remove(at: index)
         layers.insert(layer, at: newIndex)
+        normalizeLayerTree()
         touch()
+        return true
     }
 
     public mutating func touch() {
@@ -273,7 +323,8 @@ extension PhotoDocument {
             addLayer(layer, select: false)
             titleID = layer.id
         }
-        var subject = Layer(name: Self.subjectLayerName, content: .image(asset), isLocked: true, edits: base.edits)
+        // Position-locked (D7): it must stay registered with the photo, which it follows (D10b), but it can be edited.
+        var subject = Layer(name: Self.subjectLayerName, content: .image(asset), edits: base.edits, lockOptions: [.position])
         subject.edits.append(.removeBackground(subjectMask))
         addLayer(subject, select: false)
         selectedLayerID = titleID
@@ -287,32 +338,54 @@ public extension PhotoDocument {
     /// The share of the canvas a remapped selection's box must keep, else the selection is dropped (D3, D7).
     static let selectionKeepThreshold = 0.002
 
-    /// D3: remaps local adjustments and the selection when the base layer's geometry chain changed since
-    /// `previousBaseEdits`; drops the selection when its remapped box keeps < 0.2 % of the canvas.
-    ///
-    /// Mask points live in the base's output space, so they go back through the old chain to the photo and
-    /// forward through the new one: inverse(chain(old)).then(chain(new)). Aspects come from the asset's pixel
-    /// size through each chain, never from `canvasSize`. Every path that changes the base geometry calls it:
-    /// `apply` (here), the in-place perspective handler and the aspect « original » path (M4).
+    /// D3 for the base photo, the W2 entry point (the in-place perspective handler and the aspect « original » path
+    /// call it after changing the base's operations themselves): `reconcileMasks(layerID:previousEdits:)` on the
+    /// base, the canvas set to the base's output (those paths bypass `append`'s canvas rule), then D10b, so the other
+    /// layers follow too, from the canvas the base's previous operations gave.
     mutating func reconcileMasks(previousBaseEdits: EditStack) {
         guard let baseID = baseLayerID, let base = layer(id: baseID) else { return }
-        let source = sourceAspect(of: base)
-        let old = previousBaseEdits.geometryChain(sourceAspect: source)
-        let new = base.edits.geometryChain(sourceAspect: source)
+        reconcileMasks(layerID: baseID, previousEdits: previousBaseEdits)
+        var previousCanvas = canvasSize
+        if let asset = base.imageAsset, !asset.pixelSize.isEmpty {
+            previousCanvas = previousBaseEdits.outputSize(sourcePixels: asset.pixelSize)
+            let now = base.edits.outputSize(sourcePixels: asset.pixelSize)
+            if !now.isEmpty { canvasSize = now }
+        }
+        followBaseGeometry(previousBaseEdits: previousBaseEdits, previousCanvas: previousCanvas)
+    }
+
+    /// D3, per layer (W3): remaps the layer's local adjustments, its linked layer mask (the base's whatever the link,
+    /// its content space being the canvas) and the selection drawn on it, when its geometry chain changed since
+    /// `previousEdits`; drops the selection when its remapped box keeps < 0.2 % of the canvas.
+    ///
+    /// Mask points live in the layer's output space, so they go back through the old chain to the source and forward
+    /// through the new one: inverse(chain(old)).then(chain(new)). Aspects come from the asset's pixel size through
+    /// each chain, never from `canvasSize`.
+    mutating func reconcileMasks(layerID: UUID, previousEdits: EditStack) {
+        guard let layer = layer(id: layerID), layer.isImage else { return }
+        let source = sourceAspect(of: layer)
+        let old = previousEdits.geometryChain(sourceAspect: source)
+        let new = layer.edits.geometryChain(sourceAspect: source)
         guard !old.map.isApproximatelyEqual(to: new.map) || abs(old.aspect - new.aspect) > 1e-12 else { return }
         guard let back = old.map.inverse else { return }
         let map = back.then(new.map)
-        if base.edits.operations.contains(where: { if case .localAdjust = $0.kind { return true } else { return false } }) {
-            update(layerID: baseID) { layer in
+        let isBase = layerID == baseLayerID
+        let hasLocal = layer.edits.operations.contains { if case .localAdjust = $0.kind { return true } else { return false } }
+        let remapsMask = layer.maskStack != nil && (isBase || layer.isMaskLinked)
+        if hasLocal || remapsMask {
+            update(layerID: layerID) { layer in
                 for index in layer.edits.operations.indices {
                     guard case .localAdjust(var adjustment) = layer.edits.operations[index].kind else { continue }
                     adjustment.stack = adjustment.stack.remapped(by: map, aspectBefore: old.aspect, aspectAfter: new.aspect)
                     let operation = layer.edits.operations[index]
                     layer.edits.operations[index] = EditOperation(id: operation.id, kind: .localAdjust(adjustment), createdAt: operation.createdAt, label: operation.label)
                 }
+                if remapsMask, let stack = layer.maskStack {
+                    layer.maskStack = stack.remapped(by: map, aspectBefore: old.aspect, aspectAfter: new.aspect)
+                }
             }
         }
-        if let selection, selection.layerID == baseID {
+        if let selection, selection.layerID == layerID {
             self.selection = selection.remapped(by: map)
         }
     }
@@ -330,7 +403,8 @@ public extension PhotoDocument {
     ///    A mask the command edited but that was deleted meanwhile gives nil.
     /// 2. the selection carries over when only the command changed it; both changing it gives nil.
     /// 3. geometric steps are re-appended through the document, so current masks are remapped and the canvas
-    ///    follows; the canvas guard therefore compares only the current document with the base.
+    ///    follows; the canvas guard therefore compares only the current document with the base. W3: the other layers
+    ///    follow a base geometry step (D10b) on both sides of the replay.
     /// What the command changed is measured against the base with the command's own steps replayed, so a mask
     /// that only moved with the command's crop does not count as changed by it.
     func rebased(_ updated: PhotoDocument, from base: PhotoDocument) -> PhotoDocument? {
@@ -341,9 +415,6 @@ public extension PhotoDocument {
         var projected = base
         var replays: [(layerID: UUID, operations: [EditOperation])] = []
         for (before, after) in zip(base.layers, updated.layers) {
-            var untouched = after
-            untouched.edits = before.edits
-            guard untouched == before else { return nil }
             let old = before.edits.operations.filter { !Self.isLocal($0.kind) }
             let new = after.edits.operations.filter { !Self.isLocal($0.kind) }
             guard new.count >= old.count, Array(new.prefix(old.count)) == old else { return nil }
@@ -363,6 +434,13 @@ public extension PhotoDocument {
         }
         // The command changed the canvas some other way than by the steps it appended: it cannot be replayed.
         guard projected.canvasSize == updated.canvasSize else { return nil }
+        // Nor can a command that changed a layer otherwise than through its operations (W1). Measured after the replay:
+        // a base geometry step moves the other layers with the photo (D10b), and the replay moves them the same way.
+        for (target, after) in zip(projected.layers, updated.layers) {
+            var untouched = after
+            untouched.edits = target.edits
+            guard untouched == target else { return nil }
+        }
         // Local adjustments, by id (rule 1).
         for (target, after) in zip(projected.layers, updated.layers) {
             let reference = target.edits.resolvedLocalAdjustments

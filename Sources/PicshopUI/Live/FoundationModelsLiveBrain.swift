@@ -71,6 +71,8 @@ final class FoundationModelsLiveBrain: LiveBrain, @unchecked Sendable {
         defer { bridge.end(turn: turn.id) }
         continuation.yield(.started(model: "apple-on-device"))
         let prompt = LivePrompt.onDevicePrompt(turn)
+        // W3 (D20): no outline here; a long goal gets its first steps and the honest « redis-moi la suite ».
+        let longGoal = GoalOutline.isLongGoal(turn: turn, mode: mode)
         var retried = false
         while true {
             let session = currentSession(for: turn)
@@ -78,7 +80,12 @@ final class FoundationModelsLiveBrain: LiveBrain, @unchecked Sendable {
             do {
                 let reply = try await stream(session, prompt: prompt, continuation: continuation, emitted: &emitted)
                 remember(user: turn.text, reply: reply)
-                continuation.yield(.completed(bridge.appliedEdit(turn: turn.id) ? .editApplied : .answered))
+                let applied = bridge.appliedEdit(turn: turn.id)
+                if longGoal, applied {
+                    let line = GoalOutline.firstStepsLine(count: nil, french: turn.language != .english)
+                    continuation.yield(.text(reply.isEmpty || reply.last?.isWhitespace == true ? line : " " + line))
+                }
+                continuation.yield(.completed(applied ? .editApplied : .answered))
                 continuation.finish()
                 return
             } catch let error as LanguageModelSession.GenerationError {

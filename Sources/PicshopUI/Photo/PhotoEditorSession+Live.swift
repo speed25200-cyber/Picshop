@@ -13,6 +13,10 @@ extension PhotoEditorSession: LiveEditingHost {
 
     public var liveVersion: Int { revision }
 
+    /// W3 (D19): the committed photo, so Live re-grounds a plan's later steps after a crop, a turn, a flip or a
+    /// perspective step.
+    public var liveGeometryAnchor: PhotoDocument? { document }
+
     public var liveIsBusy: Bool { isProcessing }
 
     /// The photo tasks report completion rather than a fraction.
@@ -67,6 +71,8 @@ extension PhotoEditorSession: LiveEditingHost {
         // model reads are the ones its steps resolve against.
         state.table = liveTable
         state.sceneMap = liveSceneMap
+        // W3 (D19): the layer tree as the model reads and names it (i2, j1, g1), with the scene map's object refs.
+        state.layers = LiveLayerLines.line(for: document, scene: liveSceneMap, language: lineLanguage)
         // The retrieved cards mark the layer and LUT operations unavailable without these.
         state.layerCount = document.layers.count
         state.hasImportedLUT = document.activeLayerHasLUT

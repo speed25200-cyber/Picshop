@@ -62,6 +62,7 @@ public enum LivePrompt {
             if let table = state.table { lines += LiveSceneLines.table(table) }
             if let map = state.sceneMap { lines += LiveSceneLines.scene(map, budget: state.table == nil ? LocalLivePrompt.Budgets.sceneLines : LocalLivePrompt.Budgets.sceneLinesWithTable) }
             if let masks = LiveMaskLines.masksLine(state.masks.map(clean)) { lines.append(masks) }
+            if let layers = state.layers { lines.append(clean(layers)) }
             if let video = state.video { lines.append(timelineLine(video)) }
             if let busy = state.busyTitle { lines.append("running: " + clean(busy)) }
             if !since.isEmpty { lines.append("since your reply: " + since.map(clean).joined(separator: "; ")) }
@@ -183,6 +184,11 @@ public enum LivePrompt {
         }
         if let map = state.sceneMap { lines += LiveSceneLines.scene(map, budget: LocalLivePrompt.Budgets.sceneLinesWithTable) }
         if let last = turn.recentActions.last { lines.append(LiveSceneLines.last(last, scene: state.sceneMap)) }
+        if turn.kind != .sessionStart {
+            // W3 (D20): the layer requests that are not possible yet, so the model says so instead of guessing.
+            let hint = UnsupportedLayerRequests.promptHint(UnsupportedLayerRequests.named(in: turn.text, domain: state.mode.opDomain))
+            if !hint.isEmpty { lines.append(hint) }
+        }
         let words = turn.kind == .sessionStart ? "(the Live session just started: greet in a few words)" : turn.text
         lines.append("User: " + words)
         return lines.joined(separator: "\n")

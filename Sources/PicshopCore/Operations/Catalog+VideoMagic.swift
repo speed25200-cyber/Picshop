@@ -160,7 +160,7 @@ enum CatalogVideoMagic {
             s.requires = needs(subject: true, cost: .heavy)
             s.triggers = [
                 .fr: ["suit le visage", "fais suivre", "suivi", "suit la personne", "suis-le", "colle au sujet"],
-                .en: ["follow the subject", "track", "track the subject", "track the person", "tracking", "follow the face", "pin to the person"],
+                .en: ["follow the subject", "track", "track the subject", "track the person", "tracking", "follow the face", "pin to the person", "track the cyclist"],
             ]
             s.examples = [
                 fr("fais suivre le titre au visage", ["text": "text"]),

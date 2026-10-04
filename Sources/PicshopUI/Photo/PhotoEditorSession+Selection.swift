@@ -19,6 +19,9 @@ extension PhotoEditorSession {
     enum SelectionUse: Equatable {
         case adjust, mask, erase, cutout
         case fill(PSColor), recolor(PSColor), blur(Double), generate(String)
+        /// W3 (D17): « Nouveau calque (copier) » and « Nouveau calque (couper) », the selection's pixels of the active
+        /// image layer on a new layer above it.
+        case copyToLayer, cutToLayer
 
         /// The `use` value of selectionApply.
         var use: String {
@@ -27,6 +30,8 @@ extension PhotoEditorSession {
             case .mask: return "mask"
             case .erase: return "erase"
             case .cutout: return "cutout"
+            case .copyToLayer: return "copyToLayer"
+            case .cutToLayer: return "cutToLayer"
             case .fill: return "fill"
             case .recolor: return "recolor"
             case .blur: return "blur"
@@ -41,7 +46,7 @@ extension PhotoEditorSession {
             case .fill(let color), .recolor(let color): args["color"] = .string(color.hexString)
             case .blur(let amount): args["amount"] = .number((amount * 100).rounded().clamped(to: 0...100))
             case .generate(let prompt): args["prompt"] = .string(prompt)
-            case .adjust, .mask, .erase, .cutout: break
+            case .adjust, .mask, .erase, .cutout, .copyToLayer, .cutToLayer: break
             }
             return args
         }

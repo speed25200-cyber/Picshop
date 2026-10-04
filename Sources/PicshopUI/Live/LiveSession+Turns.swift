@@ -75,14 +75,16 @@ extension LiveSession {
         replyLanguage = language
         lastUserWords = text
         // Read fresh: the grammar bakes the playhead and the last tap into its intents.
-        let grammar = RuleBasedIntentEngine().parse(text, context: currentIntentContext())
+        let context = currentIntentContext()
+        let grammar = RuleBasedIntentEngine().parse(text, context: context)
         currentKind = chooseBrain()
         assignRoute(liveRoute(for: currentKind))
         let jobRunning = backgroundJobs > 0 || (host?.liveIsBusy ?? false)
         // While a choice is pending its chips replace the ideas: "la dernière" is a candidate, not a chip.
         let choicePending = choices != nil
         let lane = LiveTurnRouter.route(text, grammar: grammar, brain: currentKind, ideasOnScreen: choicePending ? 0 : shownIdeas.count,
-                                        jobRunning: jobRunning, fastLane: app?.settings.liveFastLane ?? true, mode: mode)
+                                        jobRunning: jobRunning, fastLane: app?.settings.liveFastLane ?? true, mode: mode,
+                                        pendingYesNo: context.pendingClarification?.candidates.isEmpty == true)
         var dismissesChoice = false
         if choicePending, LiveTurnRouter.dismissesPendingChoice(grammar) {
             if case .control = lane {} else { dismissesChoice = true }
@@ -345,6 +347,8 @@ extension LiveSession {
         toolHandler?.language = language
         var chunker = SpeechChunker(language: language)
         var gotOutput = false
+        // W3 (D23): the turn's first generation feeds the first-token stats (« Latence »), once.
+        var notedFirstToken = false
         latency.mark(.requestSent, at: clock.now(), turn: id)
         // A question gets a short line after 1.2 s without an answer; any model turn after 2.5 s
         // (a cold cache can take several seconds before its first token).
@@ -399,10 +403,15 @@ extension LiveSession {
                 case .stats(let stats):
                     latency.record(stats: stats, turn: id)
                     LiveServices.shared.debug.setStats(stats)
+                    if !notedFirstToken, brainKind == .model {
+                        notedFirstToken = true
+                        LocalBrainHub.shared.noteTurn(stats: stats, picture: image != nil && stats.kvPath == nil && stats.cachedTokens == 0)
+                    }
                     LiveServices.shared.record(LiveLogEntry(time: clock.now(), event: "brain.stats", fields: [
                         "brain": brainKind.rawValue, "model": stats.model, "prompt_tokens": String(stats.promptTokens),
                         "cached_tokens": String(stats.cachedTokens), "generated_tokens": String(stats.generatedTokens),
                         "first_token_ms": String(stats.firstTokenMs), "tokens_per_s": String(format: "%.1f", stats.tokensPerSecond),
+                        "kv_path": stats.kvPath ?? "chatSession", "prefix_tokens": String(stats.prefixTokens),
                     ]))
                 case .completed(let end):
                     for chunk in chunker.finish() { speak(chunk, language: language, turn: id, isResponse: true) }

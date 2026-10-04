@@ -145,6 +145,9 @@ public struct PSRect: Hashable, Codable, Sendable {
 
 /// Simple affine transform used for layer placement. Stored in normalized
 /// canvas space so documents are resolution independent.
+///
+/// W3 (D10) adds non-uniform scale, skew and a 4-corner quad (distort, perspective). Codable lives in
+/// Layers/LayerCodable.swift: the five W1 keys as before, the W3 keys only when not default.
 public struct LayerTransform: Hashable, Codable, Sendable {
     /// Center of the layer in normalized canvas coordinates (0...1).
     public var center: PSPoint
@@ -154,17 +157,42 @@ public struct LayerTransform: Hashable, Codable, Sendable {
     public var rotation: Double
     public var isFlippedHorizontally: Bool
     public var isFlippedVertically: Bool
+    /// "scaleX", default 1: horizontal scale on top of `scale`.
+    public var scaleX: Double
+    /// "scaleY", default 1.
+    public var scaleY: Double
+    /// "skewX", default 0, degrees, clamped to −80…80 on use.
+    public var skewX: Double
+    /// "skewY", default 0, degrees.
+    public var skewY: Double
+    /// "quad", default nil: exactly 4 points (TL, TR, BR, BL), canvas-normalised; when set every other field is
+    /// ignored by the placement map. A count ≠ 4 decodes as nil.
+    public var quad: [PSPoint]?
+    /// Unknown keys as sorted-keys JSON text, written back as read (D2, a newer build's transform fields). Not a key.
+    public var retainedFields: [String: String]
 
     public init(center: PSPoint = PSPoint(x: 0.5, y: 0.5), scale: Double = 1, rotation: Double = 0,
-                isFlippedHorizontally: Bool = false, isFlippedVertically: Bool = false) {
+                isFlippedHorizontally: Bool = false, isFlippedVertically: Bool = false,
+                scaleX: Double = 1, scaleY: Double = 1, skewX: Double = 0, skewY: Double = 0, quad: [PSPoint]? = nil) {
         self.center = center
         self.scale = scale
         self.rotation = rotation
         self.isFlippedHorizontally = isFlippedHorizontally
         self.isFlippedVertically = isFlippedVertically
+        self.scaleX = scaleX
+        self.scaleY = scaleY
+        self.skewX = skewX
+        self.skewY = skewY
+        self.quad = quad
+        self.retainedFields = [:]
     }
 
     public static let identity = LayerTransform()
+
+    /// No W3 field in use: scaleX == 1, scaleY == 1, no skew, no quad.
+    public var isAffineIdentityExtras: Bool {
+        scaleX == 1 && scaleY == 1 && skewX == 0 && skewY == 0 && quad == nil
+    }
 }
 
 public enum FlipAxis: String, Codable, Sendable, CaseIterable {

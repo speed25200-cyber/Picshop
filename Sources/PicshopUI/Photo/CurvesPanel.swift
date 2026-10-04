@@ -21,10 +21,12 @@ struct CurvesPanel: View {
 
     var body: some View {
         VStack(spacing: 10) {
+            // W3 (D9): the layer the curve edits (a « Courbes » adjustment layer, or an image layer).
+            ToneTargetChip(session: session, op: "curves", controlID: "curves.target")
             ModeSegments(modes: ToneCurve.Channel.allCases, selection: Binding(get: { tone.channel }, set: { tone.channel = $0 ?? .rgb }),
                          title: CurvesPanel.channelName, symbol: { _ in "" })
             CurveGraph(curve: session.userToneCurve, channel: channel, histogram: tone.inputHistogram, side: Self.graphSide,
-                       onBegin: { session.beginInteraction(label: "Curves") },
+                       onBegin: { session.beginCurvesInteraction() },
                        onChange: { session.setToneCurve($0) },
                        onEnd: { session.endInteraction() })
                 .frame(maxWidth: .infinity)
