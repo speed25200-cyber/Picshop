@@ -11,10 +11,22 @@ enum PDFToolCatalog {
     typealias Tool = PDFEditorSession.Tool
 
     /// Category ids, symbols and the panels each one holds, in order.
-    static let layout: [(id: String, symbol: String, panels: [Tool])] = [
+    static var layout: [(id: String, symbol: String, panels: [Tool])] {
+        FeatureFlags.isOn(.ux2) ? ux2Layout : classicLayout
+    }
+
+    static let classicLayout: [(id: String, symbol: String, panels: [Tool])] = [
         ("pages", "doc.on.doc", [.pages]),
         ("markup", "highlighter", [.highlight, .draw, .redact]),
         ("add", "plus.square.on.square", [.text, .signature, .image]),
+    ]
+
+    /// UX 2.0 (ux-spec §3.7): what the user came to do — Annoter, Modifier, Signer, Pages.
+    static let ux2Layout: [(id: String, symbol: String, panels: [Tool])] = [
+        ("markup", "highlighter", [.highlight, .draw]),
+        ("edit", "pencil", [.text, .image, .redact]),
+        ("sign", "signature", [.signature]),
+        ("pages", "doc.on.doc", [.pages]),
     ]
 
     static func make(session: PDFEditorSession) -> ToolCatalog {
@@ -83,6 +95,8 @@ enum PDFToolCatalog {
         switch id {
         case "pages": return L("Pages")
         case "markup": return L("Mark up")
+        case "edit": return L("Modify")
+        case "sign": return L("Sign")
         default: return L("Add")
         }
     }

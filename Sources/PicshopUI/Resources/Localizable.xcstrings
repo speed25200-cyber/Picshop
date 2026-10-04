@@ -2705,6 +2705,22 @@
         }
       }
     },
+    "Changes to %@ discarded": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changes to %@ discarded"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifications de %@ abandonnées"
+          }
+        }
+      }
+    },
     "ChatSession (W2)": {
       "localizations": {
         "en": {
@@ -2781,6 +2797,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choisissez comment sélectionner, puis touchez ou peignez l'image. Deux doigts déplacent l'image."
+          }
+        }
+      }
+    },
+    "Choose what the tool changes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose what the tool changes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez ce que l’outil modifie"
           }
         }
       }
@@ -3473,6 +3505,22 @@
         }
       }
     },
+    "Create": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Créer"
+          }
+        }
+      }
+    },
     "Create a magic movie": {
       "localizations": {
         "en": {
@@ -3501,6 +3549,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Créer mon film"
+          }
+        }
+      }
+    },
+    "Creates a new project": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creates a new project"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crée un nouveau projet"
           }
         }
       }
@@ -4221,6 +4285,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Désactiver"
+          }
+        }
+      }
+    },
+    "Discard Changes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard Changes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abandonner les modifications"
+          }
+        }
+      }
+    },
+    "Discard the changes to %@?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard the changes to %@?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abandonner les modifications de %@ ?"
           }
         }
       }
@@ -5345,6 +5441,22 @@
         }
       }
     },
+    "Enter a value": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a value"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisir une valeur"
+          }
+        }
+      }
+    },
     "Erase": {
       "localizations": {
         "en": {
@@ -5709,6 +5821,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Étendre l'image"
+          }
+        }
+      }
+    },
+    "Expand the panel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expand the panel"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agrandir le panneau"
           }
         }
       }
@@ -6449,6 +6577,38 @@
         }
       }
     },
+    "Fine adjustment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fine adjustment"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réglage fin"
+          }
+        }
+      }
+    },
+    "Fine-tune": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fine-tune"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajuster"
+          }
+        }
+      }
+    },
     "First token": {
       "localizations": {
         "en": {
@@ -6989,6 +7149,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Depuis"
+          }
+        }
+      }
+    },
+    "From %@ to %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From %@ to %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "De %@ à %@"
           }
         }
       }
@@ -7665,6 +7841,22 @@
         }
       }
     },
+    "Help": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Help"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aide"
+          }
+        }
+      }
+    },
     "Hide": {
       "localizations": {
         "en": {
@@ -8097,6 +8289,22 @@
         }
       }
     },
+    "In the area: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In the area: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dans la zone : %@"
+          }
+        }
+      }
+    },
     "In the order you like. Up to 30.": {
       "localizations": {
         "en": {
@@ -8109,6 +8317,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dans l'ordre de votre choix. Jusqu'à 30."
+          }
+        }
+      }
+    },
+    "In the selection: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In the selection: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dans la sélection : %@"
           }
         }
       }
@@ -8413,6 +8637,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Auto-test KV"
+          }
+        }
+      }
+    },
+    "Keep Editing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep Editing"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuer"
           }
         }
       }
@@ -9873,6 +10113,22 @@
         }
       }
     },
+    "Magic movie": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Magic movie"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Film magique"
+          }
+        }
+      }
+    },
     "Magic wand": {
       "localizations": {
         "en": {
@@ -10529,6 +10785,22 @@
         }
       }
     },
+    "Modify": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modify"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier"
+          }
+        }
+      }
+    },
     "Moments": {
       "localizations": {
         "en": {
@@ -10913,6 +11185,38 @@
         }
       }
     },
+    "New Home and editor (UX 2.0)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Home and editor (UX 2.0)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouvel accueil et nouvel éditeur (UX 2.0)"
+          }
+        }
+      }
+    },
+    "New adjustment layer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New adjustment layer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau calque de réglage"
+          }
+        }
+      }
+    },
     "New conversation p50": {
       "localizations": {
         "en": {
@@ -11197,6 +11501,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aucun projet ne porte ce nom."
+          }
+        }
+      }
+    },
+    "No project yet. Choose Photo, Video or PDF to start.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No project yet. Choose Photo, Video or PDF to start."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun projet pour l’instant. Choisissez Photo, Vidéo ou PDF pour commencer."
           }
         }
       }
@@ -13553,6 +13873,22 @@
         }
       }
     },
+    "Projects": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projects"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projets"
+          }
+        }
+      }
+    },
     "Prompt / cached tokens": {
       "localizations": {
         "en": {
@@ -14077,6 +14413,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rétablir"
+          }
+        }
+      }
+    },
+    "Redone: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redone: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rétabli : %@"
           }
         }
       }
@@ -15009,6 +15361,38 @@
         }
       }
     },
+    "Saved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistré"
+          }
+        }
+      }
+    },
+    "Saved in PicShop": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved in PicShop"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistré dans PicShop"
+          }
+        }
+      }
+    },
     "Saved to Files": {
       "localizations": {
         "en": {
@@ -15057,6 +15441,22 @@
         }
       }
     },
+    "Saving…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saving…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrement…"
+          }
+        }
+      }
+    },
     "Say what you want and PicShop does it — and suggests ideas as you talk, like a real conversation.": {
       "localizations": {
         "en": {
@@ -15085,6 +15485,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dis « bonjour Picshop » après la consigne."
+          }
+        }
+      }
+    },
+    "Search": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher"
           }
         }
       }
@@ -15261,6 +15677,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sélection"
+          }
+        }
+      }
+    },
+    "Selection actions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selection actions"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actions sur la sélection"
           }
         }
       }
@@ -15777,6 +16209,22 @@
         }
       }
     },
+    "Showing the original": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Showing the original"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affichage de l’original"
+          }
+        }
+      }
+    },
     "Shows the local brain and its download.": {
       "localizations": {
         "en": {
@@ -15805,6 +16253,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Affiche les pages."
+          }
+        }
+      }
+    },
+    "Shrink the panel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shrink the panel"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réduire le panneau"
           }
         }
       }
@@ -19265,6 +19729,38 @@
         }
       }
     },
+    "Undo the change": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undo the change"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annuler la modification"
+          }
+        }
+      }
+    },
+    "Undone: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undone: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annulé : %@"
+          }
+        }
+      }
+    },
     "Ungroup": {
       "localizations": {
         "en": {
@@ -20589,6 +21085,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "ça"
+          }
+        }
+      }
+    },
+    "the photo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the photo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "la photo"
           }
         }
       }

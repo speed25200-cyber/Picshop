@@ -19,12 +19,29 @@ enum VideoToolCatalog {
     typealias Tool = VideoEditorSession.Tool
 
     /// Category ids, symbols and the panels each one holds, in order.
-    static let layout: [(id: String, symbol: String, panels: [Tool])] = [
+    static var layout: [(id: String, symbol: String, panels: [Tool])] {
+        FeatureFlags.isOn(.ux2) ? ux2Layout : classicLayout
+    }
+
+    static let classicLayout: [(id: String, symbol: String, panels: [Tool])] = [
         ("magic", "sparkles", [.transcript, .magic]),
         ("edit", "scissors", [.cut, .speed, .transitions, .frame, .motion]),
         ("color", "camera.filters", [.adjust, .color, .looks]),
         ("sound", "speaker.wave.2", [.audio]),
         ("add", "plus.square.on.square", [.text, .overlay]),
+    ]
+
+    /// UX 2.0 (ux-spec §3.6): one named entry per job — Magie, Montage, Ajuster, Filtres, Son, Texte,
+    /// Incrustations, Format. A category with one panel opens it at once.
+    static let ux2Layout: [(id: String, symbol: String, panels: [Tool])] = [
+        ("magic", "sparkles", [.transcript, .magic]),
+        ("edit", "scissors", [.cut, .speed, .transitions, .motion]),
+        ("adjust", "slider.horizontal.3", [.adjust, .color]),
+        ("looks", "camera.filters", [.looks]),
+        ("sound", "music.note", [.audio]),
+        ("text", "textformat", [.text]),
+        ("overlay", "rectangle.on.rectangle", [.overlay]),
+        ("frame", "aspectratio", [.frame]),
     ]
 
     static func make(session: VideoEditorSession) -> ToolCatalog {
@@ -102,6 +119,11 @@ enum VideoToolCatalog {
         case "edit": return L("Edit")
         case "color": return L("Colour")
         case "sound": return L("Sound")
+        case "adjust": return L("Fine-tune")
+        case "looks": return L("Filters")
+        case "text": return L("Text")
+        case "overlay": return L("Overlays")
+        case "frame": return L("Format")
         default: return L("Add")
         }
     }

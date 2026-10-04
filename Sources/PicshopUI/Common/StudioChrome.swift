@@ -2,6 +2,7 @@
 import SwiftUI
 import UIKit
 import Combine
+import PicshopCore
 import PicshopIntent
 
 /// Where the studio's bars sit, in global coordinates: the canvas fits its
@@ -195,6 +196,8 @@ struct StudioChrome<Canvas: View, Panel: View>: View {
     @State private var pendingAction: (() -> Void)?
     @State private var keyboardVisible = false
     @State private var inspector = StudioInspectorState()
+    /// UX 2.0: the named tool bar under the Ask field, « ‹ Projets » and Redo always shown. Read once per editor.
+    @State private var isUX2 = FeatureFlags.isOn(.ux2)
     @Namespace private var toolsNamespace
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -242,19 +245,28 @@ struct StudioChrome<Canvas: View, Panel: View>: View {
                 // Empty space in the stack is not hit-testable: the canvas
                 // keeps every touch between the bars.
                 VStack(spacing: 0) {
-                    StudioTopBar(bar: bar, actions: actions, live: live, context: context, compare: compare)
+                    StudioTopBar(bar: bar, actions: actions, live: live, context: context, compare: compare, isUX2: isUX2)
                         .padding(.top, extraTop)
                         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { topEdge = $0 }
                     Spacer(minLength: 0)
                     VStack(spacing: PSSpacing.small) {
-                        if showsRail, !(isToolOpen && inspector.detent == .full) {
-                            StudioRailHost(catalog: rail ?? catalog, openToolID: isToolOpen ? openToolID : nil, onAllTools: openTools)
-                                .padding(.horizontal, PSSpacing.editorSide)
-                                .frame(maxWidth: 620)
-                                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        if isUX2 {
+                            ZStack(alignment: .bottom) { bottom }
+                            if !isToolOpen {
+                                StudioCategoryBar(categories: rail ?? catalog, catalog: catalog, onSearch: openTools)
+                                    .frame(maxWidth: 620)
+                                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                            }
+                        } else {
+                            if showsRail, !(isToolOpen && inspector.detent == .full) {
+                                StudioRailHost(catalog: rail ?? catalog, openToolID: isToolOpen ? openToolID : nil, onAllTools: openTools)
+                                    .padding(.horizontal, PSSpacing.editorSide)
+                                    .frame(maxWidth: 620)
+                                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                            }
+                            // Dock and panel overlap while one replaces the other.
+                            ZStack(alignment: .bottom) { bottom }
                         }
-                        // Dock and panel overlap while one replaces the other.
-                        ZStack(alignment: .bottom) { bottom }
                     }
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomHeight = $0 }
                     .padding(.bottom, keyboardVisible ? 8 : restingBottom)
@@ -300,7 +312,7 @@ struct StudioChrome<Canvas: View, Panel: View>: View {
                 .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.move(edge: .bottom).combined(with: .opacity))
         } else {
             LiveDock(live: live, onTools: openTools, candidateThumbnail: candidateThumbnail,
-                     showsToolsButton: !showsRail, showsOnDeviceCue: isStudio)
+                     showsToolsButton: !showsRail && !isUX2, showsOnDeviceCue: isStudio)
                 .transition(.opacity)
         }
     }
@@ -387,6 +399,8 @@ struct StudioTopBar: View {
     let live: LiveSession
     var context: StudioContext?
     var compare: CompareControl?
+    /// UX 2.0: « ‹ Projets » in words instead of ✕, and Redo always beside Undo.
+    var isUX2 = false
     @Namespace private var glass
 
     /// Compare, Undo and Redo melt into one glass shape.
@@ -395,8 +409,14 @@ struct StudioTopBar: View {
     var body: some View {
         PSGlassContainer(spacing: PSSpacing.small) {
             HStack(spacing: PSSpacing.small) {
-                PSCircleButton(systemImage: "xmark", accessibilityLabel: L("Close"), action: actions.close)
-                    .glassEffectID("close", in: glass)
+                if isUX2 {
+                    PSCapsuleButton(L("Projects"), systemImage: "chevron.backward", kind: .glass, action: actions.close)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .glassEffectID("close", in: glass)
+                } else {
+                    PSCircleButton(systemImage: "xmark", accessibilityLabel: L("Close"), action: actions.close)
+                        .glassEffectID("close", in: glass)
+                }
                 Spacer(minLength: 4)
                 if let context {
                     StudioContextMenu(context: context, onZoom: actions.zoom)
@@ -412,7 +432,8 @@ struct StudioTopBar: View {
                         .glassEffectID("compare", in: glass)
                         .glassEffectUnion(id: Self.historyUnion, namespace: glass)
                 }
-                UndoRedoCluster(bar: bar, actions: actions, glass: glass, unionID: compare != nil ? Self.historyUnion : nil)
+                UndoRedoCluster(bar: bar, actions: actions, glass: glass, unionID: compare != nil ? Self.historyUnion : nil,
+                                alwaysShowsRedo: isUX2)
                 // Never truncated by the centre, whatever its words.
                 PSCapsuleButton(L("Export"), action: actions.export)
                     .fixedSize(horizontal: true, vertical: false)
@@ -529,6 +550,8 @@ private struct UndoRedoCluster: View {
     let glass: Namespace.ID
     /// Melts Undo and Redo into the compare button's glass (W1).
     var unionID: String? = nil
+    /// UX 2.0: Redo stays beside Undo, dimmed while there is nothing to redo.
+    var alwaysShowsRedo = false
 
     @State private var showsRedo = false
     @State private var redoToken = 0
@@ -542,12 +565,14 @@ private struct UndoRedoCluster: View {
             undoMenu
                 .glassEffectID("undo", in: glass)
                 .glassEffectUnion(id: unionID, namespace: glass)
-            if showsRedo, bar.canRedo {
+            if alwaysShowsRedo || (showsRedo && bar.canRedo) {
                 PSCircleButton(systemImage: "arrow.uturn.forward", accessibilityLabel: L("Redo")) {
+                    guard bar.canRedo else { return }
                     actions.redo()
                     reveal()
                 }
-                .disabled(bar.isBusy)
+                .disabled(bar.isBusy || !bar.canRedo)
+                .opacity(bar.canRedo ? 1 : 0.35)
                 .glassEffectID("redo", in: glass)
                 .glassEffectUnion(id: unionID, namespace: glass)
                 .transition(AnyTransition.opacity.combined(with: .scale(scale: 0.8)))

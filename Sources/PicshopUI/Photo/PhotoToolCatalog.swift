@@ -23,6 +23,7 @@ enum PhotoToolCatalog {
     /// Category ids, symbols and the panels each one holds, in order. W2: Masques ends Lumière et couleur, and
     /// Sélection follows Effacer, each behind its flag.
     static var layout: [(id: String, symbol: String, panels: [Tool])] {
+        if FeatureFlags.isOn(.ux2) { return ux2Layout }
         var light: [Tool] = FeatureFlags.isOn(.proTone) ? [.adjust, .curves, .levels, .color, .looks] : [.adjust, .color, .looks]
         if FeatureFlags.isOn(.masks) { light.append(.masks) }
         let retouch: [Tool] = FeatureFlags.isOn(.aiSelection) ? [.erase, .select, .precise, .cutout] : [.erase, .precise, .cutout]
@@ -33,6 +34,25 @@ enum PhotoToolCatalog {
             ("crop", "crop.rotate", [.crop]),
             ("add", "plus.square.on.square", [.text, .shapes, .layers]),
         ]
+    }
+
+    /// UX 2.0 (ux-spec §3.5.1): the bar names what the user wants to do, in the order of a usual edit — Magie,
+    /// Ajuster, Filtres, Recadrer, Retoucher, Texte, Sélection, Calques. A category with one panel opens it at once.
+    static var ux2Layout: [(id: String, symbol: String, panels: [Tool])] {
+        let adjust: [Tool] = FeatureFlags.isOn(.proTone) ? [.adjust, .color, .curves, .levels] : [.adjust, .color]
+        var select: [Tool] = FeatureFlags.isOn(.aiSelection) ? [.select] : []
+        if FeatureFlags.isOn(.masks) { select.append(.masks) }
+        var layout: [(id: String, symbol: String, panels: [Tool])] = [
+            ("magic", "sparkles", [.focus, .magic]),
+            ("adjust", "slider.horizontal.3", adjust),
+            ("looks", "camera.filters", [.looks]),
+            ("crop", "crop.rotate", [.crop]),
+            ("retouch", "bandage", [.erase, .precise, .cutout]),
+            ("text", "textformat", [.text, .shapes]),
+        ]
+        if !select.isEmpty { layout.append(("select", "lasso", select)) }
+        layout.append(("layers", "square.3.layers.3d", [.layers]))
+        return layout
     }
 
     /// `railOnly`: the panels and their dots alone, for the tool rail, which the editor's chrome
@@ -130,7 +150,12 @@ enum PhotoToolCatalog {
         case "magic": return L("Magic")
         case "retouch": return L("Touch up")
         case "light": return L("Light & colour")
-        case "crop": return L("Framing")
+        case "crop": return FeatureFlags.isOn(.ux2) ? L("Crop") : L("Framing")
+        case "adjust": return L("Fine-tune")
+        case "looks": return L("Filters")
+        case "text": return L("Text")
+        case "select": return L("Selection")
+        case "layers": return L("Layers")
         default: return L("Add")
         }
     }

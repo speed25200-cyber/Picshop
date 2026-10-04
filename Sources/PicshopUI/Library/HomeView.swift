@@ -32,6 +32,8 @@ public struct HomeView: View {
     @State private var deleteTarget: ProjectSummary?
     /// psBackdrop, read once: a flag change takes effect the next time Home appears.
     @State private var isStudio = FeatureFlags.isOn(.psBackdrop)
+    /// UX 2.0: « Créer » with named tiles at the top, the projects under it, no resume hero and no bottom dock.
+    @State private var isUX2 = FeatureFlags.isOn(.ux2)
     /// The latest picture's palette: read by the backdrop and the hero, never by this body.
     @State private var palette = HomePaletteModel()
     /// The scroll offset, read only by the backdrop.
@@ -197,9 +199,13 @@ public struct HomeView: View {
                     LazyVStack(alignment: .leading, spacing: PSSpacing.section, pinnedViews: [.sectionHeaders]) {
                         HomeStudioHeader(app: app, isSearching: $isSearching, query: $query) { showsSettings = true }
                         if !isSearching {
-                            hero(latest, library: library)
-                            HomeLibraryStrip(selection: $pickedItem)
-                                .padding(.horizontal, PSSpacing.page)
+                            if isUX2 {
+                                createRow
+                            } else {
+                                hero(latest, library: library)
+                                HomeLibraryStrip(selection: $pickedItem)
+                                    .padding(.horizontal, PSSpacing.page)
+                            }
                         }
                         HomeRecentsGrid(summaries: isSearching ? HomeCommands.search(query, in: summaries) : summaries,
                                         library: library, namespace: cardTransition, actions: projectActions,
@@ -219,7 +225,17 @@ public struct HomeView: View {
             } else {
                 VStack(spacing: 0) {
                     HomeStudioHeader(app: app, isSearching: .constant(false), query: .constant(""), showsSearch: false) { showsSettings = true }
-                    if library.hasLoaded {
+                    if library.hasLoaded, isUX2 {
+                        createRow
+                            .padding(.top, PSSpacing.medium)
+                        Text(L("No project yet. Choose Photo, Video or PDF to start."))
+                            .font(.body)
+                            .foregroundStyle(Color.psTextSecondary)
+                            .multilineTextAlignment(.center)
+                            .padding(PSSpacing.page)
+                            .frame(maxHeight: .infinity)
+                            .transition(.opacity)
+                    } else if library.hasLoaded {
                         HomeStudioEmptyState(selection: $pickedItem, actions: HomeStartActions(
                             pickVideo: { pick(.videos) },
                             importPDF: { showsPDFPicker = true },
@@ -252,9 +268,15 @@ public struct HomeView: View {
         .padding(.horizontal, PSSpacing.page)
     }
 
+    /// UX 2.0: Photo, Vidéo, PDF, Film magique.
+    private var createRow: some View {
+        HomeCreateRow(pickPhoto: { pick(.images) }, pickVideo: { pick(.videos) },
+                      importPDF: { showsPDFPicker = true }, magicMovie: { showsMagicMovie = true })
+    }
+
     @ViewBuilder
     private var dock: some View {
-        if let app {
+        if let app, !isUX2 {
             HomeDock(app: app, lastKind: app.library.summaries.first?.kind, projects: { app.library.summaries }, actions: HomeDockActions(
                 pick: { pick($0) },
                 importPDF: { showsPDFPicker = true },
