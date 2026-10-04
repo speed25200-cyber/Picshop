@@ -4,7 +4,7 @@
 #   picshop-testflight  — Pro build (local brain on MLX + Stable Diffusion) signed with your App Store Connect API key, uploaded to TestFlight
 #                          automatically on every push to the development branch and to main.
 #                          Requirements in Codemagic (Teams → Integrations → Developer Portal):
-#                            • an App Store Connect integration named "PetMind ASC API"
+#                            • an App Store Connect integration named "Dev"
 #                              (API key with the App Manager role)
 #                          Signing uses the distribution certificate uploaded under
 #                          Teams → Code signing identities; the App Store provisioning profile for
@@ -102,7 +102,7 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
     integrations:
-      app_store_connect: PetMind ASC API
+      app_store_connect: Dev
     environment:
       <<: *env
       ios_signing:
