@@ -220,7 +220,7 @@ final class MLXKVEngine: LocalChatEngine, @unchecked Sendable {
     private func run(_ batch: [Chat.Message], hasNewMedia: Bool, options: LocalGenerationOptions,
                      continuation: AsyncThrowingStream<LocalChatEvent, Error>.Continuation) async {
         let state: (ModelContainer, KVConversation, Bool)? = lock.withLock {
-            guard !closed, let container else { return nil }
+            guard !closed, let container = self.container else { return nil }
             let drop = dropsPrefix
             dropsPrefix = false
             return (container, conversation, drop)

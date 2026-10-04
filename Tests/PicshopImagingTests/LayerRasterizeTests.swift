@@ -2,6 +2,7 @@
 import XCTest
 import CoreImage
 import PicshopCore
+import PicshopIntent
 @testable import PicshopImaging
 
 /// D17: merge down is the two layers' isolated plan (the lower one at full opacity, in normal mode), cropped to their
@@ -55,7 +56,7 @@ final class LayerRasterizeTests: XCTestCase {
             $0.blendMode = .normal
         }
         let reference = try await fixture.renderer.renderedRGBA(alone, options: .full)
-        let x0 = Int((result.opaqueBounds.x * Double(width)).rounded()), y0 = Int((result.opaqueBounds.y * Double(height)).rounded())
+        let x0 = Int((result.opaqueBounds.minX * Double(width)).rounded()), y0 = Int((result.opaqueBounds.minY * Double(height)).rounded())
         var crop: [UInt8] = []
         for row in y0..<(y0 + got.height) {
             let start = (row * reference.width + x0) * 4
@@ -82,7 +83,7 @@ final class LayerRasterizeTests: XCTestCase {
         alone.backgroundColor = .clear
         alone.update(layerID: alone.baseLayerID ?? lower.id) { $0.isVisible = false }
         let reference = try await fixture.renderer.renderedRGBA(alone, options: .full)
-        let x0 = Int((result.opaqueBounds.x * Double(width)).rounded()), y0 = Int((result.opaqueBounds.y * Double(height)).rounded())
+        let x0 = Int((result.opaqueBounds.minX * Double(width)).rounded()), y0 = Int((result.opaqueBounds.minY * Double(height)).rounded())
         var crop: [UInt8] = []
         for row in y0..<(y0 + got.height) {
             let start = (row * reference.width + x0) * 4
@@ -90,8 +91,11 @@ final class LayerRasterizeTests: XCTestCase {
         }
         compare(got.bytes, crop, tolerance: 2, "merge selected")
         let bounds = LayerPlacement.bounds(for: lower, contentSize: lowerAsset.pixelSize, canvasSize: document.canvasSize, isBase: false)
-        let x = Int(((bounds.x + bounds.width * 0.15) * Double(width)).rounded()) - x0
-        XCTAssertEqual(Double(got.bytes[((got.height / 2) * got.width + x) * 4 + 3]), 127.5, accuracy: 8, "the lower layer at 50 %")
+        let left: Double = (bounds.minX + bounds.width * 0.15) * Double(width)
+        let x = Int(left.rounded()) - x0
+        let index = ((got.height / 2) * got.width + x) * 4 + 3
+        let alpha = Double(got.bytes[index])
+        XCTAssertEqual(alpha, 127.5, accuracy: 8, "the lower layer at 50 %")
     }
 
     func testAStampEqualsTheVisibleComposite() async throws {
@@ -124,13 +128,16 @@ final class LayerRasterizeTests: XCTestCase {
         document.layers.append(layer)
         let result = try await fixture.renderer.rasterize(.layers([layer.id]), in: document)
         let bounds = LayerPlacement.bounds(for: layer, contentSize: asset.pixelSize, canvasSize: document.canvasSize, isBase: false)
-        XCTAssertEqual(result.opaqueBounds.x, bounds.x, accuracy: 1.5 / Double(width))
+        XCTAssertEqual(result.opaqueBounds.minX, bounds.minX, accuracy: 1.5 / Double(width))
         XCTAssertEqual(result.opaqueBounds.width, bounds.width, accuracy: 2.5 / Double(width))
         let got = try readBack(result, fixture)
         // Left half kept, right half cleared.
         let row = got.height / 2
-        XCTAssertGreaterThan(got.bytes[(row * got.width + got.width / 4) * 4 + 3], 240)
-        XCTAssertLessThan(got.bytes[(row * got.width + got.width * 3 / 4) * 4 + 3], 15)
+        let keptIndex = (row * got.width + got.width / 4) * 4 + 3
+        let clearedIndex = (row * got.width + got.width * 3 / 4) * 4 + 3
+        let kept: UInt8 = got.bytes[keptIndex], cleared: UInt8 = got.bytes[clearedIndex]
+        XCTAssertGreaterThan(kept, 240)
+        XCTAssertLessThan(cleared, 15)
     }
 }
 #endif
