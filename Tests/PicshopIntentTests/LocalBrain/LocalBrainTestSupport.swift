@@ -7,6 +7,19 @@ import XCTest
 // editor the model's calls land on, a fast clock, turn builders and an event
 // collector.
 
+extension LocalModelLiveBrain.Limits {
+    /// Deadlines that never fire in a test about something else: 1 s to the first token and
+    /// 10 s a turn on the 0.01 test clock, so a loaded parallel runner cannot trip them.
+    /// Tests about the deadlines themselves pass their own limits.
+    static var relaxedForTests: Self {
+        var limits = Self()
+        limits.firstTokenTimeout = 100
+        limits.coldFirstTokenTimeout = 100
+        limits.turnTimeout = 1_000
+        return limits
+    }
+}
+
 /// Time for the brain's deadlines, scaled down so a 6 s watchdog fires in 60 ms.
 struct BrainTestClock: LiveClock {
     var scale = 0.01

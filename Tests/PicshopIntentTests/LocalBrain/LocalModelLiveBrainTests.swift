@@ -9,7 +9,7 @@ import XCTest
 // thermal limits, and never any markup in speech.
 
 final class LocalModelLiveBrainTests: XCTestCase {
-    private func brain(_ factory: FakeEngineFactory, fallback: (any LiveBrain)? = nil, limits: LocalModelLiveBrain.Limits = .init(),
+    private func brain(_ factory: FakeEngineFactory, fallback: (any LiveBrain)? = nil, limits: LocalModelLiveBrain.Limits = .relaxedForTests,
                        info: LocalModelInfo = .qwen4B, clock: BrainTestClock = BrainTestClock(), log: (@Sendable (LiveLogEntry) -> Void)? = nil) -> LocalModelLiveBrain {
         LocalModelLiveBrain(mode: .photo, info: info, makeEngine: factory.factory, fallback: fallback, limits: limits, clock: clock, log: log)
     }
@@ -135,7 +135,7 @@ final class LocalModelLiveBrainTests: XCTestCase {
 
     func testRoundLimitEndsWithLoopLimit() async throws {
         let factory = FakeEngineFactory(scripts: [[Self.warmer(15), Self.warmer(20), Self.warmer(25), Self.warmer(30)]])
-        var limits = LocalModelLiveBrain.Limits()
+        var limits = LocalModelLiveBrain.Limits.relaxedForTests
         limits.maxApplyEdits = 10
         let handler = ScriptedToolHandler()
         await MainActor.run { handler.stepStatus = .failed }
@@ -344,7 +344,7 @@ final class LocalModelLiveBrainTests: XCTestCase {
     func testCompactionPastTheTokenBudget() async throws {
         let answer: [LocalChatEvent] = [.text("Ok."), Say.done()]
         let factory = FakeEngineFactory(scripts: [[answer, answer], [answer]], growth: 80)
-        var limits = LocalModelLiveBrain.Limits()
+        var limits = LocalModelLiveBrain.Limits.relaxedForTests
         limits.compactAt = 100
         let entries = LogCollectorBox()
         let brain = brain(factory, limits: limits, log: { entries.add($0) })
@@ -402,7 +402,7 @@ final class LocalModelLiveBrainTests: XCTestCase {
     // 12. No token in time: .timeout(first_token) before any .text.
     func testFirstTokenTimeout() async throws {
         let factory = FakeEngineFactory(scripts: [[[.text("Trop tard."), Say.done()]]], eventDelay: 0.5)
-        let (events, error) = await drain(brain(factory).respond(to: BrainTurns.speech("plus chaud"), tools: ScriptedToolHandler()))
+        let (events, error) = await drain(brain(factory, limits: LocalModelLiveBrain.Limits()).respond(to: BrainTurns.speech("plus chaud"), tools: ScriptedToolHandler()))
         XCTAssertEqual(error as? LiveBrainError, .timeout(stage: "first_token"))
         XCTAssertEqual(events.kinds, ["started"])
     }
@@ -493,12 +493,16 @@ final class LocalModelLiveBrainTests: XCTestCase {
 
     func testTurnDeadline() async throws {
         var limits = LocalModelLiveBrain.Limits()
-        // 0.3 s of turn against 0.8 s of speech, 20 ms a word: the first words land well inside
-        // the deadline even on a loaded parallel runner, the last ones well after it.
+        // At a 0.05 clock: 1.5 s of turn against 2 s of speech, 50 ms a word, and a first-token
+        // deadline (5 s) that cannot fire first. The first words land well inside the turn even on
+        // a loaded parallel runner, the last ones well after it.
         limits.turnTimeout = 30
+        limits.firstTokenTimeout = 100
+        limits.coldFirstTokenTimeout = 100
         let events = (0..<40).map { _ in LocalChatEvent.text("bla ") } + [Say.done()]
-        let factory = FakeEngineFactory(scripts: [[events]], eventDelay: 0.02)
-        let (seen, error) = await drain(brain(factory, limits: limits).respond(to: BrainTurns.speech("raconte"), tools: ScriptedToolHandler()))
+        let factory = FakeEngineFactory(scripts: [[events]], eventDelay: 0.05)
+        let (seen, error) = await drain(brain(factory, limits: limits, clock: BrainTestClock(scale: 0.05))
+            .respond(to: BrainTurns.speech("raconte"), tools: ScriptedToolHandler()))
         XCTAssertEqual(error as? LiveBrainError, .timeout(stage: "turn"))
         XCTAssertFalse(seen.said.isEmpty)
     }

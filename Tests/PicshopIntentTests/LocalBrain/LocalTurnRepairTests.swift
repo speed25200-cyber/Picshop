@@ -69,7 +69,7 @@ import XCTest
 }
 
 final class LocalTurnRepairTests: XCTestCase {
-    private func brain(_ factory: FakeEngineFactory, limits: LocalModelLiveBrain.Limits = .init(), log: (@Sendable (LiveLogEntry) -> Void)? = nil) -> LocalModelLiveBrain {
+    private func brain(_ factory: FakeEngineFactory, limits: LocalModelLiveBrain.Limits = .relaxedForTests, log: (@Sendable (LiveLogEntry) -> Void)? = nil) -> LocalModelLiveBrain {
         LocalModelLiveBrain(mode: .photo, info: .qwen4B, makeEngine: factory.factory, fallback: FakeFallbackBrain(), limits: limits, clock: BrainTestClock(), log: log)
     }
 
@@ -265,7 +265,7 @@ final class LocalTurnRepairTests: XCTestCase {
 
     // A call made only of repeats does not count toward maxApplyEdits: it comes back blocked, not "too many".
     func testABlockedCallDoesNotCountTowardTheLimit() async throws {
-        var limits = LocalModelLiveBrain.Limits()
+        var limits = LocalModelLiveBrain.Limits.relaxedForTests
         limits.maxApplyEdits = 1
         let factory = FakeEngineFactory(scripts: [[
             [Say.call("apply_edits", Self.behind), Say.done()],
