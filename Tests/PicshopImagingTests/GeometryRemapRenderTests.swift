@@ -74,9 +74,9 @@ final class GeometryRemapRenderTests: XCTestCase {
         let original = blob(originalMask)
         let edits: [(String, EditOperation.Kind)] = [
             ("crop", .crop(PSRect(x: 0.1, y: 0.05, width: 0.65, height: 0.9))),
-            ("rotate", .rotate(90)),
+            ("rotate", .rotate(degrees: 90)),
             ("flip", .flip(.horizontal)),
-            ("straighten", .straighten(5)),
+            ("straighten", .straighten(degrees: 5)),
         ]
         for (name, edit) in edits {
             var remapped = made

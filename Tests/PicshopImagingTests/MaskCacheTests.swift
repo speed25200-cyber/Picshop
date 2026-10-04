@@ -173,7 +173,8 @@ final class MaskCacheTests: XCTestCase {
         XCTAssertEqual(built, 3)
         for step in 0..<12 {
             let preview = MaskStack.single(MaskComponent(.colorRange(ColorRangeSpec(samples: [LabColor(l: 50, a: 40, b: 20)], fuzziness: 0.2 + 0.05 * Double(step)))))
-            _ = try await fixture.renderer.render(document, options: interactive(target: target), overlay: MaskOverlayRequest(target: .stack(preview)))
+            // Read back as bytes: the frame and overlay CIImages would cross out of the renderer actor.
+            _ = try await fixture.renderer.renderedRGBA(document, options: interactive(target: target), overlay: MaskOverlayRequest(target: .stack(preview)))
         }
         let dragged = await fixture.renderer.maskCubeBuilds
         XCTAssertEqual(dragged - built, 12, "one cube per preview frame")
