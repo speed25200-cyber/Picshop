@@ -402,7 +402,11 @@ final class LocalModelLiveBrainTests: XCTestCase {
     // 12. No token in time: .timeout(first_token) before any .text.
     func testFirstTokenTimeout() async throws {
         let factory = FakeEngineFactory(scripts: [[[.text("Trop tard."), Say.done()]]], eventDelay: 0.5)
-        let (events, error) = await drain(brain(factory, limits: LocalModelLiveBrain.Limits()).respond(to: BrainTurns.speech("plus chaud"), tools: ScriptedToolHandler()))
+        // The default first-token deadlines (60 / 120 ms on the test clock) against a 500 ms token,
+        // and a turn deadline (10 s) that cannot fire first on a loaded runner.
+        var limits = LocalModelLiveBrain.Limits()
+        limits.turnTimeout = 1_000
+        let (events, error) = await drain(brain(factory, limits: limits).respond(to: BrainTurns.speech("plus chaud"), tools: ScriptedToolHandler()))
         XCTAssertEqual(error as? LiveBrainError, .timeout(stage: "first_token"))
         XCTAssertEqual(events.kinds, ["started"])
     }

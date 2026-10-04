@@ -22,13 +22,22 @@ public enum AdjustmentPipeline {
             filter.ev = Float(adjustments[.exposure] * 2.0)
             image = filter.outputImage ?? image
         }
-        if adjustments[.brightness] != 0 || adjustments[.contrast] != 0 || adjustments[.saturation] != 0 {
+        if adjustments[.brightness] != 0 || adjustments[.saturation] != 0 {
             let filter = CIFilter.colorControls()
             filter.inputImage = image
             filter.brightness = Float(adjustments[.brightness] * 0.22)
-            filter.contrast = Float(1 + adjustments[.contrast] * 0.55)
             filter.saturation = Float(max(0, 1 + adjustments[.saturation]))
             image = filter.outputImage ?? image
+        }
+        if adjustments[.contrast] != 0, let encoding = CGColorSpace(name: CGColorSpace.extendedSRGB),
+           let encoded = image.matchedFromWorkingSpace(to: encoding) {
+            // Contrast pivots on mid-grey. CIColorControls computes (c − 0.5) × k + 0.5 on the numbers it is given: in
+            // the linear working space 0.5 is L* 76, so + crushed the shadows (mid-grey fell from L* 50 to 34, a dark
+            // region lost spread) and − lifted them. On gamma sRGB numbers 0.5 is L* 53.
+            let filter = CIFilter.colorControls()
+            filter.inputImage = encoded
+            filter.contrast = Float(1 + adjustments[.contrast] * 0.55)
+            image = filter.outputImage?.matchedToWorkingSpace(from: encoding) ?? image
         }
         if adjustments[.shadows] != 0 || adjustments[.highlights] < 0 {
             let filter = CIFilter.highlightShadowAdjust()
@@ -59,12 +68,15 @@ public enum AdjustmentPipeline {
             image = filter.outputImage ?? image
         }
         if adjustments[.temperature] != 0 || adjustments[.tint] != 0 || adjustments[.skinTone] != 0 {
+            // Core Image maps the colour of `neutral` onto `targetNeutral`: a target above 6500 K tints the picture
+            // blue and a positive target tint green. The dials say what the light was (as Lightroom's Temp and Tint
+            // do), so they set `neutral` and the target stays D65: warmth + is warmer (b* up), tint + more magenta.
             let filter = CIFilter.temperatureAndTint()
             filter.inputImage = image
-            filter.neutral = CIVector(x: 6500, y: 0)
             let kelvin = 6500 + (adjustments[.temperature] * 3000) + (adjustments[.skinTone] * 400)
             let tint = adjustments[.tint] * 60 + adjustments[.skinTone] * 8
-            filter.targetNeutral = CIVector(x: kelvin, y: tint)
+            filter.neutral = CIVector(x: kelvin, y: tint)
+            filter.targetNeutral = CIVector(x: 6500, y: 0)
             image = filter.outputImage ?? image
         }
         if adjustments[.hue] != 0 {

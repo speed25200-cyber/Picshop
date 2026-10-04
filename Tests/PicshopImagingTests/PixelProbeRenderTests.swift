@@ -9,8 +9,9 @@ import PicshopIntent
 /// both signs × five region kinds × four procedural pictures) must never read as failed; sabotaged ones (wrong
 /// sign, wrong region, a leak, a no-op) are caught at least 90 % of the time. A probe never starts an expensive pass.
 ///
-/// The verdict below mirrors §8.7's table (the thresholds `PixelPostconditions` applies in Intent); the renders, the
-/// masks and the Lab statistics are the real ones.
+/// The verdict is Intent's own (`PixelPostconditions`, §8.7's table); the renders, the masks and the Lab statistics are
+/// the real ones. A check Intent cannot make on a region (whites where it holds no highlights) is unverifiable, not
+/// failed, and stays rare.
 final class PixelProbeRenderTests: XCTestCase {
     private let width = 256, height = 192
 
@@ -19,27 +20,11 @@ final class PixelProbeRenderTests: XCTestCase {
     enum Verdict: Equatable { case passed, failed(String), unverifiable }
 
     static func verdict(_ parameter: AdjustmentParameter, sign: Double, _ result: PixelProbeResult) -> Verdict {
-        guard let before = result.before, let after = result.after else { return .unverifiable }
-        let dIn = after.inside.meanL - before.inside.meanL
-        let dOut = after.outside.meanL - before.outside.meanL
-        if outsideWeightIsMeaningful(after), abs(dOut) > max(0.6, 0.25 * abs(dIn)) { return .failed("leaks outside the mask") }
-        switch parameter {
-        case .exposure, .brightness, .shadows, .highlights, .whites, .blacks:
-            return sign * dIn >= 0.8 && sign * (dIn - dOut) >= 0.5 ? .passed : .failed("ΔL*in \(dIn)")
-        case .contrast, .clarity:
-            return sign * (after.inside.stdL - before.inside.stdL) >= 0.4 ? .passed : .failed("Δstd \(after.inside.stdL - before.inside.stdL)")
-        case .saturation, .vibrance:
-            return sign * (after.inside.meanChroma - before.inside.meanChroma) >= 0.8 ? .passed : .failed("ΔC* \(after.inside.meanChroma - before.inside.meanChroma)")
-        case .temperature:
-            return sign * (after.inside.meanB - before.inside.meanB) >= 0.5 ? .passed : .failed("Δb* \(after.inside.meanB - before.inside.meanB)")
-        case .tint:
-            return sign * (after.inside.meanA - before.inside.meanA) >= 0.5 ? .passed : .failed("Δa* \(after.inside.meanA - before.inside.meanA)")
-        case .hue, .sharpness, .noiseReduction, .grain, .fade, .skinTone, .vignette:
-            return .unverifiable
-        }
+        let check = PixelPostconditions.Check(result.request, .parameter(parameter, direction: sign > 0 ? 1 : -1, amount: 60))
+        let judged = PixelPostconditions.evaluate(PixelPostconditions.Plan(checks: [check]), results: [result])
+        if !judged.report.failed.isEmpty { return .failed(judged.report.failed.joined(separator: "; ")) }
+        return judged.report.passed > 0 ? .passed : .unverifiable
     }
-
-    static func outsideWeightIsMeaningful(_ regions: PixelStats.Regions) -> Bool { regions.outside.weight >= 50 }
 
     // MARK: - Fixtures
 
@@ -153,6 +138,7 @@ final class PixelProbeRenderTests: XCTestCase {
         }
         print("PROBES correct \(correct) (unverifiable \(unverifiable)), false failed \(falseFailures.count); sabotaged \(sabotaged), caught \(caught)")
         XCTAssertGreaterThanOrEqual(correct, 160)
+        XCTAssertLessThanOrEqual(unverifiable, correct / 10, "most correct edits are judged")
         XCTAssertTrue(falseFailures.isEmpty, falseFailures.prefix(20).joined(separator: "\n"))
         XCTAssertGreaterThanOrEqual(sabotaged, 40)
         XCTAssertGreaterThanOrEqual(Double(caught), 0.9 * Double(sabotaged))

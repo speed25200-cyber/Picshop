@@ -195,6 +195,73 @@ enum MaskComponentImages {
         return clamp.outputImage?.cropped(to: image.extent) ?? image
     }
 
+    // MARK: - Morphology
+
+    /// Above this many rectangles (radii past 26 px) the expand uses the circular built-in instead.
+    static let diskRectangleLimit = 16
+
+    /// The max (`dilate`) or min over a disk of `radius` px: the pixel offsets with dx² + dy² ≤ r², as Core's
+    /// reference expand and contract (`Morphology.dilate`, `erode`). Under one pixel of reach nothing changes.
+    ///
+    /// The disk is a union of centred rectangles, one for each distinct half-width ⌊√(r² − dy²)⌋. Each rectangle is
+    /// that half-width wide and reaches down to the last row with that half-width. Each one is an exact
+    /// `CIMorphologyRectangleMaximum` or `Minimum` (odd sizes, edges clamped), and the results are combined by max or
+    /// min. The circular built-ins are not used at small radii. At a fractional radius they count the rim pixels in
+    /// only partly, so an edge moves about half a pixel more or less than the reference's disk. That is ±12/255 on a
+    /// feathered gradient and ±20/255 on an edge blurred afterwards. Past `diskRectangleLimit` rectangles, the
+    /// circular built-in takes over: there its rim is under 1/26 of the radius, and the pass count stays bounded.
+    static func disk(_ image: CIImage, radius: Double, dilate: Bool, extent: CGRect) -> CIImage {
+        guard radius.isFinite, radius >= 1 else { return image }
+        let reach = Int(radius.rounded(.down))
+        // Half-widths do not grow with |dy|: each new one starts a taller, narrower rectangle.
+        var rectangles: [(half: Int, rows: Int)] = []
+        for dy in 0...reach {
+            let half = Int((radius * radius - Double(dy * dy)).squareRoot().rounded(.down))
+            if let last = rectangles.last, last.half == half {
+                rectangles[rectangles.count - 1].rows = dy
+            } else {
+                rectangles.append((half, dy))
+            }
+        }
+        let input = image.clampedToExtent()
+        guard rectangles.count <= diskRectangleLimit else {
+            let output: CIImage?
+            if dilate {
+                let filter = CIFilter.morphologyMaximum()
+                filter.inputImage = input
+                filter.radius = Float(radius)
+                output = filter.outputImage
+            } else {
+                let filter = CIFilter.morphologyMinimum()
+                filter.inputImage = input
+                filter.radius = Float(radius)
+                output = filter.outputImage
+            }
+            return output?.cropped(to: extent) ?? image
+        }
+        var result: CIImage?
+        for rectangle in rectangles {
+            let width = Float(2 * rectangle.half + 1), height = Float(2 * rectangle.rows + 1)
+            let filtered: CIImage?
+            if dilate {
+                let filter = CIFilter.morphologyRectangleMaximum()
+                filter.inputImage = input
+                filter.width = width
+                filter.height = height
+                filtered = filter.outputImage
+            } else {
+                let filter = CIFilter.morphologyRectangleMinimum()
+                filter.inputImage = input
+                filter.width = width
+                filter.height = height
+                filtered = filter.outputImage
+            }
+            guard let output = filtered?.cropped(to: extent) else { return image }
+            result = result.map { dilate ? maximum(output, $0) : minimum(output, $0) } ?? output
+        }
+        return result ?? image
+    }
+
     /// max(a, b) per channel.
     static func maximum(_ a: CIImage, _ b: CIImage) -> CIImage {
         let filter = CIFilter.maximumCompositing()

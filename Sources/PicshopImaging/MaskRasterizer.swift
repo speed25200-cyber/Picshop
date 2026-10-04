@@ -7,9 +7,10 @@ import PicshopCore
 /// Draws a `MaskStack` on the GPU (W2, D1, D5, D6), owned by the `PhotoRenderer` actor and only used inside it.
 ///
 /// Composition is D1 exactly, with built-ins: each component's image (`MaskComponentImages`), inverted and scaled by
-/// its opacity, then add = max, intersect = min, subtract = min with 1 − v; then expand or contract (morphology,
-/// radius |expand| × 0.02 × L), feather (Gaussian, σ = feather × 0.03 × L), invert and density. A first component
-/// that subtracts starts from white; unsupported components (written by a newer build) are skipped.
+/// its opacity, then add = max, intersect = min, subtract = min with 1 − v; then expand or contract (max or min over
+/// a disk of radius |expand| × 0.02 × L, `MaskComponentImages.disk`), feather (Gaussian, σ = feather × 0.03 × L),
+/// invert and density. A first component that subtracts starts from white; unsupported components (written by a
+/// newer build) are skipped.
 ///
 /// Caches (D6):
 /// - decoded rasters by path (LRU), so a drag never decodes a PNG;
@@ -193,20 +194,7 @@ final class MaskRasterizer {
         let longest = Double(max(extent.width, extent.height))
         let expand = stack.expand.clamped(to: -1...1)
         if abs(expand) > 0.0005 {
-            let radius = Float(abs(expand) * MaskStack.expandRadiusFraction * longest)
-            if radius >= 0.5 {
-                if expand > 0 {
-                    let filter = CIFilter.morphologyMaximum()
-                    filter.inputImage = m.clampedToExtent()
-                    filter.radius = radius
-                    m = filter.outputImage?.cropped(to: extent) ?? m
-                } else {
-                    let filter = CIFilter.morphologyMinimum()
-                    filter.inputImage = m.clampedToExtent()
-                    filter.radius = radius
-                    m = filter.outputImage?.cropped(to: extent) ?? m
-                }
-            }
+            m = MaskComponentImages.disk(m, radius: abs(expand) * MaskStack.expandRadiusFraction * longest, dilate: expand > 0, extent: extent)
         }
         let feather = stack.feather.clamped(to: 0...1)
         if feather > 0.0005 {
