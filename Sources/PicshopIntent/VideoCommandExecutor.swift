@@ -887,6 +887,8 @@ public struct VideoCommandExecutor: Sendable {
         case .zoom: return (timeline, .effect(.zoom(intent.amount, intent.target), label: ""))
         case .export: return (timeline, .effect(.export, label: ""))
         case .share: return (timeline, .effect(.share, label: ""))
+        // A greeting or a thank-you is answered (the plan's reply); the help sheet stays closed.
+        case .help where intent.text == "greeting" || intent.text == "thanks": return (timeline, .effect(.message("chat"), label: ""))
         case .help: return (timeline, .effect(.help, label: ""))
         case .confirm: return (timeline, .effect(.confirm, label: ""))
         case .cancel: return (timeline, .effect(.cancel, label: ""))

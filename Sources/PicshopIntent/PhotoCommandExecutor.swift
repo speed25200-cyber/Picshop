@@ -476,6 +476,8 @@ public struct PhotoCommandExecutor: Sendable {
         case .restoreVersion: return (document, .effect(.message("version:restore:" + (intent.text ?? "")), label: ""))
         case .export: return (document, .effect(.export, label: ""))
         case .share: return (document, .effect(.share, label: ""))
+        // A greeting or a thank-you is answered (the plan's reply); the help sheet stays closed.
+        case .help where intent.text == "greeting" || intent.text == "thanks": return (document, .effect(.message("chat"), label: ""))
         case .help: return (document, .effect(.help, label: ""))
         case .confirm:
             // « oui » to a model offer (W2): the session downloads the model and runs the pending call once it is installed.

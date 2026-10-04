@@ -204,6 +204,8 @@ public struct PDFCommandExecutor: Sendable {
         case .revert: return (document, .effect(.revert, label: ""))
         case .export: return (document, .effect(.export, label: ""))
         case .share: return (document, .effect(.share, label: ""))
+        // A greeting or a thank-you is answered (the plan's reply); the help sheet stays closed.
+        case .help where intent.text == "greeting" || intent.text == "thanks": return (document, .effect(.message("chat"), label: ""))
         case .help: return (document, .effect(.help, label: ""))
         case .zoom: return (document, .effect(.zoom(intent.amount, nil), label: ""))
         case .confirm: return (document, .effect(.confirm, label: ""))

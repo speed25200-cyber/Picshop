@@ -113,6 +113,11 @@ public enum Replies {
         case .chooseCandidate: return fr ? "Compris." : "Got it."
         case .confirm: return fr ? "OK." : "OK."
         case .cancel: return fr ? "Annulé." : "Cancelled."
+        case .help where intent.text == "greeting":
+            return fr ? "Bonjour ! Dites-moi ce que vous voulez changer, par exemple « plus lumineux », « efface la personne » ou « recadre en carré »."
+                : "Hi! Tell me what to change, for example “brighter”, “remove the person” or “crop to square”."
+        case .help where intent.text == "thanks":
+            return fr ? "Avec plaisir." : "You're welcome."
         case .help: return fr ? "Dis par exemple : « efface le chien », « plus lumineux », « recadre en carré »." : "Try: “remove the dog”, “make it brighter”, “crop to square”."
         case .describe: return fr ? "Je regarde la photo…" : "Looking at the photo…"
         case .readPage: return fr ? "Je lis la page." : "Reading the page."
