@@ -51,6 +51,8 @@ final class EdgeRefineGPUTests: XCTestCase {
         // Two tones: any guide encoding is an affine map of the other, which the guided filter does not see.
         let guideValues = (0..<(width * height)).map { Float(($0 % width) < 100 ? 0.15 : 0.85) }
         let refinement = SelectionRefinement(radius: 1, contrast: 0.2)
+        // The reference's filter runs on the GPU, not `CIGuidedFilter`'s fallback (which leaves the edge in place).
+        XCTAssertNotNil(EdgeRefine.GuidedKernels.shared.kernels(radius: 4), "the guided filter's kernels build")
         let roughImage = try image(roughMask())
         let guideImage = try image(guideValues)
         let gpu = try values(EdgeRefine.refine(roughImage, guide: guideImage, refinement: refinement))

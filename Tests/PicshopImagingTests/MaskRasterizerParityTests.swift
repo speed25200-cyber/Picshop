@@ -357,6 +357,23 @@ final class MaskRasterizerParityTests: XCTestCase {
         XCTAssertLessThanOrEqual(result.max, 8.0 / 255)
     }
 
+    /// Expand and contract at fractional radii (1.7 px, and 2.5 px then feathered) move a soft edge exactly as far as
+    /// the reference's disk: a footprint half a pixel off shows as 11 to 15/255 on this ramp.
+    func testAFractionalExpandOrContractMovesASoftEdgeLikeTheReferenceDisk() async throws {
+        let rgba = MaskTestFixtures.colourful(width: width, height: height)
+        let project = try MaskTestFixtures.project(rgba: rgba, width: width, height: height)
+        defer { try? FileManager.default.removeItem(at: project.root) }
+        let radial = MaskComponent(.radial(RadialGradientSpec(center: PSPoint(x: 0.5, y: 0.45), radiusX: 0.12, radiusY: 0.35, rotation: 57, feather: 0.65)))
+        for (expand, feather) in [(0.33, 0.0), (-0.33, 0.0), (0.4855, 0.375), (-0.4855, 0.375)] {
+            let stack = MaskStack(components: [radial], feather: feather, expand: expand)
+            let gpu = try await gpuMask(stack, project)
+            let cpu = MaskRaster.render(stack, width: width, height: height, source: ReferencePixels(rgba: rgba, rasters: [:])).values
+            let result = compare(gpu, cpu)
+            XCTAssertLessThanOrEqual(result.mean, 1.0 / 255, "expand \(expand), feather \(feather)")
+            XCTAssertLessThanOrEqual(result.max, 6.0 / 255, "expand \(expand), feather \(feather)")
+        }
+    }
+
     func testADepthRangeOnASixteenBitRampMatches() async throws {
         let rgba = MaskTestFixtures.colourful(width: width, height: height)
         let project = try MaskTestFixtures.project(rgba: rgba, width: width, height: height)

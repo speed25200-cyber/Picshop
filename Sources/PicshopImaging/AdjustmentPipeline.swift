@@ -22,13 +22,22 @@ public enum AdjustmentPipeline {
             filter.ev = Float(adjustments[.exposure] * 2.0)
             image = filter.outputImage ?? image
         }
-        if adjustments[.brightness] != 0 || adjustments[.contrast] != 0 || adjustments[.saturation] != 0 {
+        if adjustments[.brightness] != 0 || adjustments[.saturation] != 0 {
             let filter = CIFilter.colorControls()
             filter.inputImage = image
             filter.brightness = Float(adjustments[.brightness] * 0.22)
-            filter.contrast = Float(1 + adjustments[.contrast] * 0.55)
             filter.saturation = Float(max(0, 1 + adjustments[.saturation]))
             image = filter.outputImage ?? image
+        }
+        if adjustments[.contrast] != 0, let encoding = CGColorSpace(name: CGColorSpace.extendedSRGB),
+           let encoded = image.matchedFromWorkingSpace(to: encoding) {
+            // Contrast pivots on mid-grey. CIColorControls computes (c − 0.5) × k + 0.5 on the numbers it is given: in
+            // the linear working space 0.5 is L* 76, so + crushed the shadows (mid-grey fell from L* 50 to 34, a dark
+            // region lost spread) and − lifted them. On gamma sRGB numbers 0.5 is L* 53.
+            let filter = CIFilter.colorControls()
+            filter.inputImage = encoded
+            filter.contrast = Float(1 + adjustments[.contrast] * 0.55)
+            image = filter.outputImage?.matchedToWorkingSpace(from: encoding) ?? image
         }
         if adjustments[.shadows] != 0 || adjustments[.highlights] < 0 {
             let filter = CIFilter.highlightShadowAdjust()

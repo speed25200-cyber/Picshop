@@ -8,13 +8,39 @@ import PicshopCore
 /// `EdgeRefineReference`, which tests it. Lazy Core Image graphs: `refinePreview` draws them at the interactive
 /// size, `refineSelection` at the working size.
 ///
-/// The guided filter is Core Image's `CIGuidedFilter`, reached by name (inputImage, inputGuideImage, inputRadius,
-/// inputEpsilon) so the build never depends on a typed accessor; without it the mask goes on unguided.
+/// The guided filter is the reference's own (He et al., a (2r + 1)² box clipped at the edges, the guide's luma), run
+/// by four small kernels (`GuidedKernels`). Core Image's `CIGuidedFilter` is an upsampler whose radius and ε do not
+/// mean the reference's: at radius 4 on a two-tone guide it left a soft edge where it was instead of moving it onto
+/// the guide's, so it is only the fallback when the kernels cannot be built.
 public enum EdgeRefine {
-    /// The guided filter of `mask` (opaque, value in RGB) by `guide` (the picture), radius in pixels.
+    /// The guided filter of `mask` (opaque, value in RGB) by `guide` (the picture), radius in pixels (rounded, as the
+    /// reference's). The guide is read as the luma of its gamma-encoded (sRGB curve) working values, the reference's
+    /// "luma of the picture's bytes"; the result is opaque, value in RGB, not clamped.
     public static func guided(_ mask: CIImage, guide: CIImage, radius: Double, epsilon: Double) -> CIImage {
         let extent = mask.extent
         guard radius >= 1, !extent.isInfinite else { return mask }
+        let r = Int(radius.rounded())
+        if let kernels = GuidedKernels.shared.kernels(radius: r) {
+            let luma = guide.applyingFilter("CILinearToSRGBToneCurve")
+            // Means over the box, carried premultiplied: the box sums values and coverage (alpha, 0 outside the
+            // extent), so value / alpha is the mean over the in-extent pixels, the reference's clipped box.
+            func box(_ image: CIImage?) -> CIImage? {
+                var out = image?.cropped(to: extent)
+                for direction in [CIVector(x: 1, y: 0), CIVector(x: 0, y: 1)] {
+                    guard let input = out else { return nil }
+                    let dx = CGFloat(r) * direction.x, dy = CGFloat(r) * direction.y
+                    out = kernels.box.apply(extent: extent, roiCallback: { _, rect in rect.insetBy(dx: -dx, dy: -dy) },
+                                            arguments: [input, direction])
+                }
+                return out
+            }
+            if let first = box(kernels.prepare.apply(extent: extent, arguments: [luma, mask, 0])),
+               let second = box(kernels.prepare.apply(extent: extent, arguments: [luma, mask, 1])),
+               let coefficients = box(kernels.coefficients.apply(extent: extent, arguments: [first, second, epsilon])),
+               let output = kernels.output.apply(extent: extent, arguments: [coefficients, luma]) {
+                return MaskComponentImages.opaque(output, extent: extent)
+            }
+        }
         guard let filter = CIFilter(name: "CIGuidedFilter") else { return mask }
         // `CIGuidedFilter` upsamples its input to the guide's extent, so both go in finite and equal: an infinite
         // (clamped) extent gives it no scale and the output reads black. Clamped, then cropped 2r beyond the
@@ -27,6 +53,77 @@ public enum EdgeRefine {
         filter.setValue(epsilon, forKey: "inputEpsilon")
         guard let output = filter.outputImage else { return mask }
         return MaskComponentImages.opaque(output.cropped(to: extent), extent: extent)
+    }
+
+    /// The guided filter's kernels (Core Image Kernel Language, compiled once; the box once per radius, its loop
+    /// bound a constant). Values are those of the reference with the guide centred (I − 0.5, which leaves a, and so
+    /// q, unchanged) so I² and I·p keep their precision in half-float intermediates.
+    final class GuidedKernels: @unchecked Sendable {
+        static let shared = GuidedKernels()
+
+        struct Kernels {
+            /// (I, p, I², 1) for `second` 0, (I·p, 0, 0, 1) for 1, I the guide's luma − 0.5 and p the mask.
+            let prepare: CIColorKernel
+            /// The sum of 2r + 1 samples along `direction`, over 2r + 1: premultiplied means.
+            let box: CIKernel
+            /// (a, b, 0, 1) from the means: a = cov(I, p) / (var(I) + ε), b = mean(p) − a × mean(I).
+            let coefficients: CIColorKernel
+            /// q = mean(a) × I + mean(b), opaque gray.
+            let output: CIColorKernel
+        }
+
+        private let lock = NSLock()
+        private var boxes: [Int: CIKernel] = [:]
+        private let base: (CIColorKernel, CIColorKernel, CIColorKernel)?
+
+        init() {
+            let luma = "dot(g.rgb, vec3(0.2126, 0.7152, 0.0722)) - 0.5"
+            let prepare = CIColorKernel(source: """
+                kernel vec4 picshopGuidedPrepare(__sample g, __sample m, float second) {
+                    float i = \(luma);
+                    float p = m.r;
+                    return mix(vec4(i, p, i * i, 1.0), vec4(i * p, 0.0, 0.0, 1.0), second);
+                }
+                """)
+            let coefficients = CIColorKernel(source: """
+                kernel vec4 picshopGuidedCoefficients(__sample s, __sample t, float epsilon) {
+                    vec3 m = s.rgb / max(s.a, 0.000001);
+                    float ip = t.r / max(t.a, 0.000001);
+                    float variance = max(0.0, m.b - m.r * m.r);
+                    float a = (ip - m.r * m.g) / (variance + epsilon);
+                    return vec4(a, m.g - a * m.r, 0.0, 1.0);
+                }
+                """)
+            let output = CIColorKernel(source: """
+                kernel vec4 picshopGuidedOutput(__sample ab, __sample g) {
+                    float i = \(luma);
+                    float q = (ab.r * i + ab.g) / max(ab.a, 0.000001);
+                    return vec4(q, q, q, 1.0);
+                }
+                """)
+            if let prepare, let coefficients, let output { base = (prepare, coefficients, output) } else { base = nil }
+        }
+
+        /// The kernels for a box of radius `radius`, nil when Core Image cannot build them.
+        func kernels(radius: Int) -> Kernels? {
+            guard let base, radius >= 1 else { return nil }
+            lock.lock()
+            defer { lock.unlock() }
+            if boxes[radius] == nil {
+                boxes[radius] = CIKernel(source: """
+                    kernel vec4 picshopGuidedBox\(radius)(sampler src, vec2 direction) {
+                        vec2 d = destCoord();
+                        vec4 sum = vec4(0.0);
+                        for (int k = -\(radius); k <= \(radius); k++) {
+                            sum += sample(src, samplerTransform(src, d + direction * float(k)));
+                        }
+                        return sum / \(2 * radius + 1).0;
+                    }
+                    """)
+            }
+            guard let box = boxes[radius] else { return nil }
+            return Kernels(prepare: base.0, box: box, coefficients: base.1, output: base.2)
+        }
     }
 
     /// The four Select & Mask steps on `mask`, guided by `guide`, at the mask's extent.
