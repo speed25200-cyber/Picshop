@@ -138,8 +138,9 @@ struct ReferencePixels: MaskPixelSource {
 }
 
 /// The GPU rasterizer equals Core's CPU reference (`MaskRaster.render`, D1) on every component kind (W2, §6 item 2):
-/// within mean 2/255 and max 8/255 outside a 2 px band around edges (colour-cube ranges: mean 3/255), mask values
-/// raw (a soft 0.5 edge stays 0.5), clear outside a warped raster never read as "nothing" (D5).
+/// within mean 2/255 and max 8/255 outside a 2 px band around edges (colour-cube ranges: mean 3/255, and the max
+/// also outside the colours the 48³ cube itself cannot follow), mask values raw (a soft 0.5 edge stays 0.5), clear
+/// outside a warped raster never read as "nothing" (D5).
 final class MaskRasterizerParityTests: XCTestCase {
     private let width = 256, height = 192
 
@@ -148,8 +149,8 @@ final class MaskRasterizerParityTests: XCTestCase {
         var max: Double
     }
 
-    /// Mean and max |gpu − cpu| outside a 2 px band around the reference's edges.
-    private func compare(_ gpu: [Float], _ cpu: [Float]) -> Comparison {
+    /// Mean and max |gpu − cpu| outside a 2 px band around the reference's edges; the max also outside `cubeBand`.
+    private func compare(_ gpu: [Float], _ cpu: [Float], cubeBand: [Bool]? = nil) -> Comparison {
         var edge = [Bool](repeating: false, count: width * height)
         for y in 0..<height {
             for x in 0..<width {
@@ -159,23 +160,89 @@ final class MaskRasterizerParityTests: XCTestCase {
                 }
             }
         }
-        var band = edge
+        let band = grown(edge, by: 2)
+        var sum = 0.0, worst = 0.0, n = 0.0
+        for index in 0..<(width * height) where !band[index] {
+            let d = Double(abs(gpu[index] - cpu[index]))
+            sum += d
+            if cubeBand?[index] != true { worst = Swift.max(worst, d) }
+            n += 1
+        }
+        return Comparison(mean: n == 0 ? 0 : sum / n, max: worst)
+    }
+
+    /// `marked` grown by `radius` px (a square).
+    private func grown(_ marked: [Bool], by radius: Int) -> [Bool] {
+        var band = marked
         for y in 0..<height {
-            for x in 0..<width where edge[y * width + x] {
-                for dy in -2...2 { for dx in -2...2 {
+            for x in 0..<width where marked[y * width + x] {
+                for dy in -radius...radius { for dx in -radius...radius {
                     let px = x + dx, py = y + dy
                     if px >= 0, px < width, py >= 0, py < height { band[py * width + px] = true }
                 } }
             }
         }
-        var sum = 0.0, worst = 0.0, n = 0.0
-        for index in 0..<(width * height) where !band[index] {
-            let d = Double(abs(gpu[index] - cpu[index]))
-            sum += d
-            worst = Swift.max(worst, d)
-            n += 1
+        return band
+    }
+
+    /// The pixels where the GPU's range cube itself differs from the exact range by more than 4/255, grown by 2 px
+    /// plus the stack's expand radius and 3σ of its feather (how far those differences travel).
+    ///
+    /// The GPU reads colour and luminance ranges through a `MaskRasterizer.cubeDimension`³ cube with trilinear
+    /// interpolation (CIColorCube), the CPU reference evaluates the function exactly. Where a range's soft edge is
+    /// narrower than a cube cell (a preset's hue edge at low chroma, a tight sample, near black) the cube is off by
+    /// up to ~0.3 on a few per cent of colours, at any affordable dimension (64³ still ~0.25): that is the cube's
+    /// accuracy, bounded on its own by MaskMathTests (mean and 95th percentile), not a GPU fault. The max bound here
+    /// holds everywhere the cube can follow the function; the mean still covers every pixel.
+    private func cubeBand(_ stack: MaskStack, rgba: [UInt8]) -> [Bool] {
+        let n = MaskRasterizer.cubeDimension
+        var marked = [Bool](repeating: false, count: width * height)
+        for component in stack.components {
+            let cube: [Float]
+            let exact: (UInt8, UInt8, UInt8) -> Double
+            switch component.kind {
+            case .colorRange(let spec):
+                cube = MaskMath.labCube(dimension: n) { lab, chroma, hue in MaskMath.colorRange(lab, chroma: chroma, hue: hue, spec) }
+                exact = { r, g, b in MaskMath.colorRange(MaskMath.lab(bytes: r, g, b), spec) }
+            case .luminanceRange(let spec):
+                cube = MaskMath.cube(dimension: n) { r, g, b in
+                    MaskMath.trapezoid(MaskMath.luma(r: r, g: g, b: b), low: spec.low, high: spec.high, feather: spec.feather)
+                }
+                exact = { r, g, b in
+                    MaskMath.trapezoid(MaskMath.luma(r: Double(r) / 255, g: Double(g) / 255, b: Double(b) / 255),
+                                       low: spec.low, high: spec.high, feather: spec.feather)
+                }
+            default:
+                continue
+            }
+            for index in 0..<(width * height) where !marked[index] {
+                let r = rgba[index * 4], g = rgba[index * 4 + 1], b = rgba[index * 4 + 2]
+                let looked = Self.trilinear(cube, n: n, r: Double(r) / 255, g: Double(g) / 255, b: Double(b) / 255)
+                if abs(looked - exact(r, g, b)) > 4.0 / 255 { marked[index] = true }
+            }
         }
-        return Comparison(mean: n == 0 ? 0 : sum / n, max: worst)
+        let longest = Double(max(width, height))
+        let expand = stack.expand.isFinite ? abs(stack.expand) * MaskStack.expandRadiusFraction * longest : 0
+        let sigma = stack.feather.isFinite ? max(0, stack.feather) * MaskStack.featherSigmaFraction * longest : 0
+        return grown(marked, by: 2 + Int(expand.rounded(.up)) + Int((3 * sigma).rounded(.up)))
+    }
+
+    /// A cube in `MaskMath.cube`'s layout (R fastest, value in R) read at gamma sRGB (r, g, b) as CIColorCube reads it.
+    private static func trilinear(_ cube: [Float], n: Int, r: Double, g: Double, b: Double) -> Double {
+        func value(_ ri: Int, _ gi: Int, _ bi: Int) -> Double { Double(cube[((bi * n + gi) * n + ri) * 4]) }
+        let scale = Double(n - 1)
+        let fr = r * scale, fg = g * scale, fb = b * scale
+        let r0 = min(Int(fr), n - 2), g0 = min(Int(fg), n - 2), b0 = min(Int(fb), n - 2)
+        let tr = fr - Double(r0), tg = fg - Double(g0), tb = fb - Double(b0)
+        var sum = 0.0
+        for (dr, wr) in [(0, 1 - tr), (1, tr)] {
+            for (dg, wg) in [(0, 1 - tg), (1, tg)] {
+                for (db, wb) in [(0, 1 - tb), (1, tb)] {
+                    sum += value(r0 + dr, g0 + dg, b0 + db) * wr * wg * wb
+                }
+            }
+        }
+        return sum
     }
 
     private func gpuMask(_ stack: MaskStack, _ project: MaskTestFixtures.Project, settled: Bool = true) async throws -> [Float] {
@@ -250,8 +317,8 @@ final class MaskRasterizerParityTests: XCTestCase {
             let stack = randomStack(&random, rasters: [disc, soft], depth: depth, colours: colours)
             let gpu = try await gpuMask(stack, project)
             let cpu = MaskRaster.render(stack, width: width, height: height, source: reference).values
-            let result = compare(gpu, cpu)
             let ranged = stack.components.contains { $0.isPixelDependent }
+            let result = compare(gpu, cpu, cubeBand: ranged ? cubeBand(stack, rgba: rgba) : nil)
             let meanLimit = ranged ? 3.0 / 255 : 2.0 / 255
             if result.mean > meanLimit || result.max > 8.0 / 255 {
                 failures.append("stack \(index): mean \(result.mean * 255)/255, max \(result.max * 255)/255, \(stack.components.map(\.kind))")

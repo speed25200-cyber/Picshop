@@ -9,15 +9,26 @@ public struct PixelStats: Hashable, Sendable {
     public var meanB: Double
     /// Σ weights (pixels).
     public var weight: Double
+    /// The weighted mean L* of the brightest quarter of the weight: the tones whites and highlights move.
+    public var highL: Double
+    /// The weighted mean L* of the darkest quarter of the weight: the tones blacks and shadows move.
+    public var lowL: Double
 
-    public init(meanL: Double = 0, stdL: Double = 0, meanChroma: Double = 0, meanA: Double = 0, meanB: Double = 0, weight: Double = 0) {
+    /// `highL` and `lowL` default to `meanL` (a region of one tone).
+    public init(meanL: Double = 0, stdL: Double = 0, meanChroma: Double = 0, meanA: Double = 0, meanB: Double = 0, weight: Double = 0,
+                highL: Double? = nil, lowL: Double? = nil) {
         self.meanL = meanL
         self.stdL = stdL
         self.meanChroma = meanChroma
         self.meanA = meanA
         self.meanB = meanB
         self.weight = weight
+        self.highL = highL ?? meanL
+        self.lowL = lowL ?? meanL
     }
+
+    /// The share of the weight `highL` and `lowL` average.
+    public static let toneShare = 0.25
 
     public struct Regions: Hashable, Sendable {
         /// Weights m.
@@ -38,8 +49,8 @@ public struct PixelStats: Hashable, Sendable {
     public static let outsideThreshold: Float = 0.05
 
     /// Gamma sRGB RGBA8 → Lab (MaskMath.lab, alpha ignored); `weights` 0…1 per pixel (nil: all 1). Weighted means of
-    /// L*, a*, b* and chroma √(a² + b²), the weighted standard deviation of L*, and Σ weights. All zero when the
-    /// sizes do not match or no pixel has weight.
+    /// L*, a*, b* and chroma √(a² + b²), the weighted standard deviation of L*, Σ weights, and the mean L* of the
+    /// brightest and darkest quarter of the weight. All zero when the sizes do not match or no pixel has weight.
     public static func measure(rgba: [UInt8], width: Int, height: Int, weights: [Float]?) -> PixelStats {
         guard width > 0, height > 0, rgba.count >= width * height * 4 else { return PixelStats() }
         if let weights, weights.count != width * height { return PixelStats() }
@@ -87,7 +98,21 @@ public struct PixelStats: Hashable, Sendable {
             let d = lab.l - meanL
             variance += w * d * d
         }
+        // The tone bands: pixels by L*, a quarter of the weight from each end (the pixel at the boundary in part).
+        let order = labs.indices.sorted { labs[$0].l < labs[$1].l }
+        func band<S: Sequence>(_ indices: S) -> Double where S.Element == Int {
+            let share = total * toneShare
+            var taken = 0.0, sum = 0.0
+            for index in indices {
+                let w = min(weights[index], share - taken)
+                guard w > 0 else { break }
+                taken += w
+                sum += w * labs[index].l
+            }
+            return taken > 0 ? sum / taken : meanL
+        }
         return PixelStats(meanL: meanL, stdL: (variance / total).squareRoot(), meanChroma: sumChroma / total,
-                          meanA: sumA / total, meanB: sumB / total, weight: total)
+                          meanA: sumA / total, meanB: sumB / total, weight: total,
+                          highL: band(order.reversed()), lowL: band(order))
     }
 }

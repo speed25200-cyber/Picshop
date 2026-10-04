@@ -48,12 +48,25 @@ public enum MaskOverlayRenderer {
     /// White where the hard (0.5) edge of the mask is, over a black copy offset by one pixel; clear elsewhere.
     static func outline(_ mask: CIImage, extent: CGRect) -> CIImage {
         let radius = outlineRadius(longestSide: max(extent.width, extent.height))
-        // Hard mask, then the morphological gradient: dilation − erosion, a band 2r wide across the edge.
-        let hard = MaskComponentImages.line(mask, slope: 64, bias: -31.5)
-        let gradient = CIFilter.morphologyGradient()
-        gradient.inputImage = hard.clampedToExtent()
-        gradient.radius = Float(radius)
-        guard let band = gradient.outputImage?.cropped(to: extent) else { return CIImage.empty() }
+        // Hard mask, then the morphological gradient: dilation − erosion, a band about 2r wide across the edge, built
+        // as min(dilated, 1 − eroded) (equal for a 0/1 mask), every step opaque with the value in RGB. The square
+        // morphologies take an odd width (documented as rounded to the nearest odd integer), so the reach is exactly
+        // ⌊r⌉ ≥ 1 pixel each way; the circular ones (and `CIMorphologyGradient`) leave the pixel footprint of a radius
+        // near 1 unspecified, and at the radius the outline usually has (1) the gradient filter drew no band at all.
+        let hard = MaskComponentImages.line(mask, slope: 64, bias: -31.5).clampedToExtent()
+        let size = Float(2 * max(1, Int(radius.rounded())) + 1)
+        let dilate = CIFilter.morphologyRectangleMaximum()
+        dilate.inputImage = hard
+        dilate.width = size
+        dilate.height = size
+        let erode = CIFilter.morphologyRectangleMinimum()
+        erode.inputImage = hard
+        erode.width = size
+        erode.height = size
+        guard let dilated = dilate.outputImage?.cropped(to: extent), let eroded = erode.outputImage?.cropped(to: extent) else {
+            return CIImage.empty()
+        }
+        let band = MaskComponentImages.minimum(dilated, MaskComponentImages.inverted(eroded))
         let white = AdjustmentPipeline.applyingAlpha(mask: band, to: MaskComponentImages.white(extent))
         let shadow = AdjustmentPipeline.applyingAlpha(mask: band, to: MaskComponentImages.black(extent))
             .transformed(by: CGAffineTransform(translationX: 1, y: -1))

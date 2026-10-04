@@ -23,6 +23,10 @@ public enum PixelPostconditions {
     public static let colorAlreadyThere = 8.0, uniformForBlur = 2.0
     /// The share of the mask's box that must lie in the target box grown by 10 %.
     public static let boxShare = 0.5
+    /// A region holds tones for whites and highlights when its brightest quarter is at L* 70 or more, for blacks and
+    /// shadows when its darkest quarter is at L* 30 or less. Without them such a dial has little to move: a small
+    /// move is unverifiable there, not failed.
+    public static let highlightTones = 70.0, shadowTones = 30.0
 
     /// What a parameter's change is measured on.
     enum Metric: Equatable {
@@ -36,6 +40,67 @@ public enum PixelPostconditions {
             case .temperature: return .warmth
             case .tint: return .tint
             case .hue, .sharpness, .noiseReduction, .grain, .fade, .skinTone, .vignette: return nil
+            }
+        }
+
+        /// The quantity it reads (L* over `tones` for lightness) and its name in a verdict.
+        func value(_ stats: PixelStats, tones: Tones) -> Double {
+            switch self {
+            case .lightness: return tones.meanL(stats)
+            case .contrast: return stats.stdL
+            case .chroma: return stats.meanChroma
+            case .warmth: return stats.meanB
+            case .tint: return stats.meanA
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .lightness: return "L*"
+            case .contrast: return "std L*"
+            case .chroma: return "C*"
+            case .warmth: return "b*"
+            case .tint: return "a*"
+            }
+        }
+    }
+
+    /// The tones a lightness dial moves: whites and highlights the brightest quarter of the region, blacks and shadows
+    /// the darkest (`PixelStats.highL`, `lowL`); exposure and brightness all of it. A dial of part of the range barely
+    /// moves the region's mean when the region holds few such tones.
+    enum Tones: Equatable {
+        case all, highlights, shadows
+
+        static func of(_ parameter: AdjustmentParameter) -> Tones {
+            switch parameter {
+            case .whites, .highlights: return .highlights
+            case .blacks, .shadows: return .shadows
+            default: return .all
+            }
+        }
+
+        func meanL(_ stats: PixelStats) -> Double {
+            switch self {
+            case .all: return stats.meanL
+            case .highlights: return stats.highL
+            case .shadows: return stats.lowL
+            }
+        }
+
+        /// Whether a region holds these tones.
+        func present(in stats: PixelStats) -> Bool {
+            switch self {
+            case .all: return true
+            case .highlights: return stats.highL >= PixelPostconditions.highlightTones
+            case .shadows: return stats.lowL <= PixelPostconditions.shadowTones
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .all: return "inside"
+            case .highlights: return "of the highlights inside"
+            case .shadows: return "of the shadows inside"
             }
         }
     }
@@ -447,39 +512,61 @@ public enum PixelPostconditions {
     static func judgeParameter(_ parameter: AdjustmentParameter, direction: Int, before: PixelStats.Regions, after: PixelStats.Regions,
                                probe: PixelProbe, into verdict: inout Verdict) {
         let sign = Double(direction)
-        let inL = after.inside.meanL - before.inside.meanL
         let hasOutside = before.outside.weight > 0 && after.outside.weight > 0
-        let outL = hasOutside ? after.outside.meanL - before.outside.meanL : 0
-        // The leak check holds for every measured parameter.
-        if hasOutside, abs(outL) > max(leakFloor, leakShare * abs(inL)) {
-            return verdict.fail(probe, expected: "no change outside the mask", observed: "leaks outside the mask (ΔL* out \(format(outL)))")
+        /// The change of a quantity inside and outside (0 without an outside).
+        func change(_ value: (PixelStats) -> Double) -> (inside: Double, outside: Double) {
+            (value(after.inside) - value(before.inside), hasOutside ? value(after.outside) - value(before.outside) : 0)
+        }
+        func leaks(_ moved: (inside: Double, outside: Double)) -> Bool {
+            hasOutside && abs(moved.outside) > max(leakFloor, leakShare * abs(moved.inside))
+        }
+        let inL = change(\.meanL)
+        // The leak check holds for every measured parameter: on L*, and on what the parameter moves (a warmth or a
+        // tint barely moves L*; whites move the bright tones only).
+        if leaks(inL) {
+            return verdict.fail(probe, expected: "no change outside the mask", observed: "leaks outside the mask (ΔL* out \(format(inL.outside)))")
         }
         guard let metric = Metric.of(parameter) else { return verdict.unverified("\(parameter.rawValue) is not measured on pixels") }
+        let tones = Tones.of(parameter)
+        let moved = change { metric.value($0, tones: tones) }
+        if metric != .lightness || tones != .all, leaks(moved) {
+            return verdict.fail(probe, expected: "no change outside the mask",
+                                observed: "leaks outside the mask (Δ\(metric.symbol) out \(format(moved.outside)))")
+        }
         switch metric {
         case .lightness:
-            guard sign * inL >= lightness else {
-                return verdict.fail(probe, expected: "ΔL* inside \(direction > 0 ? "≥ +" : "≤ −")\(format(lightness))", observed: format(inL))
+            // A dial of part of the range passes on its tones or on the whole region.
+            let passes = [moved, inL].contains { sign * $0.inside >= lightness && (!hasOutside || sign * ($0.inside - $0.outside) >= lightnessContrast) }
+            if passes { return verdict.pass() }
+            if !tones.present(in: before.inside), sign * moved.inside > -lightness {
+                return verdict.unverified("too few \(tones == .highlights ? "highlights" : "shadows") in the region for \(parameter.rawValue) to move")
             }
-            guard !hasOutside || sign * (inL - outL) >= lightnessContrast else {
-                return verdict.fail(probe, expected: "inside moves more than outside", observed: "ΔL* in \(format(inL)), out \(format(outL))")
+            guard sign * moved.inside >= lightness else {
+                return verdict.fail(probe, expected: "ΔL* \(tones.label) \(direction > 0 ? "≥ +" : "≤ −")\(format(lightness))", observed: format(moved.inside))
             }
+            return verdict.fail(probe, expected: "inside moves more than outside", observed: "ΔL* in \(format(moved.inside)), out \(format(moved.outside))")
         case .contrast:
-            let delta = after.inside.stdL - before.inside.stdL
+            let delta = moved.inside
             guard sign * delta >= contrast else {
                 return verdict.fail(probe, expected: "Δstd L* inside \(direction > 0 ? "≥ +" : "≤ −")\(format(contrast))", observed: format(delta))
             }
         case .chroma:
-            let delta = after.inside.meanChroma - before.inside.meanChroma
+            let delta = moved.inside
             guard sign * delta >= chroma else {
+                // Vibrance spares saturated colours and skin tones: a move the right way, too small to judge, is
+                // unverifiable; none, or the wrong way, fails.
+                if parameter == .vibrance, sign * delta > 0 {
+                    return verdict.unverified("vibrance moved little in the region (saturated colours and skin tones are spared)")
+                }
                 return verdict.fail(probe, expected: "ΔC* inside \(direction > 0 ? "≥ +" : "≤ −")\(format(chroma))", observed: format(delta))
             }
         case .warmth:
-            let delta = after.inside.meanB - before.inside.meanB
+            let delta = moved.inside
             guard sign * delta >= warmth else {
                 return verdict.fail(probe, expected: "Δb* inside \(direction > 0 ? "≥ +" : "≤ −")\(format(warmth))", observed: format(delta))
             }
         case .tint:
-            let delta = after.inside.meanA - before.inside.meanA
+            let delta = moved.inside
             guard sign * delta >= tint else {
                 return verdict.fail(probe, expected: "Δa* inside \(direction > 0 ? "≥ +" : "≤ −")\(format(tint))", observed: format(delta))
             }

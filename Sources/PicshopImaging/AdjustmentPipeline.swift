@@ -59,12 +59,15 @@ public enum AdjustmentPipeline {
             image = filter.outputImage ?? image
         }
         if adjustments[.temperature] != 0 || adjustments[.tint] != 0 || adjustments[.skinTone] != 0 {
+            // Core Image maps the colour of `neutral` onto `targetNeutral`: a target above 6500 K tints the picture
+            // blue and a positive target tint green. The dials say what the light was (as Lightroom's Temp and Tint
+            // do), so they set `neutral` and the target stays D65: warmth + is warmer (b* up), tint + more magenta.
             let filter = CIFilter.temperatureAndTint()
             filter.inputImage = image
-            filter.neutral = CIVector(x: 6500, y: 0)
             let kelvin = 6500 + (adjustments[.temperature] * 3000) + (adjustments[.skinTone] * 400)
             let tint = adjustments[.tint] * 60 + adjustments[.skinTone] * 8
-            filter.targetNeutral = CIVector(x: kelvin, y: tint)
+            filter.neutral = CIVector(x: kelvin, y: tint)
+            filter.targetNeutral = CIVector(x: 6500, y: 0)
             image = filter.outputImage ?? image
         }
         if adjustments[.hue] != 0 {

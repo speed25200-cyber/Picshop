@@ -16,8 +16,13 @@ public enum EdgeRefine {
         let extent = mask.extent
         guard radius >= 1, !extent.isInfinite else { return mask }
         guard let filter = CIFilter(name: "CIGuidedFilter") else { return mask }
-        filter.setValue(mask.clampedToExtent(), forKey: kCIInputImageKey)
-        filter.setValue(guide.clampedToExtent(), forKey: "inputGuideImage")
+        // `CIGuidedFilter` upsamples its input to the guide's extent, so both go in finite and equal: an infinite
+        // (clamped) extent gives it no scale and the output reads black. Clamped, then cropped 2r beyond the
+        // extent (the reach of its two box passes), so the edge pixels still see replicated borders.
+        let pad = CGFloat((2 * radius).rounded(.up))
+        let padded = extent.insetBy(dx: -pad, dy: -pad)
+        filter.setValue(mask.clampedToExtent().cropped(to: padded), forKey: kCIInputImageKey)
+        filter.setValue(guide.clampedToExtent().cropped(to: padded), forKey: "inputGuideImage")
         filter.setValue(radius, forKey: kCIInputRadiusKey)
         filter.setValue(epsilon, forKey: "inputEpsilon")
         guard let output = filter.outputImage else { return mask }

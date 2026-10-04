@@ -100,4 +100,70 @@ final class PixelPostconditionTests: XCTestCase {
         XCTAssertTrue(plan.checks.isEmpty)
         XCTAssertFalse(plan.unverifiable.isEmpty)
     }
+
+    // MARK: Parameter-aware readings (the real renders: PixelProbeRenderTests)
+
+    private func judged(_ parameter: AdjustmentParameter, direction: Int, before: PixelStats.Regions, after: PixelStats.Regions) -> PixelPostconditions.Verdict {
+        let request = PixelProbeRequest(.maskedParameter, region: .localAdjustment(UUID()))
+        let check = PixelPostconditions.Check(request, .parameter(parameter, direction: direction, amount: 60))
+        return PixelPostconditions.evaluate(PixelPostconditions.Plan(checks: [check]),
+                                            results: [PixelProbeResult(request: request, before: before, after: after)])
+    }
+
+    private func regions(_ inside: PixelStats, outside: PixelStats = PixelStats(meanL: 40, stdL: 10, meanChroma: 12, meanA: 2, meanB: 8, weight: 1000)) -> PixelStats.Regions {
+        PixelStats.Regions(inside: inside, outside: outside, coverage: 0.3)
+    }
+
+    func testWhitesAreReadOnTheHighlights() {
+        // Whites moved the brightest quarter by 1.8 and the mean by 0.45 (they leave the rest alone): passed.
+        let bright = PixelStats(meanL: 45, stdL: 20, meanChroma: 12, weight: 500, highL: 75, lowL: 12)
+        var lifted = bright
+        lifted.meanL += 0.45
+        lifted.highL += 1.8
+        XCTAssertEqual(judged(.whites, direction: 1, before: regions(bright), after: regions(lifted)).report.passed, 1)
+        // The wrong way: failed.
+        XCTAssertEqual(judged(.whites, direction: -1, before: regions(bright), after: regions(lifted)).report.failed.count, 1)
+        // A region with highlights that whites did not move: failed.
+        XCTAssertEqual(judged(.whites, direction: 1, before: regions(bright), after: regions(bright)).report.failed.count, 1)
+        // A region without highlights (brightest quarter at L* 50) barely moves: unverifiable, not failed.
+        let dark = PixelStats(meanL: 27, stdL: 15, meanChroma: 12, weight: 500, highL: 50, lowL: 8)
+        var nudged = dark
+        nudged.highL += 0.1
+        let verdict = judged(.whites, direction: 1, before: regions(dark), after: regions(nudged))
+        XCTAssertEqual(verdict.report.failed, [])
+        XCTAssertEqual(verdict.report.unverifiable, 1)
+        // Moved the wrong way by the bar there: still failed.
+        nudged.highL = dark.highL - 1
+        XCTAssertEqual(judged(.whites, direction: 1, before: regions(dark), after: regions(nudged)).report.failed.count, 1)
+        // Exposure is read on the whole region as before.
+        XCTAssertEqual(judged(.exposure, direction: 1, before: regions(bright), after: regions(lifted)).report.failed.count, 1)
+    }
+
+    func testALeakIsReadOnWhatTheParameterMoves() {
+        // Warmth applied to the whole picture: b* moved outside as much as inside, L* barely.
+        let inside = PixelStats(meanL: 50, stdL: 18, meanChroma: 20, meanA: 4, meanB: 12, weight: 500)
+        let outside = PixelStats(meanL: 40, stdL: 10, meanChroma: 12, meanA: 2, meanB: 8, weight: 1000)
+        var warmIn = inside, warmOut = outside
+        warmIn.meanB += 7
+        warmOut.meanB += 7
+        let leak = judged(.temperature, direction: 1, before: regions(inside, outside: outside), after: regions(warmIn, outside: warmOut))
+        XCTAssertEqual(leak.report.failed.count, 1)
+        XCTAssertTrue(leak.report.failed[0].contains("b*"), "\(leak.report.failed)")
+        // Inside only: passed.
+        XCTAssertEqual(judged(.temperature, direction: 1, before: regions(inside, outside: outside), after: regions(warmIn, outside: outside)).report.passed, 1)
+    }
+
+    func testVibranceThatMovedLittleIsUnverifiable() {
+        let inside = PixelStats(meanL: 50, stdL: 18, meanChroma: 20, weight: 500)
+        var spared = inside
+        spared.meanChroma -= 0.7
+        let little = judged(.vibrance, direction: -1, before: regions(inside), after: regions(spared))
+        XCTAssertEqual(little.report.failed, [])
+        XCTAssertEqual(little.report.unverifiable, 1)
+        // Not at all, or the wrong way: failed.
+        XCTAssertEqual(judged(.vibrance, direction: -1, before: regions(inside), after: regions(inside)).report.failed.count, 1)
+        XCTAssertEqual(judged(.vibrance, direction: 1, before: regions(inside), after: regions(spared)).report.failed.count, 1)
+        // Saturation is not spared: the same move fails.
+        XCTAssertEqual(judged(.saturation, direction: -1, before: regions(inside), after: regions(spared)).report.failed.count, 1)
+    }
 }

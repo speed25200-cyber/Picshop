@@ -66,12 +66,13 @@ final class EdgeRefineGPUTests: XCTestCase {
     }
 
     func testDecontaminationMovesTheFringeTowardsTheSubject() throws {
-        // A red subject on green with a half-transparent band of mixed colour.
+        // A red subject on green with a half-transparent band of mixed colour, 8 px wide: its middle (x = 100) is
+        // 2σ (σ = 0.01 × 200) from the nearest hard-foreground pixel, within the blur's reach as the reference has it.
         var rgba = [UInt8](repeating: 255, count: width * height * 4)
         var alpha = [Float](repeating: 0, count: width * height)
         for y in 0..<height {
             for x in 0..<width {
-                let a: Float = x < 90 ? 1 : (x < 110 ? Float(110 - x) / 20 : 0)
+                let a: Float = x < 96 ? 1 : (x < 104 ? Float(104 - x) / 8 : 0)
                 alpha[y * width + x] = a
                 let i = (y * width + x) * 4
                 rgba[i] = UInt8((Float(220) * a + 30 * (1 - a)).rounded())

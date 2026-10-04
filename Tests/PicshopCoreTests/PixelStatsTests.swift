@@ -84,4 +84,22 @@ final class PixelStatsTests: XCTestCase {
         XCTAssertGreaterThan(a.inside.meanL - b.inside.meanL, 5)
         XCTAssertEqual(a.outside.meanL, b.outside.meanL, accuracy: 1e-12)
     }
+
+    func testTheToneBandsAverageAQuarterOfTheWeightFromEachEnd() {
+        // Eight greys 0, 32 … 224: the darkest quarter is 0 and 32, the brightest 192 and 224.
+        let levels: [UInt8] = [0, 32, 64, 96, 128, 160, 192, 224]
+        let stats = PixelStats.measure(rgba: image(levels.map { ($0, $0, $0) }), width: 8, height: 1, weights: nil)
+        let l = levels.map { MaskMath.lab(bytes: $0, $0, $0).l }
+        XCTAssertEqual(stats.lowL, (l[0] + l[1]) / 2, accuracy: 1e-9)
+        XCTAssertEqual(stats.highL, (l[6] + l[7]) / 2, accuracy: 1e-9)
+        // Weights count: the brightest pixel at weight 1 of 4 is the whole top quarter.
+        let weighted = PixelStats.measure(rgba: image([(0, 0, 0), (128, 128, 128), (255, 255, 255)]), width: 3, height: 1, weights: [2, 1, 1])
+        XCTAssertEqual(weighted.highL, 100, accuracy: 0.01)
+        XCTAssertEqual(weighted.lowL, 0, accuracy: 0.01)
+        // A uniform region: both bands are its mean.
+        let flat = PixelStats.measure(rgba: image(Array(repeating: (119, 119, 119), count: 16)), width: 4, height: 4, weights: nil)
+        XCTAssertEqual(flat.highL, flat.meanL, accuracy: 1e-9)
+        XCTAssertEqual(flat.lowL, flat.meanL, accuracy: 1e-9)
+    }
 }
+
