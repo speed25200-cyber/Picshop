@@ -138,7 +138,7 @@ public enum IdeaEngine {
         let colourParameters: Set<String> = ["saturation", "vibrance", "temperature", "tint", "skinTone"]
         return idea.steps.contains { step in
             switch step.action {
-            case "applyLook", "recolor", "replaceBackground", "removeBackground", "blurBackground", "generativeFill", "matchColor": return true
+            case "applyLook", "recolor", "replaceBackground", "removeBackground", "blurBackground", "generativeFill", "matchColor", "maskAdjust": return true
             case "adjust", "selectiveAdjust": return step.parameter.map(colourParameters.contains) ?? false
             default: return false
             }
@@ -198,8 +198,41 @@ public enum IdeaEngine {
             default: break
             }
         }
+        list += maskCandidates(scene, persons: persons, outdoor: outdoor)
         return list + [enhance, autoCrop, vivid]
     }
+
+    /// W2 (§8.9): the catalog's local-adjustment chips, when masks are on: a deeper sky under a sky, the subject
+    /// brought forward, a darker foot for a landscape, a soft vignette for a portrait or a landscape.
+    static func maskCandidates(_ scene: SceneDescription, persons: Int, outdoor: Set<String>) -> [Template] {
+        guard FeatureFlags.isOn(.masks) else { return [] }
+        let labels = Set(scene.labels)
+        let landscape: Set<String> = ["landscape", "mountain", "field", "beach", "sea", "ocean", "desert", "snow", "lake", "forest"]
+        var list: [Template] = []
+        if !labels.isDisjoint(with: ["sky", "outdoor"]) { list.append(deeperSky) }
+        if persons >= 1 || !scene.animals.isEmpty { list.append(subjectPop) }
+        if !labels.isDisjoint(with: landscape) { list.append(darkerBottom) }
+        if persons >= 1 || !labels.isDisjoint(with: landscape) { list.append(softVignette) }
+        return list
+    }
+
+    static func maskStep(_ region: MaskRegion, _ parameter: AdjustmentParameter, _ amount: Int) -> RawIntentStep {
+        RawIntentStep(action: "maskAdjust", extra: ["where": .string(region.rawValue), "parameter": .string(parameter.rawValue), "amount": .number(Double(amount))])
+    }
+
+    static let deeperSky = Template(key: "deeperSky", french: "Ciel plus profond", english: "Deeper sky",
+                                    whyFrench: "Un ciel plus dense, sans toucher au reste.", whyEnglish: "A richer sky, the rest untouched.",
+                                    symbol: "cloud.sun", steps: [maskStep(.sky, .saturation, 15), maskStep(.sky, .exposure, -10)], markers: ["mask: sky"])
+    static let subjectPop = Template(key: "subjectPop", french: "Faire ressortir le sujet", english: "Make the subject pop",
+                                     whyFrench: "Le sujet un peu plus lumineux et net que le fond.", whyEnglish: "The subject a little brighter and crisper than the rest.",
+                                     symbol: "person.crop.circle.badge.plus", steps: [maskStep(.subject, .exposure, 15), maskStep(.subject, .clarity, 10)],
+                                     markers: ["mask: subject"])
+    static let darkerBottom = Template(key: "darkerBottom", french: "Assombrir le bas", english: "Darken the bottom",
+                                       whyFrench: "Un premier plan plus sombre guide l'œil vers le haut.", whyEnglish: "A darker foreground leads the eye up.",
+                                       symbol: "rectangle.bottomhalf.filled", steps: [maskStep(.bottom, .exposure, -20)], markers: ["mask: bottom"])
+    static let softVignette = Template(key: "softVignette", french: "Vignette douce", english: "Soft vignette",
+                                       whyFrench: "Des bords un peu plus sombres recentrent le regard.", whyEnglish: "Slightly darker edges draw the eye in.",
+                                       symbol: "circle.dashed", steps: [maskStep(.edges, .exposure, -15)], markers: ["mask: edges"])
 
     static let retouch = Template(key: "retouch", french: "Portrait doux", english: "Soft portrait",
                                   whyFrench: "Adoucit la peau et éclaire le regard.", whyEnglish: "Smooths the skin and brightens the eyes.",

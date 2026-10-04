@@ -36,7 +36,12 @@ struct IdeaChipModel: Identifiable, Equatable {
     /// table work; any other keeps the symbol its author chose, and one left at the default
     /// ("sparkles") gets the symbol of its first step (text, an erase, a crop, a look…).
     static func symbol(for idea: LiveIdea) -> String {
-        guard let action = idea.steps.first.flatMap({ IntentAction(rawValue: $0.action) }) else { return idea.symbol }
+        guard let action = idea.steps.first.flatMap({ IntentAction(rawValue: $0.action) }) else {
+            // W2: a catalog operation's chip (its step's action is the operation's id) gets its category's glyph.
+            guard idea.symbol == "sparkles", let id = idea.steps.first?.action,
+                  let spec = OperationCatalog.shared.spec(OpID(id)) else { return idea.symbol }
+            return symbol(for: spec.category)
+        }
         switch action {
         case .fillCells: return "tablecells"
         case .highlightCells: return "highlighter"
@@ -53,6 +58,37 @@ struct IdeaChipModel: Identifiable, Equatable {
         case .blurBackground: return "camera.aperture"
         case .removeBackground, .replaceBackground: return "person.crop.rectangle"
         default: return idea.symbol
+        }
+    }
+
+    /// The glyph of a catalog category (photo first: masks and selections are W2's chips).
+    static func symbol(for category: OpCategory) -> String {
+        switch category {
+        case .light: return "sun.max"
+        case .color, .clipColor: return "paintpalette"
+        case .detail: return "camera.aperture"
+        case .retouch: return "wand.and.stars"
+        case .objects: return "eraser"
+        case .background: return "person.crop.rectangle"
+        case .geometry: return "crop"
+        case .text, .pdfText, .captions: return "textformat"
+        case .layers, .overlays: return "square.3.layers.3d"
+        case .shapes: return "square.on.circle"
+        case .selection: return "circle.rectangle.dashed"
+        case .generative: return "sparkles"
+        case .effects: return "camera.filters"
+        case .table: return "tablecells"
+        case .cut: return "scissors"
+        case .speed: return "gauge.with.dots.needle.67percent"
+        case .audio: return "waveform"
+        case .transitions: return "rectangle.2.swap"
+        case .motion: return "move.3d"
+        case .story: return "film.stack"
+        case .pages, .document: return "doc.text"
+        case .annotate: return "highlighter"
+        case .sign: return "signature"
+        case .export: return "square.and.arrow.up"
+        case .history: return "clock.arrow.circlepath"
         }
     }
 }

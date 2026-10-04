@@ -48,7 +48,6 @@ public struct VideoEditorView: View {
             if case .success(let url) = result { Task { await session.addMusic(from: url) } }
         }
         .modifier(ClipPicker(session: session))
-        .preferredColorScheme(.dark)
         .persistentSystemOverlays(.hidden)
     }
 
@@ -496,7 +495,6 @@ struct VideoExportSheet: View {
             .onAppear { quality = app?.settings.videoExportQuality ?? .high }
             .interactiveDismissDisabled(isExporting)
         }
-        .preferredColorScheme(.dark)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }
@@ -514,8 +512,8 @@ struct VideoExportSheet: View {
                     }
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
-                            Capsule().fill(Color.white.opacity(0.1))
-                            Capsule().fill(PSTheme.accentGradient)
+                            Capsule().fill(Color.psFillControl)
+                            Capsule().fill(Color.psActionPrimary)
                                 .frame(width: max(8, geo.size.width * CGFloat(min(1, progress))))
                         }
                     }

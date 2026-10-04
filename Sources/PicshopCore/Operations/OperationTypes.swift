@@ -78,6 +78,8 @@ public enum OpUnit: String, Codable, Sendable { case percent, signedPercent, fra
 /// The kinds of scene-map things a `ref` param may name.
 public enum RefKind: String, Codable, Sendable, CaseIterable {
     case printedText, textLayer, object, freeArea, shape, imageLayer, adjustmentLayer, clip, soundTrack, overlay, caption, page, markup, textHit
+    /// A local adjustment (W2): "a1" is `document.localAdjustments[0]`.
+    case mask
 
     /// The letter a ref of this kind starts with ("t3", "l2", "o1").
     public var prefix: Character {
@@ -96,6 +98,7 @@ public enum RefKind: String, Codable, Sendable, CaseIterable {
         case .page: return "p"
         case .markup: return "n"
         case .textHit: return "w"
+        case .mask: return "a"
         }
     }
 }
@@ -168,6 +171,8 @@ public enum AssetKind: String, Sendable { case image, video, audio, lut, signatu
 public struct OpRequirements: Hashable, Sendable {
     public var subject = false, selection = false, table = false, captions = false, generativeEngine = false
     public var importedLUT = false, nonBaseLayer = false
+    /// A local adjustment must exist (W2: maskEdit, maskDelete).
+    public var localMask = false
     public var referenceAsset: AssetKind? = nil
     public var cost: OpCost = .instant
     public var geometryChange = false, destructive = false
@@ -199,9 +204,34 @@ public enum StateProbe: Hashable, Sendable {
     case adjustment(String), toneCurve, levels, colorMixer, colorGrade, lutIntensity, perspective, lensBlur
     case layerOpacity, layerBlend, layerVisibility, layerOrder, layerCount, textLayerCount, canvasAspect, rotation
     case clipCount, timelineDuration, captions, overlayCount, audioTrackCount, pageCount, markupCount
+    /// W2, photo only. localAdjustments and selection: their count under increased/decreased, else a digest of
+    /// their content; selectionCoverage: the number.
+    case localAdjustments, selection, selectionCoverage
 }
 
 public enum Expectation: Hashable, Sendable { case increased, decreased, changed, unchanged, equalsParam(String), delta(Double) }
+
+/// Pixel probe names used in Postcondition.pixels(rawValue, expectation) (W2, D14). Specs list a representative
+/// `.pixels(...)`; PixelPostconditions.requests(for:spec:) picks the probes from the parameters the call actually sent.
+public enum PixelProbe: String, Codable, Sendable, CaseIterable {
+    /// The call's parameter, inside its mask vs outside (direction from parameter and amount sign).
+    case maskedParameter
+    /// Creation: the mask covers 0.2 %–98 % (and ≥50 % of it inside the target box when one is given).
+    case maskCoverageInRange
+    /// Edits: mean m moved in the Expectation's direction (expand, contract).
+    case maskCoverage
+    /// |after − (1 − before)| ≤ 0.02 on mean m.
+    case maskInverted
+    /// The fraction of pixels with 0.05 < m < 0.95 increased (feather).
+    case maskSoftness
+    /// The maximum of m decreased (density).
+    case maskPeak
+    case selectionCoverageInRange
+    /// Mean coverage moved in the Expectation's direction.
+    case selectionCoverage
+    /// selectionApply, per `use`.
+    case selectionUse
+}
 
 /// What must be true after the step ran.
 public enum Postcondition: Hashable, Sendable { case structural(StateProbe, Expectation), pixels(String, Expectation), unverifiable(String) }

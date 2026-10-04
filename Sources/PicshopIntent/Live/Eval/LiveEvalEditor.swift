@@ -50,7 +50,17 @@ import PicshopCore
                         description: SceneDescription(people: 1, faces: 1, labels: ["outdoor", "sky"], hasText: true, brightness: 0.62, colourfulness: 0.4))
     }
 
+    /// A portrait by a lake (W2): sky, water, a person and a blue cup, for masks and selections.
+    public static func lake(failingChecks: Set<String> = []) -> LiveEvalEditor {
+        LiveEvalEditor(services: LiveEvalFixtures.lakeServices(failingChecks: failingChecks), document: LiveEvalFixtures.lakeDocument(),
+                        description: SceneDescription(people: 1, faces: 1, labels: ["outdoor", "sky", "lake"], brightness: 0.55, colourfulness: 0.45))
+    }
+
+    /// The reply language (the masks line names masks in it).
+    public private(set) var language: NormalizedUtterance.Language = .french
+
     public func setLanguage(_ language: NormalizedUtterance.Language) {
+        self.language = language
         executor = PhotoCommandExecutor(services: services, language: language)
     }
 
@@ -103,6 +113,9 @@ import PicshopCore
         state.mediaText = document.layers.compactMap { $0.group == nil ? $0.textElement?.text : nil }
         state.candidates = pending?.candidates.enumerated().map { "\($0.offset + 1): \($0.element.spokenDescription)" } ?? []
         state.pendingQuestion = pending?.question
+        // W2 (§8.6): the masks and the pixel selection, as the photo session reports them.
+        state.masks = LiveMaskLines.lines(for: document, language: language == .english ? .en : .fr)
+        if let selection = LiveMaskLines.selectionLine(for: document, language: language == .english ? .en : .fr) { state.selection = selection }
         return state
     }
 

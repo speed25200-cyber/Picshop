@@ -27,6 +27,26 @@ final class PromptBudgetTests: XCTestCase {
         }
     }
 
+    /// W2 (§8.5): one grounding rule (≤ 180 characters) in the photo catalog prompt, and a fresh look when a
+    /// select or mask word names a visible thing.
+    func testTheGroundingRuleAndTheFreshLook() {
+        XCTAssertLessThanOrEqual(LocalLivePrompt.groundingRule.count, 180)
+        for size in [LocalPromptSize.full, .compact] {
+            XCTAssertTrue(LocalLivePrompt.system(mode: .photo, size: size, layout: .catalog).contains(LocalLivePrompt.groundingRule))
+            XCTAssertFalse(LocalLivePrompt.system(mode: .video, size: size, layout: .catalog).contains(LocalLivePrompt.groundingRule))
+        }
+        func look(_ text: String) -> Bool {
+            var turn = LiveUserTurn.speech(text)
+            turn.kind = .speech
+            return LocalLivePrompt.needsFreshLook(turn, versionsSinceLastLook: 0)
+        }
+        XCTAssertTrue(look("sélectionne la tasse"))
+        XCTAssertTrue(look("masque le chien"))
+        XCTAssertTrue(look("select the mug"))
+        XCTAssertFalse(look("inverse la sélection"))
+        XCTAssertFalse(look("plus chaud"))
+    }
+
     func testThePrefixIsByteStableAndCarriesNoTurnState() {
         for mode in [EditorMode.photo, .video] {
             XCTAssertEqual(Self.prefix(mode, .full), Self.prefix(mode, .full))

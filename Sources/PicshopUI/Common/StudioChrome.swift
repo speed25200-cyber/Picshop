@@ -126,6 +126,9 @@ enum StudioZoom: Equatable {
     case fit
     /// A zoom relative to fit.
     case percent(Int)
+    /// « 100 % »: one image pixel per device pixel (W2), the menu's last item; PhotoEditorView maps it to
+    /// `PhotoEditorSession.zoomToActualPixels()`.
+    case actualPixels
 
     /// The menu's zoom levels besides Ajuster.
     static let levels = [200, 400]
@@ -420,7 +423,7 @@ struct StudioTopBar: View {
 
 /// The top bar's centre in W1: the document's title over its zoom (a whole
 /// percentage of fit, from StudioZoomMirror). A tap opens Ajuster, 200 %,
-/// 400 %. Plain text over the bar's scrim, not glass. A leaf: a pinch
+/// 400 % and, since W2, 100 % in actual pixels. Plain text over the bar's scrim, not glass. A leaf: a pinch
 /// redraws only this.
 struct StudioContextMenu: View {
     let context: StudioContext
@@ -438,6 +441,12 @@ struct StudioContextMenu: View {
                 }
                 ForEach(StudioZoom.levels, id: \.self) { level in
                     Button(Self.format(level)) { onZoom(.percent(level)) }
+                }
+                // W2: true actual pixels, whatever fit is on this screen (the levels above are relative to fit).
+                Button {
+                    onZoom(.actualPixels)
+                } label: {
+                    Label(L("100 % (actual pixels)"), systemImage: "1.magnifyingglass")
                 }
             } label: {
                 label(percent: percent, showsChevron: true)
@@ -652,7 +661,6 @@ struct StudioHistorySheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .preferredColorScheme(.dark)
     }
 }
 

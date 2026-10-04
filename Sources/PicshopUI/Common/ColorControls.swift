@@ -43,14 +43,11 @@ struct ColorControls: View {
     }
 
     @State private var mode: Mode? = .mixer
-    @State private var band: ColorMixer.Band = .red
     @State private var importsLUT = false
     /// The values under the finger, until the gesture ends.
-    @State private var liveMixer: ColorMixer?
     @State private var liveGrade: ColorGrade?
     @State private var liveLUTIntensity: Double?
 
-    private var shownMixer: ColorMixer { liveMixer ?? mixer }
     private var shownGrade: ColorGrade { liveGrade ?? grade }
 
     var body: some View {
@@ -122,55 +119,7 @@ struct ColorControls: View {
     // MARK: Mixer
 
     private var mixerControls: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 0) {
-                ForEach(ColorMixer.Band.allCases) { item in
-                    let selected = item == band
-                    let touched = ColorMixer.Channel.allCases.contains { abs(shownMixer[item, $0]) > 0.0005 }
-                    Button {
-                        Haptics.tick()
-                        withAnimation(PSMotion.quick) { band = item }
-                    } label: {
-                        Circle()
-                            .fill(Self.swatch(item))
-                            .frame(width: 24, height: 24)
-                            .overlay(Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 0.75))
-                            .padding(4)
-                            .overlay(Circle().strokeBorder(selected ? Color.white : .clear, lineWidth: 2))
-                            .overlay(alignment: .bottom) {
-                                Circle().fill(PSTheme.accent).frame(width: 4, height: 4).offset(y: 6).opacity(touched ? 1 : 0)
-                            }
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(PSPressStyle(scale: 0.9))
-                    .accessibilityLabel(psPrefersFrench ? item.frenchName : item.englishName)
-                    .accessibilityAddTraits(selected ? [.isSelected] : [])
-                }
-            }
-            .padding(.bottom, 4)
-            ForEach(ColorMixer.Channel.allCases) { channel in
-                DialSlider(value: binding(channel), range: -1...1, neutral: 0, label: Self.name(channel), units: 100, onEditingChanged: { editing in
-                    if editing {
-                        onBegin("Colour Mixer")
-                    } else {
-                        onEnd()
-                        liveMixer = nil
-                    }
-                })
-            }
-        }
-    }
-
-    private func binding(_ channel: ColorMixer.Channel) -> Binding<Double> {
-        Binding(
-            get: { shownMixer[band, channel] },
-            set: { value in
-                var next = shownMixer
-                next[band, channel] = value
-                liveMixer = next
-                onMixer(next)
-            }
-        )
+        BandMixerControls(mixer: mixer, onMixer: onMixer, onBegin: onBegin, onEnd: onEnd)
     }
 
     static func name(_ channel: ColorMixer.Channel) -> String {
@@ -258,6 +207,77 @@ struct ColorControls: View {
         case .midtones: return L("Midtones")
         case .highlights: return L("Highlights")
         }
+    }
+}
+
+/// The eight-band HSL mixer: a swatch per band, then hue, saturation and luminance dials for the chosen one. Shared
+/// by Couleur and the Masques « TSL » row (W2). Shows its own values while a dial moves, then follows `mixer` again.
+struct BandMixerControls: View {
+    var mixer: ColorMixer
+    var onMixer: (ColorMixer) -> Void
+    var onBegin: (String) -> Void
+    var onEnd: () -> Void
+    /// The undo label of a drag.
+    var label = "Colour Mixer"
+
+    @State private var band: ColorMixer.Band = .red
+    /// The mixer under the finger, until the gesture ends.
+    @State private var liveMixer: ColorMixer?
+
+    private var shownMixer: ColorMixer { liveMixer ?? mixer }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 0) {
+                ForEach(ColorMixer.Band.allCases) { item in
+                    let selected = item == band
+                    let touched = ColorMixer.Channel.allCases.contains { abs(shownMixer[item, $0]) > 0.0005 }
+                    Button {
+                        Haptics.tick()
+                        withAnimation(PSMotion.quick) { band = item }
+                    } label: {
+                        Circle()
+                            .fill(ColorControls.swatch(item))
+                            .frame(width: 24, height: 24)
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 0.75))
+                            .padding(4)
+                            .overlay(Circle().strokeBorder(selected ? Color.white : .clear, lineWidth: 2))
+                            .overlay(alignment: .bottom) {
+                                Circle().fill(PSTheme.accent).frame(width: 4, height: 4).offset(y: 6).opacity(touched ? 1 : 0)
+                            }
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PSPressStyle(scale: 0.9))
+                    .accessibilityLabel(psPrefersFrench ? item.frenchName : item.englishName)
+                    .accessibilityAddTraits(selected ? [.isSelected] : [])
+                    .accessibilityIdentifier("hsl.band.\(item.englishName.lowercased())")
+                }
+            }
+            .padding(.bottom, 4)
+            ForEach(ColorMixer.Channel.allCases) { channel in
+                DialSlider(value: binding(channel), range: -1...1, neutral: 0, label: ColorControls.name(channel), units: 100, onEditingChanged: { editing in
+                    if editing {
+                        onBegin(label)
+                    } else {
+                        onEnd()
+                        liveMixer = nil
+                    }
+                })
+                .accessibilityIdentifier("hsl.\(channel.rawValue)")
+            }
+        }
+    }
+
+    private func binding(_ channel: ColorMixer.Channel) -> Binding<Double> {
+        Binding(
+            get: { shownMixer[band, channel] },
+            set: { value in
+                var next = shownMixer
+                next[band, channel] = value
+                liveMixer = next
+                onMixer(next)
+            }
+        )
     }
 }
 

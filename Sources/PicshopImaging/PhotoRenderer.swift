@@ -70,13 +70,21 @@ public actor PhotoRenderer {
         public var allowExpensiveWork: Bool
         /// The picture on screen: the expensive results it uses survive memory trimming.
         public var isDisplayed: Bool
+        /// Local adjustments drawn (W2, D2). False for the analysis image, colour sampling, the eyedropper and
+        /// every AI input, so no mask depends on another mask's adjustment.
+        public var includesLocalAdjustments: Bool
+        /// The local adjustment under the finger (W2, D6): the other adjustments' masks are frozen meanwhile.
+        public var interactionTarget: UUID?
 
-        public init(targetLongestSide: Double? = nil, showOriginal: Bool = false, includeOverlays: Bool = true, allowExpensiveWork: Bool = true, isDisplayed: Bool = false) {
+        public init(targetLongestSide: Double? = nil, showOriginal: Bool = false, includeOverlays: Bool = true, allowExpensiveWork: Bool = true, isDisplayed: Bool = false,
+                    includesLocalAdjustments: Bool = true, interactionTarget: UUID? = nil) {
             self.targetLongestSide = targetLongestSide
             self.showOriginal = showOriginal
             self.includeOverlays = includeOverlays
             self.allowExpensiveWork = allowExpensiveWork
             self.isDisplayed = isDisplayed
+            self.includesLocalAdjustments = includesLocalAdjustments
+            self.interactionTarget = interactionTarget
         }
 
         public static let preview = Options(targetLongestSide: 2048, isDisplayed: true)
@@ -84,8 +92,8 @@ public actor PhotoRenderer {
         public static let full = Options()
     }
 
-    private let store: ProjectStore
-    private let projectID: UUID
+    let store: ProjectStore
+    let projectID: UUID
     private let inpainting: InpaintingPipeline
     /// Set again once the model is located: the first frame never waits for it.
     private var upscaler: Upscaler
@@ -134,12 +142,15 @@ public actor PhotoRenderer {
     private(set) var overlayRasterizations = 0
     /// Brush strokes drawn into masks since the renderer was made.
     var strokeRasterizations: Int { strokeRasters.strokesDrawn }
+    /// Local adjustments' masks (W2, D6): rasters, settled bitmaps, the interaction freeze, cubes and brushes.
+    let rasterizer: MaskRasterizer
 
     public init(store: ProjectStore, projectID: UUID, inpainting: InpaintingPipeline, upscaler: Upscaler = Upscaler()) {
         self.store = store
         self.projectID = projectID
         self.inpainting = inpainting
         self.upscaler = upscaler
+        rasterizer = MaskRasterizer(maskStore: MaskStore(store: store, projectID: projectID))
     }
 
     /// The upscaler with its model, once the model manager has located it.
@@ -150,7 +161,7 @@ public actor PhotoRenderer {
     public var maskStore: MaskStore { MaskStore(store: store, projectID: projectID) }
 
     /// Cache keys one render read or produced.
-    private final class KeyLog {
+    final class KeyLog {
         var keys: Set<String> = []
     }
 
@@ -192,6 +203,7 @@ public actor PhotoRenderer {
         clearOverlays()
         disparityCache.removeAll()
         clearStrokeMasks()
+        rasterizer.purge()
     }
 
     /// Memory warning: drops what is cheap to rebuild and the least recently used
@@ -205,6 +217,7 @@ public actor PhotoRenderer {
         clearOverlays()
         disparityCache.removeAll()
         clearStrokeMasks()
+        rasterizer.purge()
         let displayedSizes = Set(displayedKeys.compactMap(Self.sizeSuffix(ofKey:)))
         evict(downTo: keep) { key in Self.sizeSuffix(ofKey: key).map { !displayedSizes.contains($0) } ?? true }
         RenderContext.shared.clearCaches()
@@ -227,6 +240,11 @@ public actor PhotoRenderer {
     // MARK: - Rendering
 
     public func render(_ document: PhotoDocument, options: Options = .preview) async throws -> CIImage {
+        try await render(document, options: options, capture: nil)
+    }
+
+    /// The render, with the base layer's masks for an overlay recorded in `capture` (W2, D17).
+    func render(_ document: PhotoDocument, options: Options, capture: MaskCapture?) async throws -> CIImage {
         let timer = PSTimer("render")
         defer { timer.log(category: .imaging) }
         // A settled on-screen render records the results it uses; the newest one to finish wins.
@@ -241,8 +259,10 @@ public actor PhotoRenderer {
         let fullLongest = max(baseAsset.pixelSize.width, baseAsset.pixelSize.height)
         let scale = options.targetLongestSide.map { min(1, $0 / max(1, fullLongest)) } ?? 1
 
-        let baseImage = try await renderImageLayer(base, asset: baseAsset, scale: scale, options: options, log: log)
+        let baseImage = try await renderImageLayer(base, asset: baseAsset, scale: scale, options: options, log: log, capture: capture)
         let canvasRect = CGRect(origin: .zero, size: baseImage.extent.size)
+        capture?.canvasOffset = CGAffineTransform(translationX: -baseImage.extent.minX, y: -baseImage.extent.minY)
+        capture?.canvasRect = canvasRect
         var canvas = CIImage(color: document.backgroundColor.ciColor).cropped(to: canvasRect)
         canvas = composite(baseImage.transformed(by: CGAffineTransform(translationX: -baseImage.extent.minX, y: -baseImage.extent.minY)), over: canvas, layer: base, canvasRect: canvasRect, isBase: true)
 
@@ -388,7 +408,7 @@ public actor PhotoRenderer {
         return flat.transformed(by: origin)
     }
 
-    private func renderImageLayer(_ layer: Layer, asset: MediaAsset, scale: Double, options: Options, log: KeyLog? = nil) async throws -> CIImage {
+    func renderImageLayer(_ layer: Layer, asset: MediaAsset, scale: Double, options: Options, log: KeyLog? = nil, capture: MaskCapture? = nil) async throws -> CIImage {
         // Only an off-screen full-size render (export) keeps the lazy decode; what is drawn is decoded here.
         var image = try source(for: asset, scale: scale, isFullResolution: scale >= 0.999 && !options.isDisplayed)
         // Actual ratio between this render and the original (thumbnail loader rounds).
@@ -427,7 +447,8 @@ public actor PhotoRenderer {
         if let lut = layer.edits.resolvedLUT {
             image = ColorCube.shared.apply(lutAt: store.url(for: lut.relativePath, in: projectID), intensity: lut.intensity, to: image)
         }
-        return image
+        // Local adjustments come last, each through its mask, Lightroom-style (W2, D2).
+        return applyLocalAdjustments(of: layer, to: image, scale: effectiveScale, options: options, capture: capture)
     }
 
     /// The layer's tone table, nil when Levels and its curve change nothing. Kept by its inputs.
@@ -633,6 +654,10 @@ public actor PhotoRenderer {
             // A kind from a newer build: kept in the document, drawn as nothing.
             return input
 
+        case .localAdjust:
+            // Rendered after the layer's develop recipe, through its mask (W2, D2): never in the operation loop.
+            return input
+
         case .lensBlur(let focus, let aperture, let mask):
             // Done with the depth map at the source when there is one; the subject mask is the fallback.
             guard layer.edits.resolvedLensBlur?.focus == focus else { return input }
@@ -730,12 +755,15 @@ public actor PhotoRenderer {
 
         case .removeBackground(let mask):
             guard let mask, let maskImage = loadMask(mask, fitting: extent) else { return input }
-            return AdjustmentPipeline.applyingAlpha(mask: maskImage, to: input)
+            // Select & Mask's colour decontamination first (W2): the fringe takes the subject's colour.
+            let source = EdgeRefine.decontaminate(input, alpha: maskImage, amount: mask.decontaminate ?? 0)
+            return AdjustmentPipeline.applyingAlpha(mask: maskImage, to: source)
 
         case .replaceBackground(let background, let mask):
             guard let mask, let maskImage = loadMask(mask, fitting: extent) else { return input }
             let backdrop = BackgroundEffects.backdrop(for: background, original: input, scale: scale, store: store, projectID: projectID)
-            return AdjustmentPipeline.blendWithMask(foreground: input, background: backdrop, mask: maskImage)
+            let source = EdgeRefine.decontaminate(input, alpha: maskImage, amount: mask.decontaminate ?? 0)
+            return AdjustmentPipeline.blendWithMask(foreground: source, background: backdrop, mask: maskImage)
 
         case .blurBackground(let amount, let mask):
             guard let mask, let maskImage = loadMask(mask, fitting: extent) else { return input }

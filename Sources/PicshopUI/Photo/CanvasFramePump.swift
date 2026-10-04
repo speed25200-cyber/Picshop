@@ -9,7 +9,8 @@ import PicshopImaging
 /// CADisplayLink (80–120 Hz, capped by the performance governor), paused
 /// whenever there is nothing to draw, asks a `FramePacer` on every vsync
 /// whether to start a render. Frames under the finger go straight to the
-/// canvas sink; the sharp frame after 120 ms of stillness is published to
+/// canvas sink, their mask overlay with them (`presentOverlay`, same
+/// generation); the sharp frame after 120 ms of stillness is published to
 /// SwiftUI, the histogram and Live. Behind the `displayLinkCanvas` flag; the
 /// session's sleep-paced loop stays for one wave as the fallback.
 @MainActor
@@ -96,11 +97,12 @@ final class CanvasFramePump {
         }
         session.isRendering = true
         renderTask = Task { [weak self, weak session] in
-            let image = await session?.renderFrame(interactive: interactive)
+            // The frame and its mask or selection overlay (W2, D17): one render, one generation for both.
+            let rendered = await session?.renderFrame(interactive: interactive)
             guard let self else { return }
             self.renderTask = nil
-            if let session, let image, !Task.isCancelled {
-                session.frameRendered(image, interactive: interactive, generation: generation)
+            if let session, let rendered, !Task.isCancelled {
+                session.frameRendered(rendered.image, overlay: rendered.overlay, interactive: interactive, generation: generation)
             }
             self.pacer.renderFinished(now: CACurrentMediaTime())
             if self.pacer.phase == .idle { session?.isRendering = false }

@@ -65,7 +65,8 @@ final class OperationCatalogTests: XCTestCase {
     }
 
     /// The 13 W1 operations: handlers, unknown to the grammar, off the fast lane, never core, and
-    /// never an IntentAction name.
+    /// never an IntentAction name. W2 adds the six mask and selection operations (keywordsOnly: the grammar owns
+    /// only their signature phrases; maskAdjust takes selectiveAdjust's place in the photo core set).
     func testTheThirteenNewOperations() throws {
         let ids: [OpID] = ["curves", "levels", "autoTone", "hsl", "colorGrade", "lutIntensity", "removeLUT", "perspective", "lensFocus",
                            "layerOpacity", "layerBlend", "layerVisibility", "layerOrder"]
@@ -79,8 +80,18 @@ final class OperationCatalogTests: XCTestCase {
             XCTAssertEqual(spec.domains, [.photo], "\(id)")
             XCTAssertFalse(raw.contains(id.raw), "\(id) must not collide with an IntentAction")
         }
+        let masks: [OpID] = ["maskAdjust", "maskEdit", "maskDelete", "select", "selectionModify", "selectionApply"]
+        for id in masks {
+            let spec = try XCTUnwrap(OperationCatalog.shared.spec(id), "\(id)")
+            XCTAssertEqual(spec.lowering, .handler, "\(id)")
+            XCTAssertEqual(spec.grammar, .keywordsOnly, "\(id)")
+            XCTAssertFalse(spec.fastLane, "\(id)")
+            XCTAssertEqual(spec.coreIn, id == "maskAdjust" ? [.photo] : [], "\(id)")
+            XCTAssertEqual(spec.domains, [.photo], "\(id)")
+            XCTAssertFalse(raw.contains(id.raw), "\(id) must not collide with an IntentAction")
+        }
         let handlers = OperationCatalog.shared.specs.filter { $0.lowering == .handler }.map(\.id)
-        XCTAssertEqual(Set(handlers), Set(ids), "W1 has exactly these handler operations")
+        XCTAssertEqual(Set(handlers), Set(ids + masks), "W1 and W2 have exactly these handler operations")
         // An existing action keeps its raw value as id.
         for spec in OperationCatalog.shared.specs {
             if case .intent(let action) = spec.lowering { XCTAssertEqual(spec.id.raw, action.rawValue) }
@@ -89,7 +100,7 @@ final class OperationCatalogTests: XCTestCase {
 
     func testCoreSetsPerDomain() {
         func core(_ domain: OpDomain) -> Set<String> { Set(OperationCatalog.shared.core(for: domain).map(\.id.raw)) }
-        XCTAssertEqual(core(.photo), ["adjust", "applyLook", "autoEnhance", "crop", "rotate", "removeObject", "selectiveAdjust", "removeBackground",
+        XCTAssertEqual(core(.photo), ["adjust", "applyLook", "autoEnhance", "crop", "rotate", "removeObject", "maskAdjust", "removeBackground",
                                       "blurBackground", "addText", "editText", "fillCells"])
         XCTAssertEqual(core(.video), ["trim", "deleteRange", "split", "setSpeed", "addText", "addTransition", "addMusic", "setVolume", "autoCaptions",
                                       "adjust", "applyLook", "crop"])
@@ -109,6 +120,49 @@ final class OperationCatalogTests: XCTestCase {
         for spec in OperationCatalog.shared.specs where spec.lowering == .handler {
             XCTAssertTrue(spec.examples.contains { $0.role != .positive }, "\(spec.id)")
         }
+    }
+
+    /// I2 at the W2 level, for every operation: at least 3 French and 2 English positive or paraphrase examples,
+    /// and a near miss that names where it should go (the R and S lanes check them).
+    func testEveryOperationMeetsTheW2ExampleLevel() {
+        var short: [String] = []
+        for spec in OperationCatalog.shared.specs {
+            let said = spec.examples.filter { !Self.isNegative($0) }
+            let french = said.filter { $0.language == .fr }.count, english = said.filter { $0.language == .en }.count
+            let negatives = spec.examples.filter(Self.isNegative).count
+            if french < 3 || english < 2 || negatives < 1 { short.append("\(spec.id): fr \(french), en \(english), near \(negatives)") }
+        }
+        XCTAssertTrue(short.isEmpty, "\(short.count) operations below the W2 level:\n" + short.joined(separator: "\n"))
+    }
+
+    static func isNegative(_ example: OpExample) -> Bool {
+        if case .negative = example.role { return true }
+        return false
+    }
+
+    /// The six W2 operations go deeper (§8.10): French and English positives and paraphrases.
+    func testTheW2OperationsHaveTheirExamples() throws {
+        let minimums: [OpID: (Int, Int)] = ["maskAdjust": (12, 6), "select": (10, 5), "maskEdit": (8, 4), "selectionModify": (8, 4),
+                                            "selectionApply": (8, 4), "maskDelete": (3, 2)]
+        for (id, minimum) in minimums {
+            let spec = try XCTUnwrap(OperationCatalog.shared.spec(id))
+            let said = spec.examples.filter { !Self.isNegative($0) }
+            XCTAssertGreaterThanOrEqual(said.filter { $0.language == .fr }.count, minimum.0, "\(id) French")
+            XCTAssertGreaterThanOrEqual(said.filter { $0.language == .en }.count, minimum.1, "\(id) English")
+            XCTAssertTrue(spec.examples.contains(where: Self.isNegative), "\(id) near miss")
+        }
+        // selectionApply: one example per use.
+        let apply = try XCTUnwrap(OperationCatalog.shared.spec("selectionApply"))
+        let uses = Set(apply.examples.compactMap { $0.args["use"]?.string })
+        XCTAssertEqual(uses, Set(CatalogPhotoMasks.useValues))
+        // The enumerations come from the Core enums.
+        let where_ = try XCTUnwrap(OperationCatalog.shared.spec("maskAdjust")?.params.first { $0.key == "where" })
+        XCTAssertEqual(where_.kind, .enumeration(MaskRegion.allCases.map(\.rawValue)))
+        let what = try XCTUnwrap(OperationCatalog.shared.spec("select")?.params.first { $0.key == "what" })
+        XCTAssertEqual(what.kind, .enumeration(MaskRegion.allCases.map(\.rawValue) + ["all", "wand"]))
+        let combine = try XCTUnwrap(OperationCatalog.shared.spec("maskEdit")?.params.first { $0.key == "combine" })
+        XCTAssertEqual(combine.kind, .enumeration(CombineMode.allCases.map(\.rawValue)))
+        for alias in where_.valueAliases.values { XCTAssertNotNil(MaskRegion(rawValue: alias), alias) }
     }
 
     func testTextsTriggersAndChecksAreFilledIn() {
@@ -151,7 +205,8 @@ final class OperationCatalogTests: XCTestCase {
     /// The editors' panel ids (PhotoEditorSession.Tool, VideoEditorSession.Tool, PDFEditorSession.Tool raw values;
     /// the UI module does not build on Linux, so they are listed here).
     static let panels: [OpDomain: Set<String>] = [
-        .photo: ["magic", "focus", "adjust", "looks", "color", "erase", "precise", "cutout", "crop", "text", "shapes", "layers", "curves", "levels"],
+        .photo: ["magic", "focus", "adjust", "looks", "color", "erase", "precise", "cutout", "crop", "text", "shapes", "layers", "curves", "levels",
+                 "masks", "select"],
         .video: ["magic", "transcript", "cut", "speed", "motion", "audio", "looks", "adjust", "color", "text", "overlay", "transitions", "frame"],
         .pdf: ["pages", "draw", "highlight", "redact", "text", "signature", "image"],
     ]
@@ -165,7 +220,7 @@ final class OperationCatalogTests: XCTestCase {
             XCTAssertTrue(known.contains(tool), "\(spec.id): \(tool)")
         }
         let photo = Set(OperationCatalog.shared.specs(in: .photo).compactMap(\.uiTool))
-        for panel in ["curves", "levels", "layers", "color", "crop", "focus", "adjust", "looks", "text", "erase", "cutout"] {
+        for panel in ["curves", "levels", "layers", "color", "crop", "focus", "adjust", "looks", "text", "erase", "cutout", "masks", "select"] {
             XCTAssertTrue(photo.contains(panel), panel)
         }
     }

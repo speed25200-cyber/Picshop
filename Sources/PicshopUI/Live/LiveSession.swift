@@ -6,6 +6,15 @@ import PicshopCore
 import PicshopIntent
 import PicshopSpeech
 
+/// What the command palette (W2, D16) does in an editor: open a tool, or run a ready operation. The photo
+/// session installs it; video and PDF have none in W2.
+struct CommandPaletteHandler {
+    var domain: OpDomain
+    /// A PhotoEditorSession.Tool raw value (or a panel id).
+    var openTool: @MainActor (String) -> Void
+    var run: @MainActor (OperationCall) -> Void
+}
+
 /// Picshop Live in one editor: the conversation's state for the views, and the
 /// orchestrator between the microphone, the brains, the voice and the editor
 /// session that hosts it. Each editor session creates one in its init.
@@ -17,6 +26,8 @@ import PicshopSpeech
 @Observable
 public final class LiveSession {
     public let mode: EditorMode
+    /// The command palette's actions in this editor; nil: no palette (video and PDF in W2).
+    var paletteHandler: CommandPaletteHandler? = nil
     /// False on PDF: the orb dictates and typed text runs the local pipeline.
     public let canGoLive: Bool
     /// Read only by LiveOrb and its halo.
@@ -180,6 +191,8 @@ public final class LiveSession {
     /// Bumped at every Live start: a tool from an earlier conversation never reaches this one's reducer.
     @ObservationIgnored var liveGeneration = 0
     @ObservationIgnored var firstAudioMarked: Set<Int> = []
+    /// `tts.firstBuffer` per turn: from the turn's first line handed to the voice to its first audio (W2 signposts).
+    @ObservationIgnored var ttsFirstBuffer: [Int: PSSignpost.Interval] = [:]
     /// The video plays: Live does not hear (the reducer is muted, `isMuted` stays the user's).
     @ObservationIgnored var playbackHolds = false
     /// The turn whose own steps started playback ("lecture"): its reply does not pause it again.
@@ -270,6 +283,7 @@ public final class LiveSession {
         host?.liveSpeechSuppressed = false
         toolHandler = nil
         toolProxy = nil
+        paletteHandler = nil
     }
 
     // MARK: Called by views

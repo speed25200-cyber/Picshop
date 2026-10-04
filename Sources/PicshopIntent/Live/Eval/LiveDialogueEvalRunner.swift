@@ -91,6 +91,7 @@ import PicshopCore
         case .values: return .benchmark(withValues: true, failingChecks: testCase.failingChecks)
         case .stray: return .benchmark(strayOne: true, failingChecks: testCase.failingChecks)
         case .poster: return .poster(failingChecks: testCase.failingChecks)
+        case .lake: return .lake(failingChecks: testCase.failingChecks)
         }
     }
 
@@ -157,8 +158,15 @@ import PicshopCore
         var sizes: [String: Double]
         var cellValues: [String]
         var layerIDs: Set<UUID>
+        /// W2: the local adjustments and the pixel selection before the turn.
+        var masks: [LocalAdjustment]
+        var selection: PhotoSelection?
+        var history: Int
 
         @MainActor init(_ host: LiveEvalEditor) {
+            history = host.history.count
+            masks = host.document.localAdjustments
+            selection = host.document.selection
             runs = host.runs.count
             applied = host.applied.count
             erases = LiveDialogueEvalRunner.erases(host)
@@ -284,6 +292,7 @@ import PicshopCore
         if expect.neverDone, spoken.range(of: #"(?i)(^|[.!?]\s*)(c'est fait|done)\s*[.!]"#, options: .regularExpression) != nil {
             failures.append("said it was done although the check failed")
         }
+        failures += maskFailures(expect, host: host, before: before, applied: applied)
         if let limit = expect.maxRuns, host.runs.count - before.runs > limit {
             failures.append("\(host.runs.count - before.runs) runs: more than one repair round")
         }
@@ -298,6 +307,51 @@ import PicshopCore
                     if shared > 0.1 { failures.append("'\(element.text)' covers \(Int(shared * 100))% of '\(block.text)'") }
                 }
             }
+        }
+        return failures
+    }
+
+    /// W2: the masks and the selection a turn must leave.
+    static func maskFailures(_ expect: DialogueExpect, host: LiveEvalEditor, before: Snapshot, applied: [EditIntent]) -> [String] {
+        var failures: [String] = []
+        let masks = host.document.localAdjustments
+        if let ops = expect.ops {
+            let ran = Set(applied.compactMap { $0.operation?.id.raw ?? ($0.action == .selectiveAdjust ? "selectiveAdjust" : nil) })
+            if ran != ops { failures.append("ran \(ran.sorted()) instead of \(ops.sorted())") }
+        }
+        if let count = expect.maskCount, masks.count != count { failures.append("\(masks.count) masks instead of \(count)") }
+        func mask(_ index: Int) -> LocalAdjustment? { index >= 1 && index <= masks.count ? masks[index - 1] : nil }
+        func previous(_ index: Int) -> LocalAdjustment? {
+            guard let now = mask(index) else { return nil }
+            return before.masks.first { $0.id == now.id }
+        }
+        for dial in expect.dials {
+            guard let adjustment = mask(dial.index) else { failures.append("no mask a\(dial.index)"); continue }
+            let value = adjustment.adjustments[dial.parameter]
+            let old = previous(dial.index)?.adjustments[dial.parameter] ?? 0
+            switch dial.change {
+            case .up: if value <= 0.0005 { failures.append("a\(dial.index) \(dial.parameter.rawValue) is \(value), not raised") }
+            case .down: if value >= -0.0005 { failures.append("a\(dial.index) \(dial.parameter.rawValue) is \(value), not lowered") }
+            case .grew: if abs(value) <= abs(old) + 0.0005 { failures.append("a\(dial.index) \(dial.parameter.rawValue) did not grow (\(old) → \(value))") }
+            case .shrank: if abs(value) >= abs(old) - 0.0005 { failures.append("a\(dial.index) \(dial.parameter.rawValue) did not shrink (\(old) → \(value))") }
+            }
+        }
+        for (index, region) in expect.maskRegions where mask(index)?.region != region {
+            failures.append("a\(index) is \(mask(index)?.region?.rawValue ?? "missing"), not \(region.rawValue)")
+        }
+        for index in expect.invertedMasks where mask(index)?.stack.isInverted != true { failures.append("a\(index) is not inverted") }
+        for index in expect.hiddenMasks where mask(index)?.isVisible != false { failures.append("a\(index) is not hidden") }
+        if let selected = expect.selected {
+            if selected, host.document.selection == nil { failures.append("nothing is selected") }
+            if !selected, host.document.selection != nil { failures.append("something is still selected") }
+        }
+        if expect.selectionChanged, host.document.selection == before.selection { failures.append("the selection did not change") }
+        if expect.reverts, host.history.count >= before.history { failures.append("nothing was undone") }
+        for region in expect.regionsPresent where !masks.contains(where: { $0.region == region }) { failures.append("no mask on \(region.rawValue)") }
+        for index in expect.strengthened {
+            guard let now = mask(index) else { failures.append("no mask a\(index)"); continue }
+            let total = { (adjustment: LocalAdjustment?) in adjustment.map { a in AdjustmentParameter.allCases.reduce(0) { $0 + abs(a.adjustments[$1]) } } ?? 0 }
+            if total(now) <= total(previous(index)) + 0.0005 { failures.append("a\(index) did not get stronger") }
         }
         return failures
     }

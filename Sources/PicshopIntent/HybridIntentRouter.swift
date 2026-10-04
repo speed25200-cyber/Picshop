@@ -23,7 +23,13 @@ public actor HybridIntentRouter {
         /// Always consult the LLM (useful for evaluation / debugging).
         public var alwaysUseLLM: Bool
 
-        public init(fastPathThreshold: Double = 0.85, llmTimeout: Duration = .seconds(6),
+        /// The default fast-path bar.
+        public static let defaultFastPathThreshold = 0.85
+        /// The grammar's cap on a plan with a clause it could not read: strictly below the fast path, so a model,
+        /// when there is one, reads the whole request (`RuleBasedIntentEngine`).
+        public static let unreadClauseCap = 0.8
+
+        public init(fastPathThreshold: Double = Configuration.defaultFastPathThreshold, llmTimeout: Duration = .seconds(6),
                     improveTimeout: Duration = .seconds(2), alwaysUseLLM: Bool = false) {
             self.fastPathThreshold = fastPathThreshold
             self.llmTimeout = llmTimeout

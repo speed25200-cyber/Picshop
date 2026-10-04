@@ -18,6 +18,9 @@ enum CatalogMeta {
                 fr("va à 10 secondes", ["seconds": 10]),
                 fr("reviens au début", ["seconds": 0]),
                 en("jump to 30 seconds", ["seconds": 30]),
+                fr("place-toi à 5 secondes", ["seconds": 5]),
+                en("go back to the start", ["seconds": 0]),
+                near("coupe à 5 secondes", .fr, expected: "split"),
             ]
             s.verify = [.unverifiable("only the playhead moves")]
             s.grammar = .owned
@@ -31,7 +34,7 @@ extension OperationCatalog {
     /// Every entry, photo first, then video, PDF and meta. Retrieval breaks ties in this order.
     static var entries: [OperationSpec] {
         CatalogPhotoTone.all + CatalogPhotoColor.all + CatalogPhotoRetouch.all + CatalogPhotoGeometry.all + CatalogPhotoText.all
-            + CatalogPhotoTable.all + CatalogPhotoLayers.all + CatalogVideoEdit.all + CatalogVideoMagic.all + CatalogVideoAudio.all
+            + CatalogPhotoTable.all + CatalogPhotoLayers.all + CatalogPhotoMasks.all + CatalogVideoEdit.all + CatalogVideoMagic.all + CatalogVideoAudio.all
             + CatalogPDF.all + CatalogMeta.all
     }
 }

@@ -21,6 +21,9 @@ enum CatalogVideoEdit {
                 fr("garde seulement de 2 à 8 secondes", ["startSeconds": 2, "endSeconds": 8]),
                 fr("ne garde que les 10 premières secondes", ["startSeconds": 0, "endSeconds": 10]),
                 en("keep only from 5 to 20 seconds", ["startSeconds": 5, "endSeconds": 20]),
+                fr("garde de 3 à 9 secondes", ["startSeconds": 3, "endSeconds": 9]),
+                en("keep just the first 10 seconds", ["startSeconds": 0, "endSeconds": 10]),
+                near("coupe de 10 à 12 secondes", .fr, expected: "deleteRange"),
             ]
             s.verify = [.structural(.timelineDuration, .decreased)]
             s.grammar = .owned
@@ -41,6 +44,9 @@ enum CatalogVideoEdit {
                 fr("coupe ici"),
                 fr("coupe à 5 secondes", ["seconds": 5]),
                 en("split at 10 seconds", ["seconds": 10]),
+                fr("sépare le clip à 4 secondes", ["seconds": 4]),
+                en("cut here"),
+                near("supprime le clip 2", .fr, expected: "deleteClip"),
             ]
             s.verify = [.structural(.clipCount, .increased)]
             s.grammar = .owned
@@ -62,6 +68,8 @@ enum CatalogVideoEdit {
                 fr("supprime ce clip"),
                 fr("supprime le dernier clip", ["clipNumber": -1]),
                 en("delete the last clip", ["clipNumber": -1]),
+                en("delete clip 2", ["clipNumber": 2]),
+                near("coupe les 3 premières secondes", .fr, expected: "deleteRange"),
             ]
             s.verify = [.structural(.clipCount, .decreased)]
             s.grammar = .owned
@@ -73,7 +81,7 @@ enum CatalogVideoEdit {
         legacy(.deleteRange, in: [.video], .cut, .geometry,
                title: t("Cut a range", "Couper un passage"), summary: t("Removes start…end", "Enlève début…fin")) { s in
             s.coreIn = [.video]
-            s.params = [Step.startSeconds(.required), Step.endSeconds(), Step.clipNumber().offCard]
+            s.params = [Step.startSeconds(.required), Step.endSeconds(.required), Step.clipNumber().offCard]
             s.triggers = [
                 .fr: ["coupe les", "enlève les", "premières secondes", "dernières secondes", "coupe de", "supprime le passage"],
                 .en: ["cut the first", "remove the last", "first seconds", "last seconds", "cut from", "delete the part"],
@@ -83,6 +91,8 @@ enum CatalogVideoEdit {
                 fr("coupe le clip 2 de 3 à 5 secondes", ["clipNumber": 2, "startSeconds": 3, "endSeconds": 5]),
                 en("remove from 10 to 12 seconds", ["startSeconds": 10, "endSeconds": 12]),
                 para("coupe les trois premières secondes", .fr, ["startSeconds": 0, "endSeconds": 3]),
+                en("cut the first 3 seconds", ["startSeconds": 0, "endSeconds": 3]),
+                near("ne garde que de 2 à 8 secondes", .fr, expected: "trim"),
             ]
             s.verify = [.structural(.timelineDuration, .decreased)]
             s.grammar = .owned
@@ -104,6 +114,8 @@ enum CatalogVideoEdit {
                 fr("mets le clip 2 au ralenti", ["clipNumber": 2, "speed": 0.5]),
                 en("slow motion", ["speed": 0.5]),
                 para("accélère deux fois", .fr, ["speed": 2]),
+                en("speed it up 2x", ["speed": 2]),
+                near("fais une rampe de vitesse", .fr, expected: "speedRamp"),
             ]
             s.verify = [.structural(.timelineDuration, .changed)]
             s.grammar = .owned
@@ -125,6 +137,8 @@ enum CatalogVideoEdit {
                 fr("joue le clip à l'envers"),
                 en("play it backwards"),
                 near("inverse les clips 1 et 2", .fr, expected: "moveClip"),
+                fr("lis la vidéo à l'envers"),
+                en("reverse the clip"),
             ]
             s.verify = [.unverifiable("the playback direction is judged by eye")]
             s.grammar = .owned
@@ -144,6 +158,9 @@ enum CatalogVideoEdit {
                 fr("fige l'image à 4 secondes", ["seconds": 4]),
                 fr("arrêt sur image ici"),
                 en("freeze frame at 3 seconds", ["seconds": 3]),
+                fr("fige l'image à 2 secondes", ["seconds": 2]),
+                en("freeze the picture here"),
+                near("extrais l'image à 3 secondes", .fr, expected: "extractFrame"),
             ]
             s.verify = [.structural(.timelineDuration, .increased)]
             s.grammar = .owned
@@ -163,6 +180,9 @@ enum CatalogVideoEdit {
                 fr("duplique le clip"),
                 fr("duplique le clip 2", ["clipNumber": 2]),
                 en("duplicate the clip"),
+                fr("copie le clip 1", ["clipNumber": 1]),
+                en("duplicate clip 2", ["clipNumber": 2]),
+                near("supprime le clip", .fr, expected: "deleteClip"),
             ]
             s.verify = [.structural(.clipCount, .increased)]
             s.grammar = .owned
@@ -182,6 +202,9 @@ enum CatalogVideoEdit {
                 fr("déplace le clip 2 au début", ["clipNumber": 2, "choiceIndex": 1]),
                 fr("inverse les clips 1 et 2", ["clipNumber": 1, "choiceIndex": 2]),
                 en("move clip 2 to the beginning", ["clipNumber": 2, "choiceIndex": 1]),
+                fr("mets le clip 3 en premier", ["clipNumber": 3, "choiceIndex": 1]),
+                en("swap clips 1 and 2", ["clipNumber": 1, "choiceIndex": 2]),
+                near("inverse la vidéo", .fr, expected: "reverse"),
             ]
             s.verify = [.unverifiable("the order is checked by the executor")]
             s.grammar = .owned
@@ -201,6 +224,9 @@ enum CatalogVideoEdit {
                 fr("extrais l'image à 3 secondes", ["seconds": 3]),
                 fr("fais une capture d'écran"),
                 en("grab this frame"),
+                fr("enregistre cette image"),
+                en("save this frame as a photo"),
+                near("fige l'image ici", .fr, expected: "freezeFrame"),
             ]
             s.verify = [.unverifiable("the photo is saved outside the timeline")]
             s.grammar = .owned
@@ -221,6 +247,9 @@ enum CatalogVideoEdit {
                 fr("ajoute un fondu enchaîné entre tous les clips", ["transition": "crossDissolve", "scope": "all"]),
                 fr("ajoute une transition glissée", ["transition": "slideLeft"]),
                 en("add a fade to black between the clips", ["transition": "fadeToBlack", "scope": "all"]),
+                fr("mets un fondu au noir entre les plans", ["transition": "fadeToBlack", "scope": "all"]),
+                en("add a crossfade between all the clips", ["transition": "crossDissolve", "scope": "all"]),
+                near("retire toutes les transitions", .fr, expected: "removeTransition"),
             ]
             s.verify = [.unverifiable("transitions are checked by the executor")]
             s.grammar = .owned
@@ -240,6 +269,9 @@ enum CatalogVideoEdit {
                 fr("enlève la transition"),
                 fr("supprime toutes les transitions", ["scope": "all"]),
                 en("remove the transitions", ["scope": "all"]),
+                fr("retire le fondu"),
+                en("remove the transition"),
+                near("ajoute un fondu enchaîné", .fr, expected: "addTransition"),
             ]
             s.verify = [.unverifiable("transitions are checked by the executor")]
             s.grammar = .owned
@@ -260,6 +292,9 @@ enum CatalogVideoEdit {
                 fr("stabilise la vidéo"),
                 fr("ça tremble, stabilise"),
                 en("stabilize the video"),
+                fr("enlève les tremblements"),
+                en("the video is shaky, stabilize it"),
+                near("accélère la vidéo", .fr, expected: "setSpeed"),
             ]
             s.verify = [.unverifiable("stability is judged by eye")]
             s.grammar = .owned

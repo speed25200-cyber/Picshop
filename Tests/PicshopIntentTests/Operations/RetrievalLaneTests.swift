@@ -150,13 +150,42 @@ final class RetrievalLaneTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(Double(found) / Double(total), 0.97, "\(misses)")
     }
 
+    /// I2 (W2): every near miss is sent where it names. The operation it expects ranks above the spec's own,
+    /// or the grammar or abstention routes it there.
+    func testNearMissesGoWhereTheyName() {
+        var wrong: [String] = []
+        var checked = 0
+        for spec in catalog.specs {
+            for example in spec.examples {
+                guard case .negative(let expected) = example.role else { continue }
+                checked += 1
+                let theirs = expected.flatMap { catalog.spec($0)?.domains } ?? spec.domains
+                let shared = spec.domains.intersection(theirs)
+                let domain = (shared.isEmpty ? theirs : shared).sorted { $0.rawValue < $1.rawValue }.first ?? .photo
+                let ranking = index.ranking(query(example.say, domain, example.language)).map(\.id)
+                let own = ranking.firstIndex(of: spec.id) ?? Int.max
+                // A near miss that names no operation yet ("no operation yet") is the model's to answer honestly: the
+                // cards may well show the closest spec, so retrieval has nothing to check.
+                guard let expected else { continue }
+                if (ranking.firstIndex(of: expected) ?? Int.max) < own { continue }
+                if OperationAbstention.namesUnownedOp(example.say, domain: domain) == expected { continue }
+                let parsed = RuleBasedIntentEngine().parse(example.say, context: GrammarLaneTests.context(domain))
+                if parsed.intents.contains(where: { ($0.operation?.id ?? OpID($0.action.rawValue)) == expected }) { continue }
+                wrong.append("\(spec.id) « \(example.say) » → \(Array(ranking.prefix(4)).map(\.raw)), expected \(expected)")
+            }
+        }
+        XCTAssertGreaterThanOrEqual(checked, OperationCatalog.shared.specs.count)
+        XCTAssertEqual(wrong, [], "\(wrong.count) near misses go elsewhere")
+    }
+
     /// The 13 new operations' own words (their triggers) bring them, which is what the model needs
     /// before abstention hands it the request.
     func testNewOperationsAreFoundByTheirTriggers() {
-        for spec in catalog.specs where spec.lowering == .handler {
+        // A core operation (maskAdjust, W2) is always on the cards; the others must be retrieved by their words.
+        for spec in catalog.specs where spec.lowering == .handler && !spec.coreIn.contains(.photo) {
             for language in OpLanguage.allCases {
                 for trigger in spec.triggers[language] ?? [] {
-                    let ids = index.retrieve(query(trigger, .photo, language, hints: [.importedLUT, .multipleLayers]), limit: 8).map(\.id)
+                    let ids = index.retrieve(query(trigger, .photo, language, hints: [.importedLUT, .multipleLayers, .localMasks, .selection]), limit: 8).map(\.id)
                     XCTAssertTrue(ids.contains(spec.id), "\(spec.id): « \(trigger) » → \(ids)")
                 }
             }

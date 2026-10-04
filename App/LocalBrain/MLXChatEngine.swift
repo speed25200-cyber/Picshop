@@ -29,6 +29,7 @@ import CoreImage
 import Foundation
 import MLXLMCommon
 import PicshopCore
+import PicshopImaging
 import PicshopIntent
 
 final class MLXChatEngine: LocalChatEngine, @unchecked Sendable {
@@ -106,8 +107,18 @@ final class MLXChatEngine: LocalChatEngine, @unchecked Sendable {
 
     // MARK: Generation
 
+    /// One generation, the model marked busy for the model broker throughout (W2, D12): a busy LLM is never evicted.
     private func generate(_ batch: [Chat.Message], options: LocalGenerationOptions,
                           continuation: AsyncThrowingStream<LocalChatEvent, Error>.Continuation) async {
+        await ModelResidency.markBusy(.llm, true)
+        await run(batch, options: options, continuation: continuation)
+        await ModelResidency.markBusy(.llm, false)
+    }
+
+    /// The generation itself, with `llm.prefill` (send to first token) and `llm.decode` (first token to the end)
+    /// signposts for Instruments.
+    private func run(_ batch: [Chat.Message], options: LocalGenerationOptions,
+                     continuation: AsyncThrowingStream<LocalChatEvent, Error>.Continuation) async {
         let prepared: (ChatSession, [Chat.Message])? = lock.withLock {
             guard !closed, let session = self.session ?? makeSession() else { return nil }
             self.session = session
@@ -127,9 +138,20 @@ final class MLXChatEngine: LocalChatEngine, @unchecked Sendable {
         var calls = 0
         var rejected: [String] = []
         var completion: GenerateCompletionInfo?
+        let prefill = PSSignpost.begin("llm.prefill", "\(info.displayName) · \(input.count) messages")
+        var prefillOpen = true
+        var decode: PSSignpost.Interval?
+        defer {
+            if prefillOpen { PSSignpost.end(prefill) }
+            if let decode { PSSignpost.end(decode) }
+        }
 
         func first() {
-            if firstTokenMs == nil { firstTokenMs = Int(Date().timeIntervalSince(started) * 1_000) }
+            guard firstTokenMs == nil else { return }
+            firstTokenMs = Int(Date().timeIntervalSince(started) * 1_000)
+            PSSignpost.end(prefill)
+            prefillOpen = false
+            decode = PSSignpost.begin("llm.decode", info.displayName)
         }
 
         do {

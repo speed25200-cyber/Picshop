@@ -105,6 +105,9 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
         case lensBlur(focus: PSPoint, aperture: Double, mask: MaskReference?)
         /// Levels per channel (last one wins; resolved with the tone curve into one tone table).
         case levels(Levels)
+        /// A local adjustment through a mask (Lightroom-style): rendered after the layer's develop recipe, one op per
+        /// id (`EditStack.setLocalAdjustment` replaces it in place). Not geometric, not expensive (W2, D2).
+        case localAdjust(LocalAdjustment)
         /// A kind a newer build wrote: its JSON (sorted keys), kept as read and written back
         /// unchanged. Renders as a no-op.
         case unsupported(String)
@@ -146,6 +149,7 @@ public struct EditOperation: Hashable, Codable, Sendable, Identifiable {
             case .moveObject(let mask, _): return "Move \(mask.displayName)"
             case .blurRegion(let mask, _): return "Blur \(mask.displayName)"
             case .levels: return "Levels"
+            case .localAdjust: return "Local Adjustment"
             case .unsupported: return "Unsupported Edit"
             }
         }

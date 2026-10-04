@@ -81,6 +81,22 @@
         }
       }
     },
+    "%d MB · Wi‑Fi · stays on this iPhone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d MB · Wi‑Fi · stays on this iPhone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d Mo · Wi‑Fi · reste sur cet iPhone"
+          }
+        }
+      }
+    },
     "%d cells cleared": {
       "localizations": {
         "en": {
@@ -161,6 +177,38 @@
         }
       }
     },
+    "%d of 16": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d of 16"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d sur 16"
+          }
+        }
+      }
+    },
+    "%d of 8": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d of 8"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d sur 8"
+          }
+        }
+      }
+    },
     "%d pages": {
       "localizations": {
         "en": {
@@ -173,6 +221,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%d pages"
+          }
+        }
+      }
+    },
+    "%d parts, no adjustment yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d parts, no adjustment yet"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d parties, aucun réglage pour l'instant"
           }
         }
       }
@@ -253,6 +317,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 case surlignée"
+          }
+        }
+      }
+    },
+    "1 part, no adjustment yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 part, no adjustment yet"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 partie, aucun réglage pour l'instant"
+          }
+        }
+      }
+    },
+    "100 % (actual pixels)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "100 % (actual pixels)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "100 % (pixels réels)"
           }
         }
       }
@@ -353,6 +449,22 @@
         }
       }
     },
+    "A mask holds 12 parts at most.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A mask holds 12 parts at most."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un masque compte 12 parties au plus."
+          }
+        }
+      }
+    },
     "A more natural voice": {
       "localizations": {
         "en": {
@@ -385,6 +497,86 @@
         }
       }
     },
+    "AI depth": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI depth"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profondeur IA"
+          }
+        }
+      }
+    },
+    "AI depth (Depth Anything V2)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI depth (Depth Anything V2)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profondeur IA (Depth Anything V2)"
+          }
+        }
+      }
+    },
+    "AI object selection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI object selection"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélection d'objets IA"
+          }
+        }
+      }
+    },
+    "AI object selection (SAM 2.1)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI object selection (SAM 2.1)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélection d'objets IA (SAM 2.1)"
+          }
+        }
+      }
+    },
+    "AI selection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI selection"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélection IA"
+          }
+        }
+      }
+    },
     "About 200 spoken requests on a table screenshot and a poster, run through the on-device model: what it did to the picture and what it said. Keep the screen on; it takes several minutes.": {
       "localizations": {
         "en": {
@@ -397,6 +589,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Environ 200 demandes parlées sur une capture de tableau et une affiche, passées au modèle de l'iPhone : ce qu'il a fait à l'image et ce qu'il a dit. Garde l'écran allumé ; cela prend plusieurs minutes."
+          }
+        }
+      }
+    },
+    "Actions for %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actions for %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actions pour %@"
           }
         }
       }
@@ -525,6 +733,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ajouter des clips"
+          }
+        }
+      }
+    },
+    "Add colour": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add colour"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter une couleur"
           }
         }
       }
@@ -753,6 +977,22 @@
         }
       }
     },
+    "Amount": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Amount"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quantité"
+          }
+        }
+      }
+    },
     "An edit on the beat, made for you.": {
       "localizations": {
         "en": {
@@ -913,6 +1153,22 @@
         }
       }
     },
+    "Apple Intelligence schema": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence schema"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schéma Apple Intelligence"
+          }
+        }
+      }
+    },
     "Apple Intelligence unavailable": {
       "localizations": {
         "en": {
@@ -1021,6 +1277,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Appliquer à toutes les coupes"
+          }
+        }
+      }
+    },
+    "Approximate mask: refine it with the brush.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approximate mask: refine it with the brush."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masque approximatif : affinez-le au pinceau."
+          }
+        }
+      }
+    },
+    "Approximate selection (model not installed)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approximate selection (model not installed)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélection approximative (modèle non installé)"
+          }
+        }
+      }
+    },
+    "Approximate sky: refine it with the brush.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approximate sky: refine it with the brush."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ciel approximatif : affinez-le au pinceau."
           }
         }
       }
@@ -1249,6 +1553,22 @@
         }
       }
     },
+    "Background": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Background"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrière-plan"
+          }
+        }
+      }
+    },
     "Background colour": {
       "localizations": {
         "en": {
@@ -1441,6 +1761,22 @@
         }
       }
     },
+    "Black": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Black"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noir"
+          }
+        }
+      }
+    },
     "Black & white": {
       "localizations": {
         "en": {
@@ -1549,6 +1885,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fond bleu"
+          }
+        }
+      }
+    },
+    "Blues": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blues"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bleus"
           }
         }
       }
@@ -1729,6 +2081,22 @@
         }
       }
     },
+    "Bright": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bright"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clair"
+          }
+        }
+      }
+    },
     "Brighten the sky": {
       "localizations": {
         "en": {
@@ -1741,6 +2109,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Raviver le ciel"
+          }
+        }
+      }
+    },
+    "Brown": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brown"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marron"
+          }
+        }
+      }
+    },
+    "Brush": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brush"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pinceau"
           }
         }
       }
@@ -1997,6 +2397,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choisir des clips et des photos"
+          }
+        }
+      }
+    },
+    "Choose how to select, then tap or paint the picture. Two fingers move the picture.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose how to select, then tap or paint the picture. Two fingers move the picture."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez comment sélectionner, puis touchez ou peignez l'image. Deux doigts déplacent l'image."
           }
         }
       }
@@ -2273,6 +2689,22 @@
         }
       }
     },
+    "Collapsed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapsed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réduit"
+          }
+        }
+      }
+    },
     "Colour": {
       "localizations": {
         "en": {
@@ -2285,6 +2717,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couleur"
+          }
+        }
+      }
+    },
+    "Colour range": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colour range"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plage de couleurs"
+          }
+        }
+      }
+    },
+    "Colour range…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colour range…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plage de couleurs…"
           }
         }
       }
@@ -2333,6 +2797,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couleurs harmonisées."
+          }
+        }
+      }
+    },
+    "Combine": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Combine"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Combiner"
+          }
+        }
+      }
+    },
+    "Command palette": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command palette"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Palette de commandes"
           }
         }
       }
@@ -2397,6 +2893,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Continuer"
+          }
+        }
+      }
+    },
+    "Contract by": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contract by"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contracter de"
+          }
+        }
+      }
+    },
+    "Contract…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contract…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contracter…"
+          }
+        }
+      }
+    },
+    "Contrast": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contrast"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contraste"
           }
         }
       }
@@ -2509,6 +3053,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recadrer"
+          }
+        }
+      }
+    },
+    "Curve": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Curve"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Courbe"
           }
         }
       }
@@ -2689,6 +3249,38 @@
         }
       }
     },
+    "Cyans": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cyans"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cyans"
+          }
+        }
+      }
+    },
+    "Dark": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dark"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sombre"
+          }
+        }
+      }
+    },
     "Decisions": {
       "localizations": {
         "en": {
@@ -2701,6 +3293,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Décisions"
+          }
+        }
+      }
+    },
+    "Decontaminate colours": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decontaminate colours"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Décontaminer les couleurs"
           }
         }
       }
@@ -2801,6 +3409,102 @@
         }
       }
     },
+    "Density": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Density"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Densité"
+          }
+        }
+      }
+    },
+    "Depth": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Depth"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profondeur"
+          }
+        }
+      }
+    },
+    "Depth Anything V2: near and far for depth-range masks.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Depth Anything V2: near and far for depth-range masks."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Depth Anything V2 : le proche et le lointain pour les masques de profondeur."
+          }
+        }
+      }
+    },
+    "Depth model": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Depth model"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modèle de profondeur"
+          }
+        }
+      }
+    },
+    "Depth range": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Depth range"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plage de profondeur"
+          }
+        }
+      }
+    },
+    "Depth range…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Depth range…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plage de profondeur…"
+          }
+        }
+      }
+    },
     "Describe what to generate…": {
       "localizations": {
         "en": {
@@ -2813,6 +3517,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Décrivez ce qu'il faut générer…"
+          }
+        }
+      }
+    },
+    "Deselect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deselect"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désélectionner"
+          }
+        }
+      }
+    },
+    "Detected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detected"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Détectés"
           }
         }
       }
@@ -3021,6 +3757,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Touche deux fois pour discuter en direct. Touche deux fois et maintiens pour dicter une seule demande."
+          }
+        }
+      }
+    },
+    "Download": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharger"
           }
         }
       }
@@ -3265,6 +4017,22 @@
         }
       }
     },
+    "Downloading, %d percent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading, %d percent"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Téléchargement, %d pour cent"
+          }
+        }
+      }
+    },
     "Drag on the picture to frame, pinch to zoom. The camera moves from the start framing to the end one.": {
       "localizations": {
         "en": {
@@ -3309,6 +4077,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Faites glisser les poignées du clip pour le raccourcir, ou dites « coupe les 3 premières secondes », « efface le passant »."
+          }
+        }
+      }
+    },
+    "Drag the handles on the photo. Two fingers pan.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag the handles on the photo. Two fingers pan."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faites glisser les poignées sur la photo. Deux doigts déplacent l'image."
           }
         }
       }
@@ -3601,6 +4385,22 @@
         }
       }
     },
+    "Edit part": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit part"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier la partie"
+          }
+        }
+      }
+    },
     "Edit text": {
       "localizations": {
         "en": {
@@ -3873,6 +4673,22 @@
         }
       }
     },
+    "Erase strokes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase strokes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer"
+          }
+        }
+      }
+    },
     "Erase text": {
       "localizations": {
         "en": {
@@ -3885,6 +4701,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Effacer le texte"
+          }
+        }
+      }
+    },
+    "Erase the area": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase the area"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer"
           }
         }
       }
@@ -3985,6 +4817,22 @@
         }
       }
     },
+    "Every tool, by voice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every tool, by voice"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tous les outils, à la voix"
+          }
+        }
+      }
+    },
     "Everything stays on the iPhone.": {
       "localizations": {
         "en": {
@@ -4049,6 +4897,38 @@
         }
       }
     },
+    "Expand / contract": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expand / contract"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Étendre / Contracter"
+          }
+        }
+      }
+    },
+    "Expand by": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expand by"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Étendre de"
+          }
+        }
+      }
+    },
     "Expand the image": {
       "localizations": {
         "en": {
@@ -4061,6 +4941,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Étendre l'image"
+          }
+        }
+      }
+    },
+    "Expanded": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expanded"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Développé"
+          }
+        }
+      }
+    },
+    "Expand…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expand…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Étendre…"
           }
         }
       }
@@ -4161,6 +5073,70 @@
         }
       }
     },
+    "Eyedropper": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eyedropper"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pipette"
+          }
+        }
+      }
+    },
+    "Eyes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eyes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yeux"
+          }
+        }
+      }
+    },
+    "Face": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Face"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visage"
+          }
+        }
+      }
+    },
+    "Face skin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Face skin"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Peau du visage"
+          }
+        }
+      }
+    },
     "Fade to Black": {
       "localizations": {
         "en": {
@@ -4225,6 +5201,22 @@
         }
       }
     },
+    "Far": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Far"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loin"
+          }
+        }
+      }
+    },
     "Fast": {
       "localizations": {
         "en": {
@@ -4253,6 +5245,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rapide : Qwen3.5 2B, plus vif et plus léger pour la mémoire et la batterie."
+          }
+        }
+      }
+    },
+    "Feather": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Feather"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contour progressif"
+          }
+        }
+      }
+    },
+    "Feather radius": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Feather radius"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rayon du contour progressif"
+          }
+        }
+      }
+    },
+    "Feather…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Feather…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contour progressif…"
           }
         }
       }
@@ -4349,6 +5389,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Je remplis le tableau…"
+          }
+        }
+      }
+    },
+    "Fill…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fill…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remplir…"
           }
         }
       }
@@ -4673,6 +5729,22 @@
         }
       }
     },
+    "Flow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flow"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flux"
+          }
+        }
+      }
+    },
     "Focus": {
       "localizations": {
         "en": {
@@ -4881,6 +5953,22 @@
         }
       }
     },
+    "From the selection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From the selection"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Depuis la sélection"
+          }
+        }
+      }
+    },
     "From your library": {
       "localizations": {
         "en": {
@@ -4993,6 +6081,38 @@
         }
       }
     },
+    "Generate in the selection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generate in the selection"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Générer dans la sélection"
+          }
+        }
+      }
+    },
+    "Generate…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generate…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Générer…"
+          }
+        }
+      }
+    },
     "Generating “%@”…": {
       "localizations": {
         "en": {
@@ -5053,6 +6173,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modèle Remplissage génératif non installé — voir Réglages."
+          }
+        }
+      }
+    },
+    "Generative Fill paints it into the selection, on this iPhone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generative Fill paints it into the selection, on this iPhone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le Remplissage génératif le peint dans la sélection, sur cet iPhone."
           }
         }
       }
@@ -5137,6 +6273,54 @@
         }
       }
     },
+    "Gradients": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gradients"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dégradés"
+          }
+        }
+      }
+    },
+    "Graphite surround": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Graphite surround"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fond graphite"
+          }
+        }
+      }
+    },
+    "Grayscale": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grayscale"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niveaux de gris"
+          }
+        }
+      }
+    },
     "Green": {
       "localizations": {
         "en": {
@@ -5165,6 +6349,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fond vert"
+          }
+        }
+      }
+    },
+    "Greens": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Greens"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verts"
+          }
+        }
+      }
+    },
+    "Grey": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grey"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gris"
           }
         }
       }
@@ -5201,6 +6417,38 @@
         }
       }
     },
+    "HSL": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HSL"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TSL"
+          }
+        }
+      }
+    },
+    "Hair": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hair"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cheveux"
+          }
+        }
+      }
+    },
     "Haptics": {
       "localizations": {
         "en": {
@@ -5213,6 +6461,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Retours haptiques"
+          }
+        }
+      }
+    },
+    "Hardness": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hardness"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dureté"
           }
         }
       }
@@ -5261,6 +6525,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Masquer les sous-titres"
+          }
+        }
+      }
+    },
+    "Hide the mask": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide the mask"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cacher le masque"
           }
         }
       }
@@ -5777,6 +7057,54 @@
         }
       }
     },
+    "Intersect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intersect"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intersecter"
+          }
+        }
+      }
+    },
+    "Invert": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invert"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inverser"
+          }
+        }
+      }
+    },
+    "Inverted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inverted"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inversé"
+          }
+        }
+      }
+    },
     "Isolating the voice…": {
       "localizations": {
         "en": {
@@ -6241,6 +7569,54 @@
         }
       }
     },
+    "Linear": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linear"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linéaire"
+          }
+        }
+      }
+    },
+    "Linear gradient": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linear gradient"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dégradé linéaire"
+          }
+        }
+      }
+    },
+    "Lips": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lips"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lèvres"
+          }
+        }
+      }
+    },
     "Listen to %@": {
       "localizations": {
         "en": {
@@ -6577,6 +7953,22 @@
         }
       }
     },
+    "Local adjustment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local adjustment"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réglage local"
+          }
+        }
+      }
+    },
     "Local assistant · %@": {
       "localizations": {
         "en": {
@@ -6637,6 +8029,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cerveau local → Apple Intelligence → commandes, tout sur l'iPhone."
+          }
+        }
+      }
+    },
+    "Local mask": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local mask"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masque local"
           }
         }
       }
@@ -6785,6 +8193,86 @@
         }
       }
     },
+    "Luminance range": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Luminance range"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plage de luminance"
+          }
+        }
+      }
+    },
+    "Luminance range…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Luminance range…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plage de luminance…"
+          }
+        }
+      }
+    },
+    "M test bench": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "M test bench"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Banc d'essai M"
+          }
+        }
+      }
+    },
+    "Made for an earlier version: update it": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Made for an earlier version: update it"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fait pour une version antérieure : mettez-le à jour"
+          }
+        }
+      }
+    },
+    "Magentas": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Magentas"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Magentas"
+          }
+        }
+      }
+    },
     "Magic": {
       "localizations": {
         "en": {
@@ -6849,6 +8337,54 @@
         }
       }
     },
+    "Make a selection first, in Selection.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make a selection first, in Selection."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faites d'abord une sélection, dans Sélection."
+          }
+        }
+      }
+    },
+    "Making the mask…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Making the mask…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Création du masque…"
+          }
+        }
+      }
+    },
+    "Marching ants": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marching ants"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pointillés animés"
+          }
+        }
+      }
+    },
     "Mark up": {
       "localizations": {
         "en": {
@@ -6861,6 +8397,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "Annoter"
+          }
+        }
+      }
+    },
+    "Mask": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mask"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masque"
+          }
+        }
+      }
+    },
+    "Mask models over cellular": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mask models over cellular"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modèles de masques en données cellulaires"
+          }
+        }
+      }
+    },
+    "Mask overlay": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mask overlay"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Superposition du masque"
+          }
+        }
+      }
+    },
+    "Masks": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masks"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masques"
+          }
+        }
+      }
+    },
+    "Masks apply to the background photo.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masks apply to the background photo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les masques s'appliquent à la photo de fond."
           }
         }
       }
@@ -6993,6 +8609,22 @@
         }
       }
     },
+    "Medium": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medium"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moyen"
+          }
+        }
+      }
+    },
     "Merge": {
       "localizations": {
         "en": {
@@ -7021,6 +8653,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fusionner un PDF"
+          }
+        }
+      }
+    },
+    "Metal orb": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metal orb"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orbe Metal"
           }
         }
       }
@@ -7121,6 +8769,54 @@
         }
       }
     },
+    "Model broker": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model broker"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestion mémoire des modèles"
+          }
+        }
+      }
+    },
+    "Model installed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model installed."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modèle installé."
+          }
+        }
+      }
+    },
+    "Model installed: picking up where we left off.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model installed: picking up where we left off."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modèle installé : on reprend là où on s'était arrêté."
+          }
+        }
+      }
+    },
     "Model state": {
       "localizations": {
         "en": {
@@ -7153,6 +8849,22 @@
         }
       }
     },
+    "Models in memory": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Models in memory"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modèles en mémoire"
+          }
+        }
+      }
+    },
     "Moments": {
       "localizations": {
         "en": {
@@ -7165,6 +8877,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Moments"
+          }
+        }
+      }
+    },
+    "More examples": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More examples"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autres exemples"
           }
         }
       }
@@ -7409,6 +9137,38 @@
         }
       }
     },
+    "Near": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Near"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Près"
+          }
+        }
+      }
+    },
+    "Near and far need the depth model. Without it, nothing is guessed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Near and far need the depth model. Without it, nothing is guessed."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proche et lointain demandent le modèle de profondeur. Sans lui, rien n'est deviné."
+          }
+        }
+      }
+    },
     "Neon": {
       "localizations": {
         "en": {
@@ -7469,6 +9229,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nouvel accueil et nouveau fond"
+          }
+        }
+      }
+    },
+    "New mask": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New mask"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau masque"
           }
         }
       }
@@ -7585,6 +9361,22 @@
         }
       }
     },
+    "No colour picked yet: tap the picture, or choose a preset.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No colour picked yet: tap the picture, or choose a preset."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune couleur choisie : touchez l'image, ou choisissez un préréglage."
+          }
+        }
+      }
+    },
     "No histogram yet": {
       "localizations": {
         "en": {
@@ -7613,6 +9405,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pas de cerveau local sur cet iPhone"
+          }
+        }
+      }
+    },
+    "No overlay": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No overlay"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune"
+          }
+        }
+      }
+    },
+    "No preview": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No preview"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun aperçu"
           }
         }
       }
@@ -7953,6 +9777,38 @@
         }
       }
     },
+    "Not now": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not now"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plus tard"
+          }
+        }
+      }
+    },
+    "Not on this iPhone yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not on this iPhone yet."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas encore sur cet iPhone."
+          }
+        }
+      }
+    },
     "Nothing here yet.": {
       "localizations": {
         "en": {
@@ -7985,6 +9841,38 @@
         }
       }
     },
+    "Nothing to remove there.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing to remove there."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien à retirer à cet endroit."
+          }
+        }
+      }
+    },
+    "Nothing to select there.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing to select there."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien à sélectionner à cet endroit."
+          }
+        }
+      }
+    },
     "OK": {
       "localizations": {
         "en": {
@@ -7997,6 +9885,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "OK"
+          }
+        }
+      }
+    },
+    "Object": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Object"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Objet"
+          }
+        }
+      }
+    },
+    "Object (tap or frame)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Object (tap or frame)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Objet (toucher ou cadrer)"
+          }
+        }
+      }
+    },
+    "Object selection model": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Object selection model"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modèle de sélection d'objets"
           }
         }
       }
@@ -8049,6 +9985,22 @@
         }
       }
     },
+    "On black": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On black"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur noir"
+          }
+        }
+      }
+    },
     "On the beat": {
       "localizations": {
         "en": {
@@ -8093,6 +10045,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sur le haut-parleur, interromps PicShop en touchant l'orbe, en écrivant ou en disant « stop ». Tout reste sur l'iPhone."
+          }
+        }
+      }
+    },
+    "On white": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On white"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur blanc"
           }
         }
       }
@@ -8257,6 +10225,22 @@
         }
       }
     },
+    "Opens Selection.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens Selection."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvre Sélection."
+          }
+        }
+      }
+    },
     "Opens the photo or the video you tap.": {
       "localizations": {
         "en": {
@@ -8269,6 +10253,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ouvre la photo ou la vidéo touchée."
+          }
+        }
+      }
+    },
+    "Orange": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orange"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orange"
+          }
+        }
+      }
+    },
+    "Oranges": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oranges"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oranges"
           }
         }
       }
@@ -8381,6 +10397,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Blanc de sortie"
+          }
+        }
+      }
+    },
+    "Overlay colour": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overlay colour"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couleur de superposition"
+          }
+        }
+      }
+    },
+    "Overlay view": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overlay view"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Superposition"
           }
         }
       }
@@ -8561,6 +10609,22 @@
         }
       }
     },
+    "Paint over what to select.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paint over what to select."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Peignez ce qu'il faut sélectionner."
+          }
+        }
+      }
+    },
     "Paint to clone from the marked source.": {
       "localizations": {
         "en": {
@@ -8721,6 +10785,38 @@
         }
       }
     },
+    "Person": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Person"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personne"
+          }
+        }
+      }
+    },
+    "Person %d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Person %d"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personne %d"
+          }
+        }
+      }
+    },
     "Perspective": {
       "localizations": {
         "en": {
@@ -8781,6 +10877,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Format photo"
+          }
+        }
+      }
+    },
+    "Photo requests with masks and selections, run through the on-device model: operation, arguments, applied and verified. Plug the iPhone in or keep it above 30 %; it takes several minutes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo requests with masks and selections, run through the on-device model: operation, arguments, applied and verified. Plug the iPhone in or keep it above 30 %; it takes several minutes."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Des demandes photo avec masques et sélections, passées au modèle de l'iPhone : opération, arguments, appliquée et vérifiée. Branchez l'iPhone ou gardez-le au-dessus de 30 % ; cela prend plusieurs minutes."
           }
         }
       }
@@ -8929,6 +11041,22 @@
         }
       }
     },
+    "Pick what to mask, then move its dials. Two fingers move the picture.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick what to mask, then move its dials. Two fingers move the picture."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez quoi masquer, puis réglez ses curseurs. Deux doigts déplacent l'image."
+          }
+        }
+      }
+    },
     "Pill": {
       "localizations": {
         "en": {
@@ -8945,6 +11073,22 @@
         }
       }
     },
+    "Pink": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pink"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rose"
+          }
+        }
+      }
+    },
     "Pixel brush": {
       "localizations": {
         "en": {
@@ -8957,6 +11101,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pinceau pixel"
+          }
+        }
+      }
+    },
+    "Pixel checks": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pixel checks"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérification des pixels"
           }
         }
       }
@@ -9053,6 +11213,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Curseur"
+          }
+        }
+      }
+    },
+    "Plug the iPhone in, or run it above 30 % battery.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plug the iPhone in, or run it above 30 % battery."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branchez l'iPhone, ou lancez-le quand la batterie dépasse 30 %."
           }
         }
       }
@@ -9201,6 +11377,38 @@
         }
       }
     },
+    "Preparing the model…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing the model…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Préparation du modèle…"
+          }
+        }
+      }
+    },
+    "Preview": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aperçu"
+          }
+        }
+      }
+    },
     "Previous frame": {
       "localizations": {
         "en": {
@@ -9297,6 +11505,22 @@
         }
       }
     },
+    "Purple": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Purple"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Violet"
+          }
+        }
+      }
+    },
     "Push in": {
       "localizations": {
         "en": {
@@ -9345,6 +11569,22 @@
         }
       }
     },
+    "Quick selection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quick selection"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélection rapide"
+          }
+        }
+      }
+    },
     "RGB": {
       "localizations": {
         "en": {
@@ -9357,6 +11597,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "RVB"
+          }
+        }
+      }
+    },
+    "Radial": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radial"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radial"
+          }
+        }
+      }
+    },
+    "Radial gradient": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radial gradient"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dégradé radial"
+          }
+        }
+      }
+    },
+    "Radius": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radius"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rayon"
+          }
+        }
+      }
+    },
+    "Ranges": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ranges"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plages"
           }
         }
       }
@@ -9469,6 +11773,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recolorer"
+          }
+        }
+      }
+    },
+    "Recolor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recolor…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recolorer…"
           }
         }
       }
@@ -9617,6 +11937,22 @@
         }
       }
     },
+    "Reds": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reds"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rouges"
+          }
+        }
+      }
+    },
     "Relight": {
       "localizations": {
         "en": {
@@ -9745,6 +12081,38 @@
         }
       }
     },
+    "Remove colour": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove colour"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer une couleur"
+          }
+        }
+      }
+    },
+    "Remove colour %d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove colour %d"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer la couleur %d"
+          }
+        }
+      }
+    },
     "Remove fillers": {
       "localizations": {
         "en": {
@@ -9853,6 +12221,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Renommer"
+          }
+        }
+      }
+    },
+    "Rename the mask": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename the mask"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renommer le masque"
           }
         }
       }
@@ -10145,6 +12529,22 @@
         }
       }
     },
+    "Rubylith": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rubylith"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rubylith"
+          }
+        }
+      }
+    },
     "Run Test the voice above: all six steps, answering Yes or No. On any ✗, export the log.": {
       "localizations": {
         "en": {
@@ -10157,6 +12557,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lance « Tester le vocal » ci-dessus : les six étapes, en répondant Oui ou Non. Au moindre ✗, exporte le journal."
+          }
+        }
+      }
+    },
+    "Run the M lane": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run the M lane"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lancer le banc d'essai M"
           }
         }
       }
@@ -10189,6 +12605,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lance le test vocal dans Diagnostic Live avec des écouteurs : l'option s'active dès qu'il réussit."
+          }
+        }
+      }
+    },
+    "Running the M lane…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running the M lane…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Banc d'essai M en cours…"
+          }
+        }
+      }
+    },
+    "Sample size": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sample size"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taille d'échantillon"
           }
         }
       }
@@ -10369,6 +12817,22 @@
         }
       }
     },
+    "Segment Anything 2.1: a tap, a box or a brush stroke selects an object.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Segment Anything 2.1: a tap, a box or a brush stroke selects an object."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Segment Anything 2.1 : une touche, un cadre ou un coup de pinceau sélectionne un objet."
+          }
+        }
+      }
+    },
     "Select a clip on the timeline.": {
       "localizations": {
         "en": {
@@ -10381,6 +12845,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sélectionnez un clip dans la timeline."
+          }
+        }
+      }
+    },
+    "Select all": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select all"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout sélectionner"
           }
         }
       }
@@ -10401,6 +12881,86 @@
         }
       }
     },
+    "Select and mask": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select and mask"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélectionner et masquer"
+          }
+        }
+      }
+    },
+    "Select and mask…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select and mask…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélectionner et masquer…"
+          }
+        }
+      }
+    },
+    "Selecting…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selecting…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélection en cours…"
+          }
+        }
+      }
+    },
+    "Selection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selection"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélection"
+          }
+        }
+      }
+    },
+    "Selection overlay": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selection overlay"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Superposition de la sélection"
+          }
+        }
+      }
+    },
     "Selection ready. Say or type what should appear there.": {
       "localizations": {
         "en": {
@@ -10413,6 +12973,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sélection prête. Dites ou écrivez ce qui doit apparaître."
+          }
+        }
+      }
+    },
+    "Selection · %d %%": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selection · %d %%"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélection · %d %%"
+          }
+        }
+      }
+    },
+    "Selection, %d percent of the picture": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selection, %d percent of the picture"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélection, %d pour cent de l'image"
           }
         }
       }
@@ -10561,6 +13153,22 @@
         }
       }
     },
+    "Share the JSON report": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share the JSON report"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partager le rapport JSON"
+          }
+        }
+      }
+    },
     "Share the report": {
       "localizations": {
         "en": {
@@ -10573,6 +13181,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Partager le rapport"
+          }
+        }
+      }
+    },
+    "Shift edge": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shift edge"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Décaler le contour"
           }
         }
       }
@@ -10721,6 +13345,38 @@
         }
       }
     },
+    "Show the map": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show the map"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher la carte"
+          }
+        }
+      }
+    },
+    "Show the mask": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show the mask"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher le masque"
+          }
+        }
+      }
+    },
     "Show the original": {
       "localizations": {
         "en": {
@@ -10733,6 +13389,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Montrer l'original"
+          }
+        }
+      }
+    },
+    "Show while dragging": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show while dragging"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher pendant le glissement"
           }
         }
       }
@@ -10865,6 +13537,54 @@
         }
       }
     },
+    "Skin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skin"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Peau"
+          }
+        }
+      }
+    },
+    "Skin tones": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skin tones"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tons chair"
+          }
+        }
+      }
+    },
+    "Sky": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sky"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ciel"
+          }
+        }
+      }
+    },
     "Sky at sunset": {
       "localizations": {
         "en": {
@@ -10909,6 +13629,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Glissement droite"
+          }
+        }
+      }
+    },
+    "Slight": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slight"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Léger"
           }
         }
       }
@@ -10977,6 +13713,54 @@
         }
       }
     },
+    "Smooth": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smooth"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lisser"
+          }
+        }
+      }
+    },
+    "Smoothness": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smoothness"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lissage"
+          }
+        }
+      }
+    },
+    "Smooth…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smooth…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lisser…"
+          }
+        }
+      }
+    },
     "Soft portrait": {
       "localizations": {
         "en": {
@@ -10989,6 +13773,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Portrait doux"
+          }
+        }
+      }
+    },
+    "Soften": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Soften"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adoucir"
           }
         }
       }
@@ -11441,6 +14241,38 @@
         }
       }
     },
+    "Strength": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Strength"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intensité"
+          }
+        }
+      }
+    },
+    "Strong": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Strong"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fort"
+          }
+        }
+      }
+    },
     "Studio workspace": {
       "localizations": {
         "en": {
@@ -11505,6 +14337,70 @@
         }
       }
     },
+    "Subject": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subject"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sujet"
+          }
+        }
+      }
+    },
+    "Subtract": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subtract"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Soustraire"
+          }
+        }
+      }
+    },
+    "Suggestion: %@, action": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suggestion: %@, action"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suggestion : %@, action"
+          }
+        }
+      }
+    },
+    "Suggestion: %@, tool": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suggestion: %@, tool"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suggestion : %@, outil"
+          }
+        }
+      }
+    },
     "Super resolution ×4": {
       "localizations": {
         "en": {
@@ -11517,6 +14413,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Super résolution ×4"
+          }
+        }
+      }
+    },
+    "Swipe up or down to adjust.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Swipe up or down to adjust."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Balayez vers le haut ou le bas pour régler."
           }
         }
       }
@@ -11761,6 +14673,22 @@
         }
       }
     },
+    "Tap the button again, or the picture, to select it once more.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the button again, or the picture, to select it once more."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez à nouveau le bouton, ou l'image, pour le sélectionner encore."
+          }
+        }
+      }
+    },
     "Tap the canvas to place a shape. Drag to move, pinch to resize, twist to rotate.": {
       "localizations": {
         "en": {
@@ -11789,6 +14717,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Touchez la courbe pour ajouter un point, faites-le glisser pour modeler les tons."
+          }
+        }
+      }
+    },
+    "Tap the object, or draw a frame around it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the object, or draw a frame around it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez l'objet, ou tracez un cadre autour."
           }
         }
       }
@@ -11837,6 +14781,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Touche l'orbe pour discuter en direct. Maintiens-la pour dicter."
+          }
+        }
+      }
+    },
+    "Tap the picture to add its colour.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the picture to add its colour."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez l'image pour ajouter sa couleur."
+          }
+        }
+      }
+    },
+    "Tap the picture to remove the closest colour.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the picture to remove the closest colour."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez l'image pour retirer la couleur la plus proche."
+          }
+        }
+      }
+    },
+    "Tap the picture: the range centres on that tone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the picture: the range centres on that tone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez l'image : la plage se centre sur ce ton."
           }
         }
       }
@@ -11905,6 +14897,22 @@
         }
       }
     },
+    "Teal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teal"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bleu canard"
+          }
+        }
+      }
+    },
     "Teal & orange": {
       "localizations": {
         "en": {
@@ -11917,6 +14925,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sarcelle et orange"
+          }
+        }
+      }
+    },
+    "Teeth": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teeth"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dents"
           }
         }
       }
@@ -12077,6 +15101,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Texte derrière le sujet"
+          }
+        }
+      }
+    },
+    "That colour couldn't be read.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That colour couldn't be read."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de lire cette couleur."
           }
         }
       }
@@ -12545,6 +15585,22 @@
         }
       }
     },
+    "The mask couldn't be updated.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The mask couldn't be updated."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de mettre à jour le masque."
+          }
+        }
+      }
+    },
     "The microphone is not allowed: Settings › Picshop › Microphone.": {
       "localizations": {
         "en": {
@@ -12573,6 +15629,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Le modèle n'a pas pu se charger. Ferme d'autres apps, puis réessaie."
+          }
+        }
+      }
+    },
+    "The model downloaded but could not be prepared on this iPhone. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The model downloaded but could not be prepared on this iPhone. Try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le modèle est téléchargé mais n'a pas pu être préparé sur cet iPhone. Réessayez."
+          }
+        }
+      }
+    },
+    "The object selection and depth models download only when you ask, over Wi‑Fi unless cellular is allowed above; each file is checked before it is used.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The object selection and depth models download only when you ask, over Wi‑Fi unless cellular is allowed above; each file is checked before it is used."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les modèles de sélection d'objets et de profondeur ne se téléchargent qu'à votre demande, en Wi‑Fi sauf si les données cellulaires sont autorisées ci-dessus ; chaque fichier est vérifié avant d'être utilisé."
           }
         }
       }
@@ -12817,6 +15905,22 @@
         }
       }
     },
+    "There are already 16 masks: delete one first.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There are already 16 masks: delete one first."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il y a déjà 16 masques : supprimez-en un d'abord."
+          }
+        }
+      }
+    },
     "Thermal state": {
       "localizations": {
         "en": {
@@ -12957,6 +16061,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "C'est déjà l'original."
+          }
+        }
+      }
+    },
+    "This model can't be installed on this iPhone yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This model can't be installed on this iPhone yet."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce modèle ne peut pas encore être installé sur cet iPhone."
           }
         }
       }
@@ -13505,6 +16625,22 @@
         }
       }
     },
+    "Update": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettre à jour"
+          }
+        }
+      }
+    },
     "Upscale ×2": {
       "localizations": {
         "en": {
@@ -13569,6 +16705,22 @@
         }
       }
     },
+    "Use the selection for": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use the selection for"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utiliser la sélection pour"
+          }
+        }
+      }
+    },
     "Using the depth captured by the camera.": {
       "localizations": {
         "en": {
@@ -13581,6 +16733,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Avec la profondeur captée par l'appareil photo."
+          }
+        }
+      }
+    },
+    "Vegetation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vegetation"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Végétation"
           }
         }
       }
@@ -13873,6 +17041,22 @@
         }
       }
     },
+    "Water": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Water"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eau"
+          }
+        }
+      }
+    },
     "What can I say?": {
       "localizations": {
         "en": {
@@ -13905,6 +17089,38 @@
         }
       }
     },
+    "Which person?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Which person?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle personne ?"
+          }
+        }
+      }
+    },
+    "White": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "White"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blanc"
+          }
+        }
+      }
+    },
     "White point": {
       "localizations": {
         "en": {
@@ -13917,6 +17133,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Point blanc"
+          }
+        }
+      }
+    },
+    "Whole person": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Whole person"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personne entière"
           }
         }
       }
@@ -14001,6 +17233,22 @@
         }
       }
     },
+    "Without it, the selection is approximate (Vision).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Without it, the selection is approximate (Vision)."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sans lui, la sélection est approximative (Vision)."
+          }
+        }
+      }
+    },
     "Working…": {
       "localizations": {
         "en": {
@@ -14029,6 +17277,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mot de passe incorrect. Réessaie."
+          }
+        }
+      }
+    },
+    "Yellow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yellow"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jaune"
+          }
+        }
+      }
+    },
+    "Yellows": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yellows"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jaunes"
           }
         }
       }

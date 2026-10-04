@@ -70,6 +70,9 @@ public enum TextRasterizer {
     }
 
     public static func image(for element: TextElement, canvasSize: CGSize) -> CGImage? {
+        // W1 leftover: the text rasterisation shows up in Instruments next to the frame it delays.
+        let signpost = PSSignpost.begin("text.raster", "\(element.text.count) chars")
+        defer { PSSignpost.end(signpost) }
         let layout = layout(for: element, canvasSize: canvasSize)
         let attributes = layout.attributes
         let attributed = layout.attributed

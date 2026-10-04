@@ -72,6 +72,22 @@ jobs:
           done
           echo "=== errors ==="; grep -hE "error:" build-*.log | sort -u || true
           exit $status
+      # W2: the pinned SAM 2.1 tiny and Depth Anything V2 Small packages for SAMPipelineTests, DepthPipelineTests and
+      # PinnedInstallTests (compiled by the tests, run on the CPU: the VM has no Neural Engine). Cached on the pins.
+      # When the fetch fails the variable stays unset and those tests skip; when it is set and a package is
+      # missing they fail, so a misconfiguration cannot pass silently.
+      - name: Cache mask models
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/picshop-mask-models
+          key: picshop-mask-models-${{ hashFiles('Sources/PicshopCore/Models/MaskModelCatalog.swift') }}
+      - name: Fetch the pinned mask models
+        id: mask-models
+        continue-on-error: true
+        run: bash Scripts/fetch-mask-models.sh "$HOME/Library/Caches/picshop-mask-models"
+      - name: Point the tests at the mask models
+        if: steps.mask-models.outcome == 'success'
+        run: echo "PICSHOP_MASK_MODELS=$HOME/Library/Caches/picshop-mask-models" >> "$GITHUB_ENV"
       - name: swift test
         run: |
           set -o pipefail
@@ -138,6 +154,60 @@ jobs:
             -clonedSourcePackagesDirPath ~/picshop-spm -derivedDataPath ~/picshop-dd \
             CODE_SIGNING_ALLOWED=NO -skipPackagePluginValidation -skipMacroValidation -IDEBuildingContinueBuildingAfterErrors=YES 2>&1 | tee build-sim.log | grep -E "error:|warning: (unused|var|immutable)|BUILD|Compiling|Ld " || true
           grep -q "BUILD SUCCEEDED" build-sim.log
+      # W2: the six DEBUG launch scenarios (App/PicshopApp.swift, -PicshopScenario <name>) on three screen sizes, at
+      # the default text size and at Accessibility XXXL, for the visual review the Linux lanes cannot do. Each launch
+      # waits for the app's « scenario ready » marker (Documents/scenario-ready-<name>), then takes the screenshot.
+      # A scenario that never gets ready still gets its screenshot and a warning; the job does not fail on it.
+      - name: Scenario screenshots (iOS Simulator)
+        continue-on-error: true
+        run: |
+          APP=~/picshop-dd/Build/Products/Debug-iphonesimulator/PicShop.app
+          BUNDLE=com.picshopio.picshop
+          OUT="$PWD/scenario-screenshots"
+          mkdir -p "$OUT"
+          RUNTIME=$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["runtimes"] if x["platform"]=="iOS" and x["isAvailable"]]; r.sort(key=lambda x: [int(p) for p in x["version"].split(".")]); print(r[-1]["identifier"] if r else "")')
+          echo "runtime: $RUNTIME"
+          [ -n "$RUNTIME" ] || { echo "::warning::no iOS simulator runtime"; exit 0; }
+          for DEVICE in "iPhone SE (3rd generation)" "iPhone 16" "iPhone 16 Pro Max"; do
+            TYPE=$(xcrun simctl list devicetypes -j | python3 -c 'import json,sys; n=sys.argv[1]; t=[d["identifier"] for d in json.load(sys.stdin)["devicetypes"] if d["name"]==n]; print(t[0] if t else "")' "$DEVICE")
+            if [ -z "$TYPE" ]; then echo "::warning::no simulator type '$DEVICE'"; continue; fi
+            UDID=$(xcrun simctl create "picshop-$TYPE" "$TYPE" "$RUNTIME")
+            xcrun simctl boot "$UDID"
+            xcrun simctl bootstatus "$UDID" -b
+            xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 || true
+            xcrun simctl install "$UDID" "$APP"
+            SLUG=$(echo "$DEVICE" | tr -cd '[:alnum:]')
+            for SIZE in default AccessibilityXXXL; do
+              for SCENARIO in masks3 maskHandles selectOutline colorRange selectAndMask graphiteOn; do
+                DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data)
+                rm -f "$DATA/Documents/scenario-ready-$SCENARIO"
+                xcrun simctl terminate "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
+                if [ "$SIZE" = default ]; then
+                  xcrun simctl launch "$UDID" "$BUNDLE" -PicshopScenario "$SCENARIO"
+                else
+                  xcrun simctl launch "$UDID" "$BUNDLE" -PicshopScenario "$SCENARIO" -UIPreferredContentSizeCategoryName UICTContentSizeCategoryAccessibilityXXXL
+                fi
+                ready=no
+                for _ in $(seq 1 90); do
+                  if [ -f "$DATA/Documents/scenario-ready-$SCENARIO" ]; then ready=yes; break; fi
+                  sleep 1
+                done
+                [ "$ready" = yes ] || echo "::warning::scenario $SCENARIO on $DEVICE ($SIZE) never reported ready"
+                xcrun simctl io "$UDID" screenshot "$OUT/$SLUG-$SIZE-$SCENARIO.png"
+              done
+            done
+            xcrun simctl terminate "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
+            xcrun simctl shutdown "$UDID" || true
+            xcrun simctl delete "$UDID" || true
+          done
+          ls -la "$OUT"
+      - name: Upload scenario screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scenario-screenshots
+          path: scenario-screenshots/*.png
+          if-no-files-found: warn
       - name: Build (iOS device, Release)
         run: |
           set -o pipefail

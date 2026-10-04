@@ -37,6 +37,13 @@ public enum CanvasPlacement {
 /// `generation` increases with every render request, so a late frame never replaces a newer one.
 @MainActor public protocol CanvasSink: AnyObject {
     func present(_ image: CIImage, generation: Int)
+    /// The mask or selection overlay for the frame of that generation (nil clears it). W2, D17: drawn over the
+    /// image and under the W1 `overlay`; never baked into the preview.
+    func presentOverlay(_ overlay: CIImage?, generation: Int)
+}
+
+public extension CanvasSink {
+    func presentOverlay(_ overlay: CIImage?, generation: Int) {}
 }
 #endif
 
@@ -75,13 +82,27 @@ public final class MetalCanvasView: MTKView {
         didSet { setNeedsDisplay() }
     }
 
+    /// The mask or selection overlay (W2, D17), separate from `overlay`, which SwiftUI reassigns on every pass.
+    /// Set through `presentOverlay(_:generation:)` only, so a settled overlay never replaces a newer interactive one.
+    public private(set) var maskOverlay: CIImage? {
+        didSet { setNeedsDisplay() }
+    }
+
+    /// Generation of `maskOverlay`.
+    public private(set) var maskOverlayGeneration = 0
+
     /// Placement of the image inside the view (points, top-left origin).
     public var imageFrame: CGRect = .zero {
         didSet { setNeedsDisplay() }
     }
 
-    /// The canvas surround: true black.
-    public var backgroundClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
+    /// The canvas surround: true black; graphite (#1E1E21) while a tone, colour or mask panel is open (W2, D18).
+    public var backgroundClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1) {
+        didSet {
+            clearColor = backgroundClearColor
+            setNeedsDisplay()
+        }
+    }
 
     /// Command buffers allowed in the GPU queue at once.
     public var maxInFlightFrames: Int {
@@ -169,6 +190,12 @@ public final class MetalCanvasView: MTKView {
         if let image, imageFrame.width > 0, imageFrame.height > 0 {
             // Map the image extent into the drawable (points → pixels, flip y for Metal/CI origin).
             var placed = image.transformed(by: CanvasPlacement.transform(imageExtent: image.extent, frame: imageFrame, drawableSize: drawableSize, scale: scale))
+            // The mask or selection overlay (D17) over the picture, then the SwiftUI overlay on top. Each is placed by
+            // its own extent onto the same frame, so a settled overlay at another size still lines up.
+            if let maskOverlay, !maskOverlay.extent.isEmpty, !maskOverlay.extent.isInfinite {
+                let placedMask = maskOverlay.transformed(by: CanvasPlacement.transform(imageExtent: maskOverlay.extent, frame: imageFrame, drawableSize: drawableSize, scale: scale))
+                placed = placedMask.composited(over: placed)
+            }
             if let overlay {
                 let placedOverlay = overlay.transformed(by: CanvasPlacement.transform(imageExtent: overlay.extent, frame: imageFrame, drawableSize: drawableSize, scale: scale))
                 placed = placedOverlay.composited(over: placed)
@@ -246,6 +273,14 @@ extension MetalCanvasView: CanvasSink {
     /// a newer one is already there.
     public func present(_ image: CIImage, generation: Int) {
         show(image, generation: generation)
+    }
+
+    /// The mask overlay of the frame of that generation, unless a newer one is already set; `draw(_:)` puts it
+    /// over the image and under `overlay`.
+    public func presentOverlay(_ overlay: CIImage?, generation: Int) {
+        guard generation >= maskOverlayGeneration else { return }
+        maskOverlayGeneration = generation
+        if maskOverlay !== overlay { maskOverlay = overlay }
     }
 }
 #endif

@@ -49,7 +49,9 @@ final class CardTests: XCTestCase {
                 let cards = lines.dropFirst().compactMap { line -> String? in
                     guard let colon = line.firstIndex(of: ":") else { return nil }
                     let id = String(line[..<colon])
-                    return line[line.index(after: colon)...].hasPrefix(" ") && core.contains(id) ? id : nil
+                    let rest = line[line.index(after: colon)...]
+                    // A card is "id: …", or a bare "id:" for an operation without params (removeBackground).
+                    return (rest.hasPrefix(" ") || rest.isEmpty) && core.contains(id) ? id : nil
                 }
                 XCTAssertEqual(Set(cards), core, "\(domain) \(size): every core card, nothing else")
                 if size == .compact { XCTAssertFalse(block.contains("«"), "the 2B core block has no examples") }
@@ -67,7 +69,9 @@ final class CardTests: XCTestCase {
             "parameter": AdjustmentParameter.allCases.map(\.rawValue), "look": FilterPreset.allCases.map(\.rawValue),
             "aspect": AspectPreset.allCases.map(\.rawValue), "transition": TransitionKind.allCases.map(\.rawValue),
             "placement": TextElement.Placement.allCases.map(\.rawValue), "flipAxis": FlipAxis.allCases.map(\.rawValue),
-            "mode": BlendMode.allCases.map(\.rawValue), "channel": ToneCurve.Channel.allCases.map(\.rawValue),
+            "layerBlend.mode": BlendMode.allCases.map(\.rawValue), "channel": ToneCurve.Channel.allCases.map(\.rawValue),
+            "select.mode": ["new"] + CombineMode.allCases.map(\.rawValue), "combine": CombineMode.allCases.map(\.rawValue),
+            "where": MaskRegion.allCases.map(\.rawValue), "what": MaskRegion.allCases.map(\.rawValue) + ["all", "wand"],
             "range": ColorGrade.Range.allCases.map(\.rawValue), "weight": TableGrid.FontWeight.allCases.map(\.rawValue),
             "font": TableGrid.FontDesign.allCases.map(\.rawValue), "band": ColorMixer.Band.allCases.map { $0.englishName.lowercased() },
         ]
@@ -86,7 +90,7 @@ final class CardTests: XCTestCase {
                     }
                     var problems: [String] = []
                     XCTAssertNil(OperationArguments.check(.string("notAValue"), param: param, spec: spec, object: [:], path: "p", problems: &problems))
-                    if let expected = allCases[param.key] { XCTAssertEqual(printed, expected, "\(spec.id).\(param.key)") }
+                    if let expected = allCases["\(spec.id.raw).\(param.key)"] ?? allCases[param.key] { XCTAssertEqual(printed, expected, "\(spec.id).\(param.key)") }
                     checked += 1
                 }
             }
@@ -108,7 +112,9 @@ final class CardTests: XCTestCase {
             guard let range = card.range(of: marker) else { continue }
             let rest = card[range.upperBound...]
             let end = rest.firstIndex { ",} =".contains($0) } ?? rest.endIndex
-            let printed = String(rest[..<end])
+            var printed = String(rest[..<end])
+            // A group's only member on the card is printed `key:…*` (one of the group must be given).
+            if printed.hasSuffix("*") { printed.removeLast() }
             if printed == "…" {
                 guard let line = lines.first(where: { $0.hasPrefix(key + ": ") }) else { return nil }
                 return line.dropFirst(key.count + 2).split(separator: "|").map(String.init)

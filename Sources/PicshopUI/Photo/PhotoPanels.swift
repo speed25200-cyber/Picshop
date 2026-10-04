@@ -41,6 +41,10 @@ struct PhotoToolPanel: View {
                 PanelActionButton(title: L("Apply"), symbol: "eraser") { session.commitBrushErase() }
                     .accessibilityLabel(L("Erase painted area"))
             }
+        case .masks:
+            MaskOverlayMenu(session: session)
+        case .select:
+            SelectionOverlayMenu(session: session)
         default:
             EmptyView()
         }
@@ -79,6 +83,8 @@ private struct PhotoToolContent: View {
         case .layers: LayersPanel(session: session)
         case .curves: CurvesPanel(session: session)
         case .levels: LevelsPanel(session: session)
+        case .masks: MasksPanel(session: session)
+        case .select: SelectPanel(session: session)
         }
     }
 }
@@ -372,6 +378,11 @@ struct PrecisePanel: View {
                 HStack(spacing: 6) {
                     ForEach(PhotoEditorSession.PreciseMode.allCases) { mode in
                         IconChip(title: mode.title, symbol: mode.symbol, isActive: session.preciseMode == mode, tint: mode == .generate ? PSTheme.voice : nil) {
+                            // One selection UI (W2): the wand and the lasso open Sélection in that mode.
+                            if FeatureFlags.isOn(.aiSelection), mode == .wand || mode == .lasso {
+                                session.openSelect(mode: mode == .wand ? .wand : .lasso)
+                                return
+                            }
                             session.commitBrushErase()
                             session.brushStrokes = []
                             session.preciseMode = mode
@@ -428,10 +439,12 @@ struct PrecisePanel: View {
                 DialSlider(value: $session.pixelBrushRadius, range: 0.0005...0.03, neutral: 0.004, label: L("Brush size"), format: { "\(Int(($0 * 10000).rounded()))" }) { editing in
                     session.showsBrushPreview = editing
                 }
+                hardnessDial
             case .clone:
                 DialSlider(value: $session.pixelBrushRadius, range: 0.002...0.06, neutral: 0.02, label: L("Brush size"), format: { "\(Int(($0 * 1000).rounded()))" }) { editing in
                     session.showsBrushPreview = editing
                 }
+                hardnessDial
                 HStack {
                     Text(session.cloneSource == nil ? L("Tap the source area, then paint the destination.") : L("Paint to clone from the marked source."))
                         .font(PSFont.caption(11)).foregroundStyle(PSTheme.textSecondary).lineLimit(2)
@@ -443,7 +456,24 @@ struct PrecisePanel: View {
         }
     }
 
+    /// « Dureté »: the strokes painted from now on carry it (1 is a hard edge).
+    private var hardnessDial: some View {
+        DialSlider(value: $session.preciseHardness, range: 0...1, neutral: 1, label: L("Hardness"), units: 50,
+                   format: { "\(Int(($0 * 100).rounded())) %" })
+            .accessibilityIdentifier("precise.hardness")
+    }
+
+    @ViewBuilder
     private var selectionActions: some View {
+        if FeatureFlags.isOn(.aiSelection) {
+            // One selection UI (W2): what Sélection's « Utiliser la sélection pour » offers.
+            if session.document.selection != nil { SelectionUseMenu(session: session) }
+        } else {
+            legacySelectionActions
+        }
+    }
+
+    private var legacySelectionActions: some View {
         HStack(spacing: 6) {
             if session.selectionMask != nil {
                 PanelChip(title: L("Erase"), symbol: "eraser", tint: PSTheme.accent) { session.eraseSelection() }
@@ -742,8 +772,7 @@ struct ShapesPanel: View {
                     DialSlider(value: Binding(get: { shape.strokeWidth * 1000 }, set: { value in session.updateShape(layerID: layer.id) { $0.strokeWidth = value / 1000 } }),
                                range: 2...40, neutral: 8, label: L("Thickness"), units: 38, format: { String(format: "%.0f", $0) })
                 }
-                DialSlider(value: Binding(get: { layer.opacity * 100 }, set: { value in session.updateLayer(layer.id) { $0.opacity = value / 100 } }),
-                           range: 0...100, neutral: 100, label: L("Opacity"), units: 50, format: { String(format: "%.0f%%", $0) })
+                ShapeOpacityDial(session: session, layer: layer)
             }
         }
     }
@@ -765,6 +794,32 @@ struct ShapesPanel: View {
         case .ellipse: return "oval"
         case .line: return "line.diagonal"
         case .arrow: return "arrow.up.right"
+        }
+    }
+}
+
+/// A shape's opacity: the dial owns the dragged value, and a drag is one undo step (W1 leftover, as the Layers
+/// panel's dial).
+private struct ShapeOpacityDial: View {
+    let session: PhotoEditorSession
+    let layer: Layer
+    @State private var opacity: Double = 1
+    @State private var isDragging = false
+
+    var body: some View {
+        DialSlider(value: $opacity, range: 0...1, neutral: 1, label: L("Opacity"), units: 50, format: { "\(Int(($0 * 100).rounded()))%" }) { editing in
+            isDragging = editing
+            if editing { session.beginInteraction(label: "Opacity") } else { session.endInteraction() }
+        }
+        .onChange(of: opacity) { _, value in
+            // Every frame of a drag goes to the session; a tap or a VoiceOver step only when it changes.
+            if isDragging || abs(value - layer.opacity) > 0.0005 { session.setLayerOpacity(value, layerID: layer.id) }
+        }
+        .onAppear { opacity = layer.opacity }
+        .onChange(of: layer.id) { _, _ in opacity = layer.opacity }
+        .onChange(of: layer.opacity) { _, value in
+            // Undo, a voice edit: follow the document unless a drag is under way.
+            if !isDragging, abs(value - opacity) > 0.0005 { opacity = value }
         }
     }
 }

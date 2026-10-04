@@ -18,6 +18,8 @@ public enum DialoguePicture: String, Sendable, CaseIterable {
     case stray
     /// A summer-sale poster: title t1, subtitle t2, price t3, a person o1, free areas f1 and f2.
     case poster
+    /// W2: a portrait by a lake (sky, water, a person o1, a blue cup o2), for masks and selections.
+    case lake
 }
 
 /// What a good answer does, checked on the editor after the turn. Built by chaining.
@@ -56,6 +58,24 @@ public struct DialogueExpect: Sendable {
     public var maxRuns: Int?
     /// A new text may land over other text (said so); otherwise at most 10 % of it may.
     public var overlapAllowed = false
+    /// W2: the catalog operations that ran (ids; selectiveAdjust by its action), the local adjustments after the
+    /// turn, their dials, regions, inversion and visibility, and the pixel selection.
+    public enum DialChange: Sendable { case up, down, grew, shrank }
+    public struct Dial: Sendable { public var index: Int; public var parameter: AdjustmentParameter; public var change: DialChange }
+    public var ops: Set<String>?
+    public var maskCount: Int?
+    public var dials: [Dial] = []
+    public var maskRegions: [(Int, MaskRegion)] = []
+    public var invertedMasks: [Int] = []
+    public var hiddenMasks: [Int] = []
+    public var selected: Bool?
+    public var selectionChanged = false
+    /// The turn undid a step (the history is one shorter).
+    public var reverts = false
+    /// Some mask covers these regions (by region, whichever its position).
+    public var regionsPresent: [MaskRegion] = []
+    /// The dials of these masks moved further from neutral, all together.
+    public var strengthened: [Int] = []
 
     public static var any: DialogueExpect { DialogueExpect() }
 
@@ -83,6 +103,19 @@ public struct DialogueExpect: Sendable {
     public func keepingValues() -> Self { var copy = self; copy.keepsValues = true; return copy }
     public func honest(runs: Int = 2) -> Self { var copy = self; copy.neverDone = true; copy.maxRuns = runs; return copy }
     public func overlapping() -> Self { var copy = self; copy.overlapAllowed = true; return copy }
+    public func ran(_ ops: String...) -> Self { var copy = self; copy.ops = Set(ops); return copy }
+    public func masks(_ count: Int) -> Self { var copy = self; copy.maskCount = count; return copy }
+    public func dial(_ index: Int, _ parameter: AdjustmentParameter, _ change: DialChange) -> Self {
+        var copy = self; copy.dials.append(Dial(index: index, parameter: parameter, change: change)); return copy
+    }
+    public func region(_ index: Int, _ region: MaskRegion) -> Self { var copy = self; copy.maskRegions.append((index, region)); return copy }
+    public func inverted(_ index: Int) -> Self { var copy = self; copy.invertedMasks.append(index); return copy }
+    public func hidden(_ index: Int) -> Self { var copy = self; copy.hiddenMasks.append(index); return copy }
+    public func selecting(_ present: Bool = true) -> Self { var copy = self; copy.selected = present; return copy }
+    public func reselected() -> Self { var copy = self; copy.selected = true; copy.selectionChanged = true; return copy }
+    public func reverted() -> Self { var copy = self; copy.reverts = true; return copy }
+    public func hasRegion(_ region: MaskRegion) -> Self { var copy = self; copy.regionsPresent.append(region); return copy }
+    public func stronger(_ index: Int) -> Self { var copy = self; copy.strengthened.append(index); return copy }
 }
 
 /// One thing the user says, one good model answer, and what it must do.
@@ -106,7 +139,7 @@ public struct DialogueTurn: Sendable {
 }
 
 public struct LiveDialogueCase: Sendable {
-    public enum Category: String, CaseIterable, Sendable { case table, text, followUp, reference, compound, question, recovery, verify }
+    public enum Category: String, CaseIterable, Sendable { case table, text, followUp, reference, compound, question, recovery, verify, masks }
 
     public let name: String
     public let category: Category
@@ -127,7 +160,7 @@ public struct LiveDialogueCase: Sendable {
     public var language: NormalizedUtterance.Language { name.hasSuffix(" EN") ? .english : .french }
 }
 
-/// The corpus: 186 cases, about half French and half English.
+/// The corpus: 186 cases (W1), then 32 mask and selection dialogues (W2), about half French and half English.
 public enum LiveDialogueCases {
     // MARK: Qwen3.5's output format
 
@@ -160,7 +193,7 @@ public enum LiveDialogueCases {
                          turns: [DialogueTurn(text: text, reference: reference, afterResult: repair, expect: expect, closing: closing)], failingChecks: failing)
     }
 
-    public static let all: [LiveDialogueCase] = table + text + followUps + references + compound + questions + recovery + verify
+    public static let all: [LiveDialogueCase] = table + text + followUps + references + compound + questions + recovery + verify + masks
 
     // MARK: Table (42)
 
@@ -649,5 +682,208 @@ public enum LiveDialogueCases {
         one("subject on the report EN", .recovery, .benchmark, "put the title behind the subject",
             edit("Putting it behind.", #"[{"action":"textBehind","text":"Title"}]"#), .any.noChange().said("table"),
             after: "This is a table screenshot, there is no subject. Shall I fill the cells instead?"),
+    ]
+
+    // MARK: Masks and selections (W2, 32: FR 22, EN 10; three turns each: create, refine or « encore », undo or « sur le masque 2 »)
+
+    static func mask(_ fields: String) -> String { #"[{"action":"maskAdjust","# + fields + "}]" }
+    static func maskEdit(_ fields: String) -> String { #"[{"action":"maskEdit","# + fields + "}]" }
+    static func select(_ fields: String) -> String { #"[{"action":"select","# + fields + "}]" }
+    static func modify(_ fields: String) -> String { #"[{"action":"selectionModify","# + fields + "}]" }
+    static func apply(_ fields: String) -> String { #"[{"action":"selectionApply","# + fields + "}]" }
+    static let darkenBottom = mask(#""where":"bottom","parameter":"exposure","amount":-20"#)
+    static let darkenTop = mask(#""where":"top","parameter":"exposure","amount":-20"#)
+    static let subjectPop = #"[{"action":"maskAdjust","where":"subject","parameter":"exposure","amount":15},{"action":"maskAdjust","where":"subject","parameter":"clarity","amount":10}]"#
+
+    public static let masks: [LiveDialogueCase] = [
+        many("darken the bottom, again, undo", .masks, .lake, [
+            turn("assombris le bas", edit("J'assombris le bas.", darkenBottom), .any.ran("maskAdjust").masks(1).region(1, .bottom).dial(1, .exposure, .down)),
+            turn("encore", edit("Encore un peu.", darkenBottom), .any.ran("maskAdjust").masks(1).dial(1, .exposure, .grew)),
+            turn("annule", undo("J'annule."), .any.reverted()),
+        ]),
+        many("deeper sky then darker", .masks, .lake, [
+            turn("sature un peu le ciel", edit("Je densifie le ciel.", mask(#""where":"sky","parameter":"saturation","amount":15"#)),
+                 .any.ran("maskAdjust").masks(1).region(1, .sky).dial(1, .saturation, .up)),
+            turn("un peu plus sombre aussi", edit("Je l'assombris un peu.", mask(#""ref":"a1","parameter":"exposure","amount":-10"#)),
+                 .any.ran("maskAdjust").masks(1).dial(1, .exposure, .down)),
+            turn("parfait merci", "Avec plaisir.", .any.noChange()),
+        ]),
+        many("make the subject pop, more contrast, undo", .masks, .lake, [
+            turn("fais ressortir le sujet", edit("Je fais ressortir le sujet.", subjectPop), .any.ran("maskAdjust").masks(1).region(1, .subject).dial(1, .exposure, .up)),
+            turn("plus de contraste sur le sujet", edit("Plus de contraste sur le sujet.", mask(#""where":"subject","parameter":"contrast","amount":20"#)),
+                 .any.ran("maskAdjust").masks(1).dial(1, .contrast, .up)),
+            turn("annule", undo("J'annule."), .any.reverted()),
+        ]),
+        many("two masks then mask 2", .masks, .lake, [
+            turn("assombris le haut", edit("J'assombris le haut.", darkenTop), .any.masks(1).region(1, .top).dial(1, .exposure, .down)),
+            turn("éclaircis le bas", edit("J'éclaircis le bas.", mask(#""where":"bottom","parameter":"exposure","amount":20"#)),
+                 .any.masks(2).region(2, .bottom).dial(2, .exposure, .up)),
+            turn("sur le masque 2, plus de contraste", edit("Plus de contraste en bas.", mask(#""ref":"a2","parameter":"contrast","amount":20"#)),
+                 .any.ran("maskAdjust").masks(2).dial(2, .contrast, .up)),
+        ]),
+        many("darken the subject, invert, again", .masks, .lake, [
+            turn("assombris le sujet", edit("J'assombris le sujet.", mask(#""where":"subject","parameter":"exposure","amount":-20"#)), .any.masks(1).dial(1, .exposure, .down)),
+            turn("inverse le masque", edit("J'inverse le masque.", maskEdit(#""ref":"a1","invert":true"#)), .any.ran("maskEdit").masks(1).inverted(1)),
+            turn("encore un peu plus sombre", edit("Encore un peu.", mask(#""ref":"a1","parameter":"exposure","amount":-10"#)),
+                 .any.masks(1).inverted(1).dial(1, .exposure, .grew)),
+        ]),
+        many("brighten the centre, soften, delete", .masks, .lake, [
+            turn("éclaircis le centre", edit("J'éclaircis le centre.", mask(#""where":"center","parameter":"exposure","amount":20"#)), .any.masks(1).region(1, .center)),
+            turn("adoucis les bords du masque", edit("J'adoucis ses bords.", maskEdit(#""ref":"a1","feather":60"#)), .any.ran("maskEdit").masks(1)),
+            turn("supprime le masque", edit("Je le supprime.", #"[{"action":"maskDelete","ref":"a1"}]"#), .any.ran("maskDelete").masks(0)),
+        ]),
+        many("select the blue cup, blur, undo", .masks, .lake, [
+            turn("sélectionne la tasse bleue", edit("Je sélectionne la tasse.", select(#""what":"object","target":"cup","attributes":["blue"]"#)),
+                 .any.ran("select").selecting()),
+            turn("floute la sélection", edit("Je la floute.", apply(#""use":"blur","amount":60"#)), .any.ran("selectionApply")),
+            turn("annule", undo("J'annule."), .any.reverted()),
+        ]),
+        many("select the subject, invert, brighten", .masks, .lake, [
+            turn("sélectionne le sujet", edit("Je sélectionne le sujet.", select(#""what":"subject""#)), .any.ran("select").selecting()),
+            turn("inverse la sélection", edit("J'inverse la sélection.", modify(#""invert":true"#)), .any.ran("selectionModify").reselected()),
+            turn("éclaircis la sélection", edit("J'éclaircis la sélection.", apply(#""use":"adjust","parameter":"exposure","amount":20"#)),
+                 .any.ran("selectionApply").masks(1).dial(1, .exposure, .up)),
+        ]),
+        many("select the sky, add the people, fill", .masks, .lake, [
+            turn("sélectionne le ciel", edit("Je sélectionne le ciel.", select(#""what":"sky""#)), .any.ran("select").selecting()),
+            turn("ajoute les personnes à la sélection", edit("J'ajoute la personne.", select(#""what":"people","mode":"add""#)), .any.ran("select").reselected()),
+            turn("remplis la sélection de blanc", edit("Je la remplis de blanc.", apply(#""use":"fill","color":"white""#)), .any.ran("selectionApply")),
+        ]),
+        many("select blue, grow, deselect", .masks, .lake, [
+            turn("sélectionne le bleu", edit("Je sélectionne les bleus.", select(#""what":"color","color":"blue""#)), .any.ran("select").selecting()),
+            turn("agrandis la sélection de 10 pixels", edit("Je l'agrandis.", modify(#""grow":10"#)), .any.ran("selectionModify").reselected()),
+            turn("désélectionne", edit("C'est désélectionné.", modify(#""deselect":true"#)), .any.ran("selectionModify").selecting(false)),
+        ]),
+        many("darken the background, again, undo", .masks, .lake, [
+            turn("assombris l'arrière-plan", edit("J'assombris l'arrière-plan.", mask(#""where":"background","parameter":"exposure","amount":-20"#)),
+                 .any.masks(1).region(1, .background).dial(1, .exposure, .down)),
+            turn("encore", edit("Encore un peu.", mask(#""where":"background","parameter":"exposure","amount":-20"#)), .any.masks(1).dial(1, .exposure, .grew)),
+            turn("annule", undo("J'annule."), .any.reverted()),
+        ]),
+        many("bluer water, warmer skin, mask 1 less", .masks, .lake, [
+            turn("rends l'eau plus bleue", edit("Je ravive l'eau.", mask(#""where":"water","parameter":"saturation","amount":20"#)), .any.masks(1).region(1, .water)),
+            turn("réchauffe un peu le sujet", edit("Je réchauffe le sujet.", mask(#""where":"subject","parameter":"temperature","amount":10"#)),
+                 .any.masks(2).hasRegion(.subject)),
+            turn("sur le masque 1, un peu moins", edit("Un peu moins sur l'eau.", mask(#""ref":"a1","parameter":"saturation","amount":-10"#)),
+                 .any.masks(2).dial(1, .saturation, .shrank)),
+        ]),
+        many("soft edges, again, hide", .masks, .lake, [
+            turn("assombris doucement les bords", edit("J'assombris les bords.", mask(#""where":"edges","parameter":"exposure","amount":-15"#)),
+                 .any.masks(1).region(1, .edges)),
+            turn("encore", edit("Encore un peu.", mask(#""where":"edges","parameter":"exposure","amount":-15"#)), .any.masks(1).dial(1, .exposure, .grew)),
+            turn("cache le masque", edit("Je le cache.", maskEdit(#""ref":"a1","visible":false"#)), .any.ran("maskEdit").hidden(1)),
+        ]),
+        many("darken the sky, rename, show", .masks, .lake, [
+            turn("assombris un peu le ciel", edit("J'assombris le ciel.", mask(#""where":"sky","parameter":"exposure","amount":-20"#)), .any.masks(1).region(1, .sky)),
+            turn("renomme le masque en ciel du soir", edit("C'est renommé.", maskEdit(#""ref":"a1","name":"Ciel du soir""#)), .any.ran("maskEdit").masks(1)),
+            turn("montre-moi le masque", edit("Le voici.", maskEdit(#""ref":"a1","show":true"#)), .any.noChange()),
+        ]),
+        many("two masks, delete all", .masks, .lake, [
+            turn("assombris le bas", edit("J'assombris le bas.", darkenBottom), .any.masks(1)),
+            turn("éclaircis le haut", edit("J'éclaircis le haut.", mask(#""where":"top","parameter":"exposure","amount":20"#)), .any.masks(2)),
+            turn("supprime tous les masques", edit("Je les supprime.", #"[{"action":"maskDelete","all":true}]"#), .any.ran("maskDelete").masks(0)),
+        ]),
+        many("dark gradient on top, softer, undo", .masks, .lake, [
+            turn("assombris le haut", edit("Un dégradé sombre en haut.", mask(#""where":"top","parameter":"exposure","amount":-25"#)),
+                 .any.masks(1).region(1, .top).dial(1, .exposure, .down)),
+            turn("plus doux le dégradé", edit("Je l'adoucis.", maskEdit(#""ref":"a1","feather":80"#)), .any.ran("maskEdit").masks(1)),
+            turn("annule", undo("J'annule."), .any.reverted()),
+        ]),
+        many("whiter teeth, again, undo", .masks, .lake, [
+            turn("blanchis les dents", edit("Je blanchis les dents.", mask(#""where":"teeth","parameter":"saturation","amount":-30"#)),
+                 .any.masks(1).region(1, .teeth).dial(1, .saturation, .down)),
+            turn("encore", edit("Encore un peu.", mask(#""where":"teeth","parameter":"saturation","amount":-30"#)), .any.masks(1).dial(1, .saturation, .grew)),
+            turn("annule", undo("J'annule."), .any.reverted()),
+        ]),
+        many("brighter eyes, clarity, undo", .masks, .lake, [
+            turn("éclaircis les yeux", edit("J'éclaircis les yeux.", mask(#""where":"eyes","parameter":"exposure","amount":15"#)), .any.masks(1).region(1, .eyes)),
+            turn("plus de clarté dessus", edit("Plus de clarté sur les yeux.", mask(#""ref":"a1","parameter":"clarity","amount":15"#)),
+                 .any.masks(1).dial(1, .clarity, .up)),
+            turn("annule", undo("J'annule."), .any.reverted()),
+        ]),
+        many("select all, remove the subject, darken", .masks, .lake, [
+            turn("sélectionne tout", edit("Tout est sélectionné.", select(#""what":"all""#)), .any.selecting()),
+            turn("retire le sujet de la sélection", edit("J'enlève le sujet.", select(#""what":"subject","mode":"subtract""#)), .any.reselected()),
+            turn("assombris la sélection", edit("J'assombris la sélection.", apply(#""use":"adjust","parameter":"exposure","amount":-20"#)),
+                 .any.ran("selectionApply").masks(1).dial(1, .exposure, .down)),
+        ]),
+        // Follow-ups after a selection used as a mask stay on that mask (never the whole photo, never a second mask).
+        many("select the subject, brighten, again, darker", .masks, .lake, [
+            turn("sélectionne le sujet", edit("Je sélectionne le sujet.", select(#""what":"subject""#)), .any.ran("select").selecting()),
+            turn("éclaircis la sélection", edit("J'éclaircis la sélection.", apply(#""use":"adjust","parameter":"exposure","amount":20"#)),
+                 .any.ran("selectionApply").masks(1).dial(1, .exposure, .up)),
+            turn("encore", edit("Encore un peu.", mask(#""ref":"a1","parameter":"exposure","amount":20"#)), .any.masks(1).dial(1, .exposure, .grew)),
+            turn("plus sombre", edit("Un peu plus sombre.", mask(#""ref":"a1","parameter":"exposure","amount":-20"#)),
+                 .any.masks(1).dial(1, .exposure, .shrank)),
+        ]),
+        many("select the person, erase, undo", .masks, .lake, [
+            turn("sélectionne la personne", edit("Je sélectionne la personne.", select(#""what":"person""#)), .any.selecting()),
+            turn("efface la sélection", edit("Je l'efface.", apply(#""use":"erase""#)), .any.ran("selectionApply").selecting(false)),
+            turn("annule", undo("J'annule."), .any.reverted()),
+        ]),
+        many("select the cup, recolour, undo", .masks, .lake, [
+            turn("sélectionne la tasse", edit("Je sélectionne la tasse.", select(#""what":"object","target":"cup""#)), .any.selecting()),
+            turn("recolore la sélection en rouge", edit("Je la passe en rouge.", apply(#""use":"recolor","color":"red""#)), .any.ran("selectionApply")),
+            turn("annule", undo("J'annule."), .any.reverted()),
+        ]),
+        many("dark corners, mask 1 again, delete mask 1", .masks, .lake, [
+            turn("assombris les coins", edit("J'assombris les coins.", mask(#""where":"edges","parameter":"exposure","amount":-20"#)), .any.masks(1).region(1, .edges)),
+            turn("sur le masque 1, encore un peu", edit("Encore un peu.", mask(#""ref":"a1","parameter":"exposure","amount":-10"#)), .any.masks(1).dial(1, .exposure, .grew)),
+            turn("supprime le masque 1", edit("Je le supprime.", #"[{"action":"maskDelete","ref":"a1"}]"#), .any.masks(0)),
+        ]),
+        // English
+        many("darken the bottom, again, undo EN", .masks, .lake, [
+            turn("darken the bottom", edit("Darkening the bottom.", darkenBottom), .any.ran("maskAdjust").masks(1).dial(1, .exposure, .down)),
+            turn("again", edit("A little more.", darkenBottom), .any.masks(1).dial(1, .exposure, .grew)),
+            turn("undo that", undo("Undone."), .any.reverted()),
+        ]),
+        many("deeper sky, darker, thanks EN", .masks, .lake, [
+            turn("saturate the sky", edit("Deepening the sky.", mask(#""where":"sky","parameter":"saturation","amount":15"#)), .any.masks(1).region(1, .sky)),
+            turn("darken it a little", edit("A bit darker.", mask(#""ref":"a1","parameter":"exposure","amount":-10"#)), .any.masks(1).dial(1, .exposure, .down)),
+            turn("thanks", "You're welcome.", .any.noChange()),
+        ]),
+        many("brighten the subject, contrast, undo EN", .masks, .lake, [
+            turn("brighten the subject", edit("Brightening the subject.", mask(#""where":"subject","parameter":"exposure","amount":15"#)), .any.masks(1).region(1, .subject)),
+            turn("more contrast on the subject", edit("More contrast on the subject.", mask(#""where":"subject","parameter":"contrast","amount":20"#)),
+                 .any.masks(1).dial(1, .contrast, .up)),
+            turn("undo", undo("Undone."), .any.reverted()),
+        ]),
+        many("two masks then mask 2 EN", .masks, .lake, [
+            turn("darken the top", edit("Darkening the top.", darkenTop), .any.masks(1)),
+            turn("brighten the bottom", edit("Brightening the bottom.", mask(#""where":"bottom","parameter":"exposure","amount":20"#)), .any.masks(2)),
+            turn("on mask 2, more contrast", edit("More contrast at the bottom.", mask(#""ref":"a2","parameter":"contrast","amount":20"#)),
+                 .any.masks(2).dial(2, .contrast, .up)),
+        ]),
+        many("select the blue cup, blur, undo EN", .masks, .lake, [
+            turn("select the blue cup", edit("Selecting the cup.", select(#""what":"object","target":"cup","attributes":["blue"]"#)), .any.selecting()),
+            turn("blur the selection", edit("Blurring it.", apply(#""use":"blur","amount":60"#)), .any.ran("selectionApply")),
+            turn("undo", undo("Undone."), .any.reverted()),
+        ]),
+        many("select the subject, invert, brighten EN", .masks, .lake, [
+            turn("select the subject", edit("Selecting the subject.", select(#""what":"subject""#)), .any.selecting()),
+            turn("invert the selection", edit("Inverting it.", modify(#""invert":true"#)), .any.reselected()),
+            turn("brighten the selection", edit("Brightening it.", apply(#""use":"adjust","parameter":"exposure","amount":20"#)), .any.masks(1)),
+        ]),
+        many("select the sky, grow, deselect EN", .masks, .lake, [
+            turn("select the sky", edit("Selecting the sky.", select(#""what":"sky""#)), .any.selecting()),
+            turn("grow the selection by 20 pixels", edit("Growing it.", modify(#""grow":20"#)), .any.reselected()),
+            turn("deselect", edit("Deselected.", modify(#""deselect":true"#)), .any.selecting(false)),
+        ]),
+        many("darken the background, invert, delete EN", .masks, .lake, [
+            turn("darken the background", edit("Darkening the background.", mask(#""where":"background","parameter":"exposure","amount":-20"#)), .any.masks(1)),
+            turn("invert the mask", edit("Inverting the mask.", maskEdit(#""ref":"a1","invert":true"#)), .any.inverted(1)),
+            turn("delete the mask", edit("Deleting it.", #"[{"action":"maskDelete","ref":"a1"}]"#), .any.masks(0)),
+        ]),
+        many("make the subject pop, undo, redo by hand EN", .masks, .lake, [
+            turn("brighten the subject a bit", edit("Making the subject stand out.", subjectPop), .any.masks(1).region(1, .subject).dial(1, .exposure, .up)),
+            turn("undo", undo("Undone."), .any.reverted()),
+            turn("more clarity on the subject", edit("More clarity on the subject.", mask(#""where":"subject","parameter":"clarity","amount":15"#)),
+                 .any.masks(1).dial(1, .clarity, .up)),
+        ]),
+        many("brighter face, again, remove all EN", .masks, .lake, [
+            turn("brighten the face", edit("Brightening the face.", mask(#""where":"face","parameter":"exposure","amount":15"#)), .any.masks(1).hasRegion(.face)),
+            turn("again", edit("A little more.", mask(#""where":"face","parameter":"exposure","amount":15"#)), .any.masks(1).stronger(1)),
+            turn("remove all the masks", edit("Removing them.", #"[{"action":"maskDelete","all":true}]"#), .any.masks(0)),
+        ]),
     ]
 }

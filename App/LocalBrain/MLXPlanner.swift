@@ -13,6 +13,7 @@
 import Foundation
 import MLXLMCommon
 import PicshopCore
+import PicshopImaging
 import PicshopIntent
 
 final class MLXPlanner: IntentEngine, @unchecked Sendable {
@@ -35,7 +36,16 @@ final class MLXPlanner: IntentEngine, @unchecked Sendable {
         let (container, generation) = loaded
         // The request carries the cards of the catalog operations it is about (the instructions stay byte-stable).
         let prompt = IntentPrompt.userPrompt(for: utterance, context: context, hint: hint, catalogCards: true) + "\nJSON:"
-        let text = try await sessions.answer(prompt, mode: context.mode, container: container, generation: generation)
+        // Busy for the model broker while it plans (W2, D12): never evicted mid-command.
+        await ModelResidency.markBusy(.llm, true)
+        let answered: Result<String, Error>
+        do {
+            answered = .success(try await sessions.answer(prompt, mode: context.mode, container: container, generation: generation))
+        } catch {
+            answered = .failure(error)
+        }
+        await ModelResidency.markBusy(.llm, false)
+        let text = try answered.get()
         guard let raw = LLMResponseParser.parse(text) else {
             throw PicshopError.renderFailed("the local model returned no plan")
         }

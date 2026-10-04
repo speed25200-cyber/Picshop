@@ -6,7 +6,9 @@ where the tokens live, is exempt):
 - radius:  a literal corner radius (`cornerRadius: 16`, `.cornerRadius(12)`);
 - opacity: a white or black opacity literal (`Color.white.opacity(0.4)`,
            `.black.opacity(0.35)`);
-- font:    a fixed-size system font (`.system(size: 17` …).
+- font:    a fixed-size system font (`.system(size: 17` …);
+- scheme:  a `.preferredColorScheme(` modifier (W2: none anywhere, Theme included; Info.plist's
+           UIUserInterfaceStyle = Dark sets the whole app's appearance once).
 
 A count above the file's entry in Scripts/design-token-baseline.json fails the
 run (a file missing from the baseline is allowed none). Use the tokens instead:
@@ -33,8 +35,11 @@ PATTERNS = {
     "radius": re.compile(r"cornerRadius:\s*-?\d|\.cornerRadius\(\s*-?\d"),
     "opacity": re.compile(r"(?:Color)?\.(?:white|black)\.opacity\(\s*-?\.?\d"),
     "font": re.compile(r"\.system\(\s*size:\s*-?\.?\d"),
+    "scheme": re.compile(r"\.preferredColorScheme\("),
 }
 KINDS = list(PATTERNS)
+# Counted in every scanned file, Theme included, with a baseline of zero everywhere.
+EVERYWHERE = {"scheme"}
 
 
 def strip_comments(line: str) -> str:
@@ -51,7 +56,7 @@ def strip_comments(line: str) -> str:
     return line
 
 
-def count(path: pathlib.Path) -> dict:
+def count(path: pathlib.Path, kinds=KINDS) -> dict:
     counts = {kind: 0 for kind in KINDS}
     in_block = False
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -65,8 +70,8 @@ def count(path: pathlib.Path) -> dict:
             line = line.split("/*", 1)[0]
             in_block = True
         line = strip_comments(line)
-        for kind, pattern in PATTERNS.items():
-            counts[kind] += len(pattern.findall(line))
+        for kind in kinds:
+            counts[kind] += len(PATTERNS[kind].findall(line))
     return counts
 
 
@@ -76,9 +81,8 @@ def scan() -> dict:
         if not base.exists():
             continue
         for path in sorted(base.rglob("*.swift")):
-            if any(exempt in path.parents for exempt in EXEMPT):
-                continue
-            counts = count(path)
+            exempt = any(exempt in path.parents for exempt in EXEMPT)
+            counts = count(path, sorted(EVERYWHERE) if exempt else KINDS)
             if any(counts.values()):
                 result[str(path.relative_to(ROOT))] = counts
     return result
@@ -127,8 +131,9 @@ def main(argv) -> int:
     for file, counts in sorted(current.items()):
         allowed = baseline.get(file, {})
         for kind in KINDS:
-            if counts[kind] > allowed.get(kind, 0):
-                growth.append(f"{file}: {kind} {counts[kind]} > baseline {allowed.get(kind, 0)}")
+            limit = 0 if kind in EVERYWHERE else allowed.get(kind, 0)
+            if counts[kind] > limit:
+                growth.append(f"{file}: {kind} {counts[kind]} > baseline {limit}")
     shrunk = [
         file for file, allowed in baseline.items()
         if any(current.get(file, {}).get(kind, 0) < allowed.get(kind, 0) for kind in KINDS)
@@ -148,7 +153,7 @@ def main(argv) -> int:
                 print(f"  {line}")
         return 0
     if growth:
-        print("Use PSRadius, the .ps colour roles, PSFont/PSFontRole/PSGlyph instead of literals.")
+        print("Use PSRadius, the .ps colour roles, PSFont/PSFontRole/PSGlyph instead of literals; never .preferredColorScheme (Info.plist sets Dark).")
         return 1
     return 0
 

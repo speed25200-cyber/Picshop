@@ -89,6 +89,68 @@ public struct MaskStore: Sendable {
         return Double(count) / Double(bytes.count)
     }
 
+    // MARK: - W2 rasters (D4)
+
+    /// The file of a raster (a mask component's, a selection's or a depth map).
+    public func url(for raster: RasterRef) -> URL {
+        store.url(for: raster.path, in: projectID)
+    }
+
+    public func exists(_ raster: RasterRef) -> Bool {
+        FileManager.default.fileExists(atPath: url(for: raster).path)
+    }
+
+    /// Writes 8-bit bytes (top-down, 255 = in) as a new immutable raster, `masks/<uuid>.png` in DeviceGray like every
+    /// mask so far, and returns its reference: unit corners, the bounding box of the pixels above 32.
+    public func saveRaster(bytes: [UInt8], width: Int, height: Int, origin: RasterRef.Origin, label: String? = nil,
+                           stateKey: String? = nil) throws -> RasterRef {
+        guard width > 0, height > 0, let image = ImageSupport.grayImage(width: width, height: height, bytes: bytes) else {
+            throw PicshopError.renderFailed("mask rasterisation")
+        }
+        let path = "masks/\(UUID().uuidString).png"
+        try store.createPackage(for: projectID)
+        try ImageSupport.write(image, to: store.url(for: path, in: projectID), type: .png)
+        return RasterRef(path: path, origin: origin, pixelWidth: width, pixelHeight: height, bitDepth: 8,
+                         boundingBox: MaskStore.boundingBox(of: bytes, width: width, height: height), label: label, stateKey: stateKey)
+    }
+
+    /// The path of a depth map for a base state: `masks/depth-<baseStateKey>.png` (16 hex; any other key is hashed).
+    public static func depthPath(forStateKey key: String) -> String {
+        let isHex = key.count == 16 && key.allSatisfy { $0.isHexDigit && !$0.isUppercase }
+        return "masks/depth-\(isHex ? key : StableHash.hex(key)).png"
+    }
+
+    /// Writes a depth map (0 far … 1 near) as a 16-bit gray PNG at its own size and returns its reference
+    /// (origin .depth, bitDepth 16). The same base state always lands on the same file.
+    public func saveDepth(values: [Float], width: Int, height: Int, stateKey: String) throws -> RasterRef {
+        guard width > 0, height > 0, values.count >= width * height,
+              let image = ImageSupport.gray16Image(width: width, height: height, bigEndianSamples: DepthMath.pack16(Array(values.prefix(width * height)))) else {
+            throw PicshopError.renderFailed("depth map")
+        }
+        let path = MaskStore.depthPath(forStateKey: stateKey)
+        try store.createPackage(for: projectID)
+        try ImageSupport.write(image, to: store.url(for: path, in: projectID), type: .png)
+        return RasterRef(path: path, origin: .depth, pixelWidth: width, pixelHeight: height, bitDepth: 16, stateKey: stateKey)
+    }
+
+    /// The depth map already written for a base state, if any.
+    public func existingDepth(stateKey: String) -> RasterRef? {
+        let path = MaskStore.depthPath(forStateKey: stateKey)
+        let url = store.url(for: path, in: projectID)
+        guard FileManager.default.fileExists(atPath: url.path), let size = ImageSupport.pixelSize(at: url) else { return nil }
+        return RasterRef(path: path, origin: .depth, pixelWidth: Int(size.width), pixelHeight: Int(size.height), bitDepth: 16, stateKey: stateKey)
+    }
+
+    /// The raster as raw values (D5) at its own pixel size, origin at zero; nil when the file is missing.
+    public func loadRaw(_ raster: RasterRef) -> CIImage? {
+        ImageSupport.rawMaskImage(at: url(for: raster))
+    }
+
+    /// The raster's 8-bit values at its own size (row 0 at the top).
+    public func rawBytes(_ raster: RasterRef) -> (bytes: [UInt8], width: Int, height: Int)? {
+        ImageSupport.rawGrayBytes(at: url(for: raster))
+    }
+
     // MARK: - Rasterisation helpers
 
     /// Reads a one-component pixel buffer (Vision masks) into top-down bytes at the given size,

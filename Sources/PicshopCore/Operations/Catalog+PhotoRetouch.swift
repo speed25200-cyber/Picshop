@@ -47,6 +47,9 @@ enum CatalogPhotoRetouch {
                 fr("enlève les passants"),
                 fr("nettoie la photo, il y a des touristes"),
                 en("remove the tourists in the background"),
+                fr("supprime les touristes de la photo"),
+                en("clean up the people in the back"),
+                near("enlève la voiture", .fr, expected: "removeObject"),
             ]
             s.verify = [.unverifiable("which people stay is judged by eye")]
             s.grammar = .owned
@@ -68,6 +71,9 @@ enum CatalogPhotoRetouch {
                 fr("efface le bloc de texte t3", ["ref": "t3"]),
                 fr("efface la zone en haut à gauche", ["box": .box(PSRect(x: 0, y: 0, width: 300, height: 200))]),
                 en("erase that block of text", ["ref": "t1"]),
+                fr("efface ce texte", ["ref": "t2"]),
+                en("erase the top left area", ["box": .box(PSRect(x: 0, y: 0, width: 300, height: 200))]),
+                near("enlève le chien", .fr, expected: "removeObject"),
             ]
             s.verify = [.unverifiable("the erased area is judged by eye")]
             s.grammar = .keywordsOnly
@@ -88,6 +94,9 @@ enum CatalogPhotoRetouch {
                 fr("floute les visages", ["target": "face", "all": true]),
                 fr("pixelise la plaque d'immatriculation", ["target": "sign"]),
                 en("blur the faces", ["target": "face", "all": true]),
+                fr("floute la plaque de la voiture", ["target": "sign"]),
+                en("pixelate the sign", ["target": "sign"]),
+                near("floute l'arrière-plan", .fr, expected: "blurBackground"),
             ]
             s.verify = [.unverifiable("a privacy blur is judged by eye")]
             s.grammar = .owned
@@ -110,6 +119,9 @@ enum CatalogPhotoRetouch {
                 fr("déplace la voiture un peu vers la droite", ["target": "car", "degrees": 0, "amount": 0.08]),
                 fr("décale le chien vers la gauche", ["target": "dog", "degrees": 180, "amount": 0.15]),
                 en("move the person to the right", ["target": "person", "degrees": 0, "amount": 0.2]),
+                fr("pousse la personne vers la gauche", ["target": "person", "degrees": 180, "amount": 0.1]),
+                en("move the car a bit to the left", ["target": "car", "degrees": 180, "amount": 0.08]),
+                near("déplace le titre en haut", .fr, expected: "moveText"),
             ]
             s.verify = [.unverifiable("the new position is judged by eye")]
             s.grammar = .owned
@@ -130,6 +142,9 @@ enum CatalogPhotoRetouch {
                 fr("enlève le fond"),
                 fr("détoure le sujet"),
                 en("remove the background"),
+                fr("supprime l'arrière-plan"),
+                en("cut the subject out of the photo"),
+                near("mets un fond blanc", .fr, expected: "replaceBackground"),
             ]
             s.verify = [.pixels("alphaCoverage", .decreased)]
             s.grammar = .owned
@@ -151,6 +166,9 @@ enum CatalogPhotoRetouch {
                 fr("mets un fond blanc", ["background": "white"]),
                 fr("change le fond en bleu clair", ["background": "light blue"]),
                 en("change the background to light blue", ["background": "light blue"]),
+                fr("remplace l'arrière-plan par du blanc", ["background": "white"]),
+                en("put a white background", ["background": "white"]),
+                near("enlève le fond", .fr, expected: "removeBackground"),
             ]
             s.verify = [.unverifiable("the new background is judged by eye")]
             s.grammar = .owned
@@ -174,6 +192,7 @@ enum CatalogPhotoRetouch {
                 en("blur the background", ["amount": 60]),
                 para("floute larrière plan", .fr),
                 near("fais la mise au point sur le chien", .fr, expected: "lensFocus"),
+                en("blur what is behind me", ["amount": 50]),
             ]
             s.verify = [.unverifiable("the blur strength is judged by eye")]
             s.grammar = .owned
@@ -194,6 +213,10 @@ enum CatalogPhotoRetouch {
                 fr("remplace le ciel par un coucher de soleil", ["target": "sky", "text": "a sunset sky with warm clouds"]),
                 fr("ajoute un chapeau à la personne", ["target": "person", "text": "a hat"]),
                 en("the sky is boring, do something about it", ["target": "sky", "text": "a dramatic sky with golden sunset clouds"]),
+                fr("dessine des nuages dans le ciel", ["target": "sky", "text": "soft white clouds"]),
+                en("add a hat to the person", ["target": "person", "text": "a hat"]),
+                en("put a rainbow in the sky", ["target": "sky", "text": "a rainbow"]),
+                near("enlève la personne", .fr, expected: "removeObject"),
             ]
             s.verify = [.unverifiable("generated content is judged by eye")]
             s.grammar = .owned
@@ -215,6 +238,9 @@ enum CatalogPhotoRetouch {
                 fr("agrandis la toile vers la gauche"),
                 fr("élargis la photo en 16:9", ["aspect": "ratio16x9"]),
                 en("expand the canvas to square", ["aspect": "square"]),
+                fr("étends l'image en carré", ["aspect": "square"]),
+                en("extend the picture to 16:9", ["aspect": "ratio16x9"]),
+                near("recadre en carré", .fr, expected: "crop"),
             ]
             // Without an aspect the frame grows on every side and keeps its shape.
             s.verify = [.unverifiable("the canvas grows; its shape changes only with an aspect")]
@@ -236,6 +262,9 @@ enum CatalogPhotoRetouch {
                 fr("augmente la résolution"),
                 fr("agrandis la photo trois fois", ["amount": 3]),
                 en("upscale it 3 times", ["amount": 3]),
+                fr("double la résolution", ["amount": 2]),
+                en("increase the resolution"),
+                near("rends la photo plus nette", .fr, expected: "sharpen"),
             ]
             s.verify = [.unverifiable("the size is checked by the executor")]
             s.grammar = .owned
@@ -255,6 +284,9 @@ enum CatalogPhotoRetouch {
                 fr("réduis le bruit", ["amount": 40]),
                 fr("enlève le bruit de la photo", ["amount": 50]),
                 en("denoise it", ["amount": 40]),
+                fr("lisse le bruit numérique", ["amount": 30]),
+                en("reduce the noise", ["amount": 50]),
+                near("accentue la netteté", .fr, expected: "sharpen"),
             ]
             s.verify = [.structural(.adjustment("noiseReduction"), .increased)]
             s.grammar = .keywordsOnly
@@ -274,6 +306,9 @@ enum CatalogPhotoRetouch {
                 fr("rends la photo plus nette", ["amount": 30]),
                 fr("accentue la netteté", ["amount": 40]),
                 en("sharpen it a bit", ["amount": 20]),
+                fr("rends les détails plus nets", ["amount": 30]),
+                en("make it sharper", ["amount": 30]),
+                near("réduis le bruit", .fr, expected: "denoise"),
             ]
             s.verify = [.structural(.adjustment("sharpness"), .increased)]
             s.grammar = .keywordsOnly

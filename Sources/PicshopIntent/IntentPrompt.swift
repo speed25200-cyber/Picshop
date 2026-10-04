@@ -222,7 +222,12 @@ public enum IntentPrompt {
     /// marked unavailable only for state the context says is missing.
     static func stateHints(_ context: IntentContext) -> (hints: Set<OpStateHint>, unknown: Set<OpStateHint>) {
         var hints: Set<OpStateHint> = []
-        var unknown: Set<OpStateHint> = [.captions, .selection]
+        // The context does not list the masks (W2): an operation that needs one is never marked unavailable here.
+        var unknown: Set<OpStateHint> = [.captions, .selection, .localMasks]
+        if context.selectionMask != nil {
+            hints.insert(.selection)
+            unknown.remove(.selection)
+        }
         if context.table != nil { hints.insert(.table) }
         if let scene = context.scene, !scene.texts.isEmpty { hints.insert(.sceneText) }
         if context.textLayerCount > 0 || (context.layerCount ?? 1) > 1 {

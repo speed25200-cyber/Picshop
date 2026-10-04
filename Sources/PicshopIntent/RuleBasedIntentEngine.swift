@@ -99,8 +99,9 @@ public struct RuleBasedIntentEngine: IntentEngine {
         let final = (understood.isEmpty ? intents : understood).map { withOriginalWords($0, from: utterance) }
         var confidence = final.map(\.confidence).min() ?? 0
         // A clause left unread ("recadre en carré et <something the rules miss>"): what was understood is not
-        // the whole request, so the plan stays below the fast lane and a model, when there is one, reads it all.
-        if !understood.isEmpty, unreadClause { confidence = min(confidence, 0.85) }
+        // the whole request, so the plan stays strictly below the fast lane (≥ 0.85) and a model, when there is
+        // one, reads it all.
+        if !understood.isEmpty, unreadClause { confidence = min(confidence, HybridIntentRouter.Configuration.unreadClauseCap) }
         return EditPlan(utterance: utterance, intents: final, confidence: confidence, language: language.rawValue,
                         reply: Replies.combined(for: final, language: language), engine: .rules)
     }
@@ -115,6 +116,8 @@ public struct RuleBasedIntentEngine: IntentEngine {
         if let version = parseVersion(u, original: original) { return [version] }
         if let meta = parseMeta(u, context: context) { return [meta] }
         if context.mode == .photo, let describe = parseDescribe(u) { return [describe] }
+        // W2: masks and selections, anchored, before the scene, removal, blur and layer rules that share their verbs.
+        if context.mode == .photo, let mask = parseMasks(u, context: context) { return [mask] }
         if context.mode == .photo, let scene = parseSceneText(u, original: original, context: context) { return [scene] }
         if context.mode == .photo, let again = parseLastFollowUp(u, original: original, context: context) { return [again] }
         if context.mode == .pdf { return parsePDF(u, original: original, context: context) }

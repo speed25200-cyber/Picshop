@@ -154,17 +154,19 @@ public enum OperationCards {
 
     /// The long-enum keys the domain's core block already prints.
     static func coreEnumKeys(_ domain: OpDomain) -> Set<String> {
-        Set(OperationCatalog.shared.core(for: domain).flatMap { longEnums($0, domain: domain).map(\.key) })
+        Set(OperationGate.core(for: domain).flatMap { longEnums($0, domain: domain).map(\.key) })
     }
 
     // MARK: Blocks
 
-    static let coreHeader = "Operations (step {\"action\":id,…}; * required, {a / b} one of, key:… values below):"
+    /// Short: the photo core block carries maskAdjust's `where:` values (W2) within its 1,400 characters.
+    static let coreHeader = "Ops (* required, {a / b} one of, key:… below):"
 
     /// The domain's core cards for the stable prompt prefix, at most 1,400 characters.
     /// Deterministic for a domain and size, so the prefix stays byte-identical.
     public static func coreBlock(for domain: OpDomain, size: LocalPromptSize) -> String {
-        let specs = OperationCatalog.shared.core(for: domain)
+        // The flags decide the photo core set (W2): maskAdjust, or selectiveAdjust when `masks` is off.
+        let specs = OperationGate.core(for: domain)
         guard !specs.isEmpty else { return "" }
         let enums = enumLines(specs, domain: domain)
         // The richest cards that fit: every card at one level if they all fit, else bare cards upgraded

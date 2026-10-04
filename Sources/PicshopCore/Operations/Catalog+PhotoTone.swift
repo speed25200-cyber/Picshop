@@ -40,7 +40,8 @@ enum CatalogPhotoTone {
     static var selectiveAdjust: OperationSpec {
         legacy(.selectiveAdjust, in: [.photo], .light, .tone,
                title: t("Local adjust", "Réglage local"), summary: t("A setting on one region only", "Un réglage sur une zone seulement")) { s in
-            s.coreIn = [.photo]
+            // W2: maskAdjust takes its place in the photo core set (the cards bring it back when `masks` is off), and the
+            // executor lowers it onto a local adjustment through the legacy target resolution.
             s.params = [Step.target(.required, doc: "region: sky, face, eyes, teeth"), Step.parameter(),
                         Step.amount(-100...100, .signedPercent, doc: "relative ±"), Step.amountMode, Step.spatialHint, Step.point]
             s.triggers = [
@@ -57,7 +58,7 @@ enum CatalogPhotoTone {
                 en("make the sky bluer", ["target": "sky", "parameter": "saturation", "amount": 20]),
                 near("rends les bleus plus saturés", .fr, expected: "hsl"),
             ]
-            s.verify = [.unverifiable("a change on one region: the pixel check comes in W2")]
+            s.verify = [.pixels(PixelProbe.maskedParameter.rawValue, .changed)]
             s.grammar = .owned
             s.uiTool = "adjust"
         }
@@ -101,6 +102,9 @@ enum CatalogPhotoTone {
                 fr("rééclaire le sujet"),
                 fr("mets une lumière qui vient de la gauche", ["degrees": 180]),
                 en("relight the portrait"),
+                fr("éclaire la personne depuis la droite", ["degrees": 0]),
+                en("light the subject from the left", ["degrees": 180]),
+                near("éclaircis toute la photo", .fr, expected: "adjust"),
             ]
             s.verify = [.unverifiable("the relit look is judged by eye")]
             s.grammar = .owned

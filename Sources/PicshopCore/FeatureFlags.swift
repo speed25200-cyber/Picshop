@@ -1,6 +1,6 @@
 import Foundation
 
-/// Kill switches for the W1 features, one per feature.
+/// Kill switches for the W1 and W2 features, one per feature.
 public enum FeatureFlag: String, CaseIterable, Sendable {
     /// Catalog operations (IntentAction.operation) in Live and the planner (E2).
     case catalogOps
@@ -15,12 +15,37 @@ public enum FeatureFlag: String, CaseIterable, Sendable {
     /// PSBackdrop and the new Home (E5).
     case psBackdrop
 
-    /// On in Release when nobody overrode it. Testers get W1 through TestFlight, so a
+    // W2: masks and AI selection.
+    /// Local adjustments through masks: the Masques tool and maskAdjust, maskEdit, maskDelete (M1–M4).
+    case masks
+    /// The selection as document state: the Sélection tool and select, selectionModify, selectionApply (M1–M4).
+    case aiSelection
+    /// SAM 2.1 tiny for object taps, boxes and Quick Selection (M2).
+    case samModel
+    /// Depth Anything V2 Small for depth-range masks (M2).
+    case depthModel
+    /// Pixel postconditions on 256 px proxies after mask and selection steps (M4).
+    case pixelPostconditions
+    /// The Foundation Models dynamic schema for the planner and the Apple Intelligence Live brain (M4).
+    case fmDynamicSchema
+    /// Command palette suggestions in the Ask field (M4, M5).
+    case commandPalette
+    /// The Metal orb shader in Live (M5).
+    case metalOrb
+    /// Graphite surround while a tone, colour or mask panel is open (M3).
+    case graphiteSurround
+    /// The model broker: memory floor, priorities and eviction for SAM, Depth, LaMa, the upscaler, SD and the LLM (M5).
+    case modelBroker
+
+    /// On in Release when nobody overrode it. Testers get each wave through TestFlight, so a
     /// finished feature ships on; a feature left unfinished is turned off here, and
     /// its owner says so. Debug builds have every flag on.
     public var releaseDefault: Bool {
         switch self {
         case .catalogOps, .retrievalCards, .displayLinkCanvas, .proTone, .studioWorkspace, .psBackdrop: return true
+        case .masks, .aiSelection, .samModel, .depthModel, .pixelPostconditions, .fmDynamicSchema, .commandPalette, .metalOrb,
+             .graphiteSurround, .modelBroker:
+            return true
         }
     }
 }

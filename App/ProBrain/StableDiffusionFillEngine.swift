@@ -39,12 +39,24 @@ public final class StableDiffusionFillEngine: GenerativeFillEngine, @unchecked S
     }
 
     public func generate(rgba: [UInt8], mask: [UInt8], width: Int, height: Int, prompt: String, progress: @escaping @Sendable (Double) -> Void) async throws -> [UInt8] {
-        // Stable Diffusion and the local brain do not fit in memory together (D13):
-        // the Live model's weights go first; the next Live turn or editor reloads them.
-        await LocalBrainHub.shared.releaseNow(reason: "stable_diffusion")
+        // Stable Diffusion and the local brain do not fit in memory together (D13): the Live model's weights go
+        // first; the next Live turn or editor reloads them. With the model broker (W2, D12) the broker decides:
+        // SD never co-resides with the LLM, and on a 6 GB iPhone it runs alone. When it refuses (the LLM is busy
+        // in the turn that asked for this fill), SD still runs alone, as before the broker.
+        let bytes = ModelBrokerPolicy.estimatedBytes(.stableDiffusion)
+        var admitted = false
+        if ModelResidency.coordinator != nil {
+            admitted = await ModelResidency.admit(.stableDiffusion, bytes: bytes, priority: .userWaiting)
+        }
+        if !admitted { await LocalBrainHub.shared.releaseNow(reason: "stable_diffusion") }
+        // The pipeline loads its models per step (reduceMemory): resident only for the length of a fill.
+        await ModelResidency.noteLoaded(.stableDiffusion, bytes: bytes, unload: {})
+        await ModelResidency.markBusy(.stableDiffusion, true)
         let result = await Task.detached(priority: .userInitiated) { [self] in
             Result { try self.generateSync(rgba: rgba, mask: mask, width: width, height: height, prompt: prompt, progress: progress) }
         }.value
+        await ModelResidency.markBusy(.stableDiffusion, false)
+        await ModelResidency.noteUnloaded(.stableDiffusion)
         // Back to the conversation: the model loads again if the memory allows it.
         await MainActor.run { LocalBrainHub.shared.preload(reason: "after_fill") }
         return try result.get()

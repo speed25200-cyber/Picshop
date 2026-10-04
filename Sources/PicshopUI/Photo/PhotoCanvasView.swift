@@ -13,6 +13,9 @@ struct MetalCanvasRepresentable: UIViewRepresentable {
     /// one the frame pump presented directly.
     var generation: Int = 0
     var overlay: CIImage?
+    /// The settled frame's mask or selection overlay (W2, D17), given with `generation` through the view's guarded
+    /// `presentOverlay`, so it never replaces a newer interactive one. Never through `overlay`.
+    var maskOverlay: CIImage? = nil
     var frame: CGRect
     var maxFrameRate: Int = 120
     var maxContentScale: CGFloat = UIScreen.main.scale
@@ -32,6 +35,7 @@ struct MetalCanvasRepresentable: UIViewRepresentable {
         var dirty = false
         if view.image !== image, view.show(image, generation: generation) { dirty = true }
         if view.overlay !== overlay { view.overlay = overlay; dirty = true }
+        if view.maskOverlay !== maskOverlay { view.presentOverlay(maskOverlay, generation: generation) }
         if view.imageFrame != frame { view.imageFrame = frame; dirty = true }
         if view.maxFrameRate != maxFrameRate { view.maxFrameRate = maxFrameRate }
         if view.maxContentScale != maxContentScale { view.maxContentScale = maxContentScale }
@@ -47,6 +51,9 @@ struct MetalCanvasRepresentable: UIViewRepresentable {
 @MainActor
 @Observable
 final class CanvasViewport {
+    /// The deepest zoom: « 100 % » on a 48 MP photo needs about 7×, and the pixel grid shows from 6×.
+    static let maximumZoom: CGFloat = 16
+
     var zoom: CGFloat = 1
     var offset: CGSize = .zero
     /// The values a gesture started from.
@@ -68,44 +75,95 @@ final class CanvasViewport {
     }
 }
 
+/// What the one-finger drag on the canvas is doing, decided at its first event from where it started. A plain
+/// class: the gesture writes it at every event and nothing draws from it, so it never re-evaluates a body.
+@MainActor
+final class CanvasDrag {
+    enum Role {
+        /// Text or a shape moves.
+        case overlay
+        /// Effacer, or Précis's brush and clone.
+        case paint
+        /// Précis's lasso, or Sélection's.
+        case lasso
+        /// A mask gradient's handle.
+        case maskHandle
+        /// The mask brush.
+        case maskBrush
+        /// A frame drawn around an object (Masques and Sélection).
+        case box
+        /// A Quick Selection stroke.
+        case quick
+        /// The zoomed picture pans.
+        case pan
+        /// Nothing (a dropped stroke, or no role).
+        case ignored
+    }
+
+    var role: Role?
+    /// Where the drag began (a new start means a new drag).
+    var start: CGPoint = .zero
+    /// The picture's frame when a handle was grabbed.
+    var placement = MaskHandleGeometry.Placement(frame: PSRect(x: 0, y: 0, width: 1, height: 1))
+    /// A two-finger pan is under way: the one-finger drag stays out of it.
+    var twoFingers = false
+}
+
 /// The brush or lasso stroke under the finger. The path grows point by point
 /// in view coordinates (points closer than 1.5 pt are skipped); only the leaf
-/// that draws it reads it. The session gets the whole stroke once, at the end.
+/// that draws it reads it. The session gets the whole stroke once, at the end
+/// (a mask brush gets each new point: the mask itself is the stroke's drawing).
 @MainActor
 @Observable
 final class StrokeInProgress {
+    /// How the stroke shows under the finger.
+    enum Look {
+        /// Erase and Précis: the paint colour, the brush's width.
+        case paint
+        /// The lasso's dashed outline.
+        case lasso
+        /// Quick Selection: a light trail, the brush's width.
+        case selection
+        /// A mask brush: only the cursor (the mask renders live).
+        case cursorOnly
+    }
+
     private(set) var path = Path()
     /// Under the finger while painting.
     var cursor: CGPoint?
     @ObservationIgnored private(set) var points: [PSPoint] = []
     @ObservationIgnored private(set) var id = UUID()
-    @ObservationIgnored private(set) var isLasso = false
+    @ObservationIgnored private(set) var look: Look = .paint
     /// Radius in view points, fixed for the stroke.
     @ObservationIgnored private(set) var radius: CGFloat = 0
     @ObservationIgnored private var lastViewPoint: CGPoint?
 
     var isEmpty: Bool { points.isEmpty }
+    var isLasso: Bool { look == .lasso }
 
-    func begin(lasso: Bool, radius: CGFloat) {
+    func begin(_ look: Look, radius: CGFloat) {
         id = UUID()
-        isLasso = lasso
+        self.look = look
         self.radius = radius
         points = []
         lastViewPoint = nil
         path = Path()
     }
 
-    /// Adds a point unless it is within 1.5 pt of the previous one.
-    func append(_ point: PSPoint, at location: CGPoint) {
+    /// Adds a point unless it is within 1.5 pt of the previous one; true when it was added.
+    @discardableResult
+    func append(_ point: PSPoint, at location: CGPoint) -> Bool {
+        let draws = look != .cursorOnly
         if let last = lastViewPoint {
             let dx = location.x - last.x, dy = location.y - last.y
-            guard dx * dx + dy * dy >= 1.5 * 1.5 else { return }
-            path.addLine(to: location)
-        } else {
+            guard dx * dx + dy * dy >= 1.5 * 1.5 else { return false }
+            if draws { path.addLine(to: location) }
+        } else if draws {
             path.move(to: location)
         }
         lastViewPoint = location
         points.append(point)
+        return true
     }
 
     func reset() {
@@ -168,10 +226,12 @@ private struct CanvasSurface: View {
         return aligned.cropped(to: cut).composited(over: edited)
     }
 
-    /// The selection's tint and, when Levels asks for it, the clipping warning over the picture.
+    /// The selection's tint and, when Levels asks for it, the clipping warning over the picture. With the AI
+    /// selection on, the marching ants (and Sélection's own overlay) replace the legacy blue tint.
     private var overlay: CIImage? {
         let clipping = session.tone.showsClipping ? session.tone.clippingOverlay : nil
-        switch (clipping, session.selectionPreview) {
+        let selection = FeatureFlags.isOn(.aiSelection) ? nil : session.selectionPreview
+        switch (clipping, selection) {
         case (let clipping?, let selection?): return clipping.composited(over: selection)
         case (let clipping?, nil): return clipping
         case (nil, let selection): return selection
@@ -180,7 +240,8 @@ private struct CanvasSurface: View {
 
     var body: some View {
         let session = session
-        MetalCanvasRepresentable(image: displayed, generation: session.previewGeneration, overlay: overlay, frame: frame,
+        MetalCanvasRepresentable(image: displayed, generation: session.previewGeneration, overlay: overlay,
+                                 maskOverlay: session.maskState.overlayImage, frame: frame,
                                  maxFrameRate: session.app.performance.maxFrameRate,
                                  maxContentScale: session.app.performance.maxContentScale,
                                  attach: { view in session.attachCanvas(view) })
@@ -205,6 +266,7 @@ struct PhotoCanvasView: View {
     @Bindable var session: PhotoEditorSession
     @State private var viewport = CanvasViewport()
     @State private var stroke = StrokeInProgress()
+    @State private var dragState = CanvasDrag()
     @State private var textDragStart: PSPoint?
     @State private var textRotationStart: Double = 0
     @State private var textSizeStart: Double = 0
@@ -217,6 +279,7 @@ struct PhotoCanvasView: View {
     @GestureState private var isPressing = false
     @Environment(\.psEffects) private var effects
     @Environment(\.studioEdges) private var studioEdges
+    @Environment(\.displayScale) private var displayScale
 
     /// Room above and below the picture. None at the sides, so a photo that
     /// fills the width runs edge to edge, as in Photos. While cropping, the
@@ -251,10 +314,15 @@ struct PhotoCanvasView: View {
                 .gesture(canvasGesture(container: container, layout: target), including: session.isCropping ? .subviews : .all)
                 .simultaneousGesture(compareGesture)
                 .simultaneousGesture(textRotationGesture, including: session.manipulatesOverlays ? .all : .none)
+                .gesture(twoFingerPan)
                 .onChange(of: session.zoomRequest) { _, request in
                     guard let request else { return }
                     applyZoomRequest(request, container: container, layout: target)
                     session.zoomRequest = nil
+                }
+                .onChange(of: fittedDeviceWidth(container: container, layout: target), initial: true) { _, width in
+                    // « 100 % » (zoomToActualPixels) reads it; no view does.
+                    session.fittedDeviceWidth = width
                 }
         }
         .clipped()
@@ -279,7 +347,7 @@ struct PhotoCanvasView: View {
     private var comparesOnHold: Bool {
         guard !session.isCropping else { return false }
         switch session.activeTool {
-        case .erase, .precise, .text, .shapes: return false
+        case .erase, .precise, .text, .shapes, .masks, .select: return false
         default: return true
         }
     }
@@ -352,6 +420,18 @@ struct PhotoCanvasView: View {
         return PSPoint(x: Double((location.x - frame.minX) / frame.width), y: Double((location.y - frame.minY) / frame.height))
     }
 
+    /// The location on the picture, held to its edges.
+    private func clampedNormalized(_ location: CGPoint, in frame: CGRect) -> PSPoint {
+        PSPoint(x: Double((location.x - frame.minX) / max(1, frame.width)).clamped(to: 0...1),
+                y: Double((location.y - frame.minY) / max(1, frame.height)).clamped(to: 0...1))
+    }
+
+    /// The picture's width at zoom 1, in device pixels.
+    private func fittedDeviceWidth(container: CGSize, layout: CanvasLayout) -> Double {
+        let fitted = CanvasGeometry.fitted(in: CanvasGeometry.stage(in: container, layout: layout), aspect: session.previewAspectRatio)
+        return Double(fitted.width * displayScale)
+    }
+
     private func resetZoom() {
         withAnimation(.spring(duration: 0.35)) { viewport.reset() }
     }
@@ -384,11 +464,16 @@ struct PhotoCanvasView: View {
                 viewport.offset = CGSize(width: (stage.midX - center.x) * scale, height: (stage.midY - center.y) * scale)
                 viewport.steadyOffset = viewport.offset
             } else if let amount = request.amount {
+                let previous = max(0.01, viewport.zoom)
                 switch amount.mode {
-                case .absolute: viewport.zoom = 1; viewport.offset = .zero
+                // « 100 % »: the given zoom (1 image pixel per device pixel), about the stage's centre.
+                case .absolute: viewport.zoom = min(CanvasViewport.maximumZoom, max(1, CGFloat(amount.value)))
                 case .multiplier: viewport.zoom = min(8, max(1, viewport.zoom * amount.value))
                 case .relative: viewport.zoom = min(8, max(1, viewport.zoom + amount.value))
                 }
+                // What sits at the stage's centre stays there.
+                let ratio = viewport.zoom / previous
+                viewport.offset = CGSize(width: viewport.offset.width * ratio, height: viewport.offset.height * ratio)
                 viewport.steadyZoom = viewport.zoom
                 if viewport.zoom == 1 { viewport.offset = .zero }
                 viewport.steadyOffset = viewport.offset
@@ -406,6 +491,11 @@ struct PhotoCanvasView: View {
         session.activeTool == .precise && session.preciseMode == .lasso
     }
 
+    /// Masques and Sélection own the one-finger drag (handles, brush, frame, strokes, lasso): two fingers pan.
+    private var ownsOneFingerDrag: Bool {
+        session.activeTool == .masks || (session.activeTool == .select && session.aiSelectionEnabled)
+    }
+
     private func canvasGesture(container: CGSize, layout: CanvasLayout) -> some Gesture {
         let magnify = MagnifyGesture()
             .onChanged { value in
@@ -419,60 +509,36 @@ struct PhotoCanvasView: View {
                         session.updateManipulatedText(scale: target / max(0.001, geometry.size))
                     }
                 } else {
-                    viewport.zoom = min(8, max(0.5, viewport.steadyZoom * value.magnification))
+                    // The ants pause while the picture zooms (their outline changes size every frame).
+                    setInteracting(true)
+                    viewport.zoom = min(CanvasViewport.maximumZoom, max(0.5, viewport.steadyZoom * value.magnification))
                 }
             }
             .onEnded { _ in
                 if session.manipulatedTextLayerID != nil {
                     session.endTextInteraction()
                 } else if viewport.zoom < 1 {
+                    setInteracting(false)
                     resetZoom()
                 } else {
+                    setInteracting(false)
                     viewport.steadyZoom = viewport.zoom
                 }
             }
         let drag = DragGesture(minimumDistance: 2)
             .onChanged { value in
+                guard !dragState.twoFingers else { return }
                 let frame = currentFrame(container: container, layout: layout)
-                let point = normalized(value.location, in: frame)
-                if session.manipulatesOverlays, session.pendingClarification == nil {
-                    if textDragStart == nil {
-                        guard let start = normalized(value.startLocation, in: frame), let layer = session.overlayLayer(at: start) else {
-                            if viewport.zoom > 1 { pan(by: value.translation) }
-                            return
-                        }
-                        textDragStart = session.overlayGeometry(for: layer)?.center
-                        session.beginTextInteraction(layer.id)
-                    }
-                    guard let origin = textDragStart else { return }
-                    let dx = Double(value.translation.width / frame.width), dy = Double(value.translation.height / frame.height)
-                    session.updateManipulatedText(center: PSPoint(x: origin.x + dx, y: origin.y + dy))
-                } else if paintsWithBrush, session.pendingClarification == nil {
-                    stroke.cursor = value.location
-                    guard let point else { return }
-                    if stroke.isEmpty {
-                        session.beginPreciseStroke(at: point)
-                        stroke.begin(lasso: false, radius: CGFloat(brushRadius) * max(frame.width, frame.height))
-                    }
-                    stroke.append(point, at: value.location)
-                } else if drawsLasso, session.pendingClarification == nil {
-                    guard let point else { return }
-                    if stroke.isEmpty { stroke.begin(lasso: true, radius: 0) }
-                    stroke.append(point, at: value.location)
-                } else if viewport.zoom > 1 {
-                    pan(by: value.translation)
+                // A drag whose end never arrived (the system took the touch) ends before the new one starts.
+                if dragState.role != nil, value.startLocation != dragState.start { endDrag() }
+                if dragState.role == nil {
+                    dragState.start = value.startLocation
+                    dragState.role = role(for: value, frame: frame)
                 }
+                continueDrag(value, frame: frame)
             }
             .onEnded { _ in
-                if textDragStart != nil {
-                    textDragStart = nil
-                    if session.manipulatedTextLayerID != nil { session.endTextInteraction() }
-                } else if !stroke.isEmpty {
-                    finishStroke()
-                } else {
-                    stroke.cursor = nil
-                    viewport.steadyOffset = viewport.offset
-                }
+                endDrag()
             }
         let tap = SpatialTapGesture()
             .onEnded { value in
@@ -498,6 +564,196 @@ struct PhotoCanvasView: View {
         return doubleTap.exclusively(before: tap).simultaneously(with: magnify).simultaneously(with: drag)
     }
 
+    /// What a new one-finger drag does, from where it started: move text or a shape, grab a mask handle, paint a
+    /// mask, frame an object, stroke Quick Selection, draw a lasso, paint (Effacer, Précis), or pan when zoomed.
+    private func role(for value: DragGesture.Value, frame: CGRect) -> CanvasDrag.Role {
+        let pans: CanvasDrag.Role = viewport.zoom > 1 ? .pan : .ignored
+        guard session.pendingClarification == nil else { return pans }
+        if session.manipulatesOverlays { return .overlay }
+        let start = normalized(value.startLocation, in: frame)
+        switch session.activeTool {
+        case .masks?:
+            let placement = MaskHandleGeometry.Placement(frame: PSRect(frame))
+            if session.beginHandleDrag(at: PSPoint(x: Double(value.startLocation.x), y: Double(value.startLocation.y)), placement: placement) {
+                dragState.placement = placement
+                return .maskHandle
+            }
+            if session.paintsMask, let start {
+                let radius = MaskHandleGeometry.brushCursorRadius(session.maskState.brush.size, in: placement)
+                stroke.begin(.cursorOnly, radius: CGFloat(radius))
+                stroke.append(start, at: value.startLocation)
+                stroke.cursor = value.startLocation
+                session.beginMaskStroke(at: start)
+                return .maskBrush
+            }
+            if case .object? = session.maskState.editing, start != nil {
+                setInteracting(true)
+                return .box
+            }
+            return pans
+        case .select? where session.aiSelectionEnabled:
+            switch session.selectionState.mode {
+            case .object where start != nil:
+                setInteracting(true)
+                return .box
+            case .quick where start != nil:
+                setInteracting(true)
+                return .quick
+            case .lasso:
+                setInteracting(true)
+                return .lasso
+            default:
+                return pans
+            }
+        default:
+            break
+        }
+        if paintsWithBrush {
+            setInteracting(true)
+            return .paint
+        }
+        if drawsLasso {
+            setInteracting(true)
+            return .lasso
+        }
+        return pans
+    }
+
+    private func continueDrag(_ value: DragGesture.Value, frame: CGRect) {
+        let point = normalized(value.location, in: frame)
+        switch dragState.role {
+        case .overlay?:
+            if textDragStart == nil {
+                guard let start = normalized(value.startLocation, in: frame), let layer = session.overlayLayer(at: start) else {
+                    if viewport.zoom > 1 { pan(by: value.translation) }
+                    return
+                }
+                textDragStart = session.overlayGeometry(for: layer)?.center
+                session.beginTextInteraction(layer.id)
+            }
+            guard let origin = textDragStart else { return }
+            let dx = Double(value.translation.width / frame.width), dy = Double(value.translation.height / frame.height)
+            session.updateManipulatedText(center: PSPoint(x: origin.x + dx, y: origin.y + dy))
+        case .paint?:
+            stroke.cursor = value.location
+            guard let point else { return }
+            if stroke.isEmpty {
+                session.beginPreciseStroke(at: point)
+                stroke.begin(.paint, radius: CGFloat(brushRadius) * max(frame.width, frame.height))
+            }
+            stroke.append(point, at: value.location)
+        case .lasso?:
+            guard let point else { return }
+            if stroke.isEmpty { stroke.begin(.lasso, radius: 0) }
+            stroke.append(point, at: value.location)
+        case .maskHandle?:
+            session.updateHandleDrag(from: PSPoint(x: Double(value.startLocation.x), y: Double(value.startLocation.y)),
+                                     to: PSPoint(x: Double(value.location.x), y: Double(value.location.y)), placement: dragState.placement)
+        case .maskBrush?:
+            stroke.cursor = value.location
+            // The brush may run off the picture: its centre stays on the edge.
+            let clamped = clampedNormalized(value.location, in: frame)
+            if stroke.append(clamped, at: value.location) { session.continueMaskStroke(to: clamped) }
+        case .box?:
+            let a = clampedNormalized(value.startLocation, in: frame), b = clampedNormalized(value.location, in: frame)
+            session.selectionState.boxDrag = PSRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
+        case .quick?:
+            stroke.cursor = value.location
+            guard let point else { return }
+            if stroke.isEmpty { stroke.begin(.selection, radius: CGFloat(session.selectionState.quickRadius) * max(frame.width, frame.height)) }
+            stroke.append(point, at: value.location)
+        case .pan?:
+            setInteracting(true)
+            pan(by: value.translation)
+        case .ignored?, nil:
+            break
+        }
+    }
+
+    /// The finger lifted: each role hands its result to the session once.
+    private func endDrag() {
+        let role = dragState.role
+        dragState.role = nil
+        switch role {
+        case .overlay?:
+            if textDragStart != nil {
+                textDragStart = nil
+                if session.manipulatedTextLayerID != nil { session.endTextInteraction() }
+            } else {
+                viewport.steadyOffset = viewport.offset
+            }
+        case .paint?, .lasso?, .quick?:
+            if !stroke.isEmpty {
+                finishStroke()
+            } else {
+                stroke.cursor = nil
+            }
+            setInteracting(false)
+        case .maskHandle?:
+            session.endHandleDrag()
+        case .maskBrush?:
+            session.endMaskStroke()
+            stroke.reset()
+        case .box?:
+            let box = session.selectionState.boxDrag
+            session.selectionState.boxDrag = nil
+            setInteracting(false)
+            guard let box, box.width > 0.01, box.height > 0.01 else { return }
+            Haptics.tap()
+            if session.activeTool == .masks {
+                session.pickObject(in: box)
+            } else {
+                session.selectObject(in: box)
+            }
+        case .pan?:
+            setInteracting(false)
+            viewport.steadyOffset = viewport.offset
+        case .ignored?, nil:
+            stroke.cursor = nil
+            viewport.steadyOffset = viewport.offset
+        }
+    }
+
+    /// Two fingers on Masques or Sélection: the stroke, handle or frame under way is dropped, and the picture pans.
+    private var twoFingerPan: TwoFingerPan {
+        TwoFingerPan(onBegan: {
+            guard ownsOneFingerDrag else { return }
+            dragState.twoFingers = true
+            switch dragState.role {
+            case .maskBrush?:
+                session.cancelMaskStroke()
+                stroke.reset()
+            case .maskHandle?:
+                session.cancelHandleDrag()
+            case .quick?, .lasso?:
+                stroke.reset()
+                setInteracting(false)
+            case .box?:
+                session.selectionState.boxDrag = nil
+                setInteracting(false)
+            default:
+                break
+            }
+            if dragState.role != nil { dragState.role = .ignored }
+            viewport.steadyOffset = viewport.offset
+        }, onChanged: { translation in
+            guard dragState.twoFingers, viewport.zoom > 1 else { return }
+            setInteracting(true)
+            pan(by: translation)
+        }, onEnded: {
+            guard dragState.twoFingers else { return }
+            dragState.twoFingers = false
+            setInteracting(false)
+            viewport.steadyOffset = viewport.offset
+        })
+    }
+
+    /// The orb and the ants pause while a finger draws, pinches or pans (W2).
+    private func setInteracting(_ interacting: Bool) {
+        let performance = session.app.performance
+        if performance.isCanvasInteracting != interacting { performance.isCanvasInteracting = interacting }
+    }
+
     /// The brush radius as a fraction of the picture's longest side (the pixel brush follows the zoom).
     private var brushRadius: Double {
         session.activeTool == .precise ? session.pixelBrushRadius / Double(viewport.zoom) : session.brushRadius
@@ -507,15 +763,26 @@ struct PhotoCanvasView: View {
         viewport.offset = CGSize(width: viewport.steadyOffset.width + translation.width, height: viewport.steadyOffset.height + translation.height)
     }
 
-    /// Hands the finished stroke to the session: a brush stroke, or the lasso's points.
+    /// Hands the finished stroke to the session: a brush stroke, a Quick Selection stroke, or the lasso's points.
     private func finishStroke() {
         let points = stroke.points
         if stroke.isLasso {
-            session.lassoPoints.append(contentsOf: points)
             stroke.reset()
+            if session.activeTool == .select, session.aiSelectionEnabled {
+                // A drawn outline closes itself; corners tapped before it come first.
+                let outline = session.lassoPoints + points
+                if outline.count >= 3 { session.lassoSelect(points: outline) }
+                return
+            }
+            session.lassoPoints.append(contentsOf: points)
             if session.lassoPoints.count >= 3 { session.commitLasso() }
+        } else if stroke.look == .selection {
+            stroke.reset()
+            let state = session.selectionState
+            session.quickSelectStroke(points: points, radius: state.quickRadius, erase: state.quickErase)
+            Haptics.tick()
         } else {
-            let hardness = session.activeTool == .precise ? 1.0 : 0.6
+            let hardness = session.activeTool == .precise ? session.preciseHardness : 0.6
             session.brushStrokes.append(BrushStroke(id: stroke.id, points: points, radius: brushRadius, hardness: hardness))
             stroke.reset()
             Haptics.tick()
@@ -614,9 +881,15 @@ private struct CanvasStage: View {
                     .allowsHitTesting(false)
             }
             CommittedStrokes(session: session, frame: frame)
+            SelectionAntsOverlay(session: session, frame: frame)
             CanvasOverlays(session: session, frame: frame, stage: stage, container: container, zoom: viewport.zoom)
             ResultMarks(session: session, frame: frame)
             LiveStroke(session: session, stroke: stroke, frame: frame, stage: stage)
+            MaskCanvasOverlay(session: session, stroke: stroke, frame: frame)
+            CanvasFootChips(session: session)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(.bottom, layout.bottom + PSSpacing.medium)
+                .padding(.horizontal, PSSpacing.medium)
             if let split = session.compareSplit, PhotoCanvasView.canSplitCompare(session), !session.isCropping {
                 SplitCompareLine(frame: frame, split: split) { session.compareSplit = $0 }
                     .transition(.opacity)
@@ -660,13 +933,33 @@ private struct CanvasStage: View {
     }
 
     /// Colour is judged against neutral black: the wash leaves while adjusting,
-    /// grading or picking a look, and while cropping.
+    /// grading or picking a look, and while cropping. With the graphite surround
+    /// (D18), also in Courbes, Niveaux and Masques, where the surround is graphite.
     private var showsAmbient: Bool {
         guard effects != .minimal, session.hasRenderedPreview, !session.isCropping else { return false }
         switch session.activeTool {
         case .adjust, .color, .looks: return false
+        case .curves, .levels, .masks: return !FeatureFlags.isOn(.graphiteSurround)
         default: return true
         }
+    }
+}
+
+/// Above the panel, on the canvas: the mask model offer (Masques, Sélection) and, outside Sélection, the
+/// selection's chip « Sélection · 12 % ✕ ». A leaf: only it reads the offer and the selection.
+private struct CanvasFootChips: View {
+    let session: PhotoEditorSession
+
+    var body: some View {
+        VStack(spacing: PSSpacing.small) {
+            if let offer = session.maskState.modelOffer {
+                MaskModelOffer(session: session, modelID: offer)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            SelectionChip(session: session)
+        }
+        .animation(PSMotion.standard, value: session.maskState.modelOffer)
+        .animation(PSMotion.quick, value: session.document.selection == nil)
     }
 }
 
@@ -766,15 +1059,21 @@ private struct LiveStroke: View {
     var body: some View {
         let path = stroke.path
         let cursor = stroke.cursor
-        let brushes = session.activeTool == .erase || (session.activeTool == .precise && (session.preciseMode == .pixelBrush || session.preciseMode == .clone))
+        // Quick Selection shows its brush too (Masques draws its own cursor, with the hardness).
+        let quick = session.activeTool == .select && session.selectionState.mode == .quick
+        let brushes = quick || session.activeTool == .erase || (session.activeTool == .precise && (session.preciseMode == .pixelBrush || session.preciseMode == .clone))
         let preview = session.showsBrushPreview
-        let brushRadius = CGFloat(session.activeTool == .precise ? session.pixelBrushRadius : session.brushRadius) * max(frame.width, frame.height)
+        let radius = quick ? session.selectionState.quickRadius : (session.activeTool == .precise ? session.pixelBrushRadius : session.brushRadius)
+        let brushRadius = CGFloat(radius) * max(frame.width, frame.height)
         let color = CanvasOverlays.paintColor(session)
         Canvas { context, _ in
             if !path.isEmpty {
-                if stroke.isLasso {
+                switch stroke.look {
+                case .lasso:
                     context.stroke(path, with: .color(PSTheme.accent), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
-                } else {
+                case .selection:
+                    context.stroke(path, with: .color(Color.psFillPressed), style: StrokeStyle(lineWidth: max(1, stroke.radius * 2), lineCap: .round, lineJoin: .round))
+                case .paint, .cursorOnly:
                     context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: max(1, stroke.radius * 2), lineCap: .round, lineJoin: .round))
                 }
             }
@@ -809,8 +1108,9 @@ private struct ResultMarks: View {
             for cell in cells {
                 let rect = viewRect(cell).insetBy(dx: -4, dy: -3)
                 let path = Path(roundedRect: rect, cornerRadius: 5)
-                context.fill(path, with: .color(PSTheme.accent.opacity(0.20)))
-                context.stroke(path, with: .color(PSTheme.accent.opacity(0.85)), lineWidth: 1.5)
+                // White is the action colour; yellow stays the value accent (W2 token review).
+                context.fill(path, with: .color(Color.psFillPressed))
+                context.stroke(path, with: .color(Color.psActionPrimary), lineWidth: 1.5)
             }
             for mark in marks {
                 let rect = viewRect(mark).insetBy(dx: -2, dy: -2)
@@ -1333,6 +1633,8 @@ struct CanvasHint: View {
         case .looks: return L("Pick a look, then tune its intensity.")
         case .text: return L("Drag the text to move it, pinch to resize, twist to rotate.")
         case .shapes: return L("Tap the canvas to place a shape. Drag to move, pinch to resize, twist to rotate.")
+        case .masks: return L("Pick what to mask, then move its dials. Two fingers move the picture.")
+        case .select: return L("Choose how to select, then tap or paint the picture. Two fingers move the picture.")
         default: return nil
         }
     }

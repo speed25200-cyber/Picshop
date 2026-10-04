@@ -150,7 +150,6 @@ public struct HomeView: View {
                 Text(L("The project and its edits are removed from this iPhone. The original in Photos stays."))
             }
         }
-        .preferredColorScheme(.dark)
     }
 
     // MARK: Layout
@@ -899,7 +898,6 @@ private struct EditorOpening: View {
             }
         }
         .animation(PSMotion.standard, value: failure)
-        .preferredColorScheme(.dark)
     }
 }
 #endif

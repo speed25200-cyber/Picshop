@@ -21,38 +21,15 @@ struct AdjustPanel: View {
         .sharpness, .clarity, .noiseReduction, .vignette, .grain, .fade,
     ]
 
-    private let itemSize: CGFloat = 46
-    private let spacing: CGFloat = 14
-
     var body: some View {
         #if DEBUG
         let _ = ViewTrace.changes(Self.self)
         #endif
         let selected = session.selectedParameter
         VStack(spacing: 12) {
-            GeometryReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: spacing) {
-                        ForEach(Self.order) { parameter in
-                            AdjustRing(session: session, parameter: parameter, isSelected: selected == parameter)
-                                .id(parameter)
-                                .onTapGesture {
-                                    Haptics.tick()
-                                    withAnimation(PSMotion.standard) { centered = parameter }
-                                }
-                        }
-                    }
-                    .scrollTargetLayout()
-                }
-                .contentMargins(.horizontal, max(0, (proxy.size.width - itemSize) / 2), for: .scrollContent)
-                .scrollTargetBehavior(.viewAligned)
-                .scrollPosition(id: $centered, anchor: .center)
-                .mask {
-                    LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.12), .init(color: .black, location: 0.88), .init(color: .clear, location: 1)],
-                                   startPoint: .leading, endPoint: .trailing)
-                }
+            ParameterCarousel(parameters: Self.order, centered: $centered) { parameter in
+                AdjustRing(session: session, parameter: parameter, isSelected: selected == parameter)
             }
-            .frame(height: itemSize + 12)
 
             AdjustDial(session: session, parameter: selected)
 
@@ -78,6 +55,43 @@ struct AdjustPanel: View {
 
     static func name(_ parameter: AdjustmentParameter) -> String {
         psPrefersFrench ? parameter.frenchName : parameter.englishName
+    }
+}
+
+/// The row of round controls that snaps the chosen one to the centre (Photos' carousel), shared by Réglages and
+/// the Masques dials (W2): scroll to choose, tap to centre. `ring` draws one parameter's control.
+struct ParameterCarousel<Ring: View>: View {
+    let parameters: [AdjustmentParameter]
+    @Binding var centered: AdjustmentParameter?
+    @ViewBuilder let ring: (AdjustmentParameter) -> Ring
+
+    private let itemSize: CGFloat = 46
+    private let spacing: CGFloat = 14
+
+    var body: some View {
+        GeometryReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: spacing) {
+                    ForEach(parameters) { parameter in
+                        ring(parameter)
+                            .id(parameter)
+                            .onTapGesture {
+                                Haptics.tick()
+                                withAnimation(PSMotion.standard) { centered = parameter }
+                            }
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .contentMargins(.horizontal, max(0, (proxy.size.width - itemSize) / 2), for: .scrollContent)
+            .scrollTargetBehavior(.viewAligned)
+            .scrollPosition(id: $centered, anchor: .center)
+            .mask {
+                LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.12), .init(color: .black, location: 0.88), .init(color: .clear, location: 1)],
+                               startPoint: .leading, endPoint: .trailing)
+            }
+        }
+        .frame(height: itemSize + 12)
     }
 }
 

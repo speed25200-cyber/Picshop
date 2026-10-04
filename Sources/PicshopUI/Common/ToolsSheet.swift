@@ -116,12 +116,10 @@ struct ToolsSheet: View {
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
-            .preferredColorScheme(.dark)
         } else {
             sheetContent
                 .presentationDetents([.height(360), .large])
                 .presentationDragIndicator(.visible)
-                .preferredColorScheme(.dark)
         }
     }
 

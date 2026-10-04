@@ -41,9 +41,9 @@ struct TranscriptPanel: View {
                 Haptics.magic()
                 Task { await session.transcribeForEditing() }
             } label: {
-                Text(L("Transcribe")).font(PSFont.headline(14)).foregroundStyle(PSTheme.onAccent)
+                Text(L("Transcribe")).font(PSFont.headline(14)).foregroundStyle(Color.psOnAction)
                     .padding(.horizontal, 14).frame(height: 36)
-                    .background(Capsule().fill(PSTheme.accent))
+                    .background(Capsule().fill(Color.psActionPrimary))
             }
             .buttonStyle(PSPressStyle(scale: 0.94))
             .disabled(session.isProcessing)
@@ -133,9 +133,9 @@ struct TranscriptPanel: View {
                     session.cutWords(at: struck)
                 } label: {
                     Label(selection.count == 1 ? L("Cut 1 word") : String(format: L("Cut %d words"), selection.count), systemImage: "scissors")
-                        .font(PSFont.headline(14)).foregroundStyle(PSTheme.onAccent)
+                        .font(PSFont.headline(14)).foregroundStyle(Color.psOnAction)
                         .padding(.horizontal, 16).frame(height: 38)
-                        .background(Capsule().fill(PSTheme.accent))
+                        .background(Capsule().fill(Color.psActionPrimary))
                         .contentTransition(.numericText())
                 }
                 .buttonStyle(PSPressStyle(scale: 0.95))

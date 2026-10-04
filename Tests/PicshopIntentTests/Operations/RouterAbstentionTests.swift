@@ -43,11 +43,19 @@ final class RouterAbstentionTests: XCTestCase {
         }
     }
 
-    /// The audit's probes whose every right answer is a catalog operation the grammar does not own.
+    /// The audit's probes whose every right answer is a catalog operation the grammar does not own. A
+    /// `.keywordsOnly` operation whose anchored pattern the grammar does own (W2 §8.4: « sélectionne le sujet »,
+    /// « inverse la sélection ») is answered by the grammar call it makes, so that probe is not unowned.
     static func unownedProbes() -> [Probe] {
         let catalog = OperationCatalog.shared
         return ProbeCorpus.all.filter { probe in
             guard !probe.gold.isEmpty else { return false }
+            let parsed = RuleBasedIntentEngine().parse(probe.text, context: context(probe.domain))
+            let ownedPattern = parsed.intents.contains { intent in
+                guard let call = intent.operation, call.source == .grammar else { return false }
+                return probe.gold.contains(call.id.raw)
+            }
+            if ownedPattern { return false }
             return probe.gold.allSatisfy { id in
                 guard let spec = catalog.spec(OpID(id)), spec.domains.contains(probe.domain) else { return false }
                 return spec.grammar != .owned
@@ -72,6 +80,24 @@ final class RouterAbstentionTests: XCTestCase {
             let grammar = RuleBasedIntentEngine().parse(probe.text, context: Self.context(probe.domain))
             let lane = LiveTurnRouter.route(probe.text, grammar: grammar, brain: .model, ideasOnScreen: 0, jobRunning: false, fastLane: true, mode: mode)
             if case .local = lane { XCTFail("\(probe.domain) « \(probe.text) » took the fast lane") }
+        }
+    }
+
+    /// A compound whose second clause the grammar cannot read (« rends-la rouge ») is capped strictly below the
+    /// router's fast path: the model reads the whole request instead of the grammar running only the first half.
+    func testAnUnreadClauseReachesTheModel() async throws {
+        XCTAssertLessThan(HybridIntentRouter.Configuration.unreadClauseCap, HybridIntentRouter.Configuration.defaultFastPathThreshold)
+        let compounds = ["sélectionne la tasse bleue puis rends-la rouge", "recadre en carré et rends-la rouge"]
+        for text in compounds {
+            let parsed = RuleBasedIntentEngine().parse(text, context: .photo)
+            guard !parsed.isEmpty else { continue }
+            XCTAssertLessThan(parsed.confidence, HybridIntentRouter.Configuration.defaultFastPathThreshold, text)
+            let recorder = Recorder()
+            let router = HybridIntentRouter(preferredEngine: .proLocal)
+            await router.register(RecordingEngine(recorder: recorder))
+            _ = await router.plan(text, context: .photo)
+            let asked = await recorder.utterances
+            XCTAssertEqual(asked, [text], "« \(text) » reaches the model once")
         }
     }
 

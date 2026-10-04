@@ -23,6 +23,9 @@ enum CatalogPDF {
                 fr("va à la page 4", ["clipNumber": 4]),
                 fr("montre-moi la dernière page", ["clipNumber": -1]),
                 en("go to page 2", ["clipNumber": 2]),
+                fr("affiche la page 3", ["clipNumber": 3]),
+                en("show me the last page", ["clipNumber": -1]),
+                near("supprime la page 3", .fr, expected: "deletePage"),
             ]
             s.verify = [.unverifiable("only the view changes")]
             s.grammar = .owned
@@ -44,6 +47,9 @@ enum CatalogPDF {
                 fr("supprime la page 3", ["clipNumber": 3]),
                 fr("enlève la dernière page", ["clipNumber": -1]),
                 en("delete page 2", ["clipNumber": 2]),
+                fr("retire la page 4", ["clipNumber": 4]),
+                en("remove the last page", ["clipNumber": -1]),
+                near("extrais la page 2", .fr, expected: "extractPage"),
             ]
             s.verify = [.structural(.pageCount, .delta(-1))]
             s.grammar = .owned
@@ -64,6 +70,9 @@ enum CatalogPDF {
                 fr("pivote toutes les pages", ["scope": "all", "degrees": 90]),
                 fr("tourne la page 2 à l'envers", ["clipNumber": 2, "degrees": 180]),
                 en("rotate page 3 to the left", ["clipNumber": 3, "degrees": -90]),
+                fr("pivote la page 1 vers la droite", ["clipNumber": 1, "degrees": 90]),
+                en("turn all pages", ["scope": "all", "degrees": 90]),
+                near("déplace la page 2 à la fin", .fr, expected: "movePage"),
             ]
             s.verify = [.unverifiable("the page rotation is checked by the executor")]
             s.grammar = .owned
@@ -84,6 +93,9 @@ enum CatalogPDF {
                 fr("déplace la page 2 à la fin", ["clipNumber": 2, "choiceIndex": -1]),
                 fr("mets la page 5 en première position", ["clipNumber": 5, "choiceIndex": 1]),
                 en("move page 3 to position 1", ["clipNumber": 3, "choiceIndex": 1]),
+                fr("place la page 3 au début", ["clipNumber": 3, "choiceIndex": 1]),
+                en("move page 2 to the end", ["clipNumber": 2, "choiceIndex": -1]),
+                near("duplique la page 1", .fr, expected: "duplicatePage"),
             ]
             s.verify = [.structural(.pageCount, .unchanged)]
             s.grammar = .owned
@@ -103,6 +115,9 @@ enum CatalogPDF {
                 fr("duplique la page 1", ["clipNumber": 1]),
                 fr("copie cette page"),
                 en("duplicate page 2", ["clipNumber": 2]),
+                fr("fais une copie de la page 3", ["clipNumber": 3]),
+                en("copy this page"),
+                near("insère une page blanche", .fr, expected: "insertBlankPage"),
             ]
             s.verify = [.structural(.pageCount, .delta(1))]
             s.grammar = .owned
@@ -123,6 +138,9 @@ enum CatalogPDF {
                 fr("insère une page blanche après la page 2", ["clipNumber": 2, "scope": "selection"]),
                 fr("ajoute une page vide"),
                 en("insert a blank page after page 1", ["clipNumber": 1, "scope": "selection"]),
+                fr("ajoute une page blanche"),
+                en("add an empty page"),
+                near("duplique cette page", .fr, expected: "duplicatePage"),
             ]
             s.verify = [.structural(.pageCount, .delta(1))]
             s.grammar = .owned
@@ -143,6 +161,9 @@ enum CatalogPDF {
                 fr("extrais la page 2", ["clipNumber": 2]),
                 fr("exporte cette page à part"),
                 en("extract page 3", ["clipNumber": 3]),
+                fr("enregistre la page 3 à part", ["clipNumber": 3]),
+                en("save this page as its own file"),
+                near("supprime la page 2", .fr, expected: "deletePage"),
             ]
             s.verify = [.unverifiable("the extracted file is saved outside the document")]
             s.grammar = .owned
@@ -163,6 +184,9 @@ enum CatalogPDF {
                 fr("surligne le mot contrat", ["text": "contrat"]),
                 fr("surligne « date limite » en vert partout", ["text": "date limite", "color": "green", "scope": "all"]),
                 en("highlight the word total", ["text": "total"]),
+                fr("surligne le total en jaune", ["text": "total", "color": "yellow"]),
+                en("highlight every deadline in green", ["text": "deadline", "color": "green", "scope": "all"]),
+                near("souligne le mot total", .fr, expected: "underlineText"),
             ]
             s.verify = [.structural(.markupCount, .increased)]
             s.grammar = .owned
@@ -182,6 +206,9 @@ enum CatalogPDF {
                 fr("souligne le mot total en rouge", ["text": "total", "color": "red"]),
                 fr("barre le mot brouillon", ["text": "brouillon", "color": "red"]),
                 en("underline the word deadline", ["text": "deadline"]),
+                fr("souligne « signature » en bleu", ["text": "signature", "color": "blue"]),
+                en("underline total in red", ["text": "total", "color": "red"]),
+                near("surligne le mot contrat", .fr, expected: "highlightText"),
             ]
             s.verify = [.structural(.markupCount, .increased)]
             s.grammar = .owned
@@ -203,6 +230,9 @@ enum CatalogPDF {
                 fr("caviarde les numéros de téléphone", ["text": "numéros de téléphone"]),
                 fr("noircis le nom Dupont partout", ["text": "Dupont", "scope": "all"]),
                 en("redact the name Smith", ["text": "Smith"]),
+                fr("cache l'adresse sous une barre noire", ["text": "adresse"]),
+                en("black out the phone numbers", ["text": "phone numbers"]),
+                near("remplace monsieur par madame", .fr, expected: "replaceText"),
             ]
             s.verify = [.structural(.markupCount, .increased)]
             s.grammar = .owned
@@ -222,6 +252,9 @@ enum CatalogPDF {
                 fr("cherche le mot facture", ["text": "facture"]),
                 fr("trouve « échéance » dans le document", ["text": "échéance", "scope": "all"]),
                 en("find the word invoice", ["text": "invoice"]),
+                fr("recherche « signature »", ["text": "signature"]),
+                en("search for the word total", ["text": "total"]),
+                near("surligne le mot facture", .fr, expected: "highlightText"),
             ]
             s.verify = [.unverifiable("a search changes nothing")]
             s.grammar = .owned
@@ -242,6 +275,9 @@ enum CatalogPDF {
                 fr("remplace monsieur par madame", ["text": "monsieur", "replacement": "madame"]),
                 fr("efface le mot brouillon", ["text": "brouillon", "replacement": ""]),
                 en("replace 2025 with 2026 everywhere", ["text": "2025", "replacement": "2026", "scope": "all"]),
+                fr("change 2024 en 2025 partout", ["text": "2024", "replacement": "2025", "scope": "all"]),
+                en("replace Mr with Mrs", ["text": "Mr", "replacement": "Mrs"]),
+                near("cherche le mot facture", .fr, expected: "findText"),
             ]
             s.verify = [.pixels("textAbsent", .changed)]
             s.grammar = .owned
@@ -263,6 +299,9 @@ enum CatalogPDF {
                 fr("signe en bas à droite", ["placement": "bottomTrailing"]),
                 fr("ajoute ma signature sur la dernière page", ["clipNumber": -1]),
                 en("sign at the bottom", ["placement": "bottom"]),
+                fr("mets ma signature en bas", ["placement": "bottom"]),
+                en("add my signature on the last page", ["clipNumber": -1]),
+                near("ajoute les numéros de page", .fr, expected: "addPageNumbers"),
             ]
             s.verify = [.structural(.markupCount, .increased)]
             s.grammar = .owned
@@ -282,6 +321,9 @@ enum CatalogPDF {
                 fr("numérote les pages"),
                 fr("ajoute les numéros de page"),
                 en("add page numbers"),
+                fr("mets des numéros sur les pages"),
+                en("put page numbers on it"),
+                near("va à la page 4", .fr, expected: "goToPage"),
             ]
             s.verify = [.structural(.markupCount, .increased)]
             s.grammar = .owned
@@ -302,6 +344,9 @@ enum CatalogPDF {
                 fr("fusionne avec un autre PDF"),
                 fr("ajoute une image", ["text": "image"]),
                 en("merge it with another PDF"),
+                fr("combine ce PDF avec un autre"),
+                en("add another PDF to this one"),
+                near("insère une page blanche", .fr, expected: "insertBlankPage"),
             ]
             s.verify = [.unverifiable("needs the file picked by the user")]
             s.grammar = .owned

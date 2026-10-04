@@ -51,7 +51,11 @@ extension PhotoEditorSession: LiveEditingHost {
         state.canvasPixels = document.canvasSize
         state.appliedEdits = Array(undoLabels.filter { $0 != "Select" }.suffix(12))
         state.adjustments = document.activeAdjustments
-        state.selection = liveSelectionDescription
+        // W2: the masks (a1…) and the document's selection, as the model reads and names them.
+        let lineLanguage: OpLanguage = language == .french ? .fr : .en
+        state.masks = LiveMaskLines.lines(for: document, language: lineLanguage)
+        state.selection = (FeatureFlags.isOn(.aiSelection) ? LiveMaskLines.selectionLine(for: document, language: lineLanguage) : nil)
+            ?? liveSelectionDescription
         if let request = pendingClarification {
             state.pendingQuestion = request.question
             state.candidates = request.candidates.enumerated().map { "\($0.offset + 1): \($0.element.spokenDescription)" }

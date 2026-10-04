@@ -1,7 +1,7 @@
 import XCTest
 @testable import PicshopCore
 
-/// The W1 kill switches and the signpost facade.
+/// The W1 and W2 kill switches and the signpost facade.
 final class FeatureFlagsTests: XCTestCase {
     override func tearDown() {
         for flag in FeatureFlag.allCases { FeatureFlags.set(flag, nil) }
@@ -23,7 +23,34 @@ final class FeatureFlagsTests: XCTestCase {
         #if DEBUG
         for flag in FeatureFlag.allCases { XCTAssertTrue(FeatureFlags.defaultValue(flag), flag.rawValue) }
         #endif
-        XCTAssertEqual(Set(FeatureFlag.allCases.map(\.rawValue)), ["catalogOps", "retrievalCards", "displayLinkCanvas", "proTone", "studioWorkspace", "psBackdrop"])
+        XCTAssertEqual(Set(FeatureFlag.allCases.map(\.rawValue)), [
+            // W1
+            "catalogOps", "retrievalCards", "displayLinkCanvas", "proTone", "studioWorkspace", "psBackdrop",
+            // W2
+            "masks", "aiSelection", "samModel", "depthModel", "pixelPostconditions", "fmDynamicSchema", "commandPalette", "metalOrb",
+            "graphiteSurround", "modelBroker",
+        ])
+    }
+
+    /// The ten W2 switches ship on (TestFlight testers get finished features), each can be turned off on its
+    /// own, and turning one off leaves the others alone.
+    func testTheTenW2FlagsShipOnAndSwitchOffAlone() {
+        let w2: [FeatureFlag] = [.masks, .aiSelection, .samModel, .depthModel, .pixelPostconditions, .fmDynamicSchema,
+                                 .commandPalette, .metalOrb, .graphiteSurround, .modelBroker]
+        XCTAssertEqual(w2.count, 10)
+        XCTAssertEqual(FeatureFlag.allCases.count, 16)
+        for flag in w2 {
+            XCTAssertTrue(flag.releaseDefault, flag.rawValue)
+            XCTAssertEqual(FeatureFlags.key(flag), "picshop.flag.\(flag.rawValue)")
+        }
+        for flag in w2 {
+            FeatureFlags.set(flag, false)
+            XCTAssertFalse(FeatureFlags.isOn(flag), flag.rawValue)
+            for other in w2 where other != flag {
+                XCTAssertEqual(FeatureFlags.isOn(other), FeatureFlags.defaultValue(other), "\(flag.rawValue) moved \(other.rawValue)")
+            }
+            FeatureFlags.set(flag, nil)
+        }
     }
 
     func testSignpostsAreANoOpWhereThereIsNoOSLog() {

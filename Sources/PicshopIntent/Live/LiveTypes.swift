@@ -287,6 +287,9 @@ public struct LiveEditorState: Sendable, Equatable {
     /// Photo: a LUT was imported on the active image layer, at any intensity (one taken off can
     /// come back), so the LUT intensity and remove operations can run.
     public var hasImportedLUT: Bool = false
+    /// Photo (W2): `LiveMaskLines.lines`, the local adjustments as "a1 Ciel (sky): exposure +0.30". The
+    /// `selection` line above carries `LiveMaskLines.selectionLine` when the document has a selection.
+    public var masks: [String] = []
 
     public init(mode: EditorMode, version: Int) {
         self.mode = mode

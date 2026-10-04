@@ -314,6 +314,18 @@ private struct ComposerRow: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
+        VStack(spacing: PSSpacing.small) {
+            // W2 (D16): the command palette's suggestions while the field holds a short command.
+            if CommandPaletteRow.domain(for: draft, live: live) != nil {
+                CommandPaletteRow(text: draft, live: live) { draft = "" }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+            row
+        }
+        .animation(PSSpring.fade, value: CommandPaletteRow.domain(for: draft, live: live) != nil)
+    }
+
+    private var row: some View {
         HStack(spacing: 8) {
             if let onTools {
                 ToolsButton(glass: glass, action: onTools)
@@ -359,6 +371,18 @@ private struct ConsoleKeyboardField: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
+        VStack(spacing: PSSpacing.small) {
+            // W2 (D16): the command palette here too, while Live runs.
+            if CommandPaletteRow.domain(for: draft, live: live) != nil {
+                CommandPaletteRow(text: draft, live: live) { draft = "" }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+            field
+        }
+        .animation(PSSpring.fade, value: CommandPaletteRow.domain(for: draft, live: live) != nil)
+    }
+
+    private var field: some View {
         HStack(spacing: 8) {
             ComposerField(text: $draft, placeholder: typeSize.isAccessibilitySize ? L("Ask…") : L("Ask PicShop…")) { text in
                 live.send(text: text)

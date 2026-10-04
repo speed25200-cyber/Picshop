@@ -31,7 +31,10 @@ struct LiveOrb: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.psReducedMotion) private var psReducedMotion
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.picshop) private var app
     @State private var motion = OrbMotion()
+    /// The Metal orb, decided when the orb appears (its flag takes effect in the next editor).
+    @State private var usesMetalOrb = OrbShader.isEnabled
     @State private var isOnScreen = true
     @State private var pulse = false
     /// Listening: the voice level woke the orb (above `wakeLevel`); it rests again only after
@@ -116,7 +119,8 @@ struct LiveOrb: View {
         } else if holdsStill || isResting {
             stillOrb
         } else {
-            SwiftUI.TimelineView(.animation(minimumInterval: frameInterval, paused: scenePhase != .active || !isOnScreen)) { context in
+            // A brush, handle or lasso drag on the canvas has the frames (W2): the orb holds its picture meanwhile.
+            SwiftUI.TimelineView(.animation(minimumInterval: frameInterval, paused: scenePhase != .active || !isOnScreen || isCanvasInteracting)) { context in
                 livingOrb(time: context.date.timeIntervalSinceReferenceDate)
             }
         }
@@ -132,6 +136,9 @@ struct LiveOrb: View {
         default: return false
         }
     }
+
+    /// The editor's canvas is under the finger (PerformanceGovernor, set by the photo session).
+    private var isCanvasInteracting: Bool { app?.performance.isCanvasInteracting ?? false }
 
     /// The display's rate while Live is busy: 120 Hz at rich effects, 60 when reduced.
     private var frameInterval: Double {
@@ -158,10 +165,18 @@ struct LiveOrb: View {
         m.updateRipples(speaking: state == .speaking, output: output, at: t)
         let colors = m.paletteColors(at: t, fallback: OrbPalette.meshRGB(for: state, isMuted: isMuted))
         let points = OrbDynamics.blend(OrbDynamics.restPoints, dynamics.points(phase: m.phase), Float(m.wake))
+        // The Metal orb (W2, D19) when its flag is on and the app has the shader: the voice level breathes it.
+        let level: Double
+        switch state {
+        case .speaking: level = output
+        case .hearing, .dictating, .listening: level = input
+        default: level = 0
+        }
+        let shader: (time: Double, level: Double)? = usesMetalOrb ? (time: t, level: level * (isMuted ? 0.4 : 1)) : nil
         return orbStack(points: points, colors: colors.map(\.color),
                         rotation: m.rotation, scale: m.scale * m.popScale(at: t),
                         cometTurns: m.cometTurns, ripples: m.rippleStates(at: t),
-                        haloOpacity: dynamics.haloOpacity, haloColor: colors[4].color)
+                        haloOpacity: dynamics.haloOpacity, haloColor: colors[4].color, shader: shader)
     }
 
     // MARK: Still (Reduce Motion, or no timeline)
@@ -214,18 +229,27 @@ struct LiveOrb: View {
     // MARK: Layers
 
     private func orbStack(points: [SIMD2<Float>], colors: [Color], rotation: Double, scale: Double, cometTurns: Double?,
-                          ripples: [OrbMotion.RippleState], haloOpacity: Double, haloColor: Color) -> some View {
+                          ripples: [OrbMotion.RippleState], haloOpacity: Double, haloColor: Color,
+                          shader: (time: Double, level: Double)? = nil) -> some View {
         let canvas = size * 1.9
         return ZStack {
             ZStack {
-                MeshGradient(width: 3, height: 3, points: points, colors: colors)
-                    .rotationEffect(.degrees(rotation))
-                // Specular highlight: light from the top left, a soft gradient rather than a blur.
-                Ellipse()
-                    .fill(EllipticalGradient(colors: [Color.white.opacity(0.32), Color.white.opacity(0.12), Color.white.opacity(0)],
-                                             center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5))
-                    .frame(width: size * 0.66, height: size * 0.46)
-                    .offset(x: -size * 0.16, y: -size * 0.22)
+                if let shader {
+                    // One colour effect draws the body, its lobes and its highlight (App/Shaders/PSOrb.metal).
+                    Circle()
+                        .fill(PSTheme.textPrimary)
+                        .colorEffect(OrbShader.shader(time: shader.time, level: shader.level,
+                                                      colors: Self.lobeColors(colors), size: CGSize(width: size, height: size)))
+                } else {
+                    MeshGradient(width: 3, height: 3, points: points, colors: colors)
+                        .rotationEffect(.degrees(rotation))
+                    // Specular highlight: light from the top left, a soft gradient rather than a blur.
+                    Ellipse()
+                        .fill(EllipticalGradient(colors: [Color.white.opacity(0.32), Color.white.opacity(0.12), Color.white.opacity(0)],
+                                                 center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5))
+                        .frame(width: size * 0.66, height: size * 0.46)
+                        .offset(x: -size * 0.16, y: -size * 0.22)
+                }
             }
             .frame(width: size, height: size)
             .clipShape(Circle())
@@ -262,6 +286,12 @@ struct LiveOrb: View {
             }
         }
         .overlay { marks }
+    }
+
+    /// The shader's four lobes from the 3 × 3 mesh palette: its edge midpoints (top, left, right, bottom).
+    static func lobeColors(_ mesh: [Color]) -> [Color] {
+        guard mesh.count >= 9 else { return mesh }
+        return [mesh[1], mesh[3], mesh[5], mesh[7]]
     }
 
     /// Thinking: a white comet; acting: the progress ring, or a spectrum comet.

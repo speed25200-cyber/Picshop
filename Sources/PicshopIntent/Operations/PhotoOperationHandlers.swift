@@ -6,11 +6,15 @@ public struct OperationRunContext: Sendable {
     public var intent: IntentContext
     public var language: NormalizedUtterance.Language
     public var services: any PhotoAIServices
+    /// The candidates the person picked after a mask or selection call asked which one (chooseCandidate): the
+    /// call runs again on them instead of asking again.
+    public var chosen: [ObjectCandidate]?
 
-    public init(intent: IntentContext, language: NormalizedUtterance.Language, services: any PhotoAIServices) {
+    public init(intent: IntentContext, language: NormalizedUtterance.Language, services: any PhotoAIServices, chosen: [ObjectCandidate]? = nil) {
         self.intent = intent
         self.language = language
         self.services = services
+        self.chosen = chosen
     }
 
     var french: Bool { language == .french }
@@ -37,9 +41,18 @@ public enum PhotoOperationHandlers {
         "layerBlend": { call, document, context in layerProperty(call, document, context) },
         "layerVisibility": { call, document, context in layerProperty(call, document, context) },
         "layerOrder": { call, document, context in layerOrder(call, document, context) },
+        // W2: masks and selections (PhotoOperationHandlers+Masks, +Selection).
+        "maskAdjust": { call, document, context in await maskAdjust(call, document, context) },
+        "maskEdit": { call, document, context in await maskEdit(call, document, context) },
+        "maskDelete": { call, document, context in maskDelete(call, document, context) },
+        "select": { call, document, context in await select(call, document, context) },
+        "selectionModify": { call, document, context in await selectionModify(call, document, context) },
+        "selectionApply": { call, document, context in await selectionApply(call, document, context) },
     ]
 
     public static func run(_ call: OperationCall, on document: PhotoDocument, context: OperationRunContext) async -> (PhotoDocument, ExecutionResult) {
+        // A gesture-only control the grammar heard (W2): its tool opens on it.
+        if let control = call.args["openTool"]?.string { return openTool(control, document, context) }
         if let handler = table[call.id] { return await handler(call, document, context) }
         let title = OperationCatalog.shared.spec(call.id)?.title.en ?? call.id.raw
         // In French the English operation name never goes inside « ».
@@ -296,6 +309,8 @@ public enum PhotoOperationHandlers {
             updated.update(layerID: baseID) { layer in
                 layer.edits.operations[layer.edits.operations.count - 1] = EditOperation(id: last.id, kind: .perspective(horizontal: horizontal ?? h, vertical: vertical ?? v), createdAt: last.createdAt)
             }
+            // The in-place replacement bypasses `apply`: masks and the selection follow the new geometry here (D3).
+            updated.reconcileMasks(previousBaseEdits: edits)
         } else {
             updated.apply(.perspective(horizontal: horizontal ?? 0, vertical: vertical ?? 0), to: baseID)
         }

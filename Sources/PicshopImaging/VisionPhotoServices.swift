@@ -43,6 +43,10 @@ public final class VisionPhotoServices: PhotoAIServices, @unchecked Sendable {
     /// Scene maps per base state, and the last one built (its ids carry over to the next state).
     private var sceneCache: [(key: String, value: SceneMap)] = []
     private var lastSceneMap: SceneMap?
+    /// W2: people one by one, the Masques empty state's suggestions and the depth maps, per base state.
+    var personCache: [(key: String, value: [PersonInstances.Instance])] = []
+    var suggestionCache: [(key: String, value: MaskSuggestions)] = []
+    var depthCache: [(key: String, value: RasterRef)] = []
 
     public init(renderer: PhotoRenderer, store: ProjectStore, projectID: UUID) {
         self.renderer = renderer
@@ -50,15 +54,25 @@ public final class VisionPhotoServices: PhotoAIServices, @unchecked Sendable {
         self.projectID = projectID
     }
 
-    private var maskStore: MaskStore { MaskStore(store: store, projectID: projectID) }
+    var maskStore: MaskStore { MaskStore(store: store, projectID: projectID) }
+    /// The renderer the masks and probes draw with (W2).
+    var maskRenderer: PhotoRenderer { renderer }
+    var projectKey: String { projectID.uuidString }
+    /// Guards the W2 caches above.
+    var maskCacheLock: NSLock { cacheLock }
 
     // MARK: - Analysis image
 
-    /// The current edited base image (so removals after a crop line up) at analysis resolution.
+    /// The current edited base image (so removals after a crop line up) at analysis resolution, without local
+    /// adjustments (W2, D2): every AI mask, sample and eyedropper reads the picture as the masks' ranges do, so no
+    /// mask depends on another mask's adjustment. Its key leaves the local adjustments' operations out.
     func analysisImage(for document: PhotoDocument, longestSide: Int = VisionPhotoServices.analysisLongestSide) async throws -> CGImage {
         let key = document.baseLayer.map { layer in
             var hasher = Hasher()
-            hasher.combine(layer.edits.operations.map(\.id))
+            hasher.combine(layer.edits.operations.filter {
+                if case .localAdjust = $0.kind { return false }
+                return true
+            }.map(\.id))
             hasher.combine(layer.imageAsset?.relativePath)
             return hasher.finalize()
         } ?? 0
@@ -67,7 +81,8 @@ public final class VisionPhotoServices: PhotoAIServices, @unchecked Sendable {
             return nil
         }
         if let cachedImage { return cachedImage }
-        let image = try await renderer.renderBase(document, options: PhotoRenderer.Options(targetLongestSide: Double(longestSide), allowExpensiveWork: true))
+        let image = try await renderer.renderBase(document, options: PhotoRenderer.Options(targetLongestSide: Double(longestSide), allowExpensiveWork: true,
+                                                                                         includesLocalAdjustments: false))
         guard let cg = ImageSupport.cgImage(from: image) else { throw PicshopError.renderFailed("analysis image") }
         cacheLock.withLock { analysisCache[longestSide] = (key, cg) }
         return cg
@@ -597,7 +612,11 @@ public enum VisionGrounding {
     }
 
     public static func magicWandSelection(in analysis: WandAnalysis, seed: PSPoint, tolerance: Double, contiguous: Bool, maskStore: MaskStore) throws -> SelectionResult {
-        let bytes = Selection.magicWand(rgba: analysis.rgba, width: analysis.width, height: analysis.height, seed: (seed.x, seed.y), tolerance: tolerance, contiguous: contiguous)
+        // W2: the Lab wand (ΔE76, a 3 × 3 sample, a soft edge) when the AI selection is on; the RGB one otherwise.
+        let bytes = FeatureFlags.isOn(.aiSelection)
+            ? Selection.magicWandLab(rgba: analysis.rgba, width: analysis.width, height: analysis.height, seed: (seed.x, seed.y), tolerance: tolerance,
+                                     contiguous: contiguous, sampleSize: 3, antiAlias: true)
+            : Selection.magicWand(rgba: analysis.rgba, width: analysis.width, height: analysis.height, seed: (seed.x, seed.y), tolerance: tolerance, contiguous: contiguous)
         let cleaned = Selection.despeckled(bytes, width: analysis.width, height: analysis.height, minimumPixels: max(4, analysis.width * analysis.height / 20000))
         let reference = try maskStore.save(bytes: cleaned, width: analysis.width, height: analysis.height, source: .magicWand(seed, tolerance: tolerance), feather: 0.003)
         return SelectionResult(reference: reference, bytes: cleaned, width: analysis.width, height: analysis.height)
@@ -884,16 +903,33 @@ final class Detector {
     /// One candidate per face: its eyes, the teeth inside the lips, the lips, or
     /// the skin (the face oval without eyes, brows and mouth).
     func faceParts(_ label: String) throws -> [ObjectCandidate] {
+        var candidates: [ObjectCandidate] = []
+        for part in try facePartMasks(label) {
+            let reference = try maskStore.save(bytes: part.bytes, width: width, height: height, source: .object(label: label, boundingBox: part.box),
+                                               feather: label == "skin" ? 0.02 : 0.004)
+            candidates.append(ObjectCandidate(label: label, boundingBox: part.box, confidence: part.confidence, maskPath: reference.relativePath))
+        }
+        return candidates
+    }
+
+    /// The landmark masks of a face part for every face, left to right by the face's box (W2: « Personne 2 »):
+    /// "eyes", "teeth", "lips", "skin" (the oval without eyes, brows and mouth) or "face" (the whole oval).
+    func facePartMasks(_ label: String) throws -> [(bytes: [UInt8], box: PSRect, faceBox: PSRect, confidence: Double)] {
         let request = VNDetectFaceLandmarksRequest()
         try handler.perform([request])
         let size = CGSize(width: width, height: height)
-        var candidates: [ObjectCandidate] = []
-        for face in request.results ?? [] {
+        var parts: [(bytes: [UInt8], box: PSRect, faceBox: PSRect, confidence: Double)] = []
+        let faces = (request.results ?? []).sorted { $0.boundingBox.minX < $1.boundingBox.minX }
+        for face in faces {
             guard let landmarks = face.landmarks else { continue }
             func outline(_ region: VNFaceLandmarkRegion2D?) -> [PSPoint] {
                 guard let region else { return [] }
                 return region.pointsInImage(imageSize: size).map { PSPoint(x: Double($0.x) / Double(width), y: 1 - Double($0.y) / Double(height)) }
             }
+            let faceBox = PSRect.fromVision(face.boundingBox)
+            // The face oval, a little taller than Vision's box to take in the forehead.
+            let oval = PolygonRaster.ellipse(center: PSPoint(x: faceBox.midX, y: faceBox.midY - faceBox.height * 0.06), radiusX: faceBox.width * 0.5,
+                                             radiusY: faceBox.height * 0.6)
             var include: [[PSPoint]] = []
             var exclude: [[PSPoint]] = []
             switch label {
@@ -904,18 +940,19 @@ final class Detector {
             case "lips":
                 include = [outline(landmarks.outerLips)]
                 exclude = [outline(landmarks.innerLips)]
+            case "face":
+                include = [oval]
             default:
-                // The face oval, a little taller than Vision's box to take in the forehead.
-                let box = PSRect.fromVision(face.boundingBox)
-                include = [PolygonRaster.ellipse(center: PSPoint(x: box.midX, y: box.midY - box.height * 0.06), radiusX: box.width * 0.5, radiusY: box.height * 0.6)]
+                include = [oval]
                 exclude = [outline(landmarks.leftEye), outline(landmarks.rightEye), outline(landmarks.leftEyebrow), outline(landmarks.rightEyebrow), outline(landmarks.outerLips)]
             }
             include = include.filter { $0.count >= 3 }
             guard !include.isEmpty else { continue }
             var bytes = PolygonRaster.fill(include, width: width, height: height)
+            let soft = label == "skin" || label == "face"
             // Landmarks sit on the inner edge of the eyes and the teeth; grow a touch.
-            let grow = max(1, Int(Double(max(width, height)) * (label == "skin" ? 0.006 : 0.0025)))
-            if label != "skin" { bytes = MaskStore.dilated(bytes, width: width, height: height, radius: grow) }
+            let grow = max(1, Int(Double(max(width, height)) * (soft ? 0.006 : 0.0025)))
+            if !soft { bytes = MaskStore.dilated(bytes, width: width, height: height, radius: grow) }
             let holes = exclude.filter { $0.count >= 3 }
             if !holes.isEmpty {
                 // Features cut out generously so the skin retouch never softens an eyelash.
@@ -923,11 +960,9 @@ final class Detector {
                 for index in bytes.indices where cut[index] > 0 { bytes[index] = 0 }
             }
             guard MaskStore.coverage(of: bytes) > 0.00002 else { continue }
-            let box = MaskStore.boundingBox(of: bytes, width: width, height: height)
-            let reference = try maskStore.save(bytes: bytes, width: width, height: height, source: .object(label: label, boundingBox: box), feather: label == "skin" ? 0.02 : 0.004)
-            candidates.append(ObjectCandidate(label: label, boundingBox: box, confidence: Double(face.confidence), maskPath: reference.relativePath))
+            parts.append((bytes, MaskStore.boundingBox(of: bytes, width: width, height: height), faceBox, Double(face.confidence)))
         }
-        return candidates
+        return parts
     }
 
     func animals(label: String) throws -> [ObjectCandidate] {

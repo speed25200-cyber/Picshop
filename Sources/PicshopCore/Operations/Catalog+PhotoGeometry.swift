@@ -21,6 +21,7 @@ enum CatalogPhotoGeometry {
                 en("crop to 16:9", ["aspect": "ratio16x9"]),
                 para("récadre en carré", .fr, ["aspect": "square"]),
                 near("recadre au mieux", .fr, expected: "autoCrop"),
+                en("crop it square", ["aspect": "square"]),
             ]
             s.verify = [.structural(.canvasAspect, .equalsParam("aspect"))]
             s.grammar = .owned
@@ -42,6 +43,9 @@ enum CatalogPhotoGeometry {
                 fr("passe en format 9:16", ["aspect": "ratio9x16"]),
                 fr("mets-la au format paysage", ["aspect": "ratio16x9"]),
                 en("set the aspect ratio to 4:3", ["aspect": "ratio4x3"]),
+                fr("mets au format carré", ["aspect": "square"]),
+                en("make it portrait 9:16", ["aspect": "ratio9x16"]),
+                near("agrandis la toile vers la gauche", .fr, expected: "expandCanvas"),
             ]
             s.verify = [.structural(.canvasAspect, .equalsParam("aspect"))]
             s.grammar = .owned
@@ -62,6 +66,9 @@ enum CatalogPhotoGeometry {
                 fr("recadre au mieux"),
                 fr("trouve le meilleur cadrage"),
                 en("improve the framing"),
+                fr("cadre mieux la photo"),
+                en("find the best crop"),
+                near("recadre en 16:9", .fr, expected: "crop"),
             ]
             s.verify = [.structural(.canvasAspect, .changed)]
             s.grammar = .owned
@@ -84,6 +91,8 @@ enum CatalogPhotoGeometry {
                 fr("tourne de 15 degrés", ["degrees": 15]),
                 en("rotate right", ["degrees": 90]),
                 para("tourne la à droite", .fr, ["degrees": 90]),
+                en("rotate it 90 degrees to the left", ["degrees": -90]),
+                near("redresse l'horizon", .fr, expected: "straighten"),
             ]
             s.verify = [.structural(.rotation, .changed)]
             s.grammar = .owned
@@ -105,6 +114,9 @@ enum CatalogPhotoGeometry {
                 fr("redresse l'horizon"),
                 fr("redresse de 2 degrés", ["degrees": 2]),
                 en("straighten the horizon"),
+                fr("l'horizon penche, corrige-le"),
+                en("level the horizon"),
+                near("tourne de 90 degrés", .fr, expected: "rotate"),
             ]
             s.verify = [.structural(.rotation, .changed)]
             s.grammar = .owned
@@ -126,6 +138,9 @@ enum CatalogPhotoGeometry {
                 fr("effet miroir", ["flipAxis": "horizontal"]),
                 fr("retourne verticalement", ["flipAxis": "vertical"]),
                 en("flip it", ["flipAxis": "horizontal"]),
+                fr("retourne horizontalement", ["flipAxis": "horizontal"]),
+                en("mirror the picture", ["flipAxis": "horizontal"]),
+                near("c'est à l'envers", .fr, expected: "resetOrientation"),
             ]
             s.verify = [.unverifiable("a mirror keeps every measured value")]
             s.grammar = .owned
@@ -147,6 +162,9 @@ enum CatalogPhotoGeometry {
                 fr("remets-la à l'endroit"),
                 fr("c'est à l'envers", ["degrees": 180]),
                 en("it's upside down", ["degrees": 180]),
+                fr("remets la photo dans le bon sens"),
+                en("put it the right way up"),
+                near("effet miroir", .fr, expected: "flip"),
             ]
             s.verify = [.structural(.rotation, .changed)]
             s.grammar = .owned

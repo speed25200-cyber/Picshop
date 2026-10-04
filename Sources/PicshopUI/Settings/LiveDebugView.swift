@@ -1,6 +1,7 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
 import UIKit
+import PicshopCore
 import PicshopIntent
 
 /// Settings › Live › Diagnostic Live: the voice self-test, what the audio stack,
@@ -40,6 +41,8 @@ struct LiveDebugView: View {
             LiveBrainDebugSection()
 
             LiveUnderstandingEvalSection()
+
+            MLaneBenchSection()
 
             Section(L("Last answer")) {
                 value(L("Model"), debug.lastStats?.model ?? "")
@@ -102,7 +105,6 @@ struct LiveDebugView: View {
         .navigationTitle(L("Live diagnostics"))
         .navigationBarTitleDisplayMode(.inline)
         .task { logURL = await LiveServices.shared.exportLog() }
-        .preferredColorScheme(.dark)
     }
 
     @ViewBuilder
@@ -363,6 +365,141 @@ private struct LiveUnderstandingEvalSection: View {
         LiveServices.shared.record(LiveLogEntry(time: now, event: "eval.done", fields: [
             "model": model, "turns": String(turns), "passed": String(passed), "stopped": stopped ? "1" : "0",
         ]))
+    }
+}
+
+/// « Banc d'essai M » (W2): the M lane on the loaded 4B or 2B (`MLaneRunner`, single-turn photo requests with their
+/// gold operation and arguments, and the W2 dialogues), its scores, its failures, and the JSON report to attach to
+/// the device sign-off. Not on battery under 30 %: the run takes minutes of full GPU.
+private struct MLaneBenchSection: View {
+    @State private var task: Task<Void, Never>?
+    @State private var report: MLaneRunner.Report?
+    @State private var reportURL: URL?
+    @State private var refusal: String?
+    @State private var residents = ""
+
+    var body: some View {
+        Section {
+            if let report {
+                ForEach(Array(Self.lines(report).enumerated()), id: \.offset) { _, line in
+                    Text(verbatim: line).font(PSFont.mono(11)).foregroundStyle(PSTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !report.failures.isEmpty {
+                    DisclosureGroup(String(format: L("Failed turns: %d"), report.failures.count)) {
+                        ForEach(Array(report.failures.enumerated()), id: \.offset) { _, failure in
+                            Text(verbatim: failure).font(PSFont.mono(11)).foregroundStyle(PSTheme.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                if let reportURL {
+                    ShareLink(item: reportURL, subject: Text(verbatim: "PicShop M lane")) {
+                        Label(L("Share the JSON report"), systemImage: "square.and.arrow.up")
+                    }
+                }
+            }
+            if let refusal {
+                Text(verbatim: refusal).font(PSFont.footnote()).foregroundStyle(PSTheme.warning)
+            }
+            if !residents.isEmpty {
+                LabeledContent(L("Models in memory")) {
+                    Text(verbatim: residents).font(PSFont.mono(11)).foregroundStyle(PSTheme.textSecondary)
+                }
+            }
+            if task != nil {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text(L("Running the M lane…")).foregroundStyle(PSTheme.textSecondary)
+                    Spacer()
+                    Button(L("Stop")) { task?.cancel() }
+                }
+            } else {
+                Button(L("Run the M lane")) { start() }
+            }
+        } header: {
+            Text(L("M test bench"))
+        } footer: {
+            Text(L("Photo requests with masks and selections, run through the on-device model: operation, arguments, applied and verified. Plug the iPhone in or keep it above 30 %; it takes several minutes."))
+        }
+        .task { residents = await LocalBrainHub.brokerResidentsLine() }
+    }
+
+    private func start() {
+        refusal = nil
+        guard let problem = Self.batteryProblem() else {
+            run()
+            return
+        }
+        refusal = problem
+    }
+
+    private func run() {
+        report = nil
+        reportURL = nil
+        task = Task {
+            UIApplication.shared.isIdleTimerDisabled = true
+            defer {
+                UIApplication.shared.isIdleTimerDisabled = false
+                task = nil
+            }
+            guard let brain = await LocalBrainHub.shared.evalBrain(mode: .photo) else {
+                refusal = L("The on-device model is not ready on this iPhone: install it in Settings › Intelligence, then try again.")
+                return
+            }
+            let model = LocalBrainHub.shared.status.model?.displayName ?? "model"
+            let result = await MLaneRunner.run(label: model, makeBrain: {
+                // One conversation per case: nothing from the previous case carries over.
+                await brain.reset()
+                return brain
+            })
+            await brain.reset()
+            report = result
+            reportURL = Self.write(result)
+            residents = await LocalBrainHub.brokerResidentsLine()
+            LiveServices.shared.record(LiveLogEntry(time: ProcessInfo.processInfo.systemUptime, event: "mlane.done", fields: [
+                "model": model, "cases": String(result.cases), "op_exact": String(format: "%.3f", result.opExactMatch),
+                "applied_verified": String(format: "%.3f", result.appliedVerified), "stopped": Task.isCancelled ? "1" : "0",
+            ]))
+        }
+    }
+
+    /// On battery under 30 %: the reason not to run, in words; nil when it may run.
+    static func batteryProblem() -> String? {
+        let device = UIDevice.current
+        let wasMonitoring = device.isBatteryMonitoringEnabled
+        device.isBatteryMonitoringEnabled = true
+        defer { device.isBatteryMonitoringEnabled = wasMonitoring }
+        guard device.batteryState == .unplugged, device.batteryLevel >= 0, device.batteryLevel < 0.3 else { return nil }
+        return L("Plug the iPhone in, or run it above 30 % battery.")
+    }
+
+    static func lines(_ report: MLaneRunner.Report) -> [String] {
+        func percent(_ value: Double) -> String { String(format: "%.1f %%", value * 100) }
+        return [
+            "\(report.label) · \(report.cases) cases",
+            "op exact \(percent(report.opExactMatch)) · args F1 \(percent(report.argumentF1))",
+            "first-try valid \(percent(report.firstTryValid)) · applied+verified \(percent(report.appliedVerified))",
+            "honest refusals \(percent(report.honestRefusals))",
+            String(format: "latency p50 %.2f s · p95 %.2f s", report.latencyP50, report.latencyP95),
+        ]
+    }
+
+    /// The report as JSON in the temporary folder, for ShareLink.
+    static func write(_ report: MLaneRunner.Report) -> URL? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(report) else { return nil }
+        let stamp = Int(Date().timeIntervalSince1970)
+        let name = "mlane-\(report.label.replacingOccurrences(of: " ", with: "-"))-\(stamp).json"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        do {
+            try data.write(to: url, options: .atomic)
+            return url
+        } catch {
+            PSLog.error("M lane report not written: \(error)", category: .ui)
+            return nil
+        }
     }
 }
 

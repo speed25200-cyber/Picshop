@@ -55,6 +55,10 @@ public final class FoundationModelsIntentEngine: IntentEngine, @unchecked Sendab
         let prompt = IntentPrompt.userPrompt(for: utterance, context: context, hint: hint)
         let options = GenerationOptions(temperature: 0.1)
         do {
+            if FeatureFlags.isOn(.fmDynamicSchema) {
+                let dynamic = try await dynamicPlan(utterance, prompt: prompt, context: context, session: session, options: options)
+                if let dynamic { return dynamic }
+            }
             let response = try await session.respond(to: prompt, generating: GeneratedPlan.self, options: options)
             return IntentNormalizer.plan(from: response.content.rawPlan, utterance: utterance, context: context, engine: .appleIntelligence)
         } catch {
@@ -63,6 +67,31 @@ public final class FoundationModelsIntentEngine: IntentEngine, @unchecked Sendab
             discardSession(for: context.mode)
             throw error
         }
+    }
+
+    /// W2 (D15): a schema built for this request from the catalog (the core and the operations retrieved for the
+    /// words, ≤ 12), so the model can write any catalog operation's step. Its JSON goes through the coercer and
+    /// the validator like a Live call. Nil when the schema cannot be built (the W1 path answers instead).
+    private func dynamicPlan(_ utterance: String, prompt: String, context: IntentContext, session: LanguageModelSession,
+                             options: GenerationOptions) async throws -> EditPlan? {
+        let language = NormalizedUtterance(utterance).language
+        let (hints, unknown) = IntentPrompt.stateHints(context)
+        let query = OperationQuery(text: utterance, domain: context.mode.opDomain, language: language, hints: hints, unknownState: unknown)
+        let tree = FoundationModelsSchema.plan(for: query).schema
+        guard let schema = try? FoundationModelsSchema.generationSchema(tree) else { return nil }
+        let response = try await session.respond(to: prompt, schema: schema, includeSchemaInPrompt: true, options: options)
+        guard let json = try? JSONValue.parse(response.content.jsonString) else { return nil }
+        let steps = FoundationModelsSchema.steps(in: json)
+        var reply: String?
+        if case .object(let object) = json, case .string(let said)? = object["reply"], !said.isEmpty { reply = said }
+        let languageCode = language == .french ? "fr" : "en"
+        guard !steps.isEmpty else {
+            return EditPlan(utterance: utterance, intents: [], confidence: 0.3, language: languageCode, reply: reply, engine: .appleIntelligence)
+        }
+        let use = ToolArgumentCoercer.rawToolUse(id: "fm", name: LiveToolName.applyEdits.rawValue, arguments: ["steps": .array(steps)])
+        guard case .success(let call) = ToolInputValidator(mode: context.mode).validate(use, context: context),
+              case .applyEdits(let intents) = call.tool else { return nil }
+        return EditPlan(utterance: utterance, intents: intents, confidence: 0.8, language: languageCode, reply: reply, engine: .appleIntelligence)
     }
 
     /// One session per editor, so the instructions the model has already read

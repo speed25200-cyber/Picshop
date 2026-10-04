@@ -179,8 +179,8 @@ struct SoundTrackRow: View {
     var body: some View {
         VStack(spacing: 6) {
             HStack(spacing: 8) {
-                Text("\(index + 1)").font(PSFont.mono(11)).foregroundStyle(PSTheme.onAccent)
-                    .frame(width: 20, height: 20).background(Circle().fill(PSTheme.accentGradient))
+                Text("\(index + 1)").font(PSFont.mono(11)).foregroundStyle(Color.psOnAction)
+                    .frame(width: 20, height: 20).background(Circle().fill(Color.psActionPrimary))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(track.name).font(PSFont.headline(13)).lineLimit(1).foregroundStyle(track.isMuted ? PSTheme.textTertiary : PSTheme.textPrimary)
                     Text(String(format: L("from %@ · %@"), psTimecode(track.timelineStart, frameRate: session.timeline.frameRate), psTimecode(track.sourceRange.duration, frameRate: session.timeline.frameRate)))
@@ -312,9 +312,9 @@ struct VideoAdjustPanel: View {
                                 Image(systemName: parameter.symbolName).font(.system(size: 16, weight: .semibold))
                                 Text(Locale.current.language.languageCode?.identifier == "fr" ? parameter.frenchName : parameter.englishName).font(PSFont.caption(10)).lineLimit(1)
                             }
-                            .foregroundStyle(active ? Color.black : PSTheme.textPrimary)
+                            .foregroundStyle(active ? Color.psOnAction : PSTheme.textPrimary)
                             .frame(width: 68, height: 52)
-                            .background(active ? PSTheme.accent : PSTheme.hairline, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .background(active ? Color.psActionPrimary : PSTheme.hairline, in: RoundedRectangle(cornerRadius: PSRadius.tile, style: .continuous))
                         }
                         .buttonStyle(.plain)
                     }

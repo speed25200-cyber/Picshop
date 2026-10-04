@@ -21,6 +21,7 @@ enum CatalogPhotoText {
                 fr("ajoute le texte Approuvé en haut", ["text": "Approuvé", "placement": "top"]),
                 en("add text saying Happy Birthday at the bottom", ["text": "Happy Birthday", "placement": "bottom"]),
                 en("write Summer 2026 at the top in yellow", ["text": "Summer 2026", "placement": "top", "color": "yellow"]),
+                near("change le texte en Hello", .fr, expected: "editText"),
             ]
             s.verify = [.structural(.textLayerCount, .increased)]
             s.grammar = .owned
@@ -44,6 +45,8 @@ enum CatalogPhotoText {
                 fr("mets le titre en gras", ["ref": "l1", "weight": "bold"]),
                 fr("remplace « 2025 » par « 2026 »", ["ref": "t1", "text": "2026"]),
                 en("change the text to Hello", ["text": "Hello"]),
+                en("make the title bold", ["ref": "l1", "weight": "bold"]),
+                near("ajoute le texte Promo en haut", .fr, expected: "addText"),
             ]
             s.verify = [.pixels("textPresent", .changed)]
             s.grammar = .owned
@@ -63,6 +66,9 @@ enum CatalogPhotoText {
                 fr("enlève le texte"),
                 fr("efface le titre", ["ref": "l1"]),
                 en("remove the text"),
+                fr("supprime ce texte", ["ref": "l1"]),
+                en("delete the title", ["ref": "l1"]),
+                near("efface la zone en haut à gauche", .fr, expected: "eraseRegion"),
             ]
             s.verify = [.pixels("textAbsent", .changed)]
             s.grammar = .owned
@@ -84,6 +90,9 @@ enum CatalogPhotoText {
                 fr("déplace le titre en haut", ["ref": "l1", "placement": "top"]),
                 fr("mets ce texte en bas à droite", ["ref": "t2", "placement": "bottomTrailing"]),
                 en("move the title to the bottom", ["ref": "l1", "placement": "bottom"]),
+                fr("descends le titre en bas", ["ref": "l1", "placement": "bottom"]),
+                en("put this text at the top", ["ref": "t2", "placement": "top"]),
+                near("déplace le chien vers la gauche", .fr, expected: "moveObject"),
             ]
             s.verify = [.unverifiable("the new place is judged by eye")]
             s.grammar = .owned
@@ -104,6 +113,9 @@ enum CatalogPhotoText {
                 fr("écris « Paris » derrière la personne", ["text": "Paris"]),
                 fr("effet profondeur avec le mot Été", ["text": "Été"]),
                 en("put the title behind me", ["text": "Summer"]),
+                fr("mets le mot Été derrière moi", ["text": "Été"]),
+                en("write Paris behind the person", ["text": "Paris"]),
+                near("ajoute le texte Paris en haut", .fr, expected: "addText"),
             ]
             s.verify = [.structural(.textLayerCount, .increased)]
             s.grammar = .owned

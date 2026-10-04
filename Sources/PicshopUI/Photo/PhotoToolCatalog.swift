@@ -9,9 +9,9 @@ import PicshopIntent
 /// - Magie: the one-tap actions, in the order the picture suggests, with
 ///   Flou portrait (the focus panel) where the portrait blur ranks, and
 ///   Objets (tap an object to erase, move or blur it).
-/// - Retoucher: Effacer, Précis, Détourage.
-/// - Lumière et couleur: Réglages, Courbes, Niveaux, Couleur, Filtres (Courbes
-///   and Niveaux with the proTone flag on).
+/// - Retoucher: Effacer, Sélection (aiSelection flag), Précis, Détourage.
+/// - Lumière et couleur: Réglages, Courbes, Niveaux, Couleur, Filtres, Masques
+///   (Courbes and Niveaux with the proTone flag on, Masques with the masks flag).
 /// - Cadrer: Recadrer, which opens straight away.
 /// - Ajouter: Texte, Formes, Calques.
 /// Footer: the side-by-side before/after, 'Que puis-je dire ?' (and
@@ -20,12 +20,16 @@ import PicshopIntent
 enum PhotoToolCatalog {
     typealias Tool = PhotoEditorSession.Tool
 
-    /// Category ids, symbols and the panels each one holds, in order.
+    /// Category ids, symbols and the panels each one holds, in order. W2: Masques ends Lumière et couleur, and
+    /// Sélection follows Effacer, each behind its flag.
     static var layout: [(id: String, symbol: String, panels: [Tool])] {
-        [
+        var light: [Tool] = FeatureFlags.isOn(.proTone) ? [.adjust, .curves, .levels, .color, .looks] : [.adjust, .color, .looks]
+        if FeatureFlags.isOn(.masks) { light.append(.masks) }
+        let retouch: [Tool] = FeatureFlags.isOn(.aiSelection) ? [.erase, .select, .precise, .cutout] : [.erase, .precise, .cutout]
+        return [
             ("magic", "sparkles", [.focus, .magic]),
-            ("retouch", "wand.and.rays", [.erase, .precise, .cutout]),
-            ("light", "dial.medium", FeatureFlags.isOn(.proTone) ? [.adjust, .curves, .levels, .color, .looks] : [.adjust, .color, .looks]),
+            ("retouch", "wand.and.rays", retouch),
+            ("light", "dial.medium", light),
             ("crop", "crop.rotate", [.crop]),
             ("add", "plus.square.on.square", [.text, .shapes, .layers]),
         ]

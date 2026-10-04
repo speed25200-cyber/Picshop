@@ -224,7 +224,6 @@ struct MagicMovieSheet: View {
             .interactiveDismissDisabled(working != nil)
         }
         .overlay { IntelligenceGlow(isActive: working != nil, level: 0.3) }
-        .preferredColorScheme(.dark)
     }
 
     /// The same still spectrum as the Magic Movie card on Home, so the sheet

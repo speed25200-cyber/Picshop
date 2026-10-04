@@ -141,11 +141,11 @@ import PicshopCore
         return finished(results)
     }
 
-    /// A catalog operation's structural postconditions (`OperationPostconditions`, carried by the run's
-    /// effects) become the step's check when the host asked for no pixel check: 'verified n/m' or
-    /// 'verify failed n/m', and the repair round when it failed.
+    /// A catalog operation's postconditions (`OperationPostconditions`, structural and, from W2, pixel ones,
+    /// carried by the run's effects; also a selectiveAdjust lowered onto a mask) become the step's check when the
+    /// host asked for no other check: 'verified n/m' or 'verify failed n/m', and the repair round when it failed.
     static func attachPostconditions(_ result: inout LiveStepResult, intent: EditIntent, run: LiveRunResult) {
-        guard result.status == .applied, result.verification == nil, run.verificationRequest == nil, intent.action == .operation,
+        guard result.status == .applied, result.verification == nil, run.verificationRequest == nil,
               let report = OperationPostconditions.report(in: run.effects),
               let verification = OperationPostconditions.verification(report, intent: intent) else { return }
         result.verification = verification

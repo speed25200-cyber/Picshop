@@ -9,7 +9,8 @@ enum CatalogPhotoTable {
                title: t("Fill cells", "Remplir des cases"), summary: t("Writes values in table cells, one step", "Écrit des valeurs dans les cases, en une étape")) { s in
             s.coreIn = [.photo]
             // Text or generated values; or only a colour, weight or size to restyle the cells already filled.
-            s.params = [Step.text(max: 200, doc: "the value; list: a|b|c").inGroup("content"), Step.values.inGroup("content"), Step.cells,
+            // `cells` defaults to the empty ones, off the card: the core block keeps its room for maskAdjust (W2).
+            s.params = [Step.text(max: 200, doc: "the value; list: a|b|c").inGroup("content"), Step.values.inGroup("content"), Step.cells.offCard,
                         Step.row, Step.column, Step.min, Step.max, Step.decimals, Step.color().offCard.inGroup("content"),
                         Step.weight.offCard.inGroup("content"), Step.size.offCard.inGroup("content")]
             s.requires = needs(table: true)
@@ -23,6 +24,7 @@ enum CatalogPhotoTable {
                 fr("remplis la colonne Prix avec 10", ["text": "10", "column": "Prix"]),
                 en("fill the empty cells with zeros", ["text": "0", "cells": "empty"]),
                 en("put random numbers in the Score column", ["values": "random", "column": "Score"]),
+                near("vide la colonne Total", .fr, expected: "clearCells"),
             ]
             s.verify = [.structural(.textLayerCount, .increased)]
             s.grammar = .owned
@@ -44,6 +46,9 @@ enum CatalogPhotoTable {
                 fr("vide la colonne Total", ["column": "Total"]),
                 fr("efface toute la ligne 3", ["row": "3", "cells": "all"]),
                 en("clear the second column", ["column": "2", "cells": "all"]),
+                fr("efface les valeurs de la colonne Prix", ["column": "Prix"]),
+                en("empty row 2", ["row": "2", "cells": "all"]),
+                near("remplis les cases vides avec des 0", .fr, expected: "fillCells"),
             ]
             s.verify = [.unverifiable("emptied cells are checked by OCR from W2")]
             s.grammar = .owned
@@ -65,6 +70,9 @@ enum CatalogPhotoTable {
                 fr("surligne la colonne Total en jaune", ["column": "Total", "color": "yellow"]),
                 fr("colore la ligne 2 en vert", ["row": "2", "color": "green"]),
                 en("highlight the last row", ["row": "-1"]),
+                fr("mets la colonne Prix en jaune", ["column": "Prix", "color": "yellow"]),
+                en("highlight the Total column in green", ["column": "Total", "color": "green"]),
+                near("vide la ligne 2", .fr, expected: "clearCells"),
             ]
             s.verify = [.unverifiable("the highlight is judged by eye")]
             s.grammar = .owned

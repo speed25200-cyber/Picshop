@@ -164,7 +164,6 @@ struct ExportSheet: View {
             .task { await readSource() }
             .interactiveDismissDisabled(exporting)
         }
-        .preferredColorScheme(.dark)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }

@@ -132,4 +132,45 @@ final class BrushRasterTests: XCTestCase {
         cache.removeAll()
         XCTAssertEqual(cache.count, 0)
     }
+
+    /// A gesture as the brush draws it: one 2-point segment per frame, then the polyline it is merged into.
+    private func gesture(_ index: Int, points: Int) -> (segments: [BrushStroke], polyline: BrushStroke) {
+        let y = 0.1 + 0.8 * Double(index % 40) / 40
+        let spine = (0..<points).map { PSPoint(x: 0.05 + 0.9 * Double($0) / Double(max(1, points - 1)), y: y) }
+        let segments = (1..<points).map { BrushStroke(points: [spine[$0 - 1], spine[$0]], radius: 0.01, hardness: 0.8) }
+        return (segments, BrushStroke(points: spine, radius: 0.01, hardness: 0.8))
+    }
+
+    /// A drag's per-frame rasters never push out the settled-size raster the stroke's settle extends.
+    func testADragsFramesGoBeforeTheSettledRaster() {
+        var cache = StrokeRasterCache(byteLimit: 32 * 1_048_576)
+        let committed = (0..<3).map { gesture($0, points: 8).polyline }
+        _ = cache.mask(for: committed, width: 2048, height: 1536)
+        let drag = gesture(3, points: 61)
+        for count in 1...drag.segments.count {
+            _ = cache.mask(for: committed + drag.segments.prefix(count), width: 1280, height: 960)
+        }
+        let before = cache.strokesDrawn
+        _ = cache.mask(for: committed + [drag.polyline], width: 2048, height: 1536)
+        XCTAssertEqual(cache.strokesDrawn - before, 1, "the settle draws only the new stroke")
+    }
+
+    /// The merged polyline keeps the raster its segments drew: the next gesture draws one stroke, not the history.
+    func testACoalescedGestureKeepsItsRaster() {
+        var cache = StrokeRasterCache()
+        let committed = (0..<10).map { gesture($0, points: 8).polyline }
+        _ = cache.mask(for: committed, width: 320, height: 240)
+        let drag = gesture(10, points: 12)
+        for count in 1...drag.segments.count {
+            _ = cache.mask(for: committed + drag.segments.prefix(count), width: 320, height: 240)
+        }
+        cache.alias(committed + drag.segments, as: committed + [drag.polyline])
+        let next = gesture(11, points: 2).segments[0]
+        let before = cache.strokesDrawn
+        let drawn = cache.mask(for: committed + [drag.polyline, next], width: 320, height: 240)
+        XCTAssertEqual(cache.strokesDrawn - before, 1, "only the new segment")
+        var direct = [UInt8](repeating: 0, count: 320 * 240)
+        BrushRaster.draw(committed + [drag.polyline, next], width: 320, height: 240, into: &direct)
+        XCTAssertEqual(drawn.bytes, direct, "the segments and the polyline draw the same pixels")
+    }
 }

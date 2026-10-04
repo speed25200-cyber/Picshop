@@ -280,6 +280,78 @@ public enum ImageSupport {
     }
 }
 
+// MARK: - Raw masks (W2, D5)
+
+/// Mask values are raw numbers, never colour-matched (D5): an 8- or 16-bit gray raster is read with no colour space
+/// (`[.colorSpace: NSNull()]`), so Core Image takes its samples as working-space values, and read back through a
+/// linear gray space, so they come back as they went in.
+public extension ImageSupport {
+    /// A raster file (8- or 16-bit gray PNG) as raw values at its own pixel size, row 0 at the top; decoded now.
+    static func rawMaskImage(at url: URL) -> CIImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [kCGImageSourceShouldCacheImmediately: true]
+        guard let cg = CGImageSourceCreateImageAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return rawMaskImage(cg)
+    }
+
+    /// A gray CGImage as raw values.
+    static func rawMaskImage(_ cg: CGImage) -> CIImage {
+        CIImage(cgImage: cg, options: [.colorSpace: NSNull()])
+    }
+
+    /// A 16-bit gray CGImage from big-endian samples (`DepthMath.pack16`), tagged linear gray.
+    static func gray16Image(width: Int, height: Int, bigEndianSamples bytes: [UInt8], colorSpace: CGColorSpace = RenderContext.maskColorSpace) -> CGImage? {
+        guard width > 0, height > 0, bytes.count >= width * height * 2, let provider = CGDataProvider(data: Data(bytes) as CFData) else { return nil }
+        let info = CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue | CGBitmapInfo.byteOrder16Big.rawValue)
+        return CGImage(width: width, height: height, bitsPerComponent: 16, bitsPerPixel: 16, bytesPerRow: width * 2, space: colorSpace,
+                       bitmapInfo: info, provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+    }
+
+    /// Top-down 8-bit raw values of a mask image's `rect` (read through linear gray, so 0.5 stays 128).
+    static func rawGrayBytes(of image: CIImage, rect: CGRect, context: CIContext = RenderContext.background) -> [UInt8]? {
+        grayBytes(of: image, rect: rect, colorSpace: RenderContext.maskColorSpace, context: context)
+    }
+
+    /// Top-down raw values 0…1 of a mask image's `rect`, as 32-bit floats when Core Image gives them, else from
+    /// 8-bit samples.
+    static func rawGrayValues(of image: CIImage, rect: CGRect, context: CIContext = RenderContext.background) -> [Float]? {
+        let bounds = rect.integral
+        guard !bounds.isEmpty, !bounds.isInfinite, bounds.width.isFinite, bounds.height.isFinite else { return nil }
+        if let cg = context.createCGImage(image, from: bounds, format: .Lf, colorSpace: RenderContext.maskColorSpace, deferred: false),
+           let values = floatGrayValues(of: cg) {
+            return values
+        }
+        return rawGrayBytes(of: image, rect: bounds, context: context)?.map { Float($0) / 255 }
+    }
+
+    /// The samples of a 32-bit float gray CGImage, row 0 at the top; nil for any other layout.
+    static func floatGrayValues(of cg: CGImage) -> [Float]? {
+        guard cg.bitsPerComponent == 32, cg.bitsPerPixel == 32, cg.bitmapInfo.contains(.floatComponents),
+              let data = cg.dataProvider?.data as Data? else { return nil }
+        let width = cg.width, height = cg.height, rowBytes = cg.bytesPerRow
+        guard data.count >= (height - 1) * rowBytes + width * 4 else { return nil }
+        let bigEndian = cg.bitmapInfo.contains(.byteOrder32Big)
+        var values = [Float](repeating: 0, count: width * height)
+        data.withUnsafeBytes { raw in
+            for y in 0..<height {
+                for x in 0..<width {
+                    let bits = raw.loadUnaligned(fromByteOffset: y * rowBytes + x * 4, as: UInt32.self)
+                    values[y * width + x] = Float(bitPattern: bigEndian ? UInt32(bigEndian: bits) : UInt32(littleEndian: bits))
+                }
+            }
+        }
+        return values
+    }
+
+    /// Top-down 8-bit raw values of a gray raster file at its own size (16-bit files are reduced).
+    static func rawGrayBytes(at url: URL) -> (bytes: [UInt8], width: Int, height: Int)? {
+        guard let image = rawMaskImage(at: url) else { return nil }
+        let extent = image.extent.integral
+        guard let bytes = rawGrayBytes(of: image, rect: extent) else { return nil }
+        return (bytes, Int(extent.width), Int(extent.height))
+    }
+}
+
 // MARK: - Geometry bridging
 
 public extension PSRect {

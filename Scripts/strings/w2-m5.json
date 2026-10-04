@@ -1,0 +1,21 @@
+{
+  "100 % (actual pixels)": "100 % (pixels réels)",
+  "AI depth (Depth Anything V2)": "Profondeur IA (Depth Anything V2)",
+  "AI object selection (SAM 2.1)": "Sélection d'objets IA (SAM 2.1)",
+  "Depth Anything V2: near and far for depth-range masks.": "Depth Anything V2 : le proche et le lointain pour les masques de profondeur.",
+  "Every tool, by voice": "Tous les outils, à la voix",
+  "M test bench": "Banc d'essai M",
+  "Mask models over cellular": "Modèles de masques en données cellulaires",
+  "Models in memory": "Modèles en mémoire",
+  "More examples": "Autres exemples",
+  "Photo requests with masks and selections, run through the on-device model: operation, arguments, applied and verified. Plug the iPhone in or keep it above 30 %; it takes several minutes.": "Des demandes photo avec masques et sélections, passées au modèle de l'iPhone : opération, arguments, appliquée et vérifiée. Branchez l'iPhone ou gardez-le au-dessus de 30 % ; cela prend plusieurs minutes.",
+  "Plug the iPhone in, or run it above 30 % battery.": "Branchez l'iPhone, ou lancez-le quand la batterie dépasse 30 %.",
+  "Run the M lane": "Lancer le banc d'essai M",
+  "Running the M lane…": "Banc d'essai M en cours…",
+  "Segment Anything 2.1: a tap, a box or a brush stroke selects an object.": "Segment Anything 2.1 : une touche, un cadre ou un coup de pinceau sélectionne un objet.",
+  "Share the JSON report": "Partager le rapport JSON",
+  "Suggestion: %@, action": "Suggestion : %@, action",
+  "Suggestion: %@, tool": "Suggestion : %@, outil",
+  "The model downloaded but could not be prepared on this iPhone. Try again.": "Le modèle est téléchargé mais n'a pas pu être préparé sur cet iPhone. Réessayez.",
+  "The object selection and depth models download only when you ask, over Wi‑Fi unless cellular is allowed above; each file is checked before it is used.": "Les modèles de sélection d'objets et de profondeur ne se téléchargent qu'à votre demande, en Wi‑Fi sauf si les données cellulaires sont autorisées ci-dessus ; chaque fichier est vérifié avant d'être utilisé."
+}

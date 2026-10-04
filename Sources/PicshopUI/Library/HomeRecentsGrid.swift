@@ -287,7 +287,6 @@ private struct HomeProjectPreview: View {
         .frame(width: 280)
         .padding(PSSpacing.medium)
         .background(Color.psBase)
-        .preferredColorScheme(.dark)
     }
 }
 

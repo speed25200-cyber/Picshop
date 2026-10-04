@@ -99,13 +99,16 @@ public enum OperationPostconditions {
 
     // MARK: Evaluation
 
-    /// What a probe reads: a number, an exact text, or an opaque state compared for change only.
+    /// What a probe reads: a number, an exact text, an opaque state compared for change only, or a count with
+    /// the state it counts (the local adjustments: their number goes up or down, their content changes).
     enum ProbeValue: Equatable {
-        case number(Double), text(String), state(String)
+        case number(Double), text(String), state(String), counted(Double, String)
 
         var number: Double? {
-            if case .number(let value) = self { return value }
-            return nil
+            switch self {
+            case .number(let value), .counted(let value, _): return value
+            default: return nil
+            }
         }
 
         var shown: String {
@@ -113,6 +116,7 @@ public enum OperationPostconditions {
             case .number(let value): return OperationPostconditions.format(value)
             case .text(let text): return text
             case .state: return "unchanged"
+            case .counted(let value, _): return OperationPostconditions.format(value)
             }
         }
     }
@@ -210,6 +214,9 @@ public enum OperationPostconditions {
         case .audioTrackCount: return "audioTrackCount"
         case .pageCount: return "pageCount"
         case .markupCount: return "markupCount"
+        case .localAdjustments: return "localAdjustments"
+        case .selection: return "selection"
+        case .selectionCoverage: return "selectionCoverage"
         }
     }
 
@@ -277,6 +284,13 @@ public enum OperationPostconditions {
             return base.map { .number($0.edits.resolvedRotation) }
         case .clipCount, .timelineDuration, .captions, .overlayCount, .audioTrackCount, .pageCount, .markupCount:
             return nil
+        case .localAdjustments:
+            let masks = document.localAdjustments
+            return .counted(Double(masks.count), String(describing: masks))
+        case .selection:
+            return .counted(document.selection == nil ? 0 : 1, document.selection.map { String(describing: $0) } ?? "none")
+        case .selectionCoverage:
+            return .number((document.selection?.coverage ?? 0) * 100)
         }
     }
 

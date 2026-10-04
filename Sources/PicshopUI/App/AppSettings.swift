@@ -67,6 +67,8 @@ public final class AppSettings {
     public var localModelQuality: LocalModelQuality { didSet { defaults.set(localModelQuality.rawValue, forKey: "localModelQuality") } }
     /// The model may download over cellular; set only after a confirmation that shows its size.
     public var localModelAllowsCellular: Bool { didSet { defaults.set(localModelAllowsCellular, forKey: "localModelAllowsCellular") } }
+    /// The mask models (SAM 2.1 tiny, Depth Anything V2 Small, W2) may download over cellular: off by default.
+    public var maskModelsAllowCellular: Bool { didSet { defaults.set(maskModelsAllowCellular, forKey: "maskModelsAllowCellular") } }
 
     public static let liveRateRange: ClosedRange<Double> = 0.85...1.25
 
@@ -103,6 +105,7 @@ public final class AppSettings {
         livePreparesOnOpen = (defaults.object(forKey: "livePreparesOnOpen") as? Bool) ?? true
         localModelQuality = LocalModelQuality(rawValue: defaults.string(forKey: "localModelQuality") ?? "") ?? .auto
         localModelAllowsCellular = defaults.bool(forKey: "localModelAllowsCellular")
+        maskModelsAllowCellular = defaults.bool(forKey: "maskModelsAllowCellular")
         VoiceFeedback.shared.isEnabled = speaksReplies
         Haptics.isEnabled = hapticsEnabled
     }

@@ -34,6 +34,33 @@ public protocol PhotoAIServices: Sendable {
     /// The rendered document's 256-bin histogram (gamma-encoded, on a small proxy), or nil when it
     /// cannot be computed. Auto Tone and Levels' Auto read it.
     func histogram(of document: PhotoDocument) async -> Histogram?
+
+    // MARK: Masks and selections (W2). Inputs render without local adjustments (D2). A missing mask model
+    // throws `PicshopError.modelUnavailable(<descriptor id>)`; a host without masks throws `unsupportedOperation`.
+
+    /// An AI mask (D8): an 8-bit raster at the working size, unit corners, `stateKey` = the base state key.
+    func aiMask(_ request: AIMaskRequest, in document: PhotoDocument) async throws -> AIMaskResult
+    /// The depth map (16-bit, 0 far … 1 near): the camera's disparity when present and the base has no geometry,
+    /// else Depth Anything V2 Small.
+    func depthMap(in document: PhotoDocument) async throws -> RasterRef
+    /// Any stack → an 8-bit raster at PhotoSelection.workingLongestSide (selections from gradients and ranges, coverage).
+    func rasterize(_ stack: MaskStack, in document: PhotoDocument) async throws -> AIMaskResult
+    /// `new` combined into `current` (nil mode: a new selection). Steps are carried over from `current`; the caller
+    /// appends the new step.
+    func combineSelection(_ current: PhotoSelection?, with new: RasterRef, mode: CombineMode?, in document: PhotoDocument) async throws -> PhotoSelection
+    func modifySelection(_ selection: PhotoSelection, _ change: SelectionChange, in document: PhotoDocument) async throws -> PhotoSelection
+    /// Select & Mask, rendered at the working size and saved.
+    func refineSelection(_ selection: PhotoSelection, _ refinement: SelectionRefinement, in document: PhotoDocument) async throws -> PhotoSelection
+    /// The Lab colour of a (2·radius + 1)² window at each point (normalised, top-left) of the pre-local base.
+    func sampleColors(at points: [PSPoint], radius: Int, in document: PhotoDocument) async throws -> [LabColor]
+    /// Pixel postconditions (D14): `before` and `after` rendered at 256 px without expensive work, measured per region.
+    func pixelProbes(_ requests: [PixelProbeRequest], before: PhotoDocument, after: PhotoDocument) async -> [PixelProbeResult]
+    /// The box (normalised, top-left) of what `phrase` names, from the VLM (`VisualGrounding.current`); nil without one.
+    func groundBox(_ phrase: String, in document: PhotoDocument) async -> PSRect?
+    /// The Lab magic wand at `point` (normalised, top-left) of the pre-local base: `tolerance` 0…1, `contiguous`,
+    /// `sampleSize` 1, 3 or 5 px; an 8-bit raster at the working size (W2, `select what: wand`). Hosts without it
+    /// throw `unsupportedOperation`, and the handler samples the colour there instead (a colour range).
+    func wandMask(at point: PSPoint, tolerance: Double, contiguous: Bool, sampleSize: Int, in document: PhotoDocument) async throws -> AIMaskResult
 }
 
 public extension PhotoAIServices {
@@ -45,6 +72,114 @@ public extension PhotoAIServices {
         requests.map { EditVerifier.structural($0, in: document) }
     }
     func histogram(of document: PhotoDocument) async -> Histogram? { nil }
+
+    // Masks and selections: hosts without them (fakes, older back ends) say so, and the handlers fall back.
+    func aiMask(_ request: AIMaskRequest, in document: PhotoDocument) async throws -> AIMaskResult {
+        throw PicshopError.unsupportedOperation("Masks")
+    }
+    func depthMap(in document: PhotoDocument) async throws -> RasterRef { throw PicshopError.unsupportedOperation("Masks") }
+    func rasterize(_ stack: MaskStack, in document: PhotoDocument) async throws -> AIMaskResult {
+        throw PicshopError.unsupportedOperation("Masks")
+    }
+    func combineSelection(_ current: PhotoSelection?, with new: RasterRef, mode: CombineMode?, in document: PhotoDocument) async throws -> PhotoSelection {
+        throw PicshopError.unsupportedOperation("Masks")
+    }
+    func modifySelection(_ selection: PhotoSelection, _ change: SelectionChange, in document: PhotoDocument) async throws -> PhotoSelection {
+        throw PicshopError.unsupportedOperation("Masks")
+    }
+    func refineSelection(_ selection: PhotoSelection, _ refinement: SelectionRefinement, in document: PhotoDocument) async throws -> PhotoSelection {
+        throw PicshopError.unsupportedOperation("Masks")
+    }
+    func sampleColors(at points: [PSPoint], radius: Int, in document: PhotoDocument) async throws -> [LabColor] {
+        throw PicshopError.unsupportedOperation("Masks")
+    }
+    func pixelProbes(_ requests: [PixelProbeRequest], before: PhotoDocument, after: PhotoDocument) async -> [PixelProbeResult] { [] }
+    func groundBox(_ phrase: String, in document: PhotoDocument) async -> PSRect? { nil }
+    func wandMask(at point: PSPoint, tolerance: Double, contiguous: Bool, sampleSize: Int, in document: PhotoDocument) async throws -> AIMaskResult {
+        throw PicshopError.unsupportedOperation("Masks")
+    }
+}
+
+// MARK: - Masks and selections (W2)
+
+/// A tap (or a Quick Selection sample) for SAM: positive adds, negative removes.
+public struct MaskPrompt: Hashable, Codable, Sendable {
+    /// Normalised, top-left origin.
+    public var point: PSPoint
+    public var isPositive: Bool
+
+    public init(_ point: PSPoint, positive: Bool = true) {
+        self.point = point
+        self.isPositive = positive
+    }
+}
+
+/// What an AI mask is of (D8).
+public enum AIMaskRequest: Hashable, Sendable {
+    case subject, background, people, sky, vegetation, water
+    /// 1-based, left to right.
+    case person(index: Int)
+    /// face, faceSkin, eyes, lips, teeth (landmarks of person `person`, 1-based; nil = the only face);
+    /// hair, bodySkin (portrait mattes; `person` ignored).
+    case personPart(MaskRegion, person: Int?)
+    /// The legacy resolution's result (candidates already chosen by CandidateSelector): exact landmark and
+    /// instance masks from `mask(for:target:in:)`; box-only candidates refined by SAM when available.
+    case candidates([ObjectCandidate], target: ObjectTarget)
+    /// Vision grounding → box → SAM.
+    case object(ObjectTarget)
+    /// "o<n>" of the scene map.
+    case sceneObject(Int)
+    /// Normalised, top-left (the VLM's 0–1000 box / 1000).
+    case box(PSRect, label: String?)
+    /// Taps and Quick Selection strokes.
+    case points([MaskPrompt], label: String?)
+}
+
+public struct AIMaskResult: Sendable, Equatable {
+    public var raster: RasterRef
+    public var coverage: Double
+    /// SAM or Depth answered (false: a Vision or heuristic fallback; Live says so when it matters).
+    public var usedModel: Bool
+    /// The provider doubts its own edge (the sky heuristic's low confidence, QuickSelectFallback): the UI captions it.
+    public var isApproximate: Bool
+
+    public init(raster: RasterRef, coverage: Double, usedModel: Bool, isApproximate: Bool = false) {
+        self.raster = raster
+        self.coverage = coverage
+        self.usedModel = usedModel
+        self.isApproximate = isApproximate
+    }
+}
+
+/// Select › Modify. Pixels are at full resolution; smooth is 0…1.
+public enum SelectionChange: Hashable, Sendable {
+    case invert, grow(pixels: Double), shrink(pixels: Double), feather(pixels: Double), smooth(Double)
+}
+
+/// One pixel probe (D14) and the region it measures.
+public struct PixelProbeRequest: Hashable, Sendable {
+    public enum Region: Hashable, Sendable { case localAdjustment(UUID), selection, box(PSRect), whole }
+
+    public var probe: PixelProbe
+    public var region: Region
+
+    public init(_ probe: PixelProbe, region: Region) {
+        self.probe = probe
+        self.region = region
+    }
+}
+
+public struct PixelProbeResult: Hashable, Sendable {
+    public var request: PixelProbeRequest
+    /// nil when not measured (timeout, no renderer).
+    public var before: PixelStats.Regions?
+    public var after: PixelStats.Regions?
+
+    public init(request: PixelProbeRequest, before: PixelStats.Regions?, after: PixelStats.Regions?) {
+        self.request = request
+        self.before = before
+        self.after = after
+    }
 }
 
 /// Facts about a photo, assembled into a sentence by the executor.
@@ -261,9 +396,12 @@ public enum ExecutionReason: String, Sendable, Equatable, CaseIterable {
         return nil
     }
 
-    /// Messages of the machine channel ("reason:", "table:"): neutral for `changedDocument`.
+    /// Messages of the machine channel ("reason:", "table:", "postconditions:"), the spoken line ("speak:") and the
+    /// selection used up by a step ("selectionUsed"): neutral for `changedDocument`. A catalog operation's report
+    /// rides with every result it checked, so it must never make an applied step look like no change.
     public static func isMachineMessage(_ message: String) -> Bool {
-        message.hasPrefix(prefix) || message.hasPrefix(TableEditReport.prefix)
+        message.hasPrefix(prefix) || message.hasPrefix(TableEditReport.prefix) || message.hasPrefix(OperationPostconditions.effectPrefix)
+            || message.hasPrefix("speak:") || message == "selectionUsed"
     }
 }
 

@@ -41,6 +41,14 @@ struct HelpSheet: View {
         return result
     }
 
+    /// The catalog's operations for this editor (W2): their categories, each with examples to say, above the
+    /// hand-picked sections. Photo only in W2.
+    private var catalogSections: [(title: String, items: [(title: String, say: String)])] {
+        guard mode == .photo else { return [] }
+        return OperationHelp.sections(domain: .photo, language: psPrefersFrench ? .fr : .en)
+            .filter { !$0.items.isEmpty }
+    }
+
     private func symbol(for section: String) -> String {
         switch section {
         case L("Erase & cut out"): return "eraser.line.dashed"
@@ -74,6 +82,26 @@ struct HelpSheet: View {
                                 .font(PSFont.footnote()).foregroundStyle(PSTheme.textSecondary)
                         }
                     }
+                    if !catalogSections.isEmpty {
+                        Text(L("Every tool, by voice"))
+                            .font(PSFont.section()).foregroundStyle(PSTheme.textPrimary)
+                            .accessibilityAddTraits(.isHeader)
+                        ForEach(Array(catalogSections.enumerated()), id: \.offset) { _, section in
+                            VStack(alignment: .leading, spacing: PSSpacing.medium) {
+                                Label(section.title, systemImage: "square.grid.2x2")
+                                    .font(PSFont.headline()).foregroundStyle(PSTheme.textPrimary)
+                                    .symbolRenderingMode(.hierarchical)
+                                FlowLayout(spacing: 8) {
+                                    ForEach(Array(section.items.enumerated()), id: \.offset) { _, item in
+                                        exampleChip(item.say, accessibilityHint: item.title)
+                                    }
+                                }
+                            }
+                        }
+                        Text(L("More examples"))
+                            .font(PSFont.section()).foregroundStyle(PSTheme.textPrimary)
+                            .accessibilityAddTraits(.isHeader)
+                    }
                     ForEach(sections, id: \.0) { section in
                         VStack(alignment: .leading, spacing: PSSpacing.medium) {
                             Label(section.0, systemImage: symbol(for: section.0))
@@ -81,20 +109,7 @@ struct HelpSheet: View {
                                 .symbolRenderingMode(.hierarchical)
                             FlowLayout(spacing: 8) {
                                 ForEach(section.1, id: \.self) { example in
-                                    Button {
-                                        guard let onSay else { return }
-                                        Haptics.confirm()
-                                        dismiss()
-                                        onSay(example)
-                                    } label: {
-                                        Text(example).font(PSFont.control()).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
-                                            .padding(.horizontal, PSMetrics.chipPadding)
-                                            .frame(minHeight: PSMetrics.chip)
-                                            .psChipFill(Capsule())
-                                            .contentShape(Capsule())
-                                    }
-                                    .buttonStyle(PSPressStyle(scale: 0.97))
-                                    .disabled(onSay == nil)
+                                    exampleChip(example, accessibilityHint: nil)
                                 }
                             }
                         }
@@ -109,8 +124,26 @@ struct HelpSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { dismiss() } } }
         }
-        .preferredColorScheme(.dark)
         .presentationDragIndicator(.visible)
+    }
+
+    /// An example as a chip: tapped, it runs as if spoken (the sheet closes first).
+    private func exampleChip(_ example: String, accessibilityHint: String?) -> some View {
+        Button {
+            guard let onSay else { return }
+            Haptics.confirm()
+            dismiss()
+            onSay(example)
+        } label: {
+            Text(example).font(PSFont.control()).foregroundStyle(PSTheme.textPrimary).lineLimit(1)
+                .padding(.horizontal, PSMetrics.chipPadding)
+                .frame(minHeight: PSMetrics.chip)
+                .psChipFill(Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(PSPressStyle(scale: 0.97))
+        .disabled(onSay == nil)
+        .accessibilityHint(accessibilityHint ?? "")
     }
 }
 

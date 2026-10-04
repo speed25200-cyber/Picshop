@@ -871,7 +871,9 @@ public actor LocalModelLiveBrain: LiveBrain {
         if state.layerCount > 1 { hints.insert(.multipleLayers) }
         if state.hasImportedLUT { hints.insert(.importedLUT) }
         if state.video?.hasCaptions == true { hints.insert(.captions) }
-        if state.selection?.contains("layer") == true { hints.insert(.selection) }
+        // A pixel selection (W2's `selection:` line, a lasso or wand one), not a selected layer.
+        if let selection = state.selection, LiveMaskLines.isPixelSelection(selection) { hints.insert(.selection) }
+        if !state.masks.isEmpty { hints.insert(.localMasks) }
         return hints
     }
 

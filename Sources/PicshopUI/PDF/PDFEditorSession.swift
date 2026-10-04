@@ -332,6 +332,9 @@ public final class PDFEditorSession {
     }
 
     private func recompose() {
+        // Instruments (W2): the whole-document compose on every committed change.
+        let signpost = PSSignpost.begin("pdf.recompose", "\(document.pageCount) pages")
+        defer { PSSignpost.end(signpost) }
         composed = services.compose(document)
         requestedPageIndex = document.currentPageIndex
     }

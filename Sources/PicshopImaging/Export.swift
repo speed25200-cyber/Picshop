@@ -71,6 +71,11 @@ public enum PhotoExporter {
     public static func export(_ document: PhotoDocument, renderer: PhotoRenderer, options: ExportOptions, source: URL? = nil) async throws -> URL {
         let timer = PSTimer("export")
         defer { timer.log(category: .imaging) }
+        if let megapixels = fullResolutionMegapixels(document, options: options) {
+            // The model broker (W2, D12) unloads SAM and Depth, and the LLM from 24 MP or under 1.5 GB free,
+            // before the full-size render needs their memory. Without a broker this does nothing.
+            await ModelResidency.prepareForExport(megapixels: megapixels)
+        }
         var renderOptions = PhotoRenderer.Options.full
         renderOptions.targetLongestSide = options.maxLongestSide
         var image = try await renderer.render(document, options: renderOptions)
@@ -98,6 +103,14 @@ public enum PhotoExporter {
             try await PhotoLibrary.save(imageAt: url, creationDate: metadata.captureDate, location: options.keepsLocation ? metadata.location : nil)
         }
         return url
+    }
+
+    /// The canvas in megapixels when this export renders at full size (no cap, or a cap above the canvas);
+    /// nil for a capped export, which needs no room made for it.
+    static func fullResolutionMegapixels(_ document: PhotoDocument, options: ExportOptions) -> Double? {
+        let longest = max(document.canvasSize.width, document.canvasSize.height)
+        if let cap = options.maxLongestSide, Double(cap) < Double(longest) { return nil }
+        return Double(document.canvasSize.width) * Double(document.canvasSize.height) / 1_000_000
     }
 
     /// True when an on-device model drew part of the picture (fill, erase, move,

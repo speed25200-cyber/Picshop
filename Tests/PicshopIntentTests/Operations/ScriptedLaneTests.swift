@@ -64,7 +64,8 @@ final class ScriptedLaneTests: XCTestCase {
         let step = stepObject(spec, example)
         switch domain {
         case .photo:
-            let document = OperationFixtures.photo()
+            // W2: the poster with two masks (a1, a2) and a selection, so refs and the selection operations run.
+            let document = OperationFixtures.photoWithMasks()
             let context = OperationFixtures.photoContext(document)
             let use = ToolArgumentCoercer.rawToolUse(id: "s", name: "apply_edits", arguments: ["steps": [step]])
             let grounding = ToolInputValidator.Grounding(imageAspect: 4.0 / 3.0, canvasAspect: 4.0 / 3.0)
@@ -78,6 +79,10 @@ final class ScriptedLaneTests: XCTestCase {
             let (after, result) = await executor.execute(intent, on: document, context: context)
             if let problem = problem(result, intent: intent) { return fail("executor", problem) }
             guard result.outcome.isSuccess else { return nil }
+            // The executor's report (structural and, from W2, pixel postconditions on the fake host's probes).
+            if let carried = OperationPostconditions.report(in: result.effects), !carried.failed.isEmpty {
+                return fail("pixel postconditions", carried.failed.joined(separator: "; "))
+            }
             let report = OperationPostconditions.check(intent, before: document, after: after)
             return report.failed.isEmpty ? nil : fail("postconditions", report.failed.joined(separator: "; "))
         case .video:
@@ -133,7 +138,8 @@ final class ScriptedLaneTests: XCTestCase {
         XCTAssertEqual(domains, [.photo, .video, .pdf])
         let ops = Set(cases.map(\.0.id))
         for id in ["curves", "levels", "autoTone", "hsl", "colorGrade", "lutIntensity", "removeLUT", "perspective", "lensFocus",
-                   "layerOpacity", "layerBlend", "layerVisibility", "layerOrder"] as [OpID] where OperationCatalog.shared.spec(id) != nil {
+                   "layerOpacity", "layerBlend", "layerVisibility", "layerOrder",
+                   "maskAdjust", "maskEdit", "maskDelete", "select", "selectionModify", "selectionApply"] as [OpID] where OperationCatalog.shared.spec(id) != nil {
             XCTAssertTrue(ops.contains(id), id.raw)
         }
     }

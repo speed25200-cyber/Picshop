@@ -31,7 +31,6 @@ struct AdvancedSettingsView: View {
         .background(AmbientBackground().ignoresSafeArea())
         .navigationTitle(L("Advanced"))
         .navigationBarTitleDisplayMode(.inline)
-        .preferredColorScheme(.dark)
     }
 
     // MARK: Models
@@ -61,10 +60,17 @@ struct AdvancedSettingsView: View {
                     if value { Task { await app.autoInstallModels() } }
                 }))
             }
+            SettingsRow(systemName: "antenna.radiowaves.left.and.right", tint: PSTheme.voice) {
+                Toggle(L("Mask models over cellular"), isOn: Binding(get: { app.settings.maskModelsAllowCellular }, set: { value in
+                    Haptics.tick()
+                    app.settings.maskModelsAllowCellular = value
+                }))
+            }
         } header: {
             Text(L("On-device models"))
         } footer: {
-            Text(L("The eraser and the upscaler ship with the app. Generative Fill is large: it downloads by itself over Wi‑Fi the first time, and everything runs on your iPhone. The local brain is in Settings › Intelligence."))
+            Text(verbatim: L("The eraser and the upscaler ship with the app. Generative Fill is large: it downloads by itself over Wi‑Fi the first time, and everything runs on your iPhone. The local brain is in Settings › Intelligence.")
+                 + " " + L("The object selection and depth models download only when you ask, over Wi‑Fi unless cellular is allowed above; each file is checked before it is used."))
         }
     }
 
@@ -73,6 +79,8 @@ struct AdvancedSettingsView: View {
         case "lama-inpainting": return L("Neural eraser")
         case "realesrgan-x4": return L("Super resolution ×4")
         case "sd-generative-fill": return L("Generative Fill")
+        case MaskModelCatalog.samTiny.id: return L("AI object selection (SAM 2.1)")
+        case MaskModelCatalog.depthSmall.id: return L("AI depth (Depth Anything V2)")
         default: return model.displayName
         }
     }
@@ -82,6 +90,8 @@ struct AdvancedSettingsView: View {
         case "lama-inpainting": return L("LaMa network for clean object removal on complex backgrounds.")
         case "realesrgan-x4": return L("Real-ESRGAN upscaler for sharp enlargements.")
         case "sd-generative-fill": return L("Stable Diffusion: “replace the sky with a sunset”, “add a hat”.")
+        case MaskModelCatalog.samTiny.id: return L("Segment Anything 2.1: a tap, a box or a brush stroke selects an object.")
+        case MaskModelCatalog.depthSmall.id: return L("Depth Anything V2: near and far for depth-range masks.")
         default: return model.summary
         }
     }
@@ -197,7 +207,7 @@ struct AdvancedSettingsView: View {
         return parts.isEmpty ? "—" : parts.joined(separator: " · ")
     }
 
-    /// Réglages › Avancé › Expérimental: the W1 kill switches. Each new part of the app can
+    /// Réglages › Avancé › Expérimental: the W1 and W2 kill switches. Each new part of the app can
     /// be turned off here if it misbehaves; Default follows the build.
     private var experimentalSection: some View {
         Section {
@@ -227,6 +237,16 @@ struct AdvancedSettingsView: View {
         case .proTone: return L("Curves, Levels and blend modes")
         case .studioWorkspace: return L("Studio workspace")
         case .psBackdrop: return L("New Home and backdrop")
+        case .masks: return L("Masks")
+        case .aiSelection: return L("AI selection")
+        case .samModel: return L("Object selection model")
+        case .depthModel: return L("Depth model")
+        case .pixelPostconditions: return L("Pixel checks")
+        case .fmDynamicSchema: return L("Apple Intelligence schema")
+        case .commandPalette: return L("Command palette")
+        case .metalOrb: return L("Metal orb")
+        case .graphiteSurround: return L("Graphite surround")
+        case .modelBroker: return L("Model broker")
         }
     }
 

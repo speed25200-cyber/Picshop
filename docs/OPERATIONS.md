@@ -3,7 +3,7 @@
 Generated from the Operation Catalog (`Sources/PicshopCore/Operations`); do not edit by hand. After changing an entry, run
 `PICSHOP_WRITE_OPERATIONS_DOC=1 swift test --filter CardTests/testOperationsDocIsUpToDate`; CI fails while this file is stale.
 
-106 operations: 51 photo, 59 video, 17 PDF. 13 run through a handler table (`IntentAction.operation`); the others lower to the IntentAction of the same name.
+112 operations: 57 photo, 59 video, 17 PDF. 19 run through a handler table (`IntentAction.operation`); the others lower to the IntentAction of the same name.
 
 A step is `{"action": id, …params}`. Points are `[x, y]` and boxes `[x1, y1, x2, y2]`, 0–1000 with a top-left origin. On a card, `*` is required, `{a / b}` is a one-of group, and `key:…` lists its values on a `key:` line.
 
@@ -12,7 +12,7 @@ A step is `{"action": id, …params}`. Points are `[x, y]` and boxes `[x1, y1, x
 | Operation | Title | Category | Core | Grammar | Fast lane | Panel |
 |---|---|---|---|---|---|---|
 | [`adjust`](#adjust) | Adjust / Réglage | light | yes | owned | yes | adjust |
-| [`selectiveAdjust`](#selectiveadjust) | Local adjust / Réglage local | light | yes | owned |  | adjust |
+| [`selectiveAdjust`](#selectiveadjust) | Local adjust / Réglage local | light |  | owned |  | adjust |
 | [`autoEnhance`](#autoenhance) | Auto enhance / Amélioration auto | light | yes | owned | yes | magic |
 | [`relight`](#relight) | Relight / Rééclairer | light |  | owned |  | magic |
 | [`curves`](#curves) | Curves / Courbes | light |  | none |  | curves |
@@ -62,6 +62,12 @@ A step is `{"action": id, …params}`. Points are `[x, y]` and boxes `[x1, y1, x
 | [`layerBlend`](#layerblend) | Blend mode / Mode de fusion | layers |  | none |  | layers |
 | [`layerVisibility`](#layervisibility) | Show or hide layer / Afficher ou masquer | layers |  | none |  | layers |
 | [`layerOrder`](#layerorder) | Layer order / Ordre des calques | layers |  | none |  | layers |
+| [`maskAdjust`](#maskadjust) | Mask adjustment / Réglage par masque | light | yes | keywordsOnly |  | masks |
+| [`maskEdit`](#maskedit) | Edit mask / Modifier le masque | selection |  | keywordsOnly |  | masks |
+| [`maskDelete`](#maskdelete) | Delete mask / Supprimer le masque | selection |  | keywordsOnly |  | masks |
+| [`select`](#select) | Select / Sélectionner | selection |  | keywordsOnly |  | select |
+| [`selectionModify`](#selectionmodify) | Modify selection / Modifier la sélection | selection |  | keywordsOnly |  | select |
+| [`selectionApply`](#selectionapply) | Use selection / Utiliser la sélection | selection |  | keywordsOnly |  | select |
 
 ## Video
 
@@ -181,7 +187,7 @@ Adjust / Réglage. One tone or colour setting. *Un réglage de ton ou de couleur
 
 Local adjust / Réglage local. A setting on one region only. *Un réglage sur une zone seulement.*
 
-- Domains: photo; core in: photo; category light; phase tone; runs as IntentAction.selectiveAdjust.
+- Domains: photo; core in: none; category light; phase tone; runs as IntentAction.selectiveAdjust.
 - Card: `selectiveAdjust: target*:"…", parameter*:…, amount -100..100, point:[x,y] 0-1000 — A setting on one region only « whiten the teeth »`
   - `parameter: exposure|brightness|contrast|highlights|shadows|whites|blacks|saturation|vibrance|temperature|tint|sharpness|clarity|noiseReduction|vignette|grain|fade|hue|skinTone`
 - Params:
@@ -200,7 +206,7 @@ Local adjust / Réglage local. A setting on one region only. *Un réglage sur un
   - « whiten the teeth » → `{"action":"selectiveAdjust","amount":20,"parameter":"brightness","target":"teeth"}`
   - « make the sky bluer » → `{"action":"selectiveAdjust","amount":20,"parameter":"saturation","target":"sky"}`
   - « rends les bleus plus saturés » is not this: `hsl`
-- Check: unverifiable: a change on one region: the pixel check comes in W2.
+- Check: pixels maskedParameter changed (from W2).
 
 ### autoEnhance
 
@@ -239,6 +245,9 @@ Relight / Rééclairer. New light on the subject. *Une nouvelle lumière sur le 
   - « rééclaire le sujet » → `{"action":"relight"}`
   - « mets une lumière qui vient de la gauche » → `{"action":"relight","degrees":180}`
   - « relight the portrait » → `{"action":"relight"}`
+  - « éclaire la personne depuis la droite » → `{"action":"relight","degrees":0}`
+  - « light the subject from the left » → `{"action":"relight","degrees":180}`
+  - « éclaircis toute la photo » is not this: `adjust`
 - Check: unverifiable: the relit look is judged by eye.
 
 ### curves
@@ -353,6 +362,8 @@ Match colour / Harmoniser les couleurs. Colours of another photo or clip. *Les c
   - « mets la couleur du clip 1 sur tous les clips » → `{"action":"matchColor","clipNumber":1,"scope":"all"}`
   - « harmonise les couleurs avec le premier clip » → `{"action":"matchColor","clipNumber":1}`
   - « match the colours of another photo » → `{"action":"matchColor"}`
+  - « copy the colours of another picture » → `{"action":"matchColor"}`
+  - « applique un filtre vintage » is not this: `applyLook`
 - Check: unverifiable: needs the reference picked by the user.
 
 ### recolor
@@ -376,6 +387,9 @@ Recolour / Changer la couleur. New colour for one object. *Une nouvelle couleur 
   - « rends la voiture rouge » → `{"action":"recolor","color":"red","target":"car"}`
   - « mets le t-shirt en bleu » → `{"action":"recolor","color":"blue","target":"shirt"}`
   - « make the car red » → `{"action":"recolor","color":"red","target":"car"}`
+  - « passe la voiture en vert » → `{"action":"recolor","color":"green","target":"car"}`
+  - « turn the shirt blue » → `{"action":"recolor","color":"blue","target":"shirt"}`
+  - « rends les verts moins saturés » is not this: `hsl`
 - Check: unverifiable: a change on one object: the pixel check comes in W2.
 
 ### hsl
@@ -417,8 +431,8 @@ Colour grade / Étalonnage. Tint shadows, midtones or highlights. *Teinte des om
   - `amount` number 0…100 (percent), default 30: tint strength
   - `luminance` number -100…100 (signedPercent), optional: darker to lighter
   - `balance` number -100…100 (signedPercent), optional: shadows ↔ highlights split; off the card
-- Triggers (fr): « étalonnage », « ombres bleues », « ombres froides », « ombres chaudes », « hautes lumières orangées », « hautes lumières chaudes », « teinte les ombres », « virage partiel », « roues chromatiques », « étalonne »
-- Triggers (en): « colour grade », « color grade », « color grading », « split toning », « teal shadows », « orange highlights », « warm highlights », « cool shadows », « colour wheels », « color wheels »
+- Triggers (fr): « étalonnage », « ombres bleues », « ombres froides », « ombres chaudes », « hautes lumières orangées », « hautes lumières chaudes », « teinte les ombres », « virage partiel », « roues chromatiques », « étalonne », « ombres turquoise »
+- Triggers (en): « colour grade », « color grade », « color grading », « split toning », « teal shadows », « orange highlights », « warm highlights », « cool shadows », « blue shadows », « tint the shadows », « colour wheels », « color wheels »
 - Examples:
   - « ombres bleues » → `{"action":"colorGrade","amount":30,"color":"blue","range":"shadows"}`
   - « hautes lumières orangées » → `{"action":"colorGrade","amount":30,"color":"orange","range":"highlights"}`
@@ -446,6 +460,8 @@ LUT intensity / Intensité du LUT. How strongly the imported LUT applies. *La fo
   - « applique mon LUT à fond » → `{"action":"lutIntensity","amount":100}`
   - « LUT intensity 70 » → `{"action":"lutIntensity","amount":70}`
   - « mets un LUT » (paraphrase) → `{"action":"lutIntensity","amount":100}`
+  - « set the LUT to half strength » → `{"action":"lutIntensity","amount":50}`
+  - « enlève le LUT » is not this: `removeLUT`
 - Check: lutIntensity equals `amount`.
 
 ### removeLUT
@@ -462,6 +478,8 @@ Remove LUT / Retirer le LUT. Takes the imported LUT off. *Enlève le LUT import�
   - « retire la LUT » → `{"action":"removeLUT"}`
   - « remove the LUT » → `{"action":"removeLUT"}`
   - « enlève le filtre » is not this: `applyLook`
+  - « supprime le LUT importé » → `{"action":"removeLUT"}`
+  - « take the LUT off » → `{"action":"removeLUT"}`
 - Check: lutIntensity decreased.
 
 ### removeObject
@@ -504,6 +522,9 @@ Clean up / Nettoyer. Erases passers-by, keeps the subject. *Efface les passants,
   - « enlève les passants » → `{"action":"cleanUp"}`
   - « nettoie la photo, il y a des touristes » → `{"action":"cleanUp"}`
   - « remove the tourists in the background » → `{"action":"cleanUp"}`
+  - « supprime les touristes de la photo » → `{"action":"cleanUp"}`
+  - « clean up the people in the back » → `{"action":"cleanUp"}`
+  - « enlève la voiture » is not this: `removeObject`
 - Check: unverifiable: which people stay is judged by eye.
 
 ### eraseRegion
@@ -523,6 +544,9 @@ Erase area / Effacer une zone. Erases a box or a scene id. *Efface une zone ou u
   - « efface le bloc de texte t3 » → `{"action":"eraseRegion","ref":"t3"}`
   - « efface la zone en haut à gauche » → `{"action":"eraseRegion","box":[0,0,300,200]}`
   - « erase that block of text » → `{"action":"eraseRegion","ref":"t1"}`
+  - « efface ce texte » → `{"action":"eraseRegion","ref":"t2"}`
+  - « erase the top left area » → `{"action":"eraseRegion","box":[0,0,300,200]}`
+  - « enlève le chien » is not this: `removeObject`
 - Check: unverifiable: the erased area is judged by eye.
 
 ### blurObject
@@ -543,6 +567,9 @@ Blur object / Flouter un élément. Privacy blur on faces, plates, screens. *Flo
   - « floute les visages » → `{"action":"blurObject","all":true,"target":"face"}`
   - « pixelise la plaque d'immatriculation » → `{"action":"blurObject","target":"sign"}`
   - « blur the faces » → `{"action":"blurObject","all":true,"target":"face"}`
+  - « floute la plaque de la voiture » → `{"action":"blurObject","target":"sign"}`
+  - « pixelate the sign » → `{"action":"blurObject","target":"sign"}`
+  - « floute l'arrière-plan » is not this: `blurBackground`
 - Check: unverifiable: a privacy blur is judged by eye.
 
 ### moveObject
@@ -565,6 +592,9 @@ Move object / Déplacer un objet. Moves a thing, fills where it was. *Déplace u
   - « déplace la voiture un peu vers la droite » → `{"action":"moveObject","amount":0.08,"degrees":0,"target":"car"}`
   - « décale le chien vers la gauche » → `{"action":"moveObject","amount":0.15,"degrees":180,"target":"dog"}`
   - « move the person to the right » → `{"action":"moveObject","amount":0.2,"degrees":0,"target":"person"}`
+  - « pousse la personne vers la gauche » → `{"action":"moveObject","amount":0.1,"degrees":180,"target":"person"}`
+  - « move the car a bit to the left » → `{"action":"moveObject","amount":0.08,"degrees":180,"target":"car"}`
+  - « déplace le titre en haut » is not this: `moveText`
 - Check: unverifiable: the new position is judged by eye.
 
 ### removeBackground
@@ -580,6 +610,9 @@ Remove background / Enlever le fond. Cuts the subject out. *Détoure le sujet.*
   - « enlève le fond » → `{"action":"removeBackground"}`
   - « détoure le sujet » → `{"action":"removeBackground"}`
   - « remove the background » → `{"action":"removeBackground"}`
+  - « supprime l'arrière-plan » → `{"action":"removeBackground"}`
+  - « cut the subject out of the photo » → `{"action":"removeBackground"}`
+  - « mets un fond blanc » is not this: `replaceBackground`
 - Check: pixels alphaCoverage decreased (from W2).
 
 ### replaceBackground
@@ -597,6 +630,9 @@ Replace background / Changer le fond. A colour, transparent or blur behind the s
   - « mets un fond blanc » → `{"action":"replaceBackground","background":"white"}`
   - « change le fond en bleu clair » → `{"action":"replaceBackground","background":"light blue"}`
   - « change the background to light blue » → `{"action":"replaceBackground","background":"light blue"}`
+  - « remplace l'arrière-plan par du blanc » → `{"action":"replaceBackground","background":"white"}`
+  - « put a white background » → `{"action":"replaceBackground","background":"white"}`
+  - « enlève le fond » is not this: `removeBackground`
 - Check: unverifiable: the new background is judged by eye.
 
 ### blurBackground
@@ -617,6 +653,7 @@ Blur background / Flouter le fond. Portrait-mode background blur. *Flou d'arriè
   - « blur the background » → `{"action":"blurBackground","amount":60}`
   - « floute larrière plan » (paraphrase) → `{"action":"blurBackground"}`
   - « fais la mise au point sur le chien » is not this: `lensFocus`
+  - « blur what is behind me » → `{"action":"blurBackground","amount":50}`
 - Check: unverifiable: the blur strength is judged by eye.
 
 ### generativeFill
@@ -635,6 +672,10 @@ Generative fill / Remplissage génératif. Invents new content in a region. *Inv
   - « remplace le ciel par un coucher de soleil » → `{"action":"generativeFill","target":"sky","text":"a sunset sky with warm clouds"}`
   - « ajoute un chapeau à la personne » → `{"action":"generativeFill","target":"person","text":"a hat"}`
   - « the sky is boring, do something about it » → `{"action":"generativeFill","target":"sky","text":"a dramatic sky with golden sunset clouds"}`
+  - « dessine des nuages dans le ciel » → `{"action":"generativeFill","target":"sky","text":"soft white clouds"}`
+  - « add a hat to the person » → `{"action":"generativeFill","target":"person","text":"a hat"}`
+  - « put a rainbow in the sky » → `{"action":"generativeFill","target":"sky","text":"a rainbow"}`
+  - « enlève la personne » is not this: `removeObject`
 - Check: unverifiable: generated content is judged by eye.
 
 ### expandCanvas
@@ -653,6 +694,9 @@ Expand / Agrandir le cadre. A bigger frame, the border invented. *Un cadre plus 
   - « agrandis la toile vers la gauche » → `{"action":"expandCanvas"}`
   - « élargis la photo en 16:9 » → `{"action":"expandCanvas","aspect":"ratio16x9"}`
   - « expand the canvas to square » → `{"action":"expandCanvas","aspect":"square"}`
+  - « étends l'image en carré » → `{"action":"expandCanvas","aspect":"square"}`
+  - « extend the picture to 16:9 » → `{"action":"expandCanvas","aspect":"ratio16x9"}`
+  - « recadre en carré » is not this: `crop`
 - Check: unverifiable: the canvas grows; its shape changes only with an aspect.
 
 ### upscale
@@ -670,6 +714,9 @@ Upscale / Agrandir. More pixels, sharper detail. *Plus de pixels, plus de détai
   - « augmente la résolution » → `{"action":"upscale"}`
   - « agrandis la photo trois fois » → `{"action":"upscale","amount":3}`
   - « upscale it 3 times » → `{"action":"upscale","amount":3}`
+  - « double la résolution » → `{"action":"upscale","amount":2}`
+  - « increase the resolution » → `{"action":"upscale"}`
+  - « rends la photo plus nette » is not this: `sharpen`
 - Check: unverifiable: the size is checked by the executor.
 
 ### denoise
@@ -687,6 +734,9 @@ Reduce noise / Réduire le bruit. Cleans grain and noise. *Nettoie le grain et l
   - « réduis le bruit » → `{"action":"denoise","amount":40}`
   - « enlève le bruit de la photo » → `{"action":"denoise","amount":50}`
   - « denoise it » → `{"action":"denoise","amount":40}`
+  - « lisse le bruit numérique » → `{"action":"denoise","amount":30}`
+  - « reduce the noise » → `{"action":"denoise","amount":50}`
+  - « accentue la netteté » is not this: `sharpen`
 - Check: adjustment(noiseReduction) increased.
 
 ### sharpen
@@ -704,6 +754,9 @@ Sharpen / Netteté. Crisper detail. *Des détails plus nets.*
   - « rends la photo plus nette » → `{"action":"sharpen","amount":30}`
   - « accentue la netteté » → `{"action":"sharpen","amount":40}`
   - « sharpen it a bit » → `{"action":"sharpen","amount":20}`
+  - « rends les détails plus nets » → `{"action":"sharpen","amount":30}`
+  - « make it sharper » → `{"action":"sharpen","amount":30}`
+  - « réduis le bruit » is not this: `denoise`
 - Check: adjustment(sharpness) increased.
 
 ### lensFocus
@@ -747,6 +800,7 @@ Crop / Recadrer. Crop to a frame shape. *Recadre selon un format.*
   - « crop to 16:9 » → `{"action":"crop","aspect":"ratio16x9"}`
   - « récadre en carré » (paraphrase) → `{"action":"crop","aspect":"square"}`
   - « recadre au mieux » is not this: `autoCrop`
+  - « crop it square » → `{"action":"crop","aspect":"square"}`
 - Check: canvasAspect equals `aspect`.
 
 ### setAspect
@@ -765,6 +819,9 @@ Aspect ratio / Format. Sets the frame shape. *Change la forme du cadre.*
   - « passe en format 9:16 » → `{"action":"setAspect","aspect":"ratio9x16"}`
   - « mets-la au format paysage » → `{"action":"setAspect","aspect":"ratio16x9"}`
   - « set the aspect ratio to 4:3 » → `{"action":"setAspect","aspect":"ratio4x3"}`
+  - « mets au format carré » → `{"action":"setAspect","aspect":"square"}`
+  - « make it portrait 9:16 » → `{"action":"setAspect","aspect":"ratio9x16"}`
+  - « agrandis la toile vers la gauche » is not this: `expandCanvas`
 - Check: canvasAspect equals `aspect`.
 
 ### autoCrop
@@ -780,6 +837,9 @@ Best crop / Meilleur cadrage. The framing an aesthetics model prefers. *Le cadra
   - « recadre au mieux » → `{"action":"autoCrop"}`
   - « trouve le meilleur cadrage » → `{"action":"autoCrop"}`
   - « improve the framing » → `{"action":"autoCrop"}`
+  - « cadre mieux la photo » → `{"action":"autoCrop"}`
+  - « find the best crop » → `{"action":"autoCrop"}`
+  - « recadre en 16:9 » is not this: `crop`
 - Check: canvasAspect changed.
 
 ### rotate
@@ -798,6 +858,8 @@ Rotate / Pivoter. Turns by degrees. *Tourne de quelques degrés.*
   - « tourne de 15 degrés » → `{"action":"rotate","degrees":15}`
   - « rotate right » → `{"action":"rotate","degrees":90}`
   - « tourne la à droite » (paraphrase) → `{"action":"rotate","degrees":90}`
+  - « rotate it 90 degrees to the left » → `{"action":"rotate","degrees":-90}`
+  - « redresse l'horizon » is not this: `straighten`
 - Check: rotation changed.
 
 ### straighten
@@ -815,6 +877,9 @@ Straighten / Redresser. Levels the horizon. *Met l'horizon à niveau.*
   - « redresse l'horizon » → `{"action":"straighten"}`
   - « redresse de 2 degrés » → `{"action":"straighten","degrees":2}`
   - « straighten the horizon » → `{"action":"straighten"}`
+  - « l'horizon penche, corrige-le » → `{"action":"straighten"}`
+  - « level the horizon » → `{"action":"straighten"}`
+  - « tourne de 90 degrés » is not this: `rotate`
 - Check: rotation changed.
 
 ### flip
@@ -832,6 +897,9 @@ Flip / Miroir. Mirrors horizontally or vertically. *Retourne en miroir.*
   - « effet miroir » → `{"action":"flip","flipAxis":"horizontal"}`
   - « retourne verticalement » → `{"action":"flip","flipAxis":"vertical"}`
   - « flip it » → `{"action":"flip","flipAxis":"horizontal"}`
+  - « retourne horizontalement » → `{"action":"flip","flipAxis":"horizontal"}`
+  - « mirror the picture » → `{"action":"flip","flipAxis":"horizontal"}`
+  - « c'est à l'envers » is not this: `resetOrientation`
 - Check: unverifiable: a mirror keeps every measured value.
 
 ### resetOrientation
@@ -850,6 +918,9 @@ Right way up / Remettre à l'endroit. Undoes every turn and mirror. *Annule rota
   - « remets-la à l'endroit » → `{"action":"resetOrientation"}`
   - « c'est à l'envers » → `{"action":"resetOrientation","degrees":180}`
   - « it's upside down » → `{"action":"resetOrientation","degrees":180}`
+  - « remets la photo dans le bon sens » → `{"action":"resetOrientation"}`
+  - « put it the right way up » → `{"action":"resetOrientation"}`
+  - « effet miroir » is not this: `flip`
 - Check: rotation changed.
 
 ### perspective
@@ -899,6 +970,7 @@ Add text / Ajouter du texte. Writes words on the picture or page. *Écrit des mo
   - « ajoute le texte Approuvé en haut » → `{"action":"addText","placement":"top","text":"Approuvé"}`
   - « add text saying Happy Birthday at the bottom » → `{"action":"addText","placement":"bottom","text":"Happy Birthday"}`
   - « write Summer 2026 at the top in yellow » → `{"action":"addText","color":"yellow","placement":"top","text":"Summer 2026"}`
+  - « change le texte en Hello » is not this: `editText`
 - Check: textLayerCount increased.
 
 ### editText
@@ -924,6 +996,8 @@ Edit text / Modifier le texte. New words or style for a text, same look. *Nouvea
   - « mets le titre en gras » → `{"action":"editText","ref":"l1","weight":"bold"}`
   - « remplace « 2025 » par « 2026 » » → `{"action":"editText","ref":"t1","text":"2026"}`
   - « change the text to Hello » → `{"action":"editText","text":"Hello"}`
+  - « make the title bold » → `{"action":"editText","ref":"l1","weight":"bold"}`
+  - « ajoute le texte Promo en haut » is not this: `addText`
 - Check: pixels textPresent changed (from W2).
 
 ### removeText
@@ -941,6 +1015,9 @@ Remove text / Enlever le texte. Erases a text block or a layer. *Efface un bloc 
   - « enlève le texte » → `{"action":"removeText"}`
   - « efface le titre » → `{"action":"removeText","ref":"l1"}`
   - « remove the text » → `{"action":"removeText"}`
+  - « supprime ce texte » → `{"action":"removeText","ref":"l1"}`
+  - « delete the title » → `{"action":"removeText","ref":"l1"}`
+  - « efface la zone en haut à gauche » is not this: `eraseRegion`
 - Check: pixels textAbsent changed (from W2).
 
 ### moveText
@@ -963,6 +1040,9 @@ Move text / Déplacer le texte. Moves a text block. *Déplace un bloc de texte.*
   - « déplace le titre en haut » → `{"action":"moveText","placement":"top","ref":"l1"}`
   - « mets ce texte en bas à droite » → `{"action":"moveText","placement":"bottomTrailing","ref":"t2"}`
   - « move the title to the bottom » → `{"action":"moveText","placement":"bottom","ref":"l1"}`
+  - « descends le titre en bas » → `{"action":"moveText","placement":"bottom","ref":"l1"}`
+  - « put this text at the top » → `{"action":"moveText","placement":"top","ref":"t2"}`
+  - « déplace le chien vers la gauche » is not this: `moveObject`
 - Check: unverifiable: the new place is judged by eye.
 
 ### textBehind
@@ -980,6 +1060,9 @@ Text behind / Texte derrière. A title behind the person. *Un titre derrière la
   - « écris « Paris » derrière la personne » → `{"action":"textBehind","text":"Paris"}`
   - « effet profondeur avec le mot Été » → `{"action":"textBehind","text":"Été"}`
   - « put the title behind me » → `{"action":"textBehind","text":"Summer"}`
+  - « mets le mot Été derrière moi » → `{"action":"textBehind","text":"Été"}`
+  - « write Paris behind the person » → `{"action":"textBehind","text":"Paris"}`
+  - « ajoute le texte Paris en haut » is not this: `addText`
 - Check: textLayerCount increased.
 
 ### fillCells
@@ -988,11 +1071,11 @@ Fill cells / Remplir des cases. Writes values in table cells, one step. *Écrit 
 
 - Domains: photo; core in: photo; category table; phase refDependent; runs as IntentAction.fillCells.
 - Needs: a table.
-- Card: `fillCells: {text:"…" / values:random|sequence|plausible|list}*, cells:empty|all, row:"…", column:"…" — Writes values in table cells, one step`
+- Card: `fillCells: {text:"…" / values:random|sequence|plausible|list}*, row:"…", column:"…" — Writes values in table cells, one step « fill the empty cells with zeros »`
 - Params:
   - `text` text ≤ 200, one of group `content`: the value; list: a|b|c
   - `values` one of `random`, `sequence`, `plausible`, `list`, one of group `content`: generated values
-  - `cells` one of `empty`, `all`, optional: empty cells (default) or all
+  - `cells` one of `empty`, `all`, optional: empty cells (default) or all; off the card
   - `row` text ≤ 40, optional: row name or number, several with |
   - `column` text ≤ 40, optional: column name or number
   - `min` number -1000000000…1000000000 (none), optional: smallest value; off the card
@@ -1009,6 +1092,7 @@ Fill cells / Remplir des cases. Writes values in table cells, one step. *Écrit 
   - « remplis la colonne Prix avec 10 » → `{"action":"fillCells","column":"Prix","text":"10"}`
   - « fill the empty cells with zeros » → `{"action":"fillCells","cells":"empty","text":"0"}`
   - « put random numbers in the Score column » → `{"action":"fillCells","column":"Score","values":"random"}`
+  - « vide la colonne Total » is not this: `clearCells`
 - Check: textLayerCount increased.
 
 ### clearCells
@@ -1028,6 +1112,9 @@ Clear cells / Vider des cases. Empties table cells. *Vide des cases du tableau.*
   - « vide la colonne Total » → `{"action":"clearCells","column":"Total"}`
   - « efface toute la ligne 3 » → `{"action":"clearCells","cells":"all","row":"3"}`
   - « clear the second column » → `{"action":"clearCells","cells":"all","column":"2"}`
+  - « efface les valeurs de la colonne Prix » → `{"action":"clearCells","column":"Prix"}`
+  - « empty row 2 » → `{"action":"clearCells","cells":"all","row":"2"}`
+  - « remplis les cases vides avec des 0 » is not this: `fillCells`
 - Check: unverifiable: emptied cells are checked by OCR from W2.
 
 ### highlightCells
@@ -1047,6 +1134,9 @@ Highlight cells / Surligner des cases. A translucent box over rows or columns. *
   - « surligne la colonne Total en jaune » → `{"action":"highlightCells","color":"yellow","column":"Total"}`
   - « colore la ligne 2 en vert » → `{"action":"highlightCells","color":"green","row":"2"}`
   - « highlight the last row » → `{"action":"highlightCells","row":"-1"}`
+  - « mets la colonne Prix en jaune » → `{"action":"highlightCells","color":"yellow","column":"Prix"}`
+  - « highlight the Total column in green » → `{"action":"highlightCells","color":"green","column":"Total"}`
+  - « vide la ligne 2 » is not this: `clearCells`
 - Check: unverifiable: the highlight is judged by eye.
 
 ### selectLayer
@@ -1064,6 +1154,9 @@ Select layer / Sélectionner un calque. Picks the layer the next edits apply to.
   - « sélectionne le calque 2 » → `{"action":"selectLayer","choiceIndex":2}`
   - « sélectionne le texte » → `{"action":"selectLayer","text":"text"}`
   - « select layer 2 » → `{"action":"selectLayer","choiceIndex":2}`
+  - « passe au calque 1 » → `{"action":"selectLayer","choiceIndex":1}`
+  - « select the text layer » → `{"action":"selectLayer","text":"text"}`
+  - « sélectionne la tasse rouge » is not this: `select`
 - Check: unverifiable: only the selection changes.
 
 ### duplicateLayer
@@ -1078,6 +1171,9 @@ Duplicate layer / Dupliquer le calque. Copies the selected layer. *Copie le calq
   - « duplique le calque » → `{"action":"duplicateLayer"}`
   - « copie le calque » → `{"action":"duplicateLayer"}`
   - « duplicate the layer » → `{"action":"duplicateLayer"}`
+  - « fais une copie du calque » → `{"action":"duplicateLayer"}`
+  - « copy this layer » → `{"action":"duplicateLayer"}`
+  - « supprime le calque » is not this: `deleteLayer`
 - Check: layerCount increased.
 
 ### deleteLayer
@@ -1093,6 +1189,9 @@ Delete layer / Supprimer le calque. Removes the selected layer. *Supprime le cal
   - « supprime le calque » → `{"action":"deleteLayer"}`
   - « enlève le calque » → `{"action":"deleteLayer"}`
   - « delete the layer » → `{"action":"deleteLayer"}`
+  - « retire ce calque » → `{"action":"deleteLayer"}`
+  - « remove this layer » → `{"action":"deleteLayer"}`
+  - « masque le calque » is not this: `layerVisibility`
 - Check: layerCount decreased.
 
 ### layerOpacity
@@ -1113,6 +1212,8 @@ Layer opacity / Opacité du calque. How see-through a layer is. *La transparence
   - « rends le texte à moitié transparent » → `{"action":"layerOpacity","opacity":50,"ref":"l1"}`
   - « set the layer opacity to 50 » → `{"action":"layerOpacity","opacity":50}`
   - « opa du calque à 80 » (paraphrase) → `{"action":"layerOpacity","opacity":80}`
+  - « make the layer half transparent » → `{"action":"layerOpacity","opacity":50}`
+  - « cache le calque » is not this: `layerVisibility`
 - Check: layerOpacity equals `opacity`.
 
 ### layerBlend
@@ -1156,6 +1257,7 @@ Show or hide layer / Afficher ou masquer. Hides or shows a layer. *Masque ou aff
   - « cache le calque du texte » → `{"action":"layerVisibility","ref":"l1","visible":false}`
   - « hide the layer » → `{"action":"layerVisibility","visible":false}`
   - « supprime le calque » is not this: `deleteLayer`
+  - « show layer l1 again » → `{"action":"layerVisibility","ref":"l1","visible":true}`
 - Check: layerVisibility equals `visible`.
 
 ### layerOrder
@@ -1179,6 +1281,337 @@ Layer order / Ordre des calques. Brings a layer forward or sends it back. *Avanc
   - « floute l'arrière-plan » is not this: `blurBackground`
 - Check: layerOrder changed.
 
+### maskAdjust
+
+Mask adjustment / Réglage par masque. A setting on one area, through a mask. *Un réglage sur une zone, par un masque.*
+
+- Domains: photo; core in: photo; category light; phase tone; runs as handler (IntentAction.operation).
+- Card: `maskAdjust: {where:… / ref:o1|a1 / target:"…"}*, parameter:…*, amount -100..100 — A setting on one area, through a mask « darken the bottom »`
+  - `where: subject|background|sky|people|person|object|vegetation|water|face|faceSkin|eyes|lips|teeth|hair|bodySkin|top|bottom|left|right|center|edges|color|shadows|midtones|highlights|skinTones|near|far|selection`
+  - `parameter: exposure|brightness|contrast|highlights|shadows|whites|blacks|saturation|vibrance|temperature|tint|sharpness|clarity|noiseReduction|vignette|grain|fade|hue|skinTone`
+- Params:
+  - `where` one of `subject`, `background`, `sky`, `people`, `person`, `object`, `vegetation`, `water`, `face`, `faceSkin`, `eyes`, `lips`, `teeth`, `hair`, `bodySkin`, `top`, `bottom`, `left`, `right`, `center`, `edges`, `color`, `shadows`, `midtones`, `highlights`, `skinTones`, `near`, `far`, `selection`, one of group `where`: area: sky, subject, bottom, shadows… (also `region`, `area`)
+  - `ref` id on/an, one of group `where`: a1 a mask, o1 an object (also `mask`)
+  - `target` text ≤ 40, one of group `where`: object or face part noun: cup, teeth (also `object`, `subject`)
+  - `attributes` list of ≤ 3: text ≤ 24, optional: colour or clothing that tells it apart; off the card
+  - `index` integer 1…8, optional: person 1, 2… from the left (also `person`); off the card
+  - `box` box [x1, y1, x2, y2] 0–1000, one of group `where`: [x1,y1,x2,y2] 0-1000 of the thing; off the card
+  - `point` point [x, y] 0–1000, one of group `where`: [x,y] 0-1000 on the thing; off the card
+  - `color` colour name or #RRGGBB, optional: colour for where=color (also `colour`, `couleur`); off the card
+  - `fuzziness` number 0…100 (percent), optional: colour range width, 0 exact; off the card
+  - `start` point [x, y] 0–1000, optional: linear: full effect from [x,y]; off the card
+  - `end` point [x, y] 0–1000, optional: linear: no effect from [x,y]; off the card
+  - `center` point [x, y] 0–1000, optional: radial: centre [x,y]; off the card
+  - `radius` number 1…100 (percent), optional: radial: size, % of the long side; off the card
+  - `rotation` number -180…180 (degrees), optional: radial: tilt in degrees; off the card
+  - `roundness` number 0…100 (percent), optional: radial: 100 a circle; off the card
+  - `parameter` one of `exposure`, `brightness`, `contrast`, `highlights`, `shadows`, `whites`, `blacks`, `saturation`, `vibrance`, `temperature`, `tint`, `sharpness`, `clarity`, `noiseReduction`, `vignette`, `grain`, `fade`, `hue`, `skinTone`, one of group `effect`: the setting (also `param`, `setting`)
+  - `curve` one of `sCurve`, `strongS`, `matte`, `fade`, `invert`, `brighten`, `darken`, `linear`, one of group `effect`: a curve shape on the area; off the card
+  - `band` one of `red`, `orange`, `yellow`, `green`, `aqua`, `blue`, `purple`, `magenta`, one of group `effect`: a colour band (HSL); off the card
+  - `hue` number -100…100 (signedPercent), optional: HSL: shift the band's hue; off the card
+  - `saturation` number -100…100 (signedPercent), optional: HSL: the band's saturation; off the card
+  - `luminance` number -100…100 (signedPercent), optional: HSL: the band's lightness; off the card
+  - `localColor` colour name or #RRGGBB, one of group `effect`: tint the area: colour name; off the card
+  - `localColorAmount` number 0…100 (percent), optional: tint strength; off the card
+  - `amount` number -100…100 (signedPercent), optional: relative ±; a bit 10, a lot 40 (also `value`, `strength`, `intensity`)
+  - `amountMode` one of `relative`, `absolute`, default relative: relative adds, absolute sets; off the card
+  - `feather` number 0…100 (percent), optional: mask edge softness; off the card
+- Triggers (fr): « le ciel », « éclaircis le ciel », « assombris le bas », « le haut », « en bas de la photo », « dégradé », « sur le sujet », « le fond plus sombre », « l'arrière-plan », « les ombres seulement », « les tons chair », « au premier plan », « au loin », « masque », « filtre gradué », « filtre radial », « seulement le sujet », « assombris le haut », « réglage local », « par zone », « sur les bords », « le bas de la photo », « plus de contraste sur », « sur la personne », « sur l'eau », « sur la végétation »
+- Triggers (en): « darken the bottom », « brighten the sky », « on the subject », « graduated filter », « radial filter », « only the sky », « the background darker », « local adjustment », « the top of the photo », « the bottom of the photo », « more contrast on », « on the edges », « in the shadows only », « the foreground », « in the distance », « through a mask »
+- Examples:
+  - « assombris le bas de la photo » → `{"action":"maskAdjust","amount":-20,"parameter":"exposure","where":"bottom"}`
+  - « plus de contraste sur le sujet » → `{"action":"maskAdjust","amount":20,"parameter":"contrast","where":"subject"}`
+  - « rends le ciel plus profond » → `{"action":"maskAdjust","amount":25,"parameter":"saturation","where":"sky"}`
+  - « éclaircis les ombres seulement » → `{"action":"maskAdjust","amount":20,"parameter":"exposure","where":"shadows"}`
+  - « réchauffe un peu les tons chair » → `{"action":"maskAdjust","amount":10,"parameter":"temperature","where":"skinTones"}`
+  - « un dégradé sombre en haut » → `{"action":"maskAdjust","amount":-30,"end":[500,450],"parameter":"exposure","start":[500,0],"where":"top"}`
+  - « éclaircis la tasse bleue » → `{"action":"maskAdjust","amount":20,"attributes":["blue"],"parameter":"exposure","target":"cup","where":"object"}`
+  - « plus de clarté sur la deuxième personne » → `{"action":"maskAdjust","amount":20,"index":2,"parameter":"clarity","where":"person"}`
+  - « assombris tout ce qui est vert » → `{"action":"maskAdjust","amount":-20,"color":"green","fuzziness":40,"parameter":"exposure","where":"color"}`
+  - « courbe en S sur le ciel » → `{"action":"maskAdjust","curve":"sCurve","where":"sky"}`
+  - « sature les bleus du ciel » → `{"action":"maskAdjust","band":"blue","saturation":30,"where":"sky"}`
+  - « teinte orangée au premier plan » → `{"action":"maskAdjust","localColor":"orange","localColorAmount":30,"where":"near"}`
+  - « filtre radial lumineux au centre » → `{"action":"maskAdjust","amount":15,"center":[500,500],"parameter":"exposure","radius":30,"roundness":80,"where":"center"}`
+  - « mets l'exposition du ciel à -30 » → `{"action":"maskAdjust","amount":-30,"amountMode":"absolute","parameter":"exposure","where":"sky"}`
+  - « éclaircis encore le masque a1 » → `{"action":"maskAdjust","amount":15,"parameter":"exposure","ref":"a1"}`
+  - « assombris doucement les bords » → `{"action":"maskAdjust","amount":-20,"feather":80,"parameter":"exposure","where":"edges"}`
+  - « darken the bottom » → `{"action":"maskAdjust","amount":-20,"parameter":"exposure","where":"bottom"}`
+  - « more contrast on the subject » → `{"action":"maskAdjust","amount":20,"parameter":"contrast","where":"subject"}`
+  - « graduated filter at the top, a bit darker » → `{"action":"maskAdjust","amount":-15,"parameter":"exposure","where":"top"}`
+  - « warm up the water » → `{"action":"maskAdjust","amount":20,"parameter":"temperature","where":"water"}`
+  - « make the greens of the trees lighter » → `{"action":"maskAdjust","band":"green","luminance":20,"where":"vegetation"}`
+  - « brighten the thing I'm pointing at » → `{"action":"maskAdjust","amount":15,"parameter":"exposure","point":[420,610]}`
+  - « tilted radial filter on the left, brighter » → `{"action":"maskAdjust","amount":15,"center":[300,450],"parameter":"exposure","radius":25,"rotation":30,"where":"center"}`
+  - « le ciel un peu plus sombre stp » (paraphrase) → `{"action":"maskAdjust","amount":-15,"parameter":"exposure","where":"sky"}`
+  - « assombrit le bas » (paraphrase) → `{"action":"maskAdjust","amount":-20,"parameter":"exposure","where":"bottom"}`
+  - « monte la luminosité de l'objet o1 » (paraphrase) → `{"action":"maskAdjust","amount":20,"parameter":"brightness","ref":"o1"}`
+  - « décale la teinte des verts de la végétation » (paraphrase) → `{"action":"maskAdjust","band":"green","hue":-20,"where":"vegetation"}`
+  - « brighten this cup » (paraphrase) → `{"action":"maskAdjust","amount":20,"box":[380,420,560,700],"parameter":"exposure","target":"cup","where":"object"}`
+  - « éclaircis les personnes » → `{"action":"maskAdjust","amount":20,"parameter":"exposure","where":"people"}`
+  - « fais ressortir les yeux » → `{"action":"maskAdjust","amount":20,"parameter":"clarity","where":"eyes"}`
+  - « des lèvres un peu plus rouges » → `{"action":"maskAdjust","amount":20,"parameter":"saturation","where":"lips"}`
+  - « make the teeth less yellow » → `{"action":"maskAdjust","amount":-30,"parameter":"saturation","where":"teeth"}`
+  - « plus de brillance dans les cheveux » → `{"action":"maskAdjust","amount":15,"parameter":"clarity","where":"hair"}`
+  - « warm the skin on the arms » → `{"action":"maskAdjust","amount":15,"parameter":"temperature","where":"bodySkin"}`
+  - « assombris le côté droit » → `{"action":"maskAdjust","amount":-20,"parameter":"exposure","where":"right"}`
+  - « more contrast in the midtones only » → `{"action":"maskAdjust","amount":15,"parameter":"contrast","where":"midtones"}`
+  - « calme les zones claires » → `{"action":"maskAdjust","amount":-15,"parameter":"exposure","where":"highlights"}`
+  - « ajoute un vignettage » is not this: `adjust`
+  - « remplace le ciel par un coucher de soleil » is not this: `generativeFill`
+  - « désature les bleus » is not this: `hsl`
+  - « make it brighter » is not this: `adjust`
+  - « éclaircis » is not this: `adjust`
+- Check: localAdjustments changed; pixels maskedParameter changed (from W2); pixels maskCoverageInRange changed (from W2).
+
+### maskEdit
+
+Edit mask / Modifier le masque. Changes a mask's shape or strength. *Change la forme ou la force d'un masque.*
+
+- Domains: photo; core in: none; category selection; phase tone; runs as handler (IntentAction.operation).
+- Card: `maskEdit: ref:a1, {combine:add|subtract|intersect / invert:true|false / feather 0..100 / expand -100..100 / amount 0..100}* — Changes a mask's shape or strength`
+- Params:
+  - `ref` id an, optional: a1; none: the last edited (also `mask`)
+  - `combine` one of `add`, `subtract`, `intersect`, one of group `change`: add, subtract or intersect an area
+  - `invert` true or false, one of group `change`: invert the whole mask
+  - `feather` number 0…100 (percent), one of group `change`: edge softness
+  - `expand` number -100…100 (signedPercent), one of group `change`: grow +, shrink − (also `grow`)
+  - `amount` number 0…100 (percent), one of group `change`: adjustment strength (also `strength`, `opacity`)
+  - `density` number 0…100 (percent), one of group `change`: mask strength; off the card
+  - `visible` true or false, one of group `change`: false hides the adjustment; off the card
+  - `refresh` true or false, one of group `change`: recompute AI masks; off the card
+  - `name` text ≤ 30, one of group `change`: rename the mask; off the card
+  - `duplicate` true or false, one of group `change`: copy the mask; off the card
+  - `show` true or false, one of group `change`: show the mask overlay; off the card
+  - `component` integer 1…12, optional: the part of the mask, 1-based; off the card
+  - `componentMode` one of `add`, `subtract`, `intersect`, one of group `change`: that part's mode; off the card
+  - `componentInvert` true or false, one of group `change`: invert that part; off the card
+  - `componentDelete` true or false, one of group `change`: remove that part; off the card
+  - `low` number 0…100 (percent), one of group `change`: range: low end; off the card
+  - `high` number 0…100 (percent), one of group `change`: range: high end; off the card
+  - `smoothness` number 0…100 (percent), one of group `change`: range: soft ends; off the card
+  - `where` one of `subject`, `background`, `sky`, `people`, `person`, `object`, `vegetation`, `water`, `face`, `faceSkin`, `eyes`, `lips`, `teeth`, `hair`, `bodySkin`, `top`, `bottom`, `left`, `right`, `center`, `edges`, `color`, `shadows`, `midtones`, `highlights`, `skinTones`, `near`, `far`, `selection`, optional: area: sky, subject, bottom, shadows… (also `region`, `area`); off the card
+  - `target` text ≤ 40, optional: object or face part noun: cup, teeth (also `object`, `subject`); off the card
+  - `attributes` list of ≤ 3: text ≤ 24, optional: colour or clothing that tells it apart; off the card
+  - `index` integer 1…8, optional: person 1, 2… from the left (also `person`); off the card
+  - `box` box [x1, y1, x2, y2] 0–1000, optional: [x1,y1,x2,y2] 0-1000 of the thing; off the card
+  - `point` point [x, y] 0–1000, optional: [x,y] 0-1000 on the thing; off the card
+  - `color` colour name or #RRGGBB, optional: colour for where=color (also `colour`, `couleur`); off the card
+  - `fuzziness` number 0…100 (percent), one of group `change`: colour range width, 0 exact; off the card
+  - `start` point [x, y] 0–1000, one of group `change`: linear: full effect from [x,y]; off the card
+  - `end` point [x, y] 0–1000, one of group `change`: linear: no effect from [x,y]; off the card
+  - `center` point [x, y] 0–1000, one of group `change`: radial: centre [x,y]; off the card
+  - `radius` number 1…100 (percent), one of group `change`: radial: size, % of the long side; off the card
+  - `rotation` number -180…180 (degrees), one of group `change`: radial: tilt in degrees; off the card
+  - `roundness` number 0…100 (percent), one of group `change`: radial: 100 a circle; off the card
+  - `localColor` colour name or #RRGGBB, one of group `change`: tint the area: colour name; off the card
+  - `localColorAmount` number 0…100 (percent), optional: tint strength; off the card
+- Triggers (fr): « ajoute au masque », « retire du masque », « inverse le masque », « adoucis le masque », « étends le masque », « contour du masque », « agrandis le masque », « réduis le masque », « masque plus doux », « renomme le masque », « duplique le masque », « montre le masque », « cache le réglage », « intensité du masque », « le masque 2 », « sur le masque »
+- Triggers (en): « subtract from the mask », « add to the mask », « invert the mask », « feather the mask », « expand the mask », « contract the mask », « rename the mask », « duplicate the mask », « show the mask », « mask strength », « soften the mask »
+- Examples:
+  - « inverse le masque » → `{"action":"maskEdit","invert":true}`
+  - « adoucis le masque a1 » → `{"action":"maskEdit","feather":60,"ref":"a1"}`
+  - « étends un peu le masque » → `{"action":"maskEdit","expand":20}`
+  - « retire le sujet du masque a1 » → `{"action":"maskEdit","combine":"subtract","ref":"a1","where":"subject"}`
+  - « ajoute le ciel au masque » → `{"action":"maskEdit","combine":"add","where":"sky"}`
+  - « garde seulement les ombres dans le masque » → `{"action":"maskEdit","combine":"intersect","where":"shadows"}`
+  - « le masque a1 à moitié moins fort » → `{"action":"maskEdit","amount":50,"ref":"a1"}`
+  - « cache le réglage du masque a1 » → `{"action":"maskEdit","ref":"a1","visible":false}`
+  - « renomme le masque a1 en Ciel du soir » → `{"action":"maskEdit","name":"Ciel du soir","ref":"a1"}`
+  - « duplique le masque a1 » → `{"action":"maskEdit","duplicate":true,"ref":"a1"}`
+  - « montre-moi le masque a1 » → `{"action":"maskEdit","ref":"a1","show":true}`
+  - « mets à jour le masque du ciel » → `{"action":"maskEdit","ref":"a1","refresh":true}`
+  - « baisse la densité du masque à 60 » → `{"action":"maskEdit","density":60}`
+  - « passe la deuxième partie du masque en soustraction » → `{"action":"maskEdit","component":2,"componentMode":"subtract"}`
+  - « inverse la première partie du masque » → `{"action":"maskEdit","component":1,"componentInvert":true}`
+  - « supprime la deuxième partie du masque » → `{"action":"maskEdit","component":2,"componentDelete":true}`
+  - « ne garde que les tons entre 20 et 70 dans le masque » → `{"action":"maskEdit","high":70,"low":20,"smoothness":30}`
+  - « élargis la plage de couleur du masque » → `{"action":"maskEdit","fuzziness":60}`
+  - « descends le dégradé jusqu'au milieu » → `{"action":"maskEdit","end":[500,500],"start":[500,0]}`
+  - « agrandis le filtre radial » → `{"action":"maskEdit","center":[500,500],"radius":45,"rotation":0,"roundness":100}`
+  - « teinte bleue dans le masque a1 » → `{"action":"maskEdit","localColor":"blue","localColorAmount":25,"ref":"a1"}`
+  - « subtract the subject from the mask » → `{"action":"maskEdit","combine":"subtract","where":"subject"}`
+  - « invert the mask » → `{"action":"maskEdit","invert":true}`
+  - « feather the mask a lot » → `{"action":"maskEdit","feather":80}`
+  - « add this cup to the mask » → `{"action":"maskEdit","attributes":["white"],"box":[380,420,560,700],"combine":"add","target":"cup","where":"object"}`
+  - « add the second person to the mask » → `{"action":"maskEdit","combine":"add","index":2,"where":"person"}`
+  - « add the spot I'm pointing at to the mask » → `{"action":"maskEdit","combine":"add","point":[420,610]}`
+  - « add the reds to the mask » → `{"action":"maskEdit","color":"red","combine":"add","where":"color"}`
+  - « rétrécis le masque » (paraphrase) → `{"action":"maskEdit","expand":-20}`
+  - « make the mask weaker » (paraphrase) → `{"action":"maskEdit","amount":50}`
+  - « inverse la sélection » is not this: `selectionModify`
+  - « masque le calque » is not this: `layerVisibility`
+- Check: localAdjustments changed; pixels maskCoverage changed (from W2).
+
+### maskDelete
+
+Delete mask / Supprimer le masque. Removes a mask and its adjustment. *Supprime un masque et son réglage.*
+
+- Domains: photo; core in: none; category selection; phase tone; runs as handler (IntentAction.operation).
+- Needs: destructive.
+- Card: `maskDelete: ref:a1, all:true|false — Removes a mask and its adjustment « delete the mask »`
+- Params:
+  - `ref` id an, optional: a1; none: the last edited (also `mask`)
+  - `all` true or false, optional: every mask
+- Triggers (fr): « supprime le masque », « enlève le masque », « efface le masque », « retire le masque », « supprime tous les masques », « plus de masque »
+- Triggers (en): « delete the mask », « remove the mask », « delete all masks », « remove every mask »
+- Examples:
+  - « supprime le masque » → `{"action":"maskDelete"}`
+  - « enlève le masque a2 » → `{"action":"maskDelete","ref":"a2"}`
+  - « supprime tous les masques » → `{"action":"maskDelete","all":true}`
+  - « delete the mask » → `{"action":"maskDelete"}`
+  - « remove all the masks » → `{"action":"maskDelete","all":true}`
+  - « vire le masque a1 » (paraphrase) → `{"action":"maskDelete","ref":"a1"}`
+  - « supprime le calque » is not this: `deleteLayer`
+  - « supprime le fond » is not this: `removeBackground`
+- Check: localAdjustments decreased.
+
+### select
+
+Select / Sélectionner. Selects part of the photo. *Sélectionne une partie de la photo.*
+
+- Domains: photo; core in: none; category selection; phase refDependent; runs as handler (IntentAction.operation).
+- Card: `select: {what:… / ref:o1|a1 / target:"…"}*, mode:new|add|subtract|intersect=new — Selects part of the photo « select the subject »`
+  - `what: subject|background|sky|people|person|object|vegetation|water|face|faceSkin|eyes|lips|teeth|hair|bodySkin|top|bottom|left|right|center|edges|color|shadows|midtones|highlights|skinTones|near|far|selection|all|wand`
+- Params:
+  - `what` one of `subject`, `background`, `sky`, `people`, `person`, `object`, `vegetation`, `water`, `face`, `faceSkin`, `eyes`, `lips`, `teeth`, `hair`, `bodySkin`, `top`, `bottom`, `left`, `right`, `center`, `edges`, `color`, `shadows`, `midtones`, `highlights`, `skinTones`, `near`, `far`, `selection`, `all`, `wand`, one of group `what`: what: subject, sky, object, color…
+  - `ref` id on/an, one of group `what`: o1 an object, a1 a mask
+  - `target` text ≤ 40, one of group `what`: object or face part noun: cup, teeth (also `object`, `subject`)
+  - `attributes` list of ≤ 3: text ≤ 24, optional: colour or clothing that tells it apart; off the card
+  - `index` integer 1…8, optional: person 1, 2… from the left (also `person`); off the card
+  - `box` box [x1, y1, x2, y2] 0–1000, one of group `what`: [x1,y1,x2,y2] 0-1000 of the thing; off the card
+  - `point` point [x, y] 0–1000, one of group `what`: [x,y] 0-1000 on the thing; off the card
+  - `color` colour name or #RRGGBB, optional: colour for where=color (also `colour`, `couleur`); off the card
+  - `fuzziness` number 0…100 (percent), optional: colour range width, 0 exact; off the card
+  - `spatialHint` one of `left`, `right`, `top`, `bottom`, `center`, `foreground`, `background`, `largest`, `smallest`, `leftmost`, `rightmost`, `nearest`, `farthest`, optional: where it is in the frame; off the card
+  - `tolerance` number 0…100 (percent), optional: wand: how alike, 0 exact; off the card
+  - `contiguous` true or false, optional: wand: touching pixels only; off the card
+  - `sampleSize` integer 1…5, optional: wand: sample 1, 3 or 5 px; off the card
+  - `mode` one of `new`, `add`, `subtract`, `intersect`, default new: new, or add, subtract, intersect
+- Triggers (fr): « sélectionne », « sélection », « choisis la tasse », « à la baguette magique », « sélectionne cette couleur », « sélectionne le sujet », « sélectionne le ciel », « sélectionne la tasse », « sélectionne tout », « ajoute à la sélection », « retire de la sélection », « sélectionne les personnes », « sélectionne l'arrière-plan », « détoure la sélection de »
+- Triggers (en): « select the », « select subject », « select sky », « magic wand », « select everything », « add to the selection », « subtract from the selection », « select this colour », « select the people »
+- Examples:
+  - « sélectionne le sujet » → `{"action":"select","what":"subject"}`
+  - « sélectionne tous les gens » → `{"action":"select","what":"people"}`
+  - « sélectionne le ciel » → `{"action":"select","what":"sky"}`
+  - « sélectionne la tasse bleue » → `{"action":"select","attributes":["blue"],"box":[380,420,560,700],"target":"cup","what":"object"}`
+  - « sélectionne tout » → `{"action":"select","what":"all"}`
+  - « ajoute les personnes à la sélection » → `{"action":"select","mode":"add","what":"people"}`
+  - « retire le ciel de la sélection » → `{"action":"select","mode":"subtract","what":"sky"}`
+  - « garde seulement la partie commune avec le sujet » → `{"action":"select","mode":"intersect","what":"subject"}`
+  - « sélectionne cette couleur » → `{"action":"select","fuzziness":30,"point":[300,400],"what":"color"}`
+  - « baguette magique ici » → `{"action":"select","contiguous":true,"point":[620,380],"sampleSize":3,"tolerance":25,"what":"wand"}`
+  - « sélectionne l'objet o1 » → `{"action":"select","ref":"o1"}`
+  - « sélectionne la deuxième personne » → `{"action":"select","index":2,"what":"person"}`
+  - « sélectionne la personne de droite » → `{"action":"select","spatialHint":"right","target":"person","what":"object"}`
+  - « sélectionne tout ce qui est rouge » → `{"action":"select","color":"red","what":"color"}`
+  - « select the subject » → `{"action":"select","what":"subject"}`
+  - « select the sky » → `{"action":"select","what":"sky"}`
+  - « select the blue cup » → `{"action":"select","attributes":["blue"],"target":"cup","what":"object"}`
+  - « magic wand on the wall » → `{"action":"select","point":[150,300],"what":"wand"}`
+  - « select the masked area a1 » → `{"action":"select","ref":"a1"}`
+  - « selectione la tasse bleu » (paraphrase) → `{"action":"select","attributes":["blue"],"target":"cup","what":"object"}`
+  - « prends le sujet en sélection » (paraphrase) → `{"action":"select","what":"subject"}`
+  - « select the shadows » (paraphrase) → `{"action":"select","what":"shadows"}`
+  - « sélectionne la végétation » → `{"action":"select","what":"vegetation"}`
+  - « select the water » → `{"action":"select","what":"water"}`
+  - « sélectionne le visage » → `{"action":"select","what":"face"}`
+  - « select the skin of the face » → `{"action":"select","what":"faceSkin"}`
+  - « sélectionne les yeux » → `{"action":"select","what":"eyes"}`
+  - « sélectionne les lèvres » → `{"action":"select","what":"lips"}`
+  - « select the teeth » → `{"action":"select","what":"teeth"}`
+  - « sélectionne les cheveux » → `{"action":"select","what":"hair"}`
+  - « select the skin of the arms and legs » → `{"action":"select","what":"bodySkin"}`
+  - « sélectionne le haut de l'image » → `{"action":"select","what":"top"}`
+  - « sélectionne le bas » → `{"action":"select","what":"bottom"}`
+  - « select the right side » → `{"action":"select","what":"right"}`
+  - « sélectionne les bords » → `{"action":"select","what":"edges"}`
+  - « select the midtones » → `{"action":"select","what":"midtones"}`
+  - « sélectionne les tons chair » → `{"action":"select","what":"skinTones"}`
+  - « sélectionne le premier plan » → `{"action":"select","what":"near"}`
+  - « nouvelle sélection avec le ciel » → `{"action":"select","mode":"new","what":"sky"}`
+  - « sélectionne le calque 2 » is not this: `selectLayer`
+  - « détoure le sujet » is not this: `removeBackground`
+- Check: selection changed; pixels selectionCoverageInRange changed (from W2).
+
+### selectionModify
+
+Modify selection / Modifier la sélection. Inverts, grows, softens or refines it. *L'inverse, l'agrandit, l'adoucit ou l'affine.*
+
+- Domains: photo; core in: none; category selection; phase refDependent; runs as handler (IntentAction.operation).
+- Needs: a selection.
+- Card: `selectionModify: {invert:true|false / grow 1..500 / shrink 1..500 / feather 0..500 / refine:true|false / deselect:true|false}*`
+- Params:
+  - `invert` true or false, one of group `change`: select the rest
+  - `grow` number 1…500 (none), one of group `change`: grow by pixels (also `expand`)
+  - `shrink` number 1…500 (none), one of group `change`: shrink by pixels (also `contract`)
+  - `feather` number 0…500 (none), one of group `change`: soft edge, pixels
+  - `smooth` number 0…100 (percent), one of group `change`: smooth the outline; off the card
+  - `refine` true or false, one of group `change`: refine the edges (Select & Mask)
+  - `radius` number 0…100 (percent), one of group `change`: refine: edge radius; off the card
+  - `shiftEdge` number -100…100 (signedPercent), one of group `change`: refine: move the edge in − out +; off the card
+  - `contrast` number 0…100 (percent), one of group `change`: refine: harder edge; off the card
+  - `decontaminate` number 0…100 (percent), one of group `change`: refine: remove colour fringes; off the card
+  - `deselect` true or false, one of group `change`: drop the selection
+- Triggers (fr): « inverse la sélection », « agrandis la sélection », « réduis la sélection », « contour progressif », « adoucis les bords de la sélection », « affine les bords », « désélectionne », « lisse la sélection », « étends la sélection », « décontamine les couleurs », « sélectionner et masquer », « plus de sélection », « contracter la sélection », « dilater la sélection », « rétrécis la sélection »
+- Triggers (en): « deselect », « feather the selection », « refine edges », « invert the selection », « grow the selection », « shrink the selection », « smooth the selection », « select and mask », « select none »
+- Examples:
+  - « inverse la sélection » → `{"action":"selectionModify","invert":true}`
+  - « agrandis la sélection de 10 pixels » → `{"action":"selectionModify","grow":10}`
+  - « réduis la sélection de 5 pixels » → `{"action":"selectionModify","shrink":5}`
+  - « contour progressif de 20 pixels » → `{"action":"selectionModify","feather":20}`
+  - « lisse la sélection » → `{"action":"selectionModify","smooth":40}`
+  - « affine les bords » → `{"action":"selectionModify","refine":true}`
+  - « affine les bords avec un rayon plus large et décale-les vers l'extérieur » → `{"action":"selectionModify","radius":50,"refine":true,"shiftEdge":20}`
+  - « des bords plus nets et décontamine les couleurs » → `{"action":"selectionModify","contrast":40,"decontaminate":60}`
+  - « désélectionne » → `{"action":"selectionModify","deselect":true}`
+  - « deselect » → `{"action":"selectionModify","deselect":true}`
+  - « feather the selection by 30 pixels » → `{"action":"selectionModify","feather":30}`
+  - « refine edges » → `{"action":"selectionModify","refine":true}`
+  - « invert the selection » → `{"action":"selectionModify","invert":true}`
+  - « tout désélectionner » (paraphrase) → `{"action":"selectionModify","deselect":true}`
+  - « adoucis les bords de la sélection » (paraphrase) → `{"action":"selectionModify","feather":15}`
+  - « inverse le masque » is not this: `maskEdit`
+  - « affine le visage » is not this: no operation yet
+- Check: selection changed.
+
+### selectionApply
+
+Use selection / Utiliser la sélection. Uses the selection for an edit. *Se sert de la sélection pour une retouche.*
+
+- Domains: photo; core in: none; category selection; phase composition; runs as handler (IntentAction.operation).
+- Needs: a selection.
+- Card: `selectionApply: use*:…, parameter:…, amount -100..100, color:name|#hex, prompt:"…" — Uses the selection for an edit « fill the selection with blue »`
+  - `use: adjust|mask|erase|fill|recolor|blur|cutout|generate`
+  - `parameter: exposure|brightness|contrast|highlights|shadows|whites|blacks|saturation|vibrance|temperature|tint|sharpness|clarity|noiseReduction|vignette|grain|fade|hue|skinTone`
+- Params:
+  - `use` one of `adjust`, `mask`, `erase`, `fill`, `recolor`, `blur`, `cutout`, `generate`, required: what to do with the selection (also `for`)
+  - `parameter` one of `exposure`, `brightness`, `contrast`, `highlights`, `shadows`, `whites`, `blacks`, `saturation`, `vibrance`, `temperature`, `tint`, `sharpness`, `clarity`, `noiseReduction`, `vignette`, `grain`, `fade`, `hue`, `skinTone`, optional: the setting (also `param`, `setting`)
+  - `amount` number -100…100 (signedPercent), optional: adjust ±; blur 0-100 (also `value`, `strength`, `intensity`)
+  - `color` colour name or #RRGGBB, optional: fill or recolour colour (also `colour`, `couleur`)
+  - `prompt` text ≤ 80, optional: generate: what to put there (also `text`)
+  - `keep` true or false, optional: keep the selection afterwards; off the card
+- Triggers (fr): « efface la sélection », « remplis la sélection », « floute la sélection », « recolore la sélection », « fais-en un masque », « éclaircis la sélection », « remplace la sélection par », « détoure la sélection », « utilise la sélection », « dans la sélection », « assombris la sélection », « supprime la sélection », « ce qui est sélectionné »
+- Triggers (en): « fill the selection », « erase the selection », « blur the selection », « recolour the selection », « make it a mask », « brighten the selection », « use the selection », « cut out the selection », « replace the selection with »
+- Examples:
+  - « efface la sélection » → `{"action":"selectionApply","use":"erase"}`
+  - « remplis la sélection de rouge » → `{"action":"selectionApply","color":"red","use":"fill"}`
+  - « floute la sélection » → `{"action":"selectionApply","amount":60,"use":"blur"}`
+  - « recolore la sélection en vert » → `{"action":"selectionApply","color":"green","use":"recolor"}`
+  - « fais-en un masque » → `{"action":"selectionApply","use":"mask"}`
+  - « éclaircis la sélection » → `{"action":"selectionApply","amount":20,"parameter":"exposure","use":"adjust"}`
+  - « remplace la sélection par un chapeau » → `{"action":"selectionApply","prompt":"un chapeau","use":"generate"}`
+  - « détoure la sélection » → `{"action":"selectionApply","use":"cutout"}`
+  - « assombris la sélection mais garde-la » → `{"action":"selectionApply","amount":-20,"keep":true,"parameter":"exposure","use":"adjust"}`
+  - « fill the selection with blue » → `{"action":"selectionApply","color":"blue","use":"fill"}`
+  - « erase the selection » → `{"action":"selectionApply","use":"erase"}`
+  - « blur the selection » → `{"action":"selectionApply","amount":60,"use":"blur"}`
+  - « make it a mask » → `{"action":"selectionApply","use":"mask"}`
+  - « efface ce qui est sélectionné » (paraphrase) → `{"action":"selectionApply","use":"erase"}`
+  - « put a hat where the selection is » (paraphrase) → `{"action":"selectionApply","prompt":"a hat","use":"generate"}`
+  - « efface le chien » is not this: `removeObject`
+  - « floute le fond » is not this: `blurBackground`
+- Check: pixels selectionUse changed (from W2).
+
 ### trim
 
 Trim / Garder une partie. Keeps only start…end. *Ne garde que début…fin.*
@@ -1195,6 +1628,9 @@ Trim / Garder une partie. Keeps only start…end. *Ne garde que début…fin.*
   - « garde seulement de 2 à 8 secondes » → `{"action":"trim","endSeconds":8,"startSeconds":2}`
   - « ne garde que les 10 premières secondes » → `{"action":"trim","endSeconds":10,"startSeconds":0}`
   - « keep only from 5 to 20 seconds » → `{"action":"trim","endSeconds":20,"startSeconds":5}`
+  - « garde de 3 à 9 secondes » → `{"action":"trim","endSeconds":9,"startSeconds":3}`
+  - « keep just the first 10 seconds » → `{"action":"trim","endSeconds":10,"startSeconds":0}`
+  - « coupe de 10 à 12 secondes » is not this: `deleteRange`
 - Check: timelineDuration decreased.
 
 ### split
@@ -1211,6 +1647,9 @@ Split / Couper en deux. Cuts the clip at a time. *Coupe le clip à un instant.*
   - « coupe ici » → `{"action":"split"}`
   - « coupe à 5 secondes » → `{"action":"split","seconds":5}`
   - « split at 10 seconds » → `{"action":"split","seconds":10}`
+  - « sépare le clip à 4 secondes » → `{"action":"split","seconds":4}`
+  - « cut here » → `{"action":"split"}`
+  - « supprime le clip 2 » is not this: `deleteClip`
 - Check: clipCount increased.
 
 ### deleteClip
@@ -1229,6 +1668,8 @@ Delete clip / Supprimer le clip. Removes a whole clip. *Enlève un clip entier.*
   - « supprime ce clip » → `{"action":"deleteClip"}`
   - « supprime le dernier clip » → `{"action":"deleteClip","clipNumber":-1}`
   - « delete the last clip » → `{"action":"deleteClip","clipNumber":-1}`
+  - « delete clip 2 » → `{"action":"deleteClip","clipNumber":2}`
+  - « coupe les 3 premières secondes » is not this: `deleteRange`
 - Check: clipCount decreased.
 
 ### deleteRange
@@ -1236,10 +1677,10 @@ Delete clip / Supprimer le clip. Removes a whole clip. *Enlève un clip entier.*
 Cut a range / Couper un passage. Removes start…end. *Enlève début…fin.*
 
 - Domains: video; core in: video; category cut; phase geometry; runs as IntentAction.deleteRange.
-- Card: `deleteRange: startSeconds*:s, endSeconds:s — Removes start…end « remove from 10 to 12 seconds »`
+- Card: `deleteRange: startSeconds*:s, endSeconds*:s — Removes start…end « remove from 10 to 12 seconds »`
 - Params:
   - `startSeconds` number 0…36000 (seconds), required: range start (also `start`, `from`)
-  - `endSeconds` number 0…36000 (seconds), optional: range end (also `end`, `to`)
+  - `endSeconds` number 0…36000 (seconds), required: range end (also `end`, `to`)
   - `clipNumber` integer -1…999, optional: clip 1.., -1 last (also `clip`); off the card
 - Triggers (fr): « coupe les », « enlève les », « premières secondes », « dernières secondes », « coupe de », « supprime le passage »
 - Triggers (en): « cut the first », « remove the last », « first seconds », « last seconds », « cut from », « delete the part »
@@ -1248,6 +1689,8 @@ Cut a range / Couper un passage. Removes start…end. *Enlève début…fin.*
   - « coupe le clip 2 de 3 à 5 secondes » → `{"action":"deleteRange","clipNumber":2,"endSeconds":5,"startSeconds":3}`
   - « remove from 10 to 12 seconds » → `{"action":"deleteRange","endSeconds":12,"startSeconds":10}`
   - « coupe les trois premières secondes » (paraphrase) → `{"action":"deleteRange","endSeconds":3,"startSeconds":0}`
+  - « cut the first 3 seconds » → `{"action":"deleteRange","endSeconds":3,"startSeconds":0}`
+  - « ne garde que de 2 à 8 secondes » is not this: `trim`
 - Check: timelineDuration decreased.
 
 ### setSpeed
@@ -1267,6 +1710,8 @@ Speed / Vitesse. Faster or slower playback. *Lecture plus rapide ou ralentie.*
   - « mets le clip 2 au ralenti » → `{"action":"setSpeed","clipNumber":2,"speed":0.5}`
   - « slow motion » → `{"action":"setSpeed","speed":0.5}`
   - « accélère deux fois » (paraphrase) → `{"action":"setSpeed","speed":2}`
+  - « speed it up 2x » → `{"action":"setSpeed","speed":2}`
+  - « fais une rampe de vitesse » is not this: `speedRamp`
 - Check: timelineDuration changed.
 
 ### reverse
@@ -1284,6 +1729,8 @@ Reverse / Lecture inversée. Plays the clip backwards. *Lit le clip à l'envers.
   - « joue le clip à l'envers » → `{"action":"reverse"}`
   - « play it backwards » → `{"action":"reverse"}`
   - « inverse les clips 1 et 2 » is not this: `moveClip`
+  - « lis la vidéo à l'envers » → `{"action":"reverse"}`
+  - « reverse the clip » → `{"action":"reverse"}`
 - Check: unverifiable: the playback direction is judged by eye.
 
 ### freezeFrame
@@ -1301,6 +1748,9 @@ Freeze frame / Arrêt sur image. Holds one frame. *Fige une image.*
   - « fige l'image à 4 secondes » → `{"action":"freezeFrame","seconds":4}`
   - « arrêt sur image ici » → `{"action":"freezeFrame"}`
   - « freeze frame at 3 seconds » → `{"action":"freezeFrame","seconds":3}`
+  - « fige l'image à 2 secondes » → `{"action":"freezeFrame","seconds":2}`
+  - « freeze the picture here » → `{"action":"freezeFrame"}`
+  - « extrais l'image à 3 secondes » is not this: `extractFrame`
 - Check: timelineDuration increased.
 
 ### duplicateClip
@@ -1317,6 +1767,9 @@ Duplicate clip / Dupliquer le clip. Copies a clip after itself. *Copie un clip j
   - « duplique le clip » → `{"action":"duplicateClip"}`
   - « duplique le clip 2 » → `{"action":"duplicateClip","clipNumber":2}`
   - « duplicate the clip » → `{"action":"duplicateClip"}`
+  - « copie le clip 1 » → `{"action":"duplicateClip","clipNumber":1}`
+  - « duplicate clip 2 » → `{"action":"duplicateClip","clipNumber":2}`
+  - « supprime le clip » is not this: `deleteClip`
 - Check: clipCount increased.
 
 ### moveClip
@@ -1334,6 +1787,9 @@ Move clip / Déplacer le clip. Moves a clip to a new position. *Change la place 
   - « déplace le clip 2 au début » → `{"action":"moveClip","choiceIndex":1,"clipNumber":2}`
   - « inverse les clips 1 et 2 » → `{"action":"moveClip","choiceIndex":2,"clipNumber":1}`
   - « move clip 2 to the beginning » → `{"action":"moveClip","choiceIndex":1,"clipNumber":2}`
+  - « mets le clip 3 en premier » → `{"action":"moveClip","choiceIndex":1,"clipNumber":3}`
+  - « swap clips 1 and 2 » → `{"action":"moveClip","choiceIndex":2,"clipNumber":1}`
+  - « inverse la vidéo » is not this: `reverse`
 - Check: unverifiable: the order is checked by the executor.
 
 ### extractFrame
@@ -1350,6 +1806,9 @@ Extract frame / Extraire une image. Saves one frame as a photo. *Enregistre une 
   - « extrais l'image à 3 secondes » → `{"action":"extractFrame","seconds":3}`
   - « fais une capture d'écran » → `{"action":"extractFrame"}`
   - « grab this frame » → `{"action":"extractFrame"}`
+  - « enregistre cette image » → `{"action":"extractFrame"}`
+  - « save this frame as a photo » → `{"action":"extractFrame"}`
+  - « fige l'image ici » is not this: `freezeFrame`
 - Check: unverifiable: the photo is saved outside the timeline.
 
 ### addTransition
@@ -1369,6 +1828,9 @@ Transition / Transition. A transition between clips. *Une transition entre les c
   - « ajoute un fondu enchaîné entre tous les clips » → `{"action":"addTransition","scope":"all","transition":"crossDissolve"}`
   - « ajoute une transition glissée » → `{"action":"addTransition","transition":"slideLeft"}`
   - « add a fade to black between the clips » → `{"action":"addTransition","scope":"all","transition":"fadeToBlack"}`
+  - « mets un fondu au noir entre les plans » → `{"action":"addTransition","scope":"all","transition":"fadeToBlack"}`
+  - « add a crossfade between all the clips » → `{"action":"addTransition","scope":"all","transition":"crossDissolve"}`
+  - « retire toutes les transitions » is not this: `removeTransition`
 - Check: unverifiable: transitions are checked by the executor.
 
 ### removeTransition
@@ -1386,6 +1848,9 @@ Remove transition / Enlever la transition. Back to a straight cut. *Revient à u
   - « enlève la transition » → `{"action":"removeTransition"}`
   - « supprime toutes les transitions » → `{"action":"removeTransition","scope":"all"}`
   - « remove the transitions » → `{"action":"removeTransition","scope":"all"}`
+  - « retire le fondu » → `{"action":"removeTransition"}`
+  - « remove the transition » → `{"action":"removeTransition"}`
+  - « ajoute un fondu enchaîné » is not this: `addTransition`
 - Check: unverifiable: transitions are checked by the executor.
 
 ### stabilize
@@ -1404,6 +1869,9 @@ Stabilise / Stabiliser. Steadies shaky footage. *Calme les tremblements.*
   - « stabilise la vidéo » → `{"action":"stabilize"}`
   - « ça tremble, stabilise » → `{"action":"stabilize"}`
   - « stabilize the video » → `{"action":"stabilize"}`
+  - « enlève les tremblements » → `{"action":"stabilize"}`
+  - « the video is shaky, stabilize it » → `{"action":"stabilize"}`
+  - « accélère la vidéo » is not this: `setSpeed`
 - Check: unverifiable: stability is judged by eye.
 
 ### autoCaptions
@@ -1424,6 +1892,7 @@ Captions / Sous-titres. Subtitles from the speech, or a new style. *Sous-titres 
   - « add captions » → `{"action":"autoCaptions"}`
   - « sous titres » (paraphrase) → `{"action":"autoCaptions"}`
   - « mets les sous-titres en haut » is not this: no operation yet
+  - « subtitle the video » → `{"action":"autoCaptions"}`
 - Check: captions changed.
 
 ### removeCaptions
@@ -1439,6 +1908,9 @@ Remove captions / Enlever les sous-titres. Takes the subtitles off. *Retire les 
   - « enlève les sous-titres » → `{"action":"removeCaptions"}`
   - « supprime les sous-titres » → `{"action":"removeCaptions"}`
   - « remove the captions » → `{"action":"removeCaptions"}`
+  - « retire les sous-titres » → `{"action":"removeCaptions"}`
+  - « delete the subtitles » → `{"action":"removeCaptions"}`
+  - « traduis les sous-titres en anglais » is not this: `translateCaptions`
 - Check: captions changed.
 
 ### translateCaptions
@@ -1456,6 +1928,9 @@ Translate captions / Traduire les sous-titres. Subtitles in another language. *S
   - « traduis les sous-titres en anglais » → `{"action":"translateCaptions","text":"en"}`
   - « mets les sous-titres en espagnol » → `{"action":"translateCaptions","text":"es"}`
   - « translate the captions to French » → `{"action":"translateCaptions","text":"fr"}`
+  - « sous-titres en allemand » → `{"action":"translateCaptions","text":"de"}`
+  - « translate the subtitles into Spanish » → `{"action":"translateCaptions","text":"es"}`
+  - « enlève les sous-titres » is not this: `removeCaptions`
 - Check: captions changed.
 
 ### removeSilences
@@ -1473,6 +1948,9 @@ Jump cuts / Couper les blancs. Removes the pauses in speech. *Enlève les pauses
   - « enlève les blancs » → `{"action":"removeSilences"}`
   - « coupe les silences, serré » → `{"action":"removeSilences","amount":0.45}`
   - « remove the silences » → `{"action":"removeSilences"}`
+  - « supprime les silences » → `{"action":"removeSilences"}`
+  - « cut out the pauses » → `{"action":"removeSilences"}`
+  - « enlève les euh » is not this: `removeFillers`
 - Check: timelineDuration decreased.
 
 ### removeFillers
@@ -1489,6 +1967,8 @@ Remove fillers / Enlever les euh. Cuts the ums and stutters. *Coupe les euh et l
   - « coupe les hésitations » → `{"action":"removeFillers"}`
   - « remove the ums » → `{"action":"removeFillers"}`
   - « enlève les heu » (paraphrase) → `{"action":"removeFillers"}`
+  - « cut the uhs and ums » → `{"action":"removeFillers"}`
+  - « coupe les silences » is not this: `removeSilences`
 - Check: timelineDuration decreased.
 
 ### cutWords
@@ -1508,6 +1988,9 @@ Cut words / Couper des mots. Cuts where these words are said. *Coupe là où ces
   - « coupe le moment où je dis bref » → `{"action":"cutWords","text":"bref"}`
   - « enlève chaque fois que je dis genre » → `{"action":"cutWords","scope":"all","text":"genre"}`
   - « cut where I say basically » → `{"action":"cutWords","text":"basically"}`
+  - « enlève le passage où je dis voilà » → `{"action":"cutWords","text":"voilà"}`
+  - « remove every time I say like » → `{"action":"cutWords","scope":"all","text":"like"}`
+  - « enlève les hésitations » is not this: `removeFillers`
 - Check: timelineDuration decreased.
 
 ### trackSubject
@@ -1527,6 +2010,8 @@ Follow subject / Suivre le sujet. An overlay follows the moving subject. *Un él
   - « le texte doit suivre la personne » → `{"action":"trackSubject","text":"text"}`
   - « make the title follow the person » → `{"action":"trackSubject","text":"text"}`
   - « track the cyclist » (paraphrase) → `{"action":"trackSubject"}`
+  - « accroche le texte au visage » → `{"action":"trackSubject","text":"text"}`
+  - « passe en vertical en suivant le sujet » is not this: `smartReframe`
 - Check: unverifiable: tracking is judged by eye.
 
 ### splitScenes
@@ -1545,6 +2030,9 @@ Split scenes / Couper aux changements de plan. Cuts wherever the shot changes. *
   - « coupe à chaque changement de plan » → `{"action":"splitScenes","scope":"all"}`
   - « détecte les plans » → `{"action":"splitScenes"}`
   - « split at every scene change » → `{"action":"splitScenes","scope":"all"}`
+  - « découpe la vidéo par plans » → `{"action":"splitScenes","scope":"all"}`
+  - « detect the scenes » → `{"action":"splitScenes"}`
+  - « coupe à 5 secondes » is not this: `split`
 - Check: clipCount increased.
 
 ### animateText
@@ -1561,6 +2049,9 @@ Animate title / Animer le titre. How the title comes on screen. *Comment le titr
   - « anime le titre en pop » → `{"action":"animateText","text":"pop"}`
   - « fais monter le titre doucement » → `{"action":"animateText","text":"rise"}`
   - « make the title pop in » → `{"action":"animateText","text":"pop"}`
+  - « révèle le titre de gauche à droite » → `{"action":"animateText","text":"wipe"}`
+  - « animate the title with a wipe » → `{"action":"animateText","text":"wipe"}`
+  - « fais suivre le titre au visage » is not this: `trackSubject`
 - Check: unverifiable: the motion is judged by eye.
 
 ### highlights
@@ -1578,6 +2069,9 @@ Highlights / Résumé. A recap of the best moments. *Un résumé des meilleurs m
   - « fais un résumé de 20 secondes » → `{"action":"highlights","seconds":20}`
   - « garde les meilleurs moments » → `{"action":"highlights"}`
   - « make a 20 second recap » → `{"action":"highlights","seconds":20}`
+  - « garde le meilleur en 30 secondes » → `{"action":"highlights","seconds":30}`
+  - « keep the best moments » → `{"action":"highlights"}`
+  - « ne garde que les 10 premières secondes » is not this: `trim`
 - Check: timelineDuration decreased.
 
 ### speedRamp
@@ -1595,6 +2089,9 @@ Speed ramp / Rampe de vitesse. Eases into slow motion and back. *Glisse vers le 
   - « fais une rampe de vitesse » → `{"action":"speedRamp"}`
   - « ralenti progressif à 6 secondes » → `{"action":"speedRamp","amount":0.3,"seconds":6}`
   - « speed ramp into slow motion » → `{"action":"speedRamp","amount":0.3}`
+  - « passe progressivement au ralenti » → `{"action":"speedRamp","amount":0.3}`
+  - « ramp the speed down at 6 seconds » → `{"action":"speedRamp","amount":0.3,"seconds":6}`
+  - « mets tout au ralenti » is not this: `setSpeed`
 - Check: timelineDuration increased.
 
 ### punchIns
@@ -1611,6 +2108,9 @@ Zoom cuts / Zooms de coupe. Every other segment framed tighter. *Un segment sur 
   - « ajoute des zooms de coupe » → `{"action":"punchIns","amount":1.2}`
   - « zoom à chaque coupe » → `{"action":"punchIns"}`
   - « add punch-ins » → `{"action":"punchIns","amount":1.2}`
+  - « zoome un peu à chaque coupe » → `{"action":"punchIns","amount":1.15}`
+  - « zoom in on each cut » → `{"action":"punchIns"}`
+  - « ajoute un zoom lent » is not this: `kenBurns`
 - Check: unverifiable: framing is judged by eye.
 
 ### blurFaces
@@ -1629,6 +2129,9 @@ Blur faces / Flouter les visages. Every face blurred through the clips. *Tous le
   - « floute les visages » → `{"action":"blurFaces","scope":"all"}`
   - « anonymise les gens » → `{"action":"blurFaces"}`
   - « blur all the faces » → `{"action":"blurFaces","scope":"all"}`
+  - « cache les visages » → `{"action":"blurFaces","scope":"all"}`
+  - « anonymize the people » → `{"action":"blurFaces"}`
+  - « stabilise la vidéo » is not this: `stabilize`
 - Check: unverifiable: the blur is judged by eye.
 
 ### smartReframe
@@ -1648,6 +2151,8 @@ Smart reframe / Recadrage intelligent. New shape, following the subject. *Nouvea
   - « c'est pour TikTok » → `{"action":"smartReframe","aspect":"ratio9x16"}`
   - « reframe for reels following the person » → `{"action":"smartReframe","aspect":"ratio9x16"}`
   - « met la en vertical » (paraphrase) → `{"action":"smartReframe","aspect":"ratio9x16"}`
+  - « make it vertical for TikTok » → `{"action":"smartReframe","aspect":"ratio9x16"}`
+  - « recadre en carré » is not this: `crop`
 - Check: canvasAspect equals `aspect`.
 
 ### kenBurns
@@ -1666,6 +2171,8 @@ Ken Burns / Zoom lent. A slow push-in or drift. *Un zoom ou travelling lent.*
   - « ajoute un zoom avant progressif sur la personne » → `{"action":"kenBurns"}`
   - « effet Ken Burns sur tous les clips » → `{"action":"kenBurns","scope":"all"}`
   - « add a slow zoom » → `{"action":"kenBurns"}`
+  - « add a Ken Burns effect » → `{"action":"kenBurns"}`
+  - « ajoute des zooms de coupe » is not this: `punchIns`
 - Check: unverifiable: the move is judged by eye.
 
 ### mute
@@ -1683,6 +2190,9 @@ Mute / Couper le son. Silences a clip or a track. *Rend muet un clip ou une pist
   - « coupe le son » → `{"action":"mute"}`
   - « enlève le son du clip 3 » → `{"action":"mute","clipNumber":3}`
   - « mute the music » → `{"action":"mute","clipNumber":1,"scope":"selection"}`
+  - « mets le clip 2 en muet » → `{"action":"mute","clipNumber":2}`
+  - « mute clip 3 » → `{"action":"mute","clipNumber":3}`
+  - « remets le son » is not this: `unmute`
 - Check: unverifiable: sound is checked by the executor.
 
 ### unmute
@@ -1700,6 +2210,9 @@ Unmute / Remettre le son. Brings the sound back. *Remet le son.*
   - « remets le son » → `{"action":"unmute"}`
   - « réactive le son du clip 2 » → `{"action":"unmute","clipNumber":2}`
   - « unmute it » → `{"action":"unmute"}`
+  - « rallume le son » → `{"action":"unmute"}`
+  - « turn the sound back on » → `{"action":"unmute"}`
+  - « coupe le son » is not this: `mute`
 - Check: unverifiable: sound is checked by the executor.
 
 ### setVolume
@@ -1720,6 +2233,8 @@ Volume / Volume. Louder or quieter, 0-200 %. *Plus fort ou moins fort, 0-200 %.*
   - « monte le volume de la musique à 80 % » → `{"action":"setVolume","amount":80,"amountMode":"absolute","clipNumber":1,"scope":"selection"}`
   - « mets la musique à 30 % » → `{"action":"setVolume","amount":30,"amountMode":"absolute","clipNumber":1,"scope":"selection"}`
   - « turn the music down to 30 percent » → `{"action":"setVolume","amount":30,"amountMode":"absolute","clipNumber":1,"scope":"selection"}`
+  - « lower the volume by 20 percent » → `{"action":"setVolume","amount":-20}`
+  - « coupe le son du clip 2 » is not this: `mute`
 - Check: unverifiable: sound is checked by the executor.
 
 ### addMusic
@@ -1740,6 +2255,8 @@ Add sound / Ajouter du son. Another sound track: music, voice-over. *Une autre p
   - « ajoute une voix off » → `{"action":"addMusic"}`
   - « ajoute un deuxième son à 10 secondes » → `{"action":"addMusic","seconds":10}`
   - « add some calm music » → `{"action":"addMusic","text":"calm"}`
+  - « add a voice-over » → `{"action":"addMusic"}`
+  - « enlève la musique » is not this: `removeMusic`
 - Check: unverifiable: the user picks the sound before a track is added.
 
 ### removeMusic
@@ -1756,6 +2273,9 @@ Remove sound track / Enlever la musique. Removes a sound track. *Enlève une pis
   - « enlève la musique » → `{"action":"removeMusic"}`
   - « supprime la deuxième piste son » → `{"action":"removeMusic","clipNumber":2}`
   - « remove the music » → `{"action":"removeMusic"}`
+  - « retire la musique de fond » → `{"action":"removeMusic"}`
+  - « delete the second audio track » → `{"action":"removeMusic","clipNumber":2}`
+  - « baisse la musique » is not this: `setVolume`
 - Check: audioTrackCount decreased.
 
 ### moveAudio
@@ -1773,6 +2293,9 @@ Move sound / Déplacer le son. Moves a track to a time. *Déplace une piste à u
   - « fais commencer la musique à 5 secondes » → `{"action":"moveAudio","clipNumber":1,"seconds":5}`
   - « décale la piste 2 à 12 secondes » → `{"action":"moveAudio","clipNumber":2,"seconds":12}`
   - « start the music at 3 seconds » → `{"action":"moveAudio","clipNumber":1,"seconds":3}`
+  - « démarre la musique à 2 secondes » → `{"action":"moveAudio","clipNumber":1,"seconds":2}`
+  - « move track 2 to 12 seconds » → `{"action":"moveAudio","clipNumber":2,"seconds":12}`
+  - « fais finir la musique avec la vidéo » is not this: `fitMusic`
 - Check: unverifiable: sound is checked by the executor.
 
 ### fadeAudio
@@ -1791,6 +2314,9 @@ Fade sound / Fondu sonore. Fade-in or fade-out of a track. *Fondu d'entrée ou d
   - « fais un fondu de la musique à la fin » → `{"action":"fadeAudio","clipNumber":1,"text":"out"}`
   - « fondu sonore de 3 secondes au début » → `{"action":"fadeAudio","amount":3,"clipNumber":1,"text":"in"}`
   - « fade out the music » → `{"action":"fadeAudio","clipNumber":1,"text":"out"}`
+  - « fondu de sortie sur la musique » → `{"action":"fadeAudio","clipNumber":1,"text":"out"}`
+  - « fade in the music over 3 seconds » → `{"action":"fadeAudio","amount":3,"clipNumber":1,"text":"in"}`
+  - « baisse la musique quand je parle » is not this: `autoDuck`
 - Check: unverifiable: sound is checked by the executor.
 
 ### autoDuck
@@ -1807,6 +2333,9 @@ Auto duck / Atténuation auto. Music dips under the voice. *La musique baisse so
   - « baisse la musique quand je parle » → `{"action":"autoDuck"}`
   - « atténuation forte de la musique » → `{"action":"autoDuck","amount":0.8}`
   - « duck the music under the voice » → `{"action":"autoDuck"}`
+  - « mets la musique en retrait pendant la voix » → `{"action":"autoDuck"}`
+  - « lower the music when I talk » → `{"action":"autoDuck"}`
+  - « mets la musique à 30 % » is not this: `setVolume`
 - Check: unverifiable: sound is checked by the executor.
 
 ### syncToBeat
@@ -1822,6 +2351,9 @@ Cut to the beat / Couper au rythme. Moves cuts onto the music's beat. *Place les
   - « coupe au rythme de la musique » → `{"action":"syncToBeat"}`
   - « synchronise les coupes sur le beat » → `{"action":"syncToBeat"}`
   - « cut to the beat » → `{"action":"syncToBeat"}`
+  - « cale les coupes sur la musique » → `{"action":"syncToBeat"}`
+  - « sync the cuts to the music » → `{"action":"syncToBeat"}`
+  - « ajuste la musique à la durée » is not this: `fitMusic`
 - Check: unverifiable: the beat match is judged by ear.
 
 ### fitMusic
@@ -1837,6 +2369,9 @@ Fit the music / Ajuster la musique. The song ends with the video. *La musique fi
   - « ajuste la musique à la durée » → `{"action":"fitMusic"}`
   - « fais finir la musique avec la vidéo » → `{"action":"fitMusic"}`
   - « fit the music to the video » → `{"action":"fitMusic"}`
+  - « adapte la musique à la longueur de la vidéo » → `{"action":"fitMusic"}`
+  - « make the music end with the video » → `{"action":"fitMusic"}`
+  - « coupe au rythme de la musique » is not this: `syncToBeat`
 - Check: unverifiable: sound is checked by the executor.
 
 ### enhanceVoice
@@ -1854,6 +2389,9 @@ Enhance voice / Voix claire. Removes background noise from speech. *Enlève le b
   - « isole la voix » → `{"action":"enhanceVoice"}`
   - « enlève le bruit de fond » → `{"action":"enhanceVoice","scope":"all"}`
   - « clean up the audio » → `{"action":"enhanceVoice"}`
+  - « rends la voix plus claire » → `{"action":"enhanceVoice"}`
+  - « isolate the voice » → `{"action":"enhanceVoice"}`
+  - « baisse la musique quand je parle » is not this: `autoDuck`
 - Check: unverifiable: voice clarity is judged by ear.
 
 ### goToPage
@@ -1870,6 +2408,9 @@ Go to page / Aller à la page. Shows a page. *Affiche une page.*
   - « va à la page 4 » → `{"action":"goToPage","clipNumber":4}`
   - « montre-moi la dernière page » → `{"action":"goToPage","clipNumber":-1}`
   - « go to page 2 » → `{"action":"goToPage","clipNumber":2}`
+  - « affiche la page 3 » → `{"action":"goToPage","clipNumber":3}`
+  - « show me the last page » → `{"action":"goToPage","clipNumber":-1}`
+  - « supprime la page 3 » is not this: `deletePage`
 - Check: unverifiable: only the view changes.
 
 ### deletePage
@@ -1887,6 +2428,9 @@ Delete page / Supprimer la page. Removes a page. *Enlève une page.*
   - « supprime la page 3 » → `{"action":"deletePage","clipNumber":3}`
   - « enlève la dernière page » → `{"action":"deletePage","clipNumber":-1}`
   - « delete page 2 » → `{"action":"deletePage","clipNumber":2}`
+  - « retire la page 4 » → `{"action":"deletePage","clipNumber":4}`
+  - « remove the last page » → `{"action":"deletePage","clipNumber":-1}`
+  - « extrais la page 2 » is not this: `extractPage`
 - Check: pageCount changes by -1.
 
 ### rotatePage
@@ -1905,6 +2449,9 @@ Rotate page / Pivoter la page. Turns a page or every page. *Tourne une page ou t
   - « pivote toutes les pages » → `{"action":"rotatePage","degrees":90,"scope":"all"}`
   - « tourne la page 2 à l'envers » → `{"action":"rotatePage","clipNumber":2,"degrees":180}`
   - « rotate page 3 to the left » → `{"action":"rotatePage","clipNumber":3,"degrees":-90}`
+  - « pivote la page 1 vers la droite » → `{"action":"rotatePage","clipNumber":1,"degrees":90}`
+  - « turn all pages » → `{"action":"rotatePage","degrees":90,"scope":"all"}`
+  - « déplace la page 2 à la fin » is not this: `movePage`
 - Check: unverifiable: the page rotation is checked by the executor.
 
 ### movePage
@@ -1922,6 +2469,9 @@ Move page / Déplacer la page. Moves a page to a new position. *Change la place 
   - « déplace la page 2 à la fin » → `{"action":"movePage","choiceIndex":-1,"clipNumber":2}`
   - « mets la page 5 en première position » → `{"action":"movePage","choiceIndex":1,"clipNumber":5}`
   - « move page 3 to position 1 » → `{"action":"movePage","choiceIndex":1,"clipNumber":3}`
+  - « place la page 3 au début » → `{"action":"movePage","choiceIndex":1,"clipNumber":3}`
+  - « move page 2 to the end » → `{"action":"movePage","choiceIndex":-1,"clipNumber":2}`
+  - « duplique la page 1 » is not this: `duplicatePage`
 - Check: pageCount unchanged.
 
 ### duplicatePage
@@ -1938,6 +2488,9 @@ Duplicate page / Dupliquer la page. Copies a page after itself. *Copie une page 
   - « duplique la page 1 » → `{"action":"duplicatePage","clipNumber":1}`
   - « copie cette page » → `{"action":"duplicatePage"}`
   - « duplicate page 2 » → `{"action":"duplicatePage","clipNumber":2}`
+  - « fais une copie de la page 3 » → `{"action":"duplicatePage","clipNumber":3}`
+  - « copy this page » → `{"action":"duplicatePage"}`
+  - « insère une page blanche » is not this: `insertBlankPage`
 - Check: pageCount changes by 1.
 
 ### insertBlankPage
@@ -1955,6 +2508,9 @@ Insert blank page / Insérer une page blanche. A blank page at a position. *Une 
   - « insère une page blanche après la page 2 » → `{"action":"insertBlankPage","clipNumber":2,"scope":"selection"}`
   - « ajoute une page vide » → `{"action":"insertBlankPage"}`
   - « insert a blank page after page 1 » → `{"action":"insertBlankPage","clipNumber":1,"scope":"selection"}`
+  - « ajoute une page blanche » → `{"action":"insertBlankPage"}`
+  - « add an empty page » → `{"action":"insertBlankPage"}`
+  - « duplique cette page » is not this: `duplicatePage`
 - Check: pageCount changes by 1.
 
 ### extractPage
@@ -1971,6 +2527,9 @@ Extract page / Extraire la page. Saves a page as its own PDF. *Enregistre une pa
   - « extrais la page 2 » → `{"action":"extractPage","clipNumber":2}`
   - « exporte cette page à part » → `{"action":"extractPage"}`
   - « extract page 3 » → `{"action":"extractPage","clipNumber":3}`
+  - « enregistre la page 3 à part » → `{"action":"extractPage","clipNumber":3}`
+  - « save this page as its own file » → `{"action":"extractPage"}`
+  - « supprime la page 2 » is not this: `deletePage`
 - Check: unverifiable: the extracted file is saved outside the document.
 
 ### highlightText
@@ -1989,6 +2548,9 @@ Highlight / Surligner. Highlights the words where they appear. *Surligne les mot
   - « surligne le mot contrat » → `{"action":"highlightText","text":"contrat"}`
   - « surligne « date limite » en vert partout » → `{"action":"highlightText","color":"green","scope":"all","text":"date limite"}`
   - « highlight the word total » → `{"action":"highlightText","text":"total"}`
+  - « surligne le total en jaune » → `{"action":"highlightText","color":"yellow","text":"total"}`
+  - « highlight every deadline in green » → `{"action":"highlightText","color":"green","scope":"all","text":"deadline"}`
+  - « souligne le mot total » is not this: `underlineText`
 - Check: markupCount increased.
 
 ### underlineText
@@ -2007,6 +2569,9 @@ Underline or strike / Souligner ou barrer. Underlines words; red strikes them ou
   - « souligne le mot total en rouge » → `{"action":"underlineText","color":"red","text":"total"}`
   - « barre le mot brouillon » → `{"action":"underlineText","color":"red","text":"brouillon"}`
   - « underline the word deadline » → `{"action":"underlineText","text":"deadline"}`
+  - « souligne « signature » en bleu » → `{"action":"underlineText","color":"blue","text":"signature"}`
+  - « underline total in red » → `{"action":"underlineText","color":"red","text":"total"}`
+  - « surligne le mot contrat » is not this: `highlightText`
 - Check: markupCount increased.
 
 ### redactText
@@ -2025,6 +2590,9 @@ Redact / Caviarder. Blacks out words for good. *Noircit des mots définitivement
   - « caviarde les numéros de téléphone » → `{"action":"redactText","text":"numéros de téléphone"}`
   - « noircis le nom Dupont partout » → `{"action":"redactText","scope":"all","text":"Dupont"}`
   - « redact the name Smith » → `{"action":"redactText","text":"Smith"}`
+  - « cache l'adresse sous une barre noire » → `{"action":"redactText","text":"adresse"}`
+  - « black out the phone numbers » → `{"action":"redactText","text":"phone numbers"}`
+  - « remplace monsieur par madame » is not this: `replaceText`
 - Check: markupCount increased.
 
 ### findText
@@ -2042,6 +2610,9 @@ Find / Chercher. Finds words in the document. *Trouve des mots dans le document.
   - « cherche le mot facture » → `{"action":"findText","text":"facture"}`
   - « trouve « échéance » dans le document » → `{"action":"findText","scope":"all","text":"échéance"}`
   - « find the word invoice » → `{"action":"findText","text":"invoice"}`
+  - « recherche « signature » » → `{"action":"findText","text":"signature"}`
+  - « search for the word total » → `{"action":"findText","text":"total"}`
+  - « surligne le mot facture » is not this: `highlightText`
 - Check: unverifiable: a search changes nothing.
 
 ### replaceText
@@ -2060,6 +2631,9 @@ Replace text / Remplacer le texte. Replaces words; empty erases them. *Remplace 
   - « remplace monsieur par madame » → `{"action":"replaceText","replacement":"madame","text":"monsieur"}`
   - « efface le mot brouillon » → `{"action":"replaceText","replacement":"","text":"brouillon"}`
   - « replace 2025 with 2026 everywhere » → `{"action":"replaceText","replacement":"2026","scope":"all","text":"2025"}`
+  - « change 2024 en 2025 partout » → `{"action":"replaceText","replacement":"2025","scope":"all","text":"2024"}`
+  - « replace Mr with Mrs » → `{"action":"replaceText","replacement":"Mrs","text":"Mr"}`
+  - « cherche le mot facture » is not this: `findText`
 - Check: pixels textAbsent changed (from W2).
 
 ### addSignature
@@ -2079,6 +2653,9 @@ Sign / Signer. Places your saved signature. *Place ta signature enregistrée.*
   - « signe en bas à droite » → `{"action":"addSignature","placement":"bottomTrailing"}`
   - « ajoute ma signature sur la dernière page » → `{"action":"addSignature","clipNumber":-1}`
   - « sign at the bottom » → `{"action":"addSignature","placement":"bottom"}`
+  - « mets ma signature en bas » → `{"action":"addSignature","placement":"bottom"}`
+  - « add my signature on the last page » → `{"action":"addSignature","clipNumber":-1}`
+  - « ajoute les numéros de page » is not this: `addPageNumbers`
 - Check: markupCount increased.
 
 ### addPageNumbers
@@ -2093,6 +2670,9 @@ Page numbers / Numéros de page. Numbers every page. *Numérote toutes les pages
   - « numérote les pages » → `{"action":"addPageNumbers"}`
   - « ajoute les numéros de page » → `{"action":"addPageNumbers"}`
   - « add page numbers » → `{"action":"addPageNumbers"}`
+  - « mets des numéros sur les pages » → `{"action":"addPageNumbers"}`
+  - « put page numbers on it » → `{"action":"addPageNumbers"}`
+  - « va à la page 4 » is not this: `goToPage`
 - Check: markupCount increased.
 
 ### mergeDocument
@@ -2110,6 +2690,9 @@ Merge / Fusionner. Adds another PDF or an image. *Ajoute un autre PDF ou une ima
   - « fusionne avec un autre PDF » → `{"action":"mergeDocument"}`
   - « ajoute une image » → `{"action":"mergeDocument","text":"image"}`
   - « merge it with another PDF » → `{"action":"mergeDocument"}`
+  - « combine ce PDF avec un autre » → `{"action":"mergeDocument"}`
+  - « add another PDF to this one » → `{"action":"mergeDocument"}`
+  - « insère une page blanche » is not this: `insertBlankPage`
 - Check: unverifiable: needs the file picked by the user.
 
 ### seek
@@ -2126,4 +2709,7 @@ Go to time / Aller à un instant. Moves the playhead. *Déplace la tête de lect
   - « va à 10 secondes » → `{"action":"seek","seconds":10}`
   - « reviens au début » → `{"action":"seek","seconds":0}`
   - « jump to 30 seconds » → `{"action":"seek","seconds":30}`
+  - « place-toi à 5 secondes » → `{"action":"seek","seconds":5}`
+  - « go back to the start » → `{"action":"seek","seconds":0}`
+  - « coupe à 5 secondes » is not this: `split`
 - Check: unverifiable: only the playhead moves.

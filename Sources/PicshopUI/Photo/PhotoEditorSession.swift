@@ -23,6 +23,8 @@ public final class PhotoEditorSession {
         case magic, focus, adjust, looks, color, erase, precise, cutout, crop, text, shapes, layers
         /// W1 (proTone): in PhotoToolCatalog.layout only once their panels land.
         case curves, levels
+        /// W2: Masques (`masks` flag) and Sélection (`aiSelection` flag); in PhotoToolCatalog.layout once their panels land.
+        case masks, select
         public var id: String { rawValue }
         var title: String {
             switch self {
@@ -40,6 +42,8 @@ public final class PhotoEditorSession {
             case .layers: return L("Layers")
             case .curves: return L("Curves")
             case .levels: return L("Levels")
+            case .masks: return L("Masks")
+            case .select: return L("Selection")
             }
         }
         var symbol: String {
@@ -58,8 +62,13 @@ public final class PhotoEditorSession {
             case .layers: return "square.3.layers.3d"
             case .curves: return "chart.xyaxis.line"
             case .levels: return "chart.bar.xaxis"
+            case .masks: return "circle.rectangle.dashed"
+            case .select: return Self.selectSymbol
             }
         }
+
+        /// "lasso.badge.sparkles", or "scope" on a system without it.
+        private static let selectSymbol = UIImage(systemName: "lasso.badge.sparkles") != nil ? "lasso.badge.sparkles" : "scope"
     }
 
     /// Sub-modes of the pixel-precise tool.
@@ -125,6 +134,10 @@ public final class PhotoEditorSession {
     public let dial: DialValue
     /// Curves, Levels and histogram state (E3): the histogram of the last settled frame and its clipping overlay.
     let tone: PhotoToneState
+    /// Masques (W2): the selected mask, the overlay, the handle or brush in use, the thumbnails.
+    let maskState: PhotoMaskState
+    /// Sélection (W2): the mode, how a new selection combines, the marching ants, the two sheets.
+    let selectionState: PhotoSelectionState
     /// Where the frame pump presents frames directly (E4's MetalCanvasView), bypassing `preview`.
     @ObservationIgnored weak var canvasSink: (any CanvasSink)?
     /// Picshop Live in this editor, attached at the end of init.
@@ -148,8 +161,8 @@ public final class PhotoEditorSession {
     /// The dial being dragged: its label and its latest (absolute) edit. The
     /// document is committed once, when the drag ends; meanwhile the renderer
     /// draws `interactiveDocument`, the document with that edit applied.
-    @ObservationIgnored private var interaction: (label: String, edit: ((inout PhotoDocument) -> Void)?)?
-    @ObservationIgnored private var interactiveDocument: PhotoDocument?
+    @ObservationIgnored private(set) var interaction: (label: String, edit: ((inout PhotoDocument) -> Void)?)?
+    @ObservationIgnored private(set) var interactiveDocument: PhotoDocument?
     /// Live's picture: one JPEG per revision.
     @ObservationIgnored var snapshotCache: (revision: Int, image: LiveImage)?
     /// The wand's analysis pixels for one picture state (lookThumbnailKey).
@@ -160,7 +173,7 @@ public final class PhotoEditorSession {
     private let openedDocument: PhotoDocument
 
     public private(set) var renderer: PhotoRenderer?
-    private var services: VisionPhotoServices?
+    private(set) var services: VisionPhotoServices?
     private var executor: PhotoCommandExecutor?
 
     public private(set) var preview: CIImage?
@@ -218,13 +231,42 @@ public final class PhotoEditorSession {
     public var wandTolerance: Double = 0.25
     public var wandContiguous = true
     public var lassoPoints: [PSPoint] = []
-    /// Current selection made with the wand or lasso, ready for erase/generate/recolor.
+    /// The selection the legacy executors and Précis act through (erase, recolor, generate). With the AI selection
+    /// on (W2) it mirrors `document.selection` (setting nil deselects, one step: « Sélection »); otherwise it is the
+    /// W1 wand or lasso selection.
     public var selectionMask: MaskReference? {
-        didSet { if selectionMask != oldValue { live.noteContextChanged() } }
+        get { FeatureFlags.isOn(.aiSelection) ? document.selection?.mask : legacySelectionMask }
+        set {
+            if FeatureFlags.isOn(.aiSelection) {
+                // Selections are made by the Sélection tool and by `setSelection(_:source:)` (Précis's wand and
+                // lasso), each one « Selection » step; clearing here is one step too.
+                if newValue == nil, document.selection != nil { deselect() }
+            } else {
+                legacySelectionMask = newValue
+            }
+        }
     }
+    /// W1's wand or lasso selection (AI selection off).
+    private var legacySelectionMask: MaskReference? {
+        didSet { if legacySelectionMask != oldValue { live.noteContextChanged() } }
+    }
+    /// W1's blue tint over the wand or lasso selection; the marching ants replace it with the AI selection on.
     public var selectionPreview: CIImage?
+    /// A moved selection (corners no longer the unit square) baked into an aligned raster for the legacy executors
+    /// (D7), for the selection it was baked from.
+    @ObservationIgnored var bakedSelection: (selection: PhotoSelection, mask: MaskReference)?
+    /// The picture's width on screen at zoom 1, in device pixels: the canvas publishes it (never read by a view).
+    @ObservationIgnored var fittedDeviceWidth: Double = 0
+    /// The canvas's fitted scale (device pixels per image pixel at zoom 1): « 100 % » zooms by its inverse.
+    var fittedScale: Double {
+        let pixels = document.canvasSize.width
+        guard fittedDeviceWidth > 0, pixels > 0 else { return 0 }
+        return fittedDeviceWidth / pixels
+    }
     public var paintColor: PSColor = .white
     public var pixelBrushRadius: Double = 0.004
+    /// Précis's Pinceau and Tampon: 1 is a hard edge, 0 fades from the centre (the strokes carry it).
+    public var preciseHardness: Double = 1
     /// Clone source (normalised) and the offset between source and destination.
     public var cloneSource: PSPoint?
     public var cloneOffset: PSPoint?
@@ -341,6 +383,8 @@ public final class PhotoEditorSession {
         previewAspectRatio = document.aspectRatio
         dial = DialValue()
         tone = PhotoToneState()
+        maskState = PhotoMaskState()
+        selectionState = PhotoSelectionState()
         live = LiveSession(app: app, mode: .photo, canGoLive: true)
         live.attach(self)
     }
@@ -410,6 +454,7 @@ public final class PhotoEditorSession {
         if interaction != nil { endInteraction() }
         live.teardown()
         app.voice.cancel()
+        masksTeardown()
         renderTask?.cancel()
         framePump?.stop()
         framePump = nil
@@ -500,6 +545,8 @@ public final class PhotoEditorSession {
     /// Memory warning: everything this editor can rebuild goes, the current erase stays.
     private func relieveMemoryPressure() {
         lookThumbnails = nil
+        maskState.thumbnails = [:]
+        maskState.thumbnailKeys = [:]
         if compareSplit == nil { originalPreview = nil }
         Diagnostics.shared.note("editor trimmed its caches")
         if let renderer { Task { await renderer.trimForMemoryPressure() } }
@@ -516,11 +563,22 @@ public final class PhotoEditorSession {
                                     textLayerCount: document.textLayers.count, pendingClarification: pendingClarification, lastTapPoint: lastTapPoint,
                                     canUndo: history.canUndo, canRedo: history.canRedo, preferredLanguage: app.settings.languageHint,
                                     lastParameter: lastAdjustment?.parameter, lastAdjustmentDirection: lastAdjustment?.direction ?? 0,
-                                    selectionMask: selectionMask, table: liveTable, lastTableEdit: lastTableEdit, scene: liveSceneMap, lastIntent: lastIntent)
+                                    selectionMask: commandSelectionMask, table: liveTable, lastTableEdit: lastTableEdit, scene: liveSceneMap, lastIntent: lastIntent,
+                                    documentRevision: revision)
         // The planner's operation cards: the layer and LUT operations are runnable only with these.
         context.layerCount = document.layers.count
         context.hasImportedLUT = document.activeLayerHasLUT
         return context
+    }
+
+    /// The selection as the legacy executors take it (blur, move, erase on a circled area): aligned with the picture.
+    /// A selection a crop or a turn moved is baked first (`prepareCommandSelection`); until then it is left out.
+    var commandSelectionMask: MaskReference? {
+        guard FeatureFlags.isOn(.aiSelection) else { return legacySelectionMask }
+        guard let selection = document.selection else { return nil }
+        if selection.isAligned { return selection.mask }
+        guard let baked = bakedSelection, baked.selection == selection else { return nil }
+        return baked.mask
     }
 
     // MARK: - Rendering
@@ -577,11 +635,16 @@ public final class PhotoEditorSession {
                 let document = previewDocument()
                 let side = interactive ? governor.interactivePreviewSide : governor.previewLongestSide
                 // A dial drag never starts an erase or an upscale: it reuses a finished one, scaled.
-                let options = PhotoRenderer.Options(targetLongestSide: side, showOriginal: showsOriginal, allowExpensiveWork: !interactive, isDisplayed: true)
+                var options = PhotoRenderer.Options(targetLongestSide: side, showOriginal: showsOriginal, allowExpensiveWork: !interactive, isDisplayed: true)
+                // The target rides settled frames too: a pause mid-drag keeps the other masks frozen (D6).
+                options.interactionTarget = maskInteractionTarget
                 do {
-                    let image = try await renderer.render(document, options: options)
+                    // The frame and its mask or selection overlay from one actor hop (D17).
+                    let rendered = try await renderFrameAndOverlay(document, options: options, renderer: renderer)
                     guard !Task.isCancelled else { return }
+                    let image = rendered.image
                     preview = image
+                    publishOverlay(rendered.overlay, generation: previewGeneration)
                     let ratio = image.extent.height > 0 ? Double(image.extent.width / image.extent.height) : document.aspectRatio
                     if abs(ratio - previewAspectRatio) > 0.0005 { previewAspectRatio = ratio }
                     if !hasRenderedPreview { hasRenderedPreview = true }
@@ -614,6 +677,7 @@ public final class PhotoEditorSession {
     /// presented frames close the touch-to-photon intervals.
     func attachCanvas(_ view: MetalCanvasView) {
         canvasSink = view
+        applySurround()
         view.onPresented = { [weak self] generation, time in
             self?.framePump?.framePresented(generation: generation, at: time)
         }
@@ -621,16 +685,20 @@ public final class PhotoEditorSession {
 
     /// One frame for the pump: at the governor's drag size with no expensive work while
     /// the finger moves (a dial never starts an erase), at the sharp size once settled.
-    func renderFrame(interactive: Bool) async -> CIImage? {
+    /// The mask or selection overlay comes with it (D17): built in the same render, from one actor hop.
+    func renderFrame(interactive: Bool) async -> (image: CIImage, overlay: CIImage?)? {
         guard let renderer else { return nil }
         let governor = app.performance
         let document = previewDocument()
         let side = interactive ? governor.interactivePreviewSide : governor.previewLongestSide
-        let options = PhotoRenderer.Options(targetLongestSide: side, showOriginal: showsOriginal, allowExpensiveWork: !interactive, isDisplayed: true)
+        var options = PhotoRenderer.Options(targetLongestSide: side, showOriginal: showsOriginal, allowExpensiveWork: !interactive, isDisplayed: true)
+        // Under a local dial, a handle or the brush, the other masks are frozen for the drag (D6), through the
+        // pacer's settled frames while the finger rests too; endInteraction clears the target.
+        options.interactionTarget = maskInteractionTarget
         let signpost = PSSignpost.begin(interactive ? "photo.render" : "photo.settle")
         defer { PSSignpost.end(signpost) }
         do {
-            return try await renderer.render(document, options: options)
+            return try await renderFrameAndOverlay(document, options: options, renderer: renderer)
         } catch {
             PSLog.error("preview failed: \(error)", category: .ui)
             return nil
@@ -638,15 +706,18 @@ public final class PhotoEditorSession {
     }
 
     /// A frame from the pump. Under the finger it goes straight to the canvas, with no
-    /// SwiftUI pass; the sharp one is published (the canvas, the histogram, Live, compare).
-    func frameRendered(_ image: CIImage, interactive: Bool, generation: Int) {
+    /// SwiftUI pass, its overlay with it (same generation); the sharp one is published (the canvas,
+    /// the histogram, Live, compare).
+    func frameRendered(_ image: CIImage, overlay: CIImage?, interactive: Bool, generation: Int) {
         let ratio = image.extent.height > 0 ? Double(image.extent.width / image.extent.height) : document.aspectRatio
         if abs(ratio - previewAspectRatio) > 0.0005 { previewAspectRatio = ratio }
         if interactive, compareSplit == nil, let sink = canvasSink {
             sink.present(image, generation: generation)
+            sink.presentOverlay(levelledOverlay(overlay), generation: generation)
         } else {
             previewGeneration = generation
             preview = image
+            publishOverlay(overlay, generation: generation)
             if compareSplit == nil { canvasSink?.present(image, generation: generation) }
         }
         if !hasRenderedPreview { hasRenderedPreview = true }
@@ -690,6 +761,8 @@ public final class PhotoEditorSession {
             } else if interaction != nil {
                 interactiveDocument = present
             }
+            // Masks and the selection follow (W2): the selected mask, the thumbnails, the ants.
+            masksDidChange(present)
         }
         // A text drag is one change, told when it ends.
         guard changed, !history.isInTransaction else { return }
@@ -714,6 +787,8 @@ public final class PhotoEditorSession {
             }
         }
         if base?.hasGeometry == true { tools.insert(.crop) }
+        if !document.localAdjustments.isEmpty { tools.insert(.masks) }
+        if document.selection != nil { tools.insert(.select) }
         if !document.textLayers.isEmpty { tools.insert(.text) }
         if !document.shapeLayers.isEmpty { tools.insert(.shapes) }
         if document.layers.count > 1 { tools.insert(.layers) }
@@ -724,7 +799,8 @@ public final class PhotoEditorSession {
     static func lookThumbnailKey(for document: PhotoDocument, thumbnailSide: Double) -> String {
         let operations = document.baseLayer?.edits.operations.filter { operation in
             switch operation.kind {
-            case .adjust, .adjustments, .toneCurve, .levels, .look, .autoEnhance: return false
+            // Local adjustments render after the looks' base (D2): a mask's dial leaves the thumbnails alone.
+            case .adjust, .adjustments, .toneCurve, .levels, .look, .autoEnhance, .localAdjust: return false
             default: return true
             }
         } ?? []
@@ -738,6 +814,12 @@ public final class PhotoEditorSession {
         var updated = newDocument
         updated.touch()
         history.commit(updated, label: label)
+        requestPreview()
+    }
+
+    /// Replaces the present state without a new undo step (a brush flattened after the stroke that needed it).
+    func amendPresent(_ newDocument: PhotoDocument) {
+        history.replacePresent(newDocument)
         requestPreview()
     }
 
@@ -848,6 +930,8 @@ public final class PhotoEditorSession {
         if interaction != nil, interactiveDocument != document { endInteraction() }
         interaction = (label, nil)
         interactiveDocument = document
+        // A finger is on the canvas or a dial: the orb and the ants pause (W2).
+        if !app.performance.isCanvasInteracting { app.performance.isCanvasInteracting = true }
     }
 
     /// Applies a dial's latest value: to the dragged copy during a drag (the
@@ -869,6 +953,8 @@ public final class PhotoEditorSession {
 
     /// Ends a drag: one commit (one undo step, one revision, one note to Live).
     func endInteraction() {
+        if app.performance.isCanvasInteracting { app.performance.isCanvasInteracting = false }
+        maskInteractionTarget = nil
         guard let current = interaction else {
             setDial(parameter: nil, group: nil, value: dial.value)
             requestPreview()
@@ -885,8 +971,18 @@ public final class PhotoEditorSession {
         }
     }
 
+    /// Drops a drag without committing it (a stroke a two-finger pan interrupted).
+    func cancelInteraction() {
+        if app.performance.isCanvasInteracting { app.performance.isCanvasInteracting = false }
+        maskInteractionTarget = nil
+        interaction = nil
+        interactiveDocument = nil
+        setDial(parameter: nil, group: nil, value: dial.value)
+        requestPreview()
+    }
+
     /// The dial's leaf reads these; each is assigned only when it changes.
-    private func setDial(parameter: AdjustmentParameter?, group: String?, value: Double) {
+    func setDial(parameter: AdjustmentParameter?, group: String?, value: Double) {
         if dial.parameter != parameter { dial.parameter = parameter }
         if dial.group != group { dial.group = group }
         if dial.value != value { dial.value = value }
@@ -1105,8 +1201,11 @@ public final class PhotoEditorSession {
 
     private func toolDidChange(from previous: Tool?) {
         guard previous != activeTool else { return }
+        masksToolDidChange(from: previous)
         if previous == .erase { commitBrushErase() }
         if previous == .precise { brushStrokes = []; lassoPoints = [] }
+        // One selection UI (W2): Précis's wand and lasso live in Sélection, so Précis opens on Générer.
+        if activeTool == .precise, FeatureFlags.isOn(.aiSelection), preciseMode == .wand || preciseMode == .lasso { preciseMode = .generate }
         if previous == .crop, activeTool != .crop { cancelCrop() }
         if activeTool == .crop { beginCrop() }
         if activeTool != .magic { magicSelection = nil }
@@ -1679,7 +1778,7 @@ public final class PhotoEditorSession {
                 let selection = try await Task.detached(priority: .userInitiated) {
                     try VisionGrounding.magicWandSelection(in: analysis, seed: point, tolerance: tolerance, contiguous: contiguous, maskStore: maskStore)
                 }.value
-                self?.setSelection(selection)
+                self?.setSelection(selection, source: .wand)
                 Haptics.confirm()
             } catch {
                 self?.showToast(error.localizedDescription, isError: true)
@@ -1698,13 +1797,21 @@ public final class PhotoEditorSession {
                 try VisionGrounding.lassoSelection(imageSize: size, points: points, maskStore: maskStore)
             }.value
             guard let selection else { return }
-            self?.setSelection(selection)
+            self?.setSelection(selection, source: .lasso)
             Haptics.confirm()
         }
     }
 
-    /// The selection, and its tint on the canvas built from the bytes in memory.
-    private func setSelection(_ selection: VisionGrounding.SelectionResult) {
+    /// The selection, and its tint on the canvas built from the bytes in memory. With the AI selection on (W2) the
+    /// wand or lasso result becomes `document.selection` instead: one « Selection » step, the ants show it.
+    private func setSelection(_ selection: VisionGrounding.SelectionResult, source: SelectionStep.Source) {
+        if FeatureFlags.isOn(.aiSelection) {
+            guard let layerID = document.localAdjustmentsLayerID else { return }
+            let made = PhotoSelection(mask: selection.reference, layerID: layerID, coverage: MaskStore.coverage(of: selection.bytes),
+                                      pixelWidth: selection.width, pixelHeight: selection.height)
+            commitSelection(made, appending: SelectionStep(source))
+            return
+        }
         selectionMask = selection.reference
         guard let preview, let mask = ImageSupport.ciImage(gray: selection.bytes, width: selection.width, height: selection.height) else { return }
         let extent = preview.extent
@@ -1721,12 +1828,15 @@ public final class PhotoEditorSession {
     }
 
     public func eraseSelection() {
+        // W2: the one selection path, the same as « efface la sélection » (selectionApply).
+        if FeatureFlags.isOn(.aiSelection) { useSelection(for: .erase); return }
         guard let mask = selectionMask else { return }
         apply(.removeObject(mask), label: L("Erase selection"))
         clearSelection()
     }
 
     public func recolorSelection(_ color: PSColor) {
+        if FeatureFlags.isOn(.aiSelection) { useSelection(for: .recolor(color)); return }
         guard let mask = selectionMask else { return }
         apply(.recolor(mask, color, strength: 0.9), label: L("Recolor"))
     }
@@ -1734,6 +1844,11 @@ public final class PhotoEditorSession {
     public func generateInSelection(_ prompt: String) {
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        // W2: Generative Fill in the selection goes through selectionApply (use generate), as the voice does.
+        if FeatureFlags.isOn(.aiSelection), document.selection != nil, hasGenerativeEngine {
+            useSelection(for: .generate(text))
+            return
+        }
         guard hasGenerativeEngine else {
             showToast(L("Install Generative Fill in Settings › On-device models to use prompts."), isError: true)
             return
@@ -1776,7 +1891,8 @@ public final class PhotoEditorSession {
 
     public func commitPixelPaint() {
         guard !brushStrokes.isEmpty else { return }
-        let strokes = brushStrokes.map { BrushStroke(id: $0.id, points: $0.points, radius: $0.radius, hardness: 1) }
+        // Each stroke keeps the hardness it was painted with (Précis's « Dureté »).
+        let strokes = brushStrokes
         brushStrokes = []
         apply(.pixelPaint(strokes: strokes, color: paintColor), label: L("Paint"))
     }
@@ -1796,7 +1912,9 @@ public final class PhotoEditorSession {
         case .clone:
             if cloneSource == nil || brushStrokes.isEmpty { cloneSource = point; cloneOffset = nil; showToast(L("Source set. Now paint where to clone.")) }
         case .generate:
-            if selectionMask == nil { magicWandSelect(at: point) }
+            if selectionMask == nil {
+                if FeatureFlags.isOn(.aiSelection) { wandSelect(at: point) } else { magicWandSelect(at: point) }
+            }
         case .pixelBrush: break
         }
     }
@@ -1817,6 +1935,16 @@ public final class PhotoEditorSession {
         }
         if activeTool == .focus {
             Task { await setFocus(at: point) }
+            return
+        }
+        // W2: the colour range sheet's eyedropper, then the Masques and Sélection taps (object, wand, subject…).
+        if pendingClarification == nil, selectionState.colorRange != nil {
+            sampleColorRange(at: point)
+            return
+        }
+        if activeTool == .masks, pendingClarification == nil, handleMaskTap(at: point) { return }
+        if activeTool == .select, pendingClarification == nil {
+            handleSelectTap(at: point)
             return
         }
         if activeTool == .precise, pendingClarification == nil {
@@ -1902,6 +2030,8 @@ public final class PhotoEditorSession {
         lastReplyIsProblem = false
         lastReplyIsError = false
         replyID = UUID()
+        // The router sees the selection aligned with the picture (D7).
+        await prepareCommandSelection()
         var plan = await app.router.plan(text, context: intentContext)
         // What is shown and said never carries an internal word (D11), whichever brain planned it.
         let replyLanguage = plan.language.flatMap(NormalizedUtterance.Language.init(rawValue:)) ?? language
@@ -1931,7 +2061,7 @@ public final class PhotoEditorSession {
             return
         }
         // What has to be found in the picture is confirmed once it is found, never before.
-        let mustFindFirst = plan.intents.contains { Self.findsBeforeActing.contains($0.action) }
+        let mustFindFirst = plan.intents.contains { Self.findsBeforeActing.contains($0.action) || Self.findsMasks($0) }
         if !mustFindFirst { speak(plan.reply ?? "", language: plan.language) }
         isRunningVoiceCommand = true
         defer { isRunningVoiceCommand = false }
@@ -2058,16 +2188,20 @@ public final class PhotoEditorSession {
             if !isRunningVoiceCommand, !isQuiet { showToast(message, isError: true) }
             return .failed(message: message)
         }
-        if intent.action == .generativeFill, !hasGenerativeEngine {
+        // A generation from the panel, the voice, Live or a plan (`selectionApply use=generate` lands as an
+        // operation): refused up front without the engine, never committed as a step whose render fails.
+        let generates = Self.generates(intent)
+        if generates, !hasGenerativeEngine {
             return (outcome: refuse(L("Install Generative Fill in Settings › On-device models to use prompts.")), verification: nil)
         }
-        if [.generativeFill, .upscale, .expandCanvas].contains(intent.action), !app.performance.allowsHeavyWork {
+        if generates || [.upscale, .expandCanvas].contains(intent.action), !app.performance.allowsHeavyWork {
             return (outcome: refuse(L("The iPhone is too hot for generation right now. Let it cool for a moment.")), verification: nil)
         }
         // Table steps may read the picture first (one OCR pass); a printed block is erased before it is rewritten.
         let isHeavy = [.removeObject, .removeBackground, .blurBackground, .replaceBackground, .upscale, .selectiveAdjust, .chooseCandidate, .straighten, .generativeFill, .recolor,
                        .moveObject, .cleanUp, .expandCanvas, .textBehind, .autoCrop, .blurObject,
                        .fillCells, .clearCells, .highlightCells, .eraseRegion, .moveText].contains(intent.action) || Self.erasesPrintedText(intent)
+            || Self.findsMasks(intent)
         var generation: Int?
         if isHeavy {
             // One long step at a time (a tap during a spoken erase, a second chip…).
@@ -2096,6 +2230,8 @@ public final class PhotoEditorSession {
                 if cellWork != nil { cellWork = nil }
             }
         }
+        // A selection a crop moved is baked first, so the legacy executors get it aligned (D7).
+        await prepareCommandSelection()
         let context = intentContext
         let base = document
         let updated: PhotoDocument
@@ -2140,6 +2276,21 @@ public final class PhotoEditorSession {
 
     static let tableActions: Set<IntentAction> = [.fillCells, .clearCells, .highlightCells]
 
+    /// The W2 operations that may read the picture (an AI mask, a selection, a depth map): long steps, one at a time.
+    static let maskOperations: Set<String> = ["maskAdjust", "maskEdit", "select", "selectionModify", "selectionApply"]
+
+    static func findsMasks(_ intent: EditIntent) -> Bool {
+        guard intent.action == .operation, let call = intent.operation else { return false }
+        return maskOperations.contains(call.id.raw)
+    }
+
+    /// A step that runs the generative engine: the legacy action, or a selection used as the place to generate.
+    static func generates(_ intent: EditIntent) -> Bool {
+        if intent.action == .generativeFill { return true }
+        guard intent.action == .operation, let call = intent.operation else { return false }
+        return call.id.raw == "selectionApply" && call.args["use"]?.string == "generate"
+    }
+
     /// editText or removeText on a printed block ("t3") erase its pixels first: a long step.
     private static func erasesPrintedText(_ intent: EditIntent) -> Bool {
         guard intent.action == .editText || intent.action == .removeText, case .text(_)? = intent.ref else { return false }
@@ -2168,37 +2319,10 @@ public final class PhotoEditorSession {
         lastTableEdit = spec
     }
 
-    /// A command's result replayed onto what was committed while it ran. Only the
-    /// operations it appended carry over, and only when the photo meanwhile got
-    /// nothing but tonal steps (a slider, a look): a crop or an undo in between
-    /// would put its mask in the wrong place, so then nil. Tone is applied after
-    /// every other step, so tonal steps are left out of the comparison: a dial
-    /// nudged again rewrites its last step in place.
+    /// A command's result replayed onto what was committed while it ran: `PhotoDocument.rebased(_:from:)`
+    /// (Core, so Linux tests the rules), with `current` as the document it replays onto. Nil when it cannot.
     static func rebase(_ updated: PhotoDocument, from base: PhotoDocument, onto current: PhotoDocument) -> PhotoDocument? {
-        guard updated.canvasSize == base.canvasSize, current.canvasSize == base.canvasSize,
-              updated.layers.map(\.id) == base.layers.map(\.id) else { return nil }
-        var result = current
-        for (before, after) in zip(base.layers, updated.layers) {
-            var untouched = after
-            untouched.edits = before.edits
-            guard untouched == before else { return nil }
-            let old = before.edits.operations, new = after.edits.operations
-            guard new.count >= old.count, Array(new.prefix(old.count)) == old else { return nil }
-            let added = new.dropFirst(old.count)
-            guard !added.isEmpty else { continue }
-            guard let index = result.index(of: after.id) else { return nil }
-            let now = result.layers[index].edits.operations
-            guard now.filter({ !isTonal($0.kind) }) == old.filter({ !isTonal($0.kind) }) else { return nil }
-            result.layers[index].edits.operations.append(contentsOf: added)
-        }
-        return result
-    }
-
-    private static func isTonal(_ kind: EditOperation.Kind) -> Bool {
-        switch kind {
-        case .adjust, .adjustments, .toneCurve, .levels, .look, .autoEnhance, .colorMixer, .colorGrade, .colorMatch, .lut: return true
-        default: return false
-        }
+        current.rebased(updated, from: base)
     }
 
     /// How many cells a table step is about to touch, on the table as the editor shows it (nil when
@@ -2244,6 +2368,12 @@ public final class PhotoEditorSession {
         case .eraseRegion, .removeText: return L("Erasing…")
         case .moveText: return L("Moving the text…")
         case .editText: return L("Rewriting the text…")
+        case .operation:
+            switch intent.operation?.id.raw {
+            case "select", "selectionModify": return L("Selecting…")
+            case "maskAdjust", "maskEdit": return L("Making the mask…")
+            default: return L("Working…")
+            }
         default: return L("Working…")
         }
     }
@@ -2271,6 +2401,11 @@ public final class PhotoEditorSession {
                     return .failed(message: message)
                 }
                 resultDocument = rebased
+            }
+            // A selection used up by the step (D7) goes in the same commit: one undo brings both back.
+            if FeatureFlags.isOn(.aiSelection), result.effects.contains(.message("selectionUsed")), resultDocument.selection != nil {
+                resultDocument.setSelection(nil)
+                selectionState.quickPrompts = []
             }
             let changed = resultDocument != document
             if changed {
@@ -2308,9 +2443,14 @@ public final class PhotoEditorSession {
         for effect in result.effects {
             switch effect {
             case .message("selectRegion"):
-                activeTool = .precise
-                preciseMode = .lasso
                 if let text = intent.text, intent.action == .generativeFill { generativePrompt = text }
+                if FeatureFlags.isOn(.aiSelection) {
+                    // One selection UI (W2): Sélection, lasso mode.
+                    openSelect(mode: .lasso)
+                } else {
+                    activeTool = .precise
+                    preciseMode = .lasso
+                }
             case .message("selectionUsed"): clearSelection()
             case .undo: undo()
             case .redo: redo()
@@ -2343,6 +2483,15 @@ public final class PhotoEditorSession {
                 summarizeEdits(labels: history.past.map(\.label))
             case .message(let message) where message.hasPrefix("speak:"):
                 speak(String(message.dropFirst(6)), language: language == .french ? "fr" : "en", force: true)
+            // W2: a mask model to offer (the call waits for it), its download (« oui »), a control's tool, a mask.
+            case .message(let message) where message.hasPrefix("offerModel:"):
+                offerMaskModel(String(message.dropFirst("offerModel:".count)), for: intent)
+            case .message(let message) where message.hasPrefix("installModel:"):
+                installMaskModel(String(message.dropFirst("installModel:".count)))
+            case .message(let message) where message.hasPrefix("openTool:"):
+                openControl(String(message.dropFirst("openTool:".count)))
+            case .message(let message) where message.hasPrefix("showMask:"):
+                if let id = UUID(uuidString: String(message.dropFirst("showMask:".count))) { showMask(id) }
             default: break
             }
         }
@@ -2444,6 +2593,16 @@ public final class PhotoEditorSession {
         requestPreview()
         showToast(label)
         Haptics.success()
+    }
+
+    /// « 100 % »: one image pixel per device pixel (W2): the zoom relative to fit is the inverse of the canvas's
+    /// fitted scale (device pixels per image pixel), which the canvas publishes as it lays the picture out.
+    public func zoomToActualPixels() {
+        guard fittedScale > 0, fittedScale.isFinite else {
+            zoomRequest = ZoomRequest(amount: .absolute(1), target: nil)
+            return
+        }
+        zoomRequest = ZoomRequest(amount: .absolute(1 / fittedScale), target: nil)
     }
 
     public struct ZoomRequest: Equatable {

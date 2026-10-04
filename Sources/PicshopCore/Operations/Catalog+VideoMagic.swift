@@ -24,6 +24,7 @@ enum CatalogVideoMagic {
                 en("add captions"),
                 para("sous titres", .fr),
                 near("mets les sous-titres en haut", .fr, expected: nil),
+                en("subtitle the video"),
             ]
             s.verify = [.structural(.captions, .changed)]
             s.grammar = .owned
@@ -43,6 +44,9 @@ enum CatalogVideoMagic {
                 fr("enlève les sous-titres"),
                 fr("supprime les sous-titres"),
                 en("remove the captions"),
+                fr("retire les sous-titres"),
+                en("delete the subtitles"),
+                near("traduis les sous-titres en anglais", .fr, expected: "translateCaptions"),
             ]
             s.verify = [.structural(.captions, .changed)]
             s.grammar = .owned
@@ -68,6 +72,9 @@ enum CatalogVideoMagic {
                 fr("traduis les sous-titres en anglais", ["text": "en"]),
                 fr("mets les sous-titres en espagnol", ["text": "es"]),
                 en("translate the captions to French", ["text": "fr"]),
+                fr("sous-titres en allemand", ["text": "de"]),
+                en("translate the subtitles into Spanish", ["text": "es"]),
+                near("enlève les sous-titres", .fr, expected: "removeCaptions"),
             ]
             s.verify = [.structural(.captions, .changed)]
             s.grammar = .owned
@@ -89,6 +96,9 @@ enum CatalogVideoMagic {
                 fr("enlève les blancs"),
                 fr("coupe les silences, serré", ["amount": 0.45]),
                 en("remove the silences"),
+                fr("supprime les silences"),
+                en("cut out the pauses"),
+                near("enlève les euh", .fr, expected: "removeFillers"),
             ]
             s.verify = [.structural(.timelineDuration, .decreased)]
             s.grammar = .owned
@@ -109,6 +119,8 @@ enum CatalogVideoMagic {
                 fr("coupe les hésitations"),
                 en("remove the ums"),
                 para("enlève les heu", .fr),
+                en("cut the uhs and ums"),
+                near("coupe les silences", .fr, expected: "removeSilences"),
             ]
             s.verify = [.structural(.timelineDuration, .decreased)]
             s.grammar = .owned
@@ -130,6 +142,9 @@ enum CatalogVideoMagic {
                 fr("coupe le moment où je dis bref", ["text": "bref"]),
                 fr("enlève chaque fois que je dis genre", ["text": "genre", "scope": "all"]),
                 en("cut where I say basically", ["text": "basically"]),
+                fr("enlève le passage où je dis voilà", ["text": "voilà"]),
+                en("remove every time I say like", ["text": "like", "scope": "all"]),
+                near("enlève les hésitations", .fr, expected: "removeFillers"),
             ]
             s.verify = [.structural(.timelineDuration, .decreased)]
             s.grammar = .owned
@@ -152,6 +167,8 @@ enum CatalogVideoMagic {
                 fr("le texte doit suivre la personne", ["text": "text"]),
                 en("make the title follow the person", ["text": "text"]),
                 para("track the cyclist", .en),
+                fr("accroche le texte au visage", ["text": "text"]),
+                near("passe en vertical en suivant le sujet", .fr, expected: "smartReframe"),
             ]
             s.verify = [.unverifiable("tracking is judged by eye")]
             s.grammar = .owned
@@ -172,6 +189,9 @@ enum CatalogVideoMagic {
                 fr("coupe à chaque changement de plan", ["scope": "all"]),
                 fr("détecte les plans"),
                 en("split at every scene change", ["scope": "all"]),
+                fr("découpe la vidéo par plans", ["scope": "all"]),
+                en("detect the scenes"),
+                near("coupe à 5 secondes", .fr, expected: "split"),
             ]
             s.verify = [.structural(.clipCount, .increased)]
             s.grammar = .owned
@@ -191,6 +211,9 @@ enum CatalogVideoMagic {
                 fr("anime le titre en pop", ["text": "pop"]),
                 fr("fais monter le titre doucement", ["text": "rise"]),
                 en("make the title pop in", ["text": "pop"]),
+                fr("révèle le titre de gauche à droite", ["text": "wipe"]),
+                en("animate the title with a wipe", ["text": "wipe"]),
+                near("fais suivre le titre au visage", .fr, expected: "trackSubject"),
             ]
             s.verify = [.unverifiable("the motion is judged by eye")]
             s.grammar = .owned
@@ -211,6 +234,9 @@ enum CatalogVideoMagic {
                 fr("fais un résumé de 20 secondes", ["seconds": 20]),
                 fr("garde les meilleurs moments"),
                 en("make a 20 second recap", ["seconds": 20]),
+                fr("garde le meilleur en 30 secondes", ["seconds": 30]),
+                en("keep the best moments"),
+                near("ne garde que les 10 premières secondes", .fr, expected: "trim"),
             ]
             s.verify = [.structural(.timelineDuration, .decreased)]
             s.grammar = .owned
@@ -230,6 +256,9 @@ enum CatalogVideoMagic {
                 fr("fais une rampe de vitesse"),
                 fr("ralenti progressif à 6 secondes", ["seconds": 6, "amount": 0.3]),
                 en("speed ramp into slow motion", ["amount": 0.3]),
+                fr("passe progressivement au ralenti", ["amount": 0.3]),
+                en("ramp the speed down at 6 seconds", ["seconds": 6, "amount": 0.3]),
+                near("mets tout au ralenti", .fr, expected: "setSpeed"),
             ]
             s.verify = [.structural(.timelineDuration, .increased)]
             s.grammar = .owned
@@ -249,6 +278,9 @@ enum CatalogVideoMagic {
                 fr("ajoute des zooms de coupe", ["amount": 1.2]),
                 fr("zoom à chaque coupe"),
                 en("add punch-ins", ["amount": 1.2]),
+                fr("zoome un peu à chaque coupe", ["amount": 1.15]),
+                en("zoom in on each cut"),
+                near("ajoute un zoom lent", .fr, expected: "kenBurns"),
             ]
             s.verify = [.unverifiable("framing is judged by eye")]
             s.grammar = .owned
@@ -269,6 +301,9 @@ enum CatalogVideoMagic {
                 fr("floute les visages", ["scope": "all"]),
                 fr("anonymise les gens"),
                 en("blur all the faces", ["scope": "all"]),
+                fr("cache les visages", ["scope": "all"]),
+                en("anonymize the people"),
+                near("stabilise la vidéo", .fr, expected: "stabilize"),
             ]
             s.verify = [.unverifiable("the blur is judged by eye")]
             s.grammar = .owned
@@ -291,6 +326,8 @@ enum CatalogVideoMagic {
                 fr("c'est pour TikTok", ["aspect": "ratio9x16"]),
                 en("reframe for reels following the person", ["aspect": "ratio9x16"]),
                 para("met la en vertical", .fr, ["aspect": "ratio9x16"]),
+                en("make it vertical for TikTok", ["aspect": "ratio9x16"]),
+                near("recadre en carré", .fr, expected: "crop"),
             ]
             s.verify = [.structural(.canvasAspect, .equalsParam("aspect"))]
             s.grammar = .owned
@@ -311,6 +348,8 @@ enum CatalogVideoMagic {
                 fr("ajoute un zoom avant progressif sur la personne"),
                 fr("effet Ken Burns sur tous les clips", ["scope": "all"]),
                 en("add a slow zoom"),
+                en("add a Ken Burns effect"),
+                near("ajoute des zooms de coupe", .fr, expected: "punchIns"),
             ]
             s.verify = [.unverifiable("the move is judged by eye")]
             s.grammar = .owned

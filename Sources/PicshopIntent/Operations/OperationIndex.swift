@@ -2,7 +2,11 @@ import Foundation
 import PicshopCore
 
 /// State of the editor that makes some operations likelier (a table on the picture, captions on the timeline…).
-public enum OpStateHint: String, Sendable, CaseIterable { case table, sceneText, selection, multipleLayers, captions, overlays, importedLUT, subject }
+public enum OpStateHint: String, Sendable, CaseIterable {
+    case table, sceneText, selection, multipleLayers, captions, overlays, importedLUT, subject
+    /// The photo has local adjustments (W2: `LiveEditorState.masks` is not empty).
+    case localMasks
+}
 
 /// One retrieval request: the turn's words in its editor.
 public struct OperationQuery: Sendable, Equatable {
@@ -92,7 +96,7 @@ public struct OperationIndex: Sendable {
     /// Non-core operations of the query's domain, sticky ones first; empty below the threshold τ.
     public func retrieve(_ query: OperationQuery, limit: Int) -> [RetrievedOperation] {
         guard limit > 0 else { return [] }
-        let core = Set(catalog.core(for: query.domain).map(\.id))
+        let core = Set(OperationGate.core(for: query.domain, catalog: catalog).map(\.id))
         let threshold = Self.isQuestion(query.text) ? Self.questionThreshold : Self.threshold
         var picked: [RetrievedOperation] = []
         var seen: Set<OpID> = []
@@ -150,8 +154,9 @@ public struct OperationIndex: Sendable {
         let terms = Array(Set(content)).sorted()
         guard !terms.isEmpty else { return [] }
         let slots = SlotExtractor.extract(tokens: tokens)
+        let disabled = OperationGate.disabled()
         var scored: [(RetrievedOperation, Int)] = []
-        for document in documents where document.spec.domains.contains(query.domain) {
+        for document in documents where document.spec.domains.contains(query.domain) && !disabled.contains(document.spec.id) {
             var score = bm25(document, terms: terms)
             score += document.phraseBonus(stems, content: content)
             guard score > 0 else { continue }
@@ -224,6 +229,7 @@ public struct OperationIndex: Sendable {
         if hints.contains(.importedLUT), spec.requires.importedLUT { prior *= 1.3 }
         if hints.contains(.selection), spec.requires.selection { prior *= 1.3 }
         if hints.contains(.subject), spec.requires.subject { prior *= 1.1 }
+        if hints.contains(.localMasks), spec.requires.localMask { prior *= 1.3 }
         return prior
     }
 
@@ -236,6 +242,7 @@ public struct OperationIndex: Sendable {
         if spec.requires.table, missing(.table) { return "no table on the picture" }
         if spec.requires.captions, missing(.captions) { return "no captions yet" }
         if spec.requires.selection, missing(.selection) { return "nothing selected" }
+        if spec.requires.localMask, missing(.localMasks) { return "no mask yet" }
         return nil
     }
 
@@ -454,5 +461,40 @@ final class EmbeddingCache: @unchecked Sendable {
         }
         guard normA > 0, normB > 0 else { return 0 }
         return dot / (normA.squareRoot() * normB.squareRoot())
+    }
+}
+
+// MARK: - Flags (W2)
+
+/// Which catalog operations the flags leave on: the mask operations follow `masks`, the selection ones
+/// `aiSelection`. Off, they leave the cards, retrieval and the Foundation Models schema, and the photo core set
+/// gets selectiveAdjust back in maskAdjust's place; their handlers answer « Pas encore activé sur cet iPhone. ».
+public enum OperationGate {
+    static let maskOperations: Set<OpID> = ["maskAdjust", "maskEdit", "maskDelete"]
+    static let selectionOperations: Set<OpID> = ["select", "selectionModify", "selectionApply"]
+
+    public static func isEnabled(_ id: OpID) -> Bool {
+        if maskOperations.contains(id) { return FeatureFlags.isOn(.masks) }
+        if selectionOperations.contains(id) { return FeatureFlags.isOn(.aiSelection) }
+        return true
+    }
+
+    /// The operations the flags turn off now.
+    public static func disabled() -> Set<OpID> {
+        var off: Set<OpID> = []
+        if !FeatureFlags.isOn(.masks) { off.formUnion(maskOperations) }
+        if !FeatureFlags.isOn(.aiSelection) { off.formUnion(selectionOperations) }
+        return off
+    }
+
+    /// The domain's core set, in catalog order, as the flags leave it.
+    public static func core(for domain: OpDomain, catalog: OperationCatalog = .shared, disabled off: Set<OpID>? = nil) -> [OperationSpec] {
+        let off = off ?? disabled()
+        let selectiveBack = domain == .photo && off.contains("maskAdjust")
+        return catalog.specs.filter { spec in
+            guard spec.domains.contains(domain) else { return false }
+            if spec.coreIn.contains(domain) { return !off.contains(spec.id) }
+            return selectiveBack && spec.id == "selectiveAdjust"
+        }
     }
 }

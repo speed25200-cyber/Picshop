@@ -17,6 +17,9 @@ enum CatalogVideoAudio {
                 fr("coupe le son"),
                 fr("enlève le son du clip 3", ["clipNumber": 3]),
                 en("mute the music", ["clipNumber": 1, "scope": "selection"]),
+                fr("mets le clip 2 en muet", ["clipNumber": 2]),
+                en("mute clip 3", ["clipNumber": 3]),
+                near("remets le son", .fr, expected: "unmute"),
             ]
             s.verify = [.unverifiable("sound is checked by the executor")]
             s.grammar = .owned
@@ -37,6 +40,9 @@ enum CatalogVideoAudio {
                 fr("remets le son"),
                 fr("réactive le son du clip 2", ["clipNumber": 2]),
                 en("unmute it"),
+                fr("rallume le son"),
+                en("turn the sound back on"),
+                near("coupe le son", .fr, expected: "mute"),
             ]
             s.verify = [.unverifiable("sound is checked by the executor")]
             s.grammar = .owned
@@ -60,6 +66,8 @@ enum CatalogVideoAudio {
                 fr("monte le volume de la musique à 80 %", ["amountMode": "absolute", "amount": 80, "clipNumber": 1, "scope": "selection"]),
                 fr("mets la musique à 30 %", ["amountMode": "absolute", "amount": 30, "clipNumber": 1, "scope": "selection"]),
                 en("turn the music down to 30 percent", ["amountMode": "absolute", "amount": 30, "clipNumber": 1, "scope": "selection"]),
+                en("lower the volume by 20 percent", ["amount": -20]),
+                near("coupe le son du clip 2", .fr, expected: "mute"),
             ]
             s.verify = [.unverifiable("sound is checked by the executor")]
             s.grammar = .owned
@@ -84,6 +92,8 @@ enum CatalogVideoAudio {
                 fr("ajoute une voix off"),
                 fr("ajoute un deuxième son à 10 secondes", ["seconds": 10]),
                 en("add some calm music", ["text": "calm"]),
+                en("add a voice-over"),
+                near("enlève la musique", .fr, expected: "removeMusic"),
             ]
             s.verify = [.unverifiable("the user picks the sound before a track is added")]
             s.grammar = .owned
@@ -103,6 +113,9 @@ enum CatalogVideoAudio {
                 fr("enlève la musique"),
                 fr("supprime la deuxième piste son", ["clipNumber": 2]),
                 en("remove the music"),
+                fr("retire la musique de fond"),
+                en("delete the second audio track", ["clipNumber": 2]),
+                near("baisse la musique", .fr, expected: "setVolume"),
             ]
             s.verify = [.structural(.audioTrackCount, .decreased)]
             s.grammar = .owned
@@ -122,6 +135,9 @@ enum CatalogVideoAudio {
                 fr("fais commencer la musique à 5 secondes", ["clipNumber": 1, "seconds": 5]),
                 fr("décale la piste 2 à 12 secondes", ["clipNumber": 2, "seconds": 12]),
                 en("start the music at 3 seconds", ["clipNumber": 1, "seconds": 3]),
+                fr("démarre la musique à 2 secondes", ["clipNumber": 1, "seconds": 2]),
+                en("move track 2 to 12 seconds", ["clipNumber": 2, "seconds": 12]),
+                near("fais finir la musique avec la vidéo", .fr, expected: "fitMusic"),
             ]
             s.verify = [.unverifiable("sound is checked by the executor")]
             s.grammar = .owned
@@ -142,6 +158,9 @@ enum CatalogVideoAudio {
                 fr("fais un fondu de la musique à la fin", ["clipNumber": 1, "text": "out"]),
                 fr("fondu sonore de 3 secondes au début", ["clipNumber": 1, "amount": 3, "text": "in"]),
                 en("fade out the music", ["clipNumber": 1, "text": "out"]),
+                fr("fondu de sortie sur la musique", ["clipNumber": 1, "text": "out"]),
+                en("fade in the music over 3 seconds", ["clipNumber": 1, "amount": 3, "text": "in"]),
+                near("baisse la musique quand je parle", .fr, expected: "autoDuck"),
             ]
             s.verify = [.unverifiable("sound is checked by the executor")]
             s.grammar = .owned
@@ -161,6 +180,9 @@ enum CatalogVideoAudio {
                 fr("baisse la musique quand je parle"),
                 fr("atténuation forte de la musique", ["amount": 0.8]),
                 en("duck the music under the voice"),
+                fr("mets la musique en retrait pendant la voix"),
+                en("lower the music when I talk"),
+                near("mets la musique à 30 %", .fr, expected: "setVolume"),
             ]
             s.verify = [.unverifiable("sound is checked by the executor")]
             s.grammar = .owned
@@ -180,6 +202,9 @@ enum CatalogVideoAudio {
                 fr("coupe au rythme de la musique"),
                 fr("synchronise les coupes sur le beat"),
                 en("cut to the beat"),
+                fr("cale les coupes sur la musique"),
+                en("sync the cuts to the music"),
+                near("ajuste la musique à la durée", .fr, expected: "fitMusic"),
             ]
             s.verify = [.unverifiable("the beat match is judged by ear")]
             s.grammar = .owned
@@ -199,6 +224,9 @@ enum CatalogVideoAudio {
                 fr("ajuste la musique à la durée"),
                 fr("fais finir la musique avec la vidéo"),
                 en("fit the music to the video"),
+                fr("adapte la musique à la longueur de la vidéo"),
+                en("make the music end with the video"),
+                near("coupe au rythme de la musique", .fr, expected: "syncToBeat"),
             ]
             s.verify = [.unverifiable("sound is checked by the executor")]
             s.grammar = .owned
@@ -219,6 +247,9 @@ enum CatalogVideoAudio {
                 fr("isole la voix"),
                 fr("enlève le bruit de fond", ["scope": "all"]),
                 en("clean up the audio"),
+                fr("rends la voix plus claire"),
+                en("isolate the voice"),
+                near("baisse la musique quand je parle", .fr, expected: "autoDuck"),
             ]
             s.verify = [.unverifiable("voice clarity is judged by ear")]
             s.grammar = .owned

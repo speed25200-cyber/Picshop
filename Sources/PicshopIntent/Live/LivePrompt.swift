@@ -50,7 +50,7 @@ public enum LivePrompt {
                 return "\(parameter.rawValue) \(percent > 0 ? "+" : "")\(percent)"
             }
             if !values.isEmpty { lines.append("values: " + values.joined(separator: ", ")) }
-            lines.append("selection: " + (state.selection.map(clean) ?? "none"))
+            lines.append("selection: " + (state.selection.map { clean(LiveMaskLines.selectionValue($0)) } ?? "none"))
             lines.append("question: " + (state.pendingQuestion.map(clean) ?? "none"))
             if !candidates.isEmpty { lines.append("candidates: " + candidates.map(clean).joined(separator: " | ")) }
             let kind = LiveSceneLines.kind(state)
@@ -61,6 +61,7 @@ public enum LivePrompt {
             }
             if let table = state.table { lines += LiveSceneLines.table(table) }
             if let map = state.sceneMap { lines += LiveSceneLines.scene(map, budget: state.table == nil ? LocalLivePrompt.Budgets.sceneLines : LocalLivePrompt.Budgets.sceneLinesWithTable) }
+            if let masks = LiveMaskLines.masksLine(state.masks.map(clean)) { lines.append(masks) }
             if let video = state.video { lines.append(timelineLine(video)) }
             if let busy = state.busyTitle { lines.append("running: " + clean(busy)) }
             if !since.isEmpty { lines.append("since your reply: " + since.map(clean).joined(separator: "; ")) }

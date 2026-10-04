@@ -602,7 +602,10 @@ extension LocalModelLiveBrainTests {
         let sent = engine.sent.flatMap { $0 }.compactMap(\.userText).joined(separator: "\n")
         XCTAssertTrue(sent.contains("layerBlend"), sent)
         XCTAssertTrue(sent.contains("lutIntensity"), sent)
-        XCTAssertFalse(sent.contains("(unavailable"), sent)
+        // Their cards run; another operation the words brought may say why it cannot (a mask op on a photo without masks).
+        let cards = sent.split(separator: "\n").filter { $0.hasPrefix("layerBlend:") || $0.hasPrefix("lutIntensity:") }
+        XCTAssertFalse(cards.isEmpty, sent)
+        XCTAssertFalse(cards.contains { $0.contains("(unavailable") }, sent)
     }
 
     /// The same words on a lone photo: the cards say why the operation cannot run.

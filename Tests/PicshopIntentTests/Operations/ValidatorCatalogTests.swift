@@ -10,6 +10,27 @@ enum OperationFixtures {
     static let shapeID = UUID(uuidString: "00000000-0000-0000-0000-0000000000A2") ?? UUID()
     static let subtitleID = UUID(uuidString: "00000000-0000-0000-0000-0000000000A3") ?? UUID()
 
+    static let skyMaskID = UUID(uuidString: "00000000-0000-0000-0000-0000000000B1") ?? UUID()
+    static let bottomMaskID = UUID(uuidString: "00000000-0000-0000-0000-0000000000B2") ?? UUID()
+
+    /// The poster with two masks (a1 the sky, a2 a gradient at the bottom) and the subject selected (W2).
+    static func photoWithMasks() -> PhotoDocument {
+        var document = photo()
+        let sky = MaskSimulation.raster(.sky, label: nil, key: "fixture-sky", coverage: 0.35, document: document)
+        document.setLocalAdjustment(LocalAdjustment(id: skyMaskID, region: .sky, stack: MaskStack.single(MaskComponent(.raster(sky))),
+                                                    adjustments: Adjustments([.exposure: -0.1])), label: "Mask: Sky")
+        if let bottom = MaskStack.defaultComponent(for: .bottom, aspect: 4.0 / 3.0) {
+            document.setLocalAdjustment(LocalAdjustment(id: bottomMaskID, region: .bottom, stack: MaskStack.single(bottom),
+                                                        adjustments: Adjustments([.exposure: -0.2])), label: "Mask: Bottom")
+        }
+        let subject = MaskSimulation.raster(.subject, label: nil, key: "fixture-subject", coverage: 0.35, document: document)
+        if let layer = document.baseLayerID {
+            document.setSelection(PhotoSelection(mask: subject.maskReference, layerID: layer, steps: [SelectionStep(.subject)], coverage: 0.35,
+                                                 pixelWidth: subject.pixelWidth, pixelHeight: subject.pixelHeight))
+        }
+        return document
+    }
+
     static func photo(lut: Bool = true, selectTitle: Bool = true) -> PhotoDocument {
         var document = PhotoDocument(title: "Poster", baseImage: base)
         if lut, let id = document.baseLayerID {
@@ -68,12 +89,25 @@ enum OperationFixtures {
     }
 }
 
-/// The photo services of the catalog tests: two objects, a subject, a histogram with headroom.
+/// The photo services of the catalog tests: two objects, a subject, a histogram with headroom, and the W2 masks and
+/// selections, structurally (`MaskSimulation`: the two objects, one face).
 struct OperationPhotoServices: PhotoAIServices {
     var histogramAvailable = true
+    var masks = MaskSimulation(objects: [OperationFixtures.dog, OperationFixtures.person])
+    /// The vision-language model's boxes: the objects' boxes by name.
+    var grounds = true
+    /// The faces Vision finds, left to right: a face part (teeth, eyes, lips, skin, face) is one candidate per face
+    /// (SelectiveLoweringTests). Nil: one candidate mid-frame, as for any other noun.
+    var faces: [PSRect]? = nil
+    /// Nouns Vision does not find at all (the SAM offer, the VLM fallback).
+    var unseen: Set<String> = []
 
     /// The dog and the person; anything else named is found once, mid-frame (sky, face, teeth…).
     func candidates(for target: ObjectTarget, in document: PhotoDocument) async throws -> [ObjectCandidate] {
+        if unseen.contains(target.label) { return [] }
+        if let faces, ["teeth", "eyes", "lips", "skin", "face", "mouth"].contains(target.label) {
+            return faces.map { ObjectCandidate(label: target.label, boundingBox: $0, confidence: 0.9) }
+        }
         let known = [OperationFixtures.dog, OperationFixtures.person].filter { $0.label == target.label || target.label == "object" }
         if !known.isEmpty { return target.label == "object" ? [known[0]] : known }
         return [ObjectCandidate(label: target.label, boundingBox: PSRect(x: 0.3, y: 0.3, width: 0.3, height: 0.3), confidence: 0.9)]
@@ -88,6 +122,28 @@ struct OperationPhotoServices: PhotoAIServices {
     func horizonAngle(in document: PhotoDocument) async throws -> Double? { 3 }
     func framingRect(for target: ObjectTarget, in document: PhotoDocument) async throws -> PSRect? { OperationFixtures.dog.boundingBox }
     func sceneMap(in document: PhotoDocument) async throws -> SceneMap? { OperationFixtures.scene() }
+
+    // W2: masks and selections.
+    func aiMask(_ request: AIMaskRequest, in document: PhotoDocument) async throws -> AIMaskResult { try masks.aiMask(request, in: document) }
+    func depthMap(in document: PhotoDocument) async throws -> RasterRef { try masks.depthMap(in: document) }
+    func rasterize(_ stack: MaskStack, in document: PhotoDocument) async throws -> AIMaskResult { masks.rasterize(stack, in: document) }
+    func combineSelection(_ current: PhotoSelection?, with new: RasterRef, mode: CombineMode?, in document: PhotoDocument) async throws -> PhotoSelection {
+        masks.combineSelection(current, with: new, mode: mode, in: document)
+    }
+    func modifySelection(_ selection: PhotoSelection, _ change: SelectionChange, in document: PhotoDocument) async throws -> PhotoSelection {
+        masks.modifySelection(selection, change, in: document)
+    }
+    func refineSelection(_ selection: PhotoSelection, _ refinement: SelectionRefinement, in document: PhotoDocument) async throws -> PhotoSelection {
+        masks.refineSelection(selection, refinement, in: document)
+    }
+    func sampleColors(at points: [PSPoint], radius: Int, in document: PhotoDocument) async throws -> [LabColor] { masks.sampleColors(at: points, radius: radius) }
+    func wandMask(at point: PSPoint, tolerance: Double, contiguous: Bool, sampleSize: Int, in document: PhotoDocument) async throws -> AIMaskResult {
+        masks.wandMask(at: point, tolerance: tolerance, contiguous: contiguous, in: document)
+    }
+    func pixelProbes(_ requests: [PixelProbeRequest], before: PhotoDocument, after: PhotoDocument) async -> [PixelProbeResult] {
+        masks.pixelProbes(requests, before: before, after: after)
+    }
+    func groundBox(_ phrase: String, in document: PhotoDocument) async -> PSRect? { grounds ? masks.groundBox(phrase) : nil }
 
     /// A low-contrast picture: values between 40 and 200.
     func histogram(of document: PhotoDocument) async -> Histogram? {

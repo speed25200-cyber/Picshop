@@ -112,8 +112,9 @@ public enum PlanLinter {
         guard a.action == .operation, b.action == .operation, let x = a.operation, let y = b.operation, x.id == y.id else { return false }
         // Same band, range, channel and layer (absent counts as the same).
         for key in ["band", "range", "channel", "ref"] where x.args[key] != y.args[key] { return false }
-        // A curve's shape and a layer's order are not settings that add up.
-        return !["curves", "layerOrder"].contains(x.id.raw)
+        // A curve's shape and a layer's order are not settings that add up; nor are W2's mask and selection
+        // steps (two maskAdjust on the sky with two dials are two settings, two selects build a selection).
+        return !["curves", "layerOrder", "maskAdjust", "maskEdit", "maskDelete", "select", "selectionModify", "selectionApply"].contains(x.id.raw)
     }
 
     static func combine(_ a: EditIntent, _ b: EditIntent) -> EditIntent {

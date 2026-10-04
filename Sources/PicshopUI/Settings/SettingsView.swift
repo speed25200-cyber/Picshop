@@ -42,7 +42,6 @@ public struct SettingsView: View {
             .navigationTitle(L("Settings"))
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { dismiss() } } }
         }
-        .preferredColorScheme(.dark)
     }
 
     // MARK: Voice

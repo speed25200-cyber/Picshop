@@ -390,7 +390,10 @@ public final class LocalBrainHub {
         guard thermal != .critical, !(thermal == .serious && reason == "editor") else { return }
         if reason == "editor", ProcessInfo.processInfo.isLowPowerModeEnabled { return }
         if let failed = lastLoadFailure, Date().timeIntervalSince(failed) < Self.loadRetryDelay, reason != "live", reason != "selftest" { return }
-        if let available = MemoryBudget.availableBytes, UInt64(available) < entry.memoryNeededToLoad {
+        // With the broker (D12), the free-memory check comes after it has had a chance to make room (idle mask
+        // models go first); without it, here, as in W1.
+        let brokered = ModelResidency.coordinator != nil
+        if !brokered, let available = MemoryBudget.availableBytes, UInt64(available) < entry.memoryNeededToLoad {
             PSLog.info("local brain: not loading \(id) (\(available / 1_000_000) MB free)", category: .models)
             lastLoadFailure = Date()
             return
@@ -400,8 +403,20 @@ public final class LocalBrainHub {
         load = .loading(id)
         refreshStatus()
         PSLog.info("local brain: loading \(id) (\(reason))", category: .models)
+        let needed = entry.memoryNeededToLoad
         loadTask = Task { [weak self] in
             do {
+                if brokered {
+                    // Only a load the person is waiting for evicts: a passive one (an editor opening, the app back
+                    // in front) would push SAM out under Masques, and SAM's next tap would push the LLM out again.
+                    if Self.makesRoom(reason) { await ModelResidency.makeRoom(bytes: Int(clamping: needed), for: .llm) }
+                    try Task.checkCancellation()
+                    if let available = MemoryBudget.availableBytes, UInt64(available) < needed {
+                        PSLog.info("local brain: not loading \(id) (\(available / 1_000_000) MB free)", category: .models)
+                        self?.notLoadedForMemory(id)
+                        return
+                    }
+                }
                 guard let directory = await models.languageModelDirectory(for: id) else {
                     throw LiveBrainError.modelUnavailable("files missing")
                 }
@@ -430,12 +445,27 @@ public final class LocalBrainHub {
         UserDefaults.standard.set(id, forKey: Keys.loadedModel)
         refreshStatus()
         pushThermalState()
+        // W2 (D12, D13): the broker counts the weights; a vision model grounds boxes.
+        await brokerNoteLoaded(id)
         guard let app else { return }
         if !plannerRegistered, let planner = runtime?.makePlanner() {
             plannerRegistered = true
             await app.router.register(planner)
         }
         await app.refreshEngines()
+    }
+
+    /// The loads that may ask the broker to unload idle models first: the ones the person is waiting for.
+    static let roomMakingReasons: Set<String> = ["live", "selftest", "quality", "after_fill", "installed"]
+
+    static func makesRoom(_ reason: String) -> Bool { roomMakingReasons.contains(reason) }
+
+    /// Too little memory even after the broker made room: not a fault, the next preload tries again.
+    private func notLoadedForMemory(_ id: String) {
+        guard case .loading(let loading) = load, loading == id else { return }
+        lastLoadFailure = Date()
+        load = .idle
+        refreshStatus()
     }
 
     private func loadFailed(_ id: String, _ error: Error) {
@@ -485,6 +515,7 @@ public final class LocalBrainHub {
         guard wasActive, let runtime else { return }
         PSLog.info("local brain: releasing (\(reason))", category: .models)
         await runtime.unload()
+        await brokerNoteUnloaded()
         await app?.refreshEngines()
     }
 
@@ -782,6 +813,8 @@ public final class LocalBrainHub {
             return L("The download server is not answering. Try again later.")
         case ModelManager.FailureCode.files?:
             return L("This model is incomplete on the server.")
+        case ModelManager.FailureCode.compile?:
+            return L("The model downloaded but could not be prepared on this iPhone. Try again.")
         default:
             return code
         }

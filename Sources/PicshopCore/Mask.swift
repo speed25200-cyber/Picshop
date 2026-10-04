@@ -15,13 +15,17 @@ public struct BrushStroke: Hashable, Codable, Sendable, Identifiable {
     /// 0 = fully soft edge, 1 = hard edge.
     public var hardness: Double
     public var mode: Mode
+    /// Mask brush flow 0…1, per stroke as in Lightroom: each dab is multiplied by it. nil means 1 (heal,
+    /// clone and paint strokes, and every stroke written before W2).
+    public var flow: Double?
 
-    public init(id: UUID = UUID(), points: [PSPoint], radius: Double, hardness: Double = 0.6, mode: Mode = .add) {
+    public init(id: UUID = UUID(), points: [PSPoint], radius: Double, hardness: Double = 0.6, mode: Mode = .add, flow: Double? = nil) {
         self.id = id
         self.points = points
         self.radius = radius
         self.hardness = hardness
         self.mode = mode
+        self.flow = flow
     }
 }
 
@@ -65,9 +69,12 @@ public struct MaskReference: Hashable, Codable, Sendable, Identifiable {
     public var strokes: [BrushStroke]
     public var feather: Double
     public var isInverted: Bool
+    /// Select & Mask colour decontamination 0…1, applied by cutout and replaceBackground; nil (and absent from
+    /// files written before W2) means off.
+    public var decontaminate: Double?
 
     public init(id: UUID = UUID(), relativePath: String? = nil, source: MaskSource, boundingBox: PSRect = .unit,
-                strokes: [BrushStroke] = [], feather: Double = 0.02, isInverted: Bool = false) {
+                strokes: [BrushStroke] = [], feather: Double = 0.02, isInverted: Bool = false, decontaminate: Double? = nil) {
         self.id = id
         self.relativePath = relativePath ?? "masks/\(id.uuidString).png"
         self.source = source
@@ -75,6 +82,7 @@ public struct MaskReference: Hashable, Codable, Sendable, Identifiable {
         self.strokes = strokes
         self.feather = feather
         self.isInverted = isInverted
+        self.decontaminate = decontaminate
     }
 
     public var displayName: String {
@@ -97,8 +105,10 @@ public struct MaskReference: Hashable, Codable, Sendable, Identifiable {
 /// Draws brush strokes into an 8-bit mask (255 = selected, row 0 at the top), honouring
 /// hardness: full inside `hardness × radius`, a smoothstep falloff out to the radius. A hard
 /// brush (falloff under a pixel) gets a one-pixel anti-aliased edge instead. Strokes are
-/// round-capped polylines; `add` raises the mask to the brush, `subtract` lowers it.
-/// Pure Swift, so the edge profile is tested on Linux; MaskStore and the renderer use it.
+/// round-capped polylines; `add` raises the mask to the brush, `subtract` lowers it. A mask
+/// stroke's flow (W2) multiplies every dab, so a 50 % flow stroke reaches 50 % at most.
+/// Pure Swift, so the edge profile is tested on Linux; MaskStore, the renderer, StrokeRasterCache
+/// and the W2 CPU mask reference (MaskRaster) all use it.
 public enum BrushRaster {
     /// Coverage (0…1) at distance `d` pixels from the stroke's spine.
     public static func coverage(distance d: Double, radius r: Double, hardness: Double) -> Double {
@@ -125,6 +135,9 @@ public enum BrushRaster {
         let segmentCount = max(1, xs.count - 1)
         let subtract = stroke.mode == .subtract
         let hardness = stroke.hardness
+        // nil (every stroke before W2, heal, clone and paint) is a full dab.
+        let flow = (stroke.flow ?? 1).isFinite ? (stroke.flow ?? 1).clamped(to: 0...1) : 1
+        guard flow > 0 else { return }
         let reach = radius + 1
         bytes.withUnsafeMutableBufferPointer { buffer in
             for segment in 0..<segmentCount {
@@ -150,7 +163,7 @@ public enum BrushRaster {
                         let ex = px - (ax + t * dx), ey = py - (ay + t * dy)
                         let distanceSquared = ex * ex + ey * ey
                         guard distanceSquared < reachSquared else { continue }
-                        let value = coverage(distance: distanceSquared.squareRoot(), radius: radius, hardness: hardness)
+                        let value = coverage(distance: distanceSquared.squareRoot(), radius: radius, hardness: hardness) * flow
                         guard value > 0 else { continue }
                         let level = UInt8((value * 255).rounded())
                         if subtract {
@@ -167,7 +180,8 @@ public enum BrushRaster {
 
 /// Stroke masks kept between renders (clone, paint, heal): a stroke list drawn once per size is
 /// served again without drawing, and a list that extends one already drawn copies it and draws
-/// only the new strokes. Least recently used out first past `byteLimit`.
+/// only the new strokes. Past `byteLimit`, a list some newer list continued goes first (a drag leaves one raster
+/// per frame), then the least recently used.
 public struct StrokeRasterCache: Sendable {
     private struct Entry: Sendable {
         let strokes: [BrushStroke]
@@ -175,6 +189,8 @@ public struct StrokeRasterCache: Sendable {
         let height: Int
         let bytes: [UInt8]
         var lastUse: Int
+        /// A longer list at the same size was drawn from this one: it is the first to go.
+        var superseded = false
     }
 
     private var entries: [String: Entry] = [:]
@@ -207,18 +223,41 @@ public struct StrokeRasterCache: Sendable {
             return (key, entry.bytes, false)
         }
         // The longest list already drawn at this size that this one continues.
-        let base = entries.values
-            .filter { $0.width == width && $0.height == height && $0.strokes.count < strokes.count && strokes.starts(with: $0.strokes) }
-            .max { $0.strokes.count < $1.strokes.count }
-        var bytes = base?.bytes ?? [UInt8](repeating: 0, count: max(0, width * height))
-        let fresh = strokes.dropFirst(base?.strokes.count ?? 0)
+        let base = entries
+            .filter { $0.value.width == width && $0.value.height == height && $0.value.strokes.count < strokes.count && strokes.starts(with: $0.value.strokes) }
+            .max { $0.value.strokes.count < $1.value.strokes.count }
+        var bytes = base?.value.bytes ?? [UInt8](repeating: 0, count: max(0, width * height))
+        let fresh = strokes.dropFirst(base?.value.strokes.count ?? 0)
         BrushRaster.draw(Array(fresh), width: width, height: height, into: &bytes)
         strokesDrawn += fresh.count
+        // The previous frame of a growing list: never needed again unless an undo goes back to it.
+        if let base { entries[base.key]?.superseded = true }
         if let old = entries[key] { bytesHeld -= old.bytes.count }
         entries[key] = Entry(strokes: strokes, width: width, height: height, bytes: bytes, lastUse: tick)
         bytesHeld += bytes.count
         evict(keeping: key)
         return (key, bytes, true)
+    }
+
+    /// `coalesced` draws exactly what `drawn` draws (a gesture's per-frame segments merged into one polyline: max and
+    /// min blending make the bytes identical). Every size holding a list that `drawn` continues keeps the raster
+    /// under the merged list too, so the next stroke extends it rather than drawing the whole history again.
+    public mutating func alias(_ drawn: [BrushStroke], as coalesced: [BrushStroke]) {
+        guard drawn != coalesced else { return }
+        var sizes: [(width: Int, height: Int)] = []
+        for entry in entries.values where drawn.starts(with: entry.strokes) && !sizes.contains(where: { $0 == (entry.width, entry.height) }) {
+            sizes.append((entry.width, entry.height))
+        }
+        for size in sizes {
+            let made = mask(for: drawn, width: size.width, height: size.height)
+            entries[made.key]?.superseded = true
+            let key = Self.key(for: coalesced, width: size.width, height: size.height)
+            tick += 1
+            if let old = entries[key] { bytesHeld -= old.bytes.count }
+            entries[key] = Entry(strokes: coalesced, width: size.width, height: size.height, bytes: made.bytes, lastUse: tick)
+            bytesHeld += made.bytes.count
+            evict(keeping: key)
+        }
     }
 
     public mutating func removeAll() {
@@ -228,10 +267,13 @@ public struct StrokeRasterCache: Sendable {
 
     private mutating func evict(keeping key: String) {
         guard bytesHeld > byteLimit else { return }
-        for (old, entry) in entries.sorted(by: { $0.value.lastUse < $1.value.lastUse }) where old != key {
-            guard bytesHeld > byteLimit else { break }
-            entries[old] = nil
-            bytesHeld -= entry.bytes.count
+        // Superseded rasters first (another size's raster, a settle's base, outlives a drag's frames), then LRU.
+        for pass in 0..<2 {
+            for (old, entry) in entries.sorted(by: { $0.value.lastUse < $1.value.lastUse }) where old != key && (pass == 1 || entry.superseded) {
+                guard bytesHeld > byteLimit else { return }
+                entries[old] = nil
+                bytesHeld -= entry.bytes.count
+            }
         }
     }
 }

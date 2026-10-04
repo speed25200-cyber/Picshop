@@ -1,6 +1,7 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
 import TipKit
+import PicshopCore
 import PicshopSpeech
 import PicshopImaging
 
@@ -52,7 +53,6 @@ public struct OnboardingView: View {
                     .padding(.bottom, PSSpacing.mediumLarge)
             }
         }
-        .preferredColorScheme(.dark)
     }
 
     /// Pinned at the bottom: the page's primary action, then its secondary one
@@ -189,18 +189,28 @@ struct OnboardingDots: View {
 /// budget into the environment so every surface can adapt to heat.
 public struct RootView: View {
     let environment: AppEnvironment
+    /// DEBUG launch scenario (W2): its name and the app's builder of its procedural photo (run off the main thread).
+    /// Release builds ignore it.
+    let scenarioName: String?
+    let scenarioPhoto: (@Sendable () -> Data?)?
 
-    public init(environment: AppEnvironment) {
+    public init(environment: AppEnvironment, scenarioName: String? = nil, scenarioPhoto: (@Sendable () -> Data?)? = nil) {
         self.environment = environment
+        self.scenarioName = scenarioName
+        self.scenarioPhoto = scenarioPhoto
     }
 
     public var body: some View {
         Group {
-            if environment.settings.hasCompletedOnboarding {
-                HomeView()
+            #if DEBUG
+            if let scenarioName, let scenarioPhoto {
+                DebugScenarioHost(app: environment, name: scenarioName, photo: scenarioPhoto)
             } else {
-                OnboardingView()
+                home
             }
+            #else
+            home
+            #endif
         }
         .environment(\.picshop, environment)
         .environment(\.psEffects, environment.performance.effectsLevel)
@@ -211,5 +221,79 @@ public struct RootView: View {
             try? Tips.configure()
         }
     }
+
+    @ViewBuilder
+    private var home: some View {
+        if environment.settings.hasCompletedOnboarding {
+            HomeView()
+        } else {
+            OnboardingView()
+        }
+    }
 }
+
+#if DEBUG
+/// A DEBUG launch scenario (W2, §9.8): the procedural photo becomes a project, the photo editor opens on it, and
+/// the session sets the scenario's state (`applyDebugScenario`). Then « scenario ready » is logged and a marker
+/// file is written in Documents (`scenario-ready-<name>`), which CI waits for before it takes the simulator
+/// screenshot. No Home, no onboarding, no model.
+private struct DebugScenarioHost: View {
+    let app: AppEnvironment
+    let name: String
+    let photo: @Sendable () -> Data?
+    @State private var session: PhotoEditorSession?
+    @State private var failure: String?
+
+    var body: some View {
+        ZStack {
+            if let session {
+                PhotoEditorView(session: session, title: name)
+            } else if let failure {
+                Text(verbatim: "scenario \(name) failed: \(failure)")
+                    .font(PSFont.footnote())
+                    .foregroundStyle(Color.psDanger)
+                    .padding(PSSpacing.page)
+            } else {
+                ProgressView().tint(Color.psTextSecondary)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.psCanvas.ignoresSafeArea())
+        .onAppear {
+            app.isEditorOpen = true
+            app.prewarmIntentEngine(mode: .photo)
+        }
+        .task { await run() }
+    }
+
+    private func run() async {
+        guard session == nil else { return }
+        do {
+            let build = photo
+            guard let data = await Task.detached(priority: .userInitiated, operation: { build() }).value else {
+                throw PicshopError.mediaUnavailable("scenario photo")
+            }
+            let project = try await app.library.createPhotoProject(from: data, title: "Scenario \(name)")
+            guard case .photo(let document) = project.content else { throw PicshopError.mediaUnavailable("scenario photo") }
+            let opened = PhotoEditorSession(document: document, projectID: project.id, app: app)
+            session = opened
+            await opened.applyDebugScenario(name)
+            // One more settled frame and the overlays' fade before the screenshot.
+            try? await Task.sleep(for: .milliseconds(900))
+            Self.markReady(name)
+        } catch {
+            failure = String(describing: error)
+            PSLog.error("scenario \(name) failed: \(error)", category: .ui)
+        }
+    }
+
+    /// « scenario ready »: the log line, and the marker file CI polls in the app's data container.
+    static func markReady(_ name: String) {
+        PSLog.info("scenario ready: \(name)", category: .ui)
+        NSLog("scenario ready: %@", name)
+        guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        try? Data(name.utf8).write(to: documents.appendingPathComponent("scenario-ready-\(name)"), options: .atomic)
+    }
+}
+#endif
 #endif

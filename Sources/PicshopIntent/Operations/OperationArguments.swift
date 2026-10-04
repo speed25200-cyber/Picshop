@@ -263,6 +263,11 @@ public enum OperationArguments {
                 problems.append("\(path): x2 and y2 must be greater than x1 and y1")
                 return nil
             }
+            // A box names a thing: at least 10 of 1000 each way.
+            guard corners[2] > corners[0] + 10, corners[3] > corners[1] + 10 else {
+                problems.append("\(path): too small: x2 > x1 + 10 and y2 > y1 + 10")
+                return nil
+            }
             return .box(PSRect(x: corners[0], y: corners[1], width: corners[2] - corners[0], height: corners[3] - corners[1]))
         case .text(let limit):
             guard case .string(let text) = raw else {
@@ -290,6 +295,11 @@ public enum OperationArguments {
                   let number = Int(text.dropFirst()), (1...999).contains(number) else {
                 let examples = prefixes.map { "\($0)1" }.joined(separator: ", ")
                 problems.append("\(path): '\(raw.string ?? raw.serialized())' is not an id such as \(examples)")
+                return nil
+            }
+            // Masks are a1…a16 (W2): whether one exists is the handler's to say, with the list of masks.
+            if letter == String(RefKind.mask.prefix), number > LocalAdjustment.maxPerLayer {
+                problems.append("\(path): masks are a1...a\(LocalAdjustment.maxPerLayer)")
                 return nil
             }
             return .string(letter + String(number))

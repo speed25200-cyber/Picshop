@@ -115,9 +115,11 @@ public enum LocalLivePrompt {
     /// The persona of the catalog layout: the same rules, less the lines its cards and guide say already
     /// (text ids are on the editText card; "nothing fits" ends the guide).
     static func catalogPersona(mode: EditorMode, size: LocalPromptSize) -> String {
-        persona(mode: mode, size: size).split(separator: "\n", omittingEmptySubsequences: false)
-            .filter { !$0.hasPrefix("- Texte de l'image") && !$0.hasPrefix("- Impossible :") }
-            .joined(separator: "\n")
+        var lines = persona(mode: mode, size: size).split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.hasPrefix("- Texte de l'image") && !$0.hasPrefix("- Impossible :") }.map(String.init)
+        // W2 (§8.5): the catalog's select and maskAdjust take a box the model reads in the picture.
+        if mode == .photo { lines.append("- " + groundingRule) }
+        return lines.joined(separator: "\n")
     }
 
     /// The catalog layout's action part: the core cards of the mode, and how the turn's cards are used.
@@ -194,6 +196,9 @@ public enum LocalLivePrompt {
         """
         return rules
     }
+
+    /// W2 (§8.5): the model aims a selection or a mask at what it sees (≤ 180 characters).
+    static let groundingRule = "Pour sélectionner ou masquer une chose visible, donne box [x1,y1,x2,y2] 0–1000 dans la dernière image."
 
     /// The curated actions, with their exact values: the tool specs keep enums in prose.
     static func actionGuide(mode: EditorMode, size: LocalPromptSize) -> String {
@@ -355,8 +360,27 @@ public enum LocalLivePrompt {
         if LiveTurnRouter.isQuestion(turn.text, tokens: tokens) { return true }
         // With table lines the model reads the cells from the state; without them, table words need the picture.
         let tableWords = turn.editorState.table == nil ? tableVisualWords : []
-        return tokens.contains { visualWords.contains($0) || tableWords.contains($0) }
+        if tokens.contains(where: { visualWords.contains($0) || tableWords.contains($0) }) { return true }
+        return namesAVisibleThingToSelect(tokens)
     }
+
+    /// W2 (§8.5): a select or mask word with a thing the picture shows (« sélectionne la tasse », « masque le
+    /// chien »): the model needs the picture to give its box. « inverse la sélection » names nothing to see.
+    static func namesAVisibleThingToSelect(_ tokens: [String]) -> Bool {
+        guard tokens.contains(where: { selectWords.contains($0) }) else { return false }
+        if tokens.contains(where: { thingWords.contains($0) }) { return true }
+        return tokens.contains { token in token.count > 2 && ObjectVocabulary.match(token) != nil }
+    }
+
+    static let selectWords: Set<String> = [
+        "selectionne", "selectionner", "selectionnes", "masque", "masquer", "masques", "detoure", "isole", "select", "mask", "pick", "isolate",
+    ]
+
+    /// Region words a box can aim at, beyond `visualWords` (people parts, nature, colours of things).
+    static let thingWords: Set<String> = [
+        "cheveux", "levres", "dents", "bouche", "arbres", "arbre", "herbe", "eau", "mer", "lac", "montagne", "montagnes", "batiment", "mur",
+        "hair", "lips", "teeth", "mouth", "tree", "trees", "grass", "water", "sea", "lake", "mountain", "mountains", "building", "wall",
+    ]
 
     /// Words about a table: visual only when no table line tells the model where the cells are.
     static let tableVisualWords: Set<String> = [
@@ -457,7 +481,9 @@ public enum LocalLivePrompt {
             // A full state names only what is there; a delta also says what went away.
             let values = valuesLine(state)
             if full ? values != nil : previous.map({ valuesLine($0) != values }) ?? false { lines.append("values: " + (values ?? "neutral")) }
-            if full ? state.selection != nil : state.selection != previous?.selection { lines.append("selection: " + (state.selection.map(clean) ?? "none")) }
+            if full ? state.selection != nil : state.selection != previous?.selection {
+                lines.append("selection: " + (state.selection.map { clean(LiveMaskLines.selectionValue($0)) } ?? "none"))
+            }
             if full ? state.pendingQuestion != nil : state.pendingQuestion != previous?.pendingQuestion {
                 lines.append("question: " + (state.pendingQuestion.map(clean) ?? "none"))
             }
@@ -486,6 +512,10 @@ public enum LocalLivePrompt {
                 lines.append("table: none")
             }
             if let map = state.sceneMap, mapChanged, sceneBudget > 0 { lines += LiveSceneLines.scene(map, budget: sceneBudget) }
+            // The masks (W2): after the scene lines, before last:, when they changed.
+            if full ? !state.masks.isEmpty : state.masks != (previous?.masks ?? []) {
+                lines.append(LiveMaskLines.masksLine(state.masks.map(clean)) ?? "masks: none")
+            }
             if let video = state.video, full || video != previous?.video { lines.append(LivePrompt.timelineLine(video)) }
             if let busy = state.busyTitle, full || busy != previous?.busyTitle {
                 lines.append("running: " + clean(busy))

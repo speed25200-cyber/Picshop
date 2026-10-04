@@ -321,7 +321,6 @@ struct LocalBrainOfferSheet: View {
         LocalBrainOfferContent(onClose: onClose, onLater: onLater)
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
-            .preferredColorScheme(.dark)
     }
 }
 

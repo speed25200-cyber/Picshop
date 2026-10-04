@@ -266,6 +266,9 @@ extension LiveSession {
         var failed: Set<LiveBrainKind> = []
         var brainKind = forcedKind ?? chooseBrain()
         let startedAt = clock.now()
+        // Instruments: one interval per turn, start to end, whatever brain answers it.
+        let turnSignpost = PSSignpost.begin("live.turn", "#\(id) \(kind)")
+        defer { PSSignpost.end(turnSignpost) }
         if kind != .sessionStart, brainKind != .model, !saidModelLoading, LocalBrainHub.shared.status.phase == .loading {
             // Once per conversation: a simpler brain answers while the local model loads, and Live says so.
             saidModelLoading = true
@@ -325,6 +328,11 @@ extension LiveSession {
     private func stream(_ brain: any LiveBrain, brainKind: LiveBrainKind, id: Int, kind: LiveUserTurn.Kind, text: String,
                         language: NormalizedUtterance.Language, isQuestion: Bool) async -> BrainOutcome {
         guard let host, let toolProxy else { return .done }
+        // The local model is busy for the whole turn, tool calls included (W2, D12): the model broker only
+        // evicts it between turns.
+        let holdsModel = brainKind == .model
+        if holdsModel { await LocalBrainHub.markModelBusy(true) }
+        defer { if holdsModel { Task { await LocalBrainHub.markModelBusy(false) } } }
         var image: LiveImage?
         let capabilities = brain.capabilities
         // Only a brain that sees pictures gets one, at the size it asks for.
@@ -591,6 +599,7 @@ extension LiveSession {
         if let captionOnly {
             captionOnly.enqueue(clean, turn: turn)
         } else if let speaker = activeSpeaker {
+            noteVoiceRequested(turn: turn)
             speaker.enqueue(clean, language: language == .french ? "fr" : "en", turn: turn)
         } else {
             // No voice at this instant (the path is changing): the line is at least shown.
@@ -600,6 +609,16 @@ extension LiveSession {
 
     func speak(_ text: String, turn: Int) {
         speak(text, language: replyLanguage, turn: turn)
+    }
+
+    /// Opens the turn's `tts.firstBuffer` interval at its first line for the voice; the first chunk heard closes it.
+    /// Intervals of turns that never sounded (cancelled, superseded) are closed when a later turn opens one.
+    private func noteVoiceRequested(turn: Int) {
+        guard !firstAudioMarked.contains(turn), ttsFirstBuffer[turn] == nil else { return }
+        for stale in ttsFirstBuffer.keys.filter({ $0 < turn }) {
+            if let interval = ttsFirstBuffer.removeValue(forKey: stale) { PSSignpost.end(interval) }
+        }
+        ttsFirstBuffer[turn] = PSSignpost.begin("tts.firstBuffer", "#\(turn)")
     }
 
     /// Speaker signals: the caption follows the chunk being heard (D11), then the reducer.
@@ -615,6 +634,7 @@ extension LiveSession {
             if !firstAudioMarked.contains(turn) {
                 firstAudioMarked.insert(turn)
                 latency.mark(.firstAudio, at: clock.now(), turn: turn)
+                if let interval = ttsFirstBuffer.removeValue(forKey: turn) { PSSignpost.end(interval) }
                 publishLatency(turn: turn)
             }
         }

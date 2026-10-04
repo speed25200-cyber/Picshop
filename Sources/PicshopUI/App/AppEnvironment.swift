@@ -50,9 +50,22 @@ public final class AppEnvironment {
             // The last editor closed: the local brain's weights go after a minute, unless one opens again.
             if !open { LocalBrainHub.shared.release(reason: "editor_closed") }
             if !open { startAutoInstallIfDue() }
+            // SAM and its kept encodings serve no closed editor (D12): they go shortly after the last one closes,
+            // unless one opens again first (a reopen then pays no reload).
+            samReleaseTask?.cancel()
+            samReleaseTask = nil
+            if !open {
+                samReleaseTask = Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(20))
+                    guard let self, !Task.isCancelled, !self.isEditorOpen else { return }
+                    await SAMSegmenter.shared.unload()
+                }
+            }
         }
     }
     @ObservationIgnored private var memoryObserver: NSObjectProtocol?
+    @ObservationIgnored private var backgroundObserver: NSObjectProtocol?
+    @ObservationIgnored private var samReleaseTask: Task<Void, Never>?
     @ObservationIgnored private var installGate: Task<Void, Never>?
     /// The launch delay has passed but an editor was open: installs start when it closes.
     @ObservationIgnored private var autoInstallDue = false
@@ -70,8 +83,11 @@ public final class AppEnvironment {
     static let autoInstallDelay: TimeInterval = 60
     /// modelStates is written at most this often; terminal states go through at once.
     static let modelStatesInterval: TimeInterval = 0.25
-    /// The local brain's models: they keep downloading while an editor is open.
-    static let liveModelIDs: Set<String> = [LocalModelTiering.maxModelID, LocalModelTiering.fastModelID]
+    /// The models that keep downloading while an editor is open: the local brain's, and the two mask models (W2),
+    /// which a tool's offer starts from inside the photo editor.
+    static let liveModelIDs: Set<String> = Set([LocalModelTiering.maxModelID, LocalModelTiering.fastModelID] + MaskModelCatalog.all.map(\.id))
+    /// The pinned mask models (SAM 2.1 tiny, Depth Anything V2 Small): on request only, Wi‑Fi unless allowed.
+    static let maskModelIDs: Set<String> = Set(MaskModelCatalog.all.map(\.id))
     /// How long push-to-talk waits for a language model. The local planner answers
     /// in 1–2 s now (no thinking, a reused session), so a stalled model costs less:
     /// 4 s when the grammar has nothing, 1.5 s when it already has a usable plan.
@@ -101,8 +117,22 @@ public final class AppEnvironment {
             Task { @MainActor in
                 AppEnvironment.relieveMemoryPressure()
                 LocalBrainHub.shared.release(reason: "memory_warning")
+                // The mask models too (W2): SAM directly (with or without the broker), then every other idle one.
+                await SAMSegmenter.shared.unload()
+                await ModelResidency.releaseIdle(reason: "memory_warning")
             }
         }
+        // In the background the app is a jetsam candidate: no idle model stays (the LLM has its own observer).
+        backgroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
+            Task {
+                await SAMSegmenter.shared.unload()
+                await ModelResidency.releaseIdle(reason: "background")
+            }
+        }
+        // The model broker (W2, D12) before anything loads a model: behind its flag, else every load is admitted.
+        ModelBroker.installAtLaunch()
+        // The Metal orb's library lookup (W2, D19), once and off the main thread, before the first orb draws.
+        Task.detached(priority: .utility) { _ = OrbShader.isAvailable }
         // The runtime was registered by the app target just before; the hub reads settings and models from here.
         LocalBrainHub.shared.attach(self)
 
@@ -157,6 +187,10 @@ public final class AppEnvironment {
     /// redraw a few times a second rather than once per network chunk. Progress
     /// never runs backwards and never follows a finished install.
     private func receive(_ state: ModelManager.State, for id: String) {
+        var state = state
+        // The mask models fail with ModelManager's codes, like the language models: shown in words (the offer
+        // card's toast, Settings › Avancé).
+        if Self.maskModelIDs.contains(id), case .failed(let code) = state { state = .failed(LocalBrainHub.failureText(code)) }
         let last = pendingModelStates[id] ?? modelStates[id]
         if case .downloading(let progress) = state {
             switch last {
@@ -203,6 +237,10 @@ public final class AppEnvironment {
             let hub = LocalBrainHub.shared
             return hub.runtime != nil && model.id == hub.status.model?.id
         case .inpainting, .superResolution: return true
+        case .segmentation, .depth:
+            // Pinned Core ML packages, compiled on the device: every build can install them. They are never
+            // auto-installed (autoInstallModels leaves them out); the user or a tool's offer starts them.
+            return model.pinned != nil
         }
     }
 
@@ -212,9 +250,14 @@ public final class AppEnvironment {
     public func install(_ model: ModelDescriptor) -> Bool {
         guard canInstall(model) else { return false }
         settings.setAutoInstallSkipped(false, for: model.id)
-        if model.kind == .languageModel {
+        switch model.kind {
+        case .languageModel:
             LocalBrainHub.shared.download(allowCellular: false)
-        } else {
+        case .segmentation, .depth:
+            // Wi‑Fi only, unless Settings › Avancé allows cellular for them.
+            let allowsCellular = settings.maskModelsAllowCellular
+            Task { await models.install(model, allowsCellular: allowsCellular) }
+        case .inpainting, .superResolution, .generative:
             Task { await models.install(model) }
         }
         return true
@@ -235,8 +278,10 @@ public final class AppEnvironment {
             autoInstallDue = true
             return
         }
+        // SAM and Depth (W2) install only on request: the user or a tool's offer starts them.
         let pending = ModelCatalog.all.filter { model in
-            !ModelManager.isBundled(model.id) && canInstall(model) && !settings.isAutoInstallSkipped(model.id)
+            model.kind != .segmentation && model.kind != .depth
+                && !ModelManager.isBundled(model.id) && canInstall(model) && !settings.isAutoInstallSkipped(model.id)
         }
         var toInstall: [ModelDescriptor] = []
         for model in pending {
@@ -382,13 +427,20 @@ public final class AppEnvironment {
     /// the engines whenever they are ready.
     public func attachEngines(to pipeline: InpaintingPipeline) async {
         if let eraserURL = await models.compiledModelURL(for: "lama-inpainting") {
-            let neural = await Task.detached(priority: .userInitiated) {
-                try? CoreMLInpainter(compiledModelURL: eraserURL)
+            // Every LaMa load goes through the broker (D12). This one is speculative, so it asks at `.preload`:
+            // refused rather than evicting an idle model, it leaves a deferred eraser whose first erase asks again.
+            let result = await Task.detached(priority: .userInitiated) { () async -> Result<CoreMLInpainter?, Error> in
+                do { return .success(try await CoreMLInpainter.load(compiledModelURL: eraserURL, priority: .preload)) }
+                catch { return .failure(error) }
             }.value
-            if let neural {
+            switch result {
+            case .success(let neural?):
                 pipeline.setNeural(neural)
-            } else {
-                PSLog.error("neural eraser failed to load", category: .models)
+            case .success(nil):
+                PSLog.info("neural eraser deferred: model broker refused the preload", category: .models)
+                pipeline.setNeural(CoreMLInpainter(deferredCompiledModelURL: eraserURL))
+            case .failure(let error):
+                PSLog.error("neural eraser failed to load: \(error)", category: .models)
             }
         }
         if let provider = generativeEngineProvider, let resourcesURL = await models.resourcesURL(for: "sd-generative-fill") {

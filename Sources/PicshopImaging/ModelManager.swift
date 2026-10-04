@@ -13,6 +13,10 @@ public struct ModelDescriptor: Identifiable, Hashable, Sendable {
         case languageModel
         /// Stable Diffusion resources folder (text-guided fill).
         case generative
+        /// SAM 2.1 tiny (W2): pinned Core ML packages, installed on request only.
+        case segmentation
+        /// Depth Anything V2 Small (W2): a pinned Core ML package, installed on request only.
+        case depth
     }
 
     public var id: String
@@ -31,6 +35,8 @@ public struct ModelDescriptor: Identifiable, Hashable, Sendable {
     public var isBundledByDefault: Bool
     /// For a language model's Hugging Face folder: the only files fetched (nil: every file).
     public var fileAllowlist: [String]?
+    /// Pinned Core ML packages (exact files, sizes, SHA-256): downloaded file by file, verified, compiled on device.
+    public var pinned: PinnedModelPackageSet?
 
     public struct HuggingFaceFolder: Hashable, Sendable {
         public var repository: String
@@ -45,8 +51,10 @@ public struct ModelDescriptor: Identifiable, Hashable, Sendable {
     }
 
     public init(id: String, displayName: String, summary: String, kind: Kind, sizeMB: Int, remoteURL: URL? = nil, huggingFaceID: String? = nil,
-                huggingFaceFolder: HuggingFaceFolder? = nil, isBundledByDefault: Bool = false, fileAllowlist: [String]? = nil) {
+                huggingFaceFolder: HuggingFaceFolder? = nil, isBundledByDefault: Bool = false, fileAllowlist: [String]? = nil,
+                pinned: PinnedModelPackageSet? = nil) {
         self.id = id
+        self.pinned = pinned
         self.displayName = displayName
         self.huggingFaceFolder = huggingFaceFolder
         self.isBundledByDefault = isBundledByDefault
@@ -79,7 +87,25 @@ public enum ModelCatalog {
             ModelDescriptor(id: "sd-generative-fill", displayName: "Generative Fill (Stable Diffusion)", summary: "Text-guided replacement: “remplace le ciel par un coucher de soleil”, “add a hat”.",
                             kind: .generative, sizeMB: 1900, remoteURL: baseURL?.appendingPathComponent("sd-generative-fill.zip"),
                             huggingFaceFolder: ModelDescriptor.HuggingFaceFolder(repository: "apple/coreml-stable-diffusion-v1-5", path: "split_einsum/compiled")),
-        ] + LocalModelCatalog.all.map(liveModel)
+        ] + maskModels + LocalModelCatalog.all.map(liveModel)
+    }
+
+    /// The mask models (W2): pinned Core ML packages, downloaded over Wi‑Fi only when the user or a tool's offer asks,
+    /// verified file by file against their SHA-256 and compiled on the device. Never bundled, never auto-installed.
+    public static var maskModels: [ModelDescriptor] {
+        [
+            ModelDescriptor(id: MaskModelCatalog.samTiny.id, displayName: "AI object selection (SAM 2.1)",
+                            summary: "Segment Anything 2.1 tiny: a tap, a box or a brush stroke selects an object.",
+                            kind: .segmentation, sizeMB: megabytes(MaskModelCatalog.samTiny), pinned: MaskModelCatalog.samTiny),
+            ModelDescriptor(id: MaskModelCatalog.depthSmall.id, displayName: "AI depth (Depth Anything V2)",
+                            summary: "Depth Anything V2 Small: near and far for depth-range masks.",
+                            kind: .depth, sizeMB: megabytes(MaskModelCatalog.depthSmall), pinned: MaskModelCatalog.depthSmall),
+        ]
+    }
+
+    /// 79.6 MB → 80, 49.8 MB → 50.
+    private static func megabytes(_ set: PinnedModelPackageSet) -> Int {
+        Int((Double(set.totalBytes) / 1_000_000).rounded())
     }
 
     /// A Live model (Qwen3.5 through MLX): its pinned Hugging Face files, installed into `<id>/model`.
@@ -127,6 +153,8 @@ public actor ModelManager {
     }
 
     public let rootURL: URL
+    /// Where pinned files come from and how packages compile (Hugging Face and Core ML; tests swap it).
+    private var pinnedSource = PinnedInstallSource.standard
 
     /// Why a language-model install failed, as the `.failed` message: LocalBrainHub turns it into words.
     public enum FailureCode {
@@ -139,7 +167,12 @@ public actor ModelManager {
         public static let server = "server"
         /// The pinned revision lacks a file the model needs.
         public static let files = "files"
+        /// A pinned Core ML package downloaded and verified, but did not compile on this device.
+        public static let compile = "compile"
     }
+
+    /// Free storage a pinned install keeps beyond what is left to download (§9.2): 300 MB.
+    static let pinnedStorageHeadroom: Int64 = 300_000_000
 
     /// Retries after a network error, keeping what was downloaded (D12).
     static let retryDelays: [Double] = [2, 8, 30]
@@ -218,6 +251,13 @@ public actor ModelManager {
         return Self.bundledModelURL(for: id)
     }
 
+    /// A pinned package compiled on device: `<id>/compiled/<package>.mlmodelc`, nil until installed and compiled.
+    public func compiledPackageURL(for id: String, package: String) -> URL? {
+        guard isInstalled(id) else { return nil }
+        let url = directory(for: id).appendingPathComponent("compiled", isDirectory: true).appendingPathComponent(package + ".mlmodelc", isDirectory: true)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     /// The model compiled into the app bundle at build time, if any.
     public nonisolated static func bundledModelURL(for id: String) -> URL? {
         if let url = Bundle.main.url(forResource: id, withExtension: "mlmodelc") { return url }
@@ -228,6 +268,10 @@ public actor ModelManager {
     public nonisolated static func isBundled(_ id: String) -> Bool { bundledModelURL(for: id) != nil }
 
     public func isInstalled(_ id: String) -> Bool {
+        if let descriptor = ModelCatalog.descriptor(id: id), descriptor.pinned != nil {
+            // Pinned packages compile into `<id>/compiled/`; the marker is written last.
+            return FileManager.default.fileExists(atPath: directory(for: id).appendingPathComponent("installed").path)
+        }
         if let descriptor = ModelCatalog.descriptor(id: id), descriptor.kind == .languageModel {
             return FileManager.default.fileExists(atPath: directory(for: id).appendingPathComponent("installed").path)
         }
@@ -314,7 +358,15 @@ public actor ModelManager {
     /// Unpacking and moving files run off the actor, so a call to the manager never
     /// waits behind an install. Language models download over Wi‑Fi only this way.
     public func install(_ descriptor: ModelDescriptor) {
-        install(descriptor, allowsCellular: descriptor.kind != .languageModel)
+        install(descriptor, allowsCellular: !Self.isWiFiOnlyByDefault(descriptor.kind))
+    }
+
+    /// Language models and the pinned mask models download over Wi‑Fi unless the caller allows cellular.
+    public nonisolated static func isWiFiOnlyByDefault(_ kind: ModelDescriptor.Kind) -> Bool {
+        switch kind {
+        case .languageModel, .segmentation, .depth: return true
+        case .inpainting, .superResolution, .generative: return false
+        }
     }
 
     /// install(_:), choosing whether the transfer may use cellular data (or a
@@ -323,6 +375,12 @@ public actor ModelManager {
     public func install(_ descriptor: ModelDescriptor, allowsCellular: Bool) {
         guard activeTasks[descriptor.id] == nil, !isInstalled(descriptor.id) else { return }
         startUpdatePump()
+        // Pinned packages first: they have no archive and no folder listing, so the routes below would end in
+        // "No download source".
+        if let pinned = descriptor.pinned {
+            installPinnedPackages(descriptor, pinned: pinned, allowsCellular: allowsCellular)
+            return
+        }
         if descriptor.kind == .languageModel, let folder = descriptor.huggingFaceFolder {
             installLanguageModel(descriptor, folder: folder, allowsCellular: allowsCellular)
             return
@@ -565,6 +623,138 @@ public actor ModelManager {
         activeTasks[id] = task
     }
 
+    /// A pinned package set (SAM 2.1 tiny, Depth Anything V2 Small, §9.2), file by file:
+    /// 1. free storage for what is left to download plus 300 MB, else `FailureCode.storage`;
+    /// 2. each file into `<id>/staging/<path>` from the repository at the pinned revision, with byte-accurate
+    ///    progress and 3 retries that keep the resume data (also saved under `staging/.resume`, for the next
+    ///    attempt); a file already staged with its pinned size and SHA-256 is kept, so a relaunch picks up there;
+    /// 3. each size and SHA-256 against the pin, never against a listing: a mismatch deletes the file and fails
+    ///    with `FailureCode.verify`;
+    /// 4. each package compiled on the device, in order, into `<id>/compiled/<package>.mlmodelc`
+    ///    (`FailureCode.compile` when Core ML refuses one; the verified files stay staged for a retry);
+    /// 5. the `installed` mark, written last, then the staging folder goes.
+    /// Progress: `.downloading(p)`, `.compiling`, `.installed`.
+    private func installPinnedPackages(_ descriptor: ModelDescriptor, pinned: PinnedModelPackageSet, allowsCellular: Bool) {
+        set(.downloading(progress: 0), for: descriptor.id)
+        let id = descriptor.id
+        let directory = directory(for: id)
+        let root = rootURL
+        let source = pinnedSource
+        let handle = downloadHandle(for: id)
+        let task = Task { [weak self] in
+            guard let self else { return }
+            let staging = directory.appendingPathComponent("staging", isDirectory: true)
+            let resumeFolder = staging.appendingPathComponent(".resume", isDirectory: true)
+            let compiledFolder = directory.appendingPathComponent("compiled", isDirectory: true)
+            do {
+                try await Task.detached(priority: .utility) {
+                    try FileManager.default.createDirectory(at: resumeFolder, withIntermediateDirectories: true)
+                }.value
+                let total = max(1, pinned.totalBytes)
+                let staged = await Task.detached(priority: .utility) { Self.stagedBytes(pinned.files, in: staging) }.value
+                let needed = pinned.totalBytes - staged + Self.pinnedStorageHeadroom
+                if let free = Self.availableCapacity(at: root), free < needed {
+                    throw LanguageModelInstallError(code: "\(FailureCode.storage):\(needed)")
+                }
+                var done: Int64 = 0
+                for file in pinned.files {
+                    try Task.checkCancellation()
+                    let destination = staging.appendingPathComponent(file.path)
+                    let kept = await Task.detached(priority: .utility) { Self.isStaged(file, at: destination) }.value
+                    if kept {
+                        done += file.size
+                        self.post(.downloading(progress: min(0.999, Double(done) / Double(total))), for: id)
+                        continue
+                    }
+                    let resumeFile = resumeFolder.appendingPathComponent(file.path.replacingOccurrences(of: "/", with: "_") + ".resume")
+                    let base = done
+                    let size = file.size
+                    let temporary: URL
+                    do {
+                        temporary = try await source.fetch(pinned, file, handle, allowsCellular, resumeFile) { fraction in
+                            let bytes = base + Int64(fraction * Double(size))
+                            self.post(.downloading(progress: min(0.999, Double(bytes) / Double(total))), for: id)
+                        }
+                    } catch let error as DownloadHTTPError {
+                        throw LanguageModelInstallError(code: "\(FailureCode.server):\(error.status)")
+                    } catch let error as NSError where error.domain == NSURLErrorDomain && error.code != NSURLErrorCancelled {
+                        throw LanguageModelInstallError(code: FailureCode.network)
+                    }
+                    try await Task.detached(priority: .utility) {
+                        defer { try? FileManager.default.removeItem(at: resumeFile) }
+                        // The pin is the only truth: size, then SHA-256.
+                        guard Self.fileSize(temporary) == size, try Self.sha256(of: temporary) == file.sha256.lowercased() else {
+                            try? FileManager.default.removeItem(at: temporary)
+                            throw LanguageModelInstallError(code: FailureCode.verify)
+                        }
+                        try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                        try? FileManager.default.removeItem(at: destination)
+                        try FileManager.default.moveItem(at: temporary, to: destination)
+                    }.value
+                    done += size
+                    self.post(.downloading(progress: min(0.999, Double(done) / Double(total))), for: id)
+                }
+                self.post(.compiling, for: id)
+                for package in pinned.packages {
+                    try Task.checkCancellation()
+                    let packageURL = staging.appendingPathComponent(package + ".mlpackage", isDirectory: true)
+                    let compiled: URL
+                    do {
+                        compiled = try await source.compile(packageURL)
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        PSLog.error("pinned package \(package) did not compile: \(error)", category: .models)
+                        throw LanguageModelInstallError(code: FailureCode.compile)
+                    }
+                    try await Task.detached(priority: .utility) {
+                        try FileManager.default.createDirectory(at: compiledFolder, withIntermediateDirectories: true)
+                        let destination = compiledFolder.appendingPathComponent(package + ".mlmodelc", isDirectory: true)
+                        try? FileManager.default.removeItem(at: destination)
+                        try FileManager.default.moveItem(at: compiled, to: destination)
+                    }.value
+                }
+                try await Task.detached(priority: .utility) {
+                    try Data().write(to: directory.appendingPathComponent("installed"))
+                    try? FileManager.default.removeItem(at: staging)
+                }.value
+                PSLog.info("pinned model \(id) installed (\(pinned.totalBytes / 1_000_000) MB, \(pinned.packages.count) packages)", category: .models)
+                self.post(.installed, for: id)
+            } catch is CancellationError {
+                self.post(.notInstalled, for: id)
+            } catch let error as LanguageModelInstallError {
+                PSLog.error("pinned model \(id) install failed: \(error.code)", category: .models)
+                self.post(.failed(error.code), for: id)
+            } catch {
+                PSLog.error("pinned model \(id) install failed: \(error)", category: .models)
+                let nsError = error as NSError
+                self.post(.failed(nsError.domain == NSURLErrorDomain ? FailureCode.network : String(describing: error).prefix(80).description), for: id)
+            }
+            await self.clearTask(id)
+        }
+        activeTasks[id] = task
+    }
+
+    /// Swaps where pinned files come from and how packages compile (tests: a local folder, a stand-in compiler).
+    func usePinnedSource(_ source: PinnedInstallSource) {
+        pinnedSource = source
+    }
+
+    /// Bytes of pinned files already staged with their pinned size.
+    private static func stagedBytes(_ files: [PinnedModelFile], in staging: URL) -> Int64 {
+        files.reduce(0) { total, file in
+            fileSize(staging.appendingPathComponent(file.path)) == file.size ? total + file.size : total
+        }
+    }
+
+    /// A staged file is kept when its size and SHA-256 match the pin; one that does not is deleted (it downloads again).
+    static func isStaged(_ file: PinnedModelFile, at url: URL) -> Bool {
+        guard fileSize(url) == file.size else { return false }
+        if (try? sha256(of: url)) == file.sha256.lowercased() { return true }
+        try? FileManager.default.removeItem(at: url)
+        return false
+    }
+
     /// Bytes already staged with their final size (a download picked up after a relaunch).
     private static func stagedBytes(_ files: [HuggingFaceHub.File], in staging: URL) -> Int64 {
         files.reduce(0) { total, file in
@@ -628,6 +818,40 @@ public actor ModelManager {
         isPaused = false
         pauseExemptions = []
         for handle in downloads.values { handle.resume() }
+    }
+}
+
+/// Where a pinned model's files come from and how its packages compile (W2, §9.2). The app downloads from the
+/// repository at the pinned revision and compiles with Core ML; tests read a local folder (fake files with their
+/// real SHA-256, or the packages CI fetched) and may stand in for the compiler.
+struct PinnedInstallSource: Sendable {
+    /// Returns a temporary file holding `file`'s bytes (the caller verifies and moves it).
+    var fetch: @Sendable (_ set: PinnedModelPackageSet, _ file: PinnedModelFile, _ handle: DownloadHandle, _ allowsCellular: Bool,
+                          _ resumeFile: URL, _ progress: @escaping @Sendable (Double) -> Void) async throws -> URL
+    /// Compiles a `.mlpackage` and returns the `.mlmodelc` (in a temporary place the caller moves it from).
+    var compile: @Sendable (_ package: URL) async throws -> URL
+
+    static let standard = PinnedInstallSource(
+        fetch: { set, file, handle, allowsCellular, resumeFile, progress in
+            let url = HuggingFaceHub.fileURL(repository: set.repository, path: file.path, revision: set.revision)
+            return try await ModelDownloader.download(url, handle: handle, allowsCellular: allowsCellular, retryDelays: ModelManager.retryDelays,
+                                                      resumeFile: resumeFile, progress: progress)
+        },
+        compile: { package in try await MLModel.compileModel(at: package) }
+    )
+
+    /// Files from `<folder>/<path>` (the layout `Scripts/fetch-mask-models.sh` leaves), copied to a temporary file.
+    static func folder(_ folder: URL, compile: @escaping @Sendable (URL) async throws -> URL = { try await MLModel.compileModel(at: $0) }) -> PinnedInstallSource {
+        PinnedInstallSource(
+            fetch: { _, file, _, _, _, progress in
+                let source = folder.appendingPathComponent(file.path)
+                let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+                try FileManager.default.copyItem(at: source, to: temporary)
+                progress(1)
+                return temporary
+            },
+            compile: compile
+        )
     }
 }
 

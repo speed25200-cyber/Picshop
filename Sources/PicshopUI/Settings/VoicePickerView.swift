@@ -64,7 +64,6 @@ struct VoicePickerView: View {
             try? await Task.sleep(for: .seconds(4.5))
             if playing == current { playing = nil }
         }
-        .preferredColorScheme(.dark)
     }
 
     private func refresh() {

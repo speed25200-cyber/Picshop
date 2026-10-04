@@ -44,7 +44,7 @@ enum HeldOutUtterances {
     en | auto tone please | autoTone levels autoEnhance
     en | let it fix the tones automatically | autoTone autoEnhance levels
     fr | les orange un peu moins saturé | hsl
-    fr | rend le ciel plus cyan sans toucher le reste | hsl selectiveAdjust
+    fr | rend le ciel plus cyan sans toucher le reste | hsl selectiveAdjust maskAdjust
     fr | baisse la luminance des bleus | hsl
     fr | la teinte des verts vers le jaune | hsl
     fr | les rouges sont trop flashy calme les | hsl
@@ -143,17 +143,17 @@ enum HeldOutUtterances {
     en | crank the contrast | adjust
     en | a touch cooler | adjust
     en | lift the shadows | adjust
-    fr | le ciel plus bleu stp | selectiveAdjust hsl
-    fr | éclaircis juste le visage | selectiveAdjust relight
-    fr | la mer plus saturée | selectiveAdjust hsl
-    en | brighten only the sky | selectiveAdjust
-    en | make the grass greener | selectiveAdjust hsl
+    fr | le ciel plus bleu stp | selectiveAdjust hsl maskAdjust
+    fr | éclaircis juste le visage | selectiveAdjust relight maskAdjust
+    fr | la mer plus saturée | selectiveAdjust hsl maskAdjust
+    en | brighten only the sky | selectiveAdjust maskAdjust
+    en | make the grass greener | selectiveAdjust hsl maskAdjust
     fr | améliore la photo toute seule | autoEnhance
     fr | rends la jolie | autoEnhance applyLook
-    fr | baguette magique | autoEnhance
+    fr | baguette magique | autoEnhance select
     en | just make it look better | autoEnhance applyLook
     en | auto fix | autoEnhance autoTone
-    fr | ajoute de la lumière sur son visage | relight selectiveAdjust
+    fr | ajoute de la lumière sur son visage | relight selectiveAdjust maskAdjust
     fr | éclaire le sujet par la gauche | relight
     en | relight the subject from the right | relight
     fr | un look vintage | applyLook
@@ -410,7 +410,97 @@ enum HeldOutUtterances {
     en | add a note saying approved | addText
     """
 
-    static let all: [Utterance] = parse(photo, .photo) + parse(video, .video) + parse(pdf, .pdf)
+    /// W2 (masks and AI selection, §8.10): written before the six operations' examples, by the lane that wires
+    /// them, the way people say it to the editor, with the recogniser's slips (« selectionne la tace bleu »,
+    /// « assombri le ba »). maskAdjust is on the photo cards; the selection operations must be retrieved.
+    static let photoW2 = """
+    fr | selectionne la tace bleu | select
+    fr | assombri le ba | maskAdjust
+    fr | fonce un peu le haut de la photo | maskAdjust
+    fr | éclaircis seulement son visage | maskAdjust selectiveAdjust
+    fr | rends le ciel plus bleu et plus dense | maskAdjust selectiveAdjust
+    fr | un peu plus de peps sur le sujet | maskAdjust
+    fr | baisse l'expo du ciel | maskAdjust selectiveAdjust
+    fr | réchauffe uniquement la peau | maskAdjust selectiveAdjust
+    fr | refroidis l'arrière plan | maskAdjust
+    fr | assombris les coins de la photo | maskAdjust adjust
+    fr | remonte les ombres du premier plan | maskAdjust
+    fr | plus de clarté sur les montagnes | maskAdjust
+    fr | éclaire la personne de gauche | maskAdjust
+    fr | désature le fond | maskAdjust
+    fr | mets un dégradé sombre en haut | maskAdjust
+    fr | fais un filtre radial sur le visage | maskAdjust
+    fr | réduis la saturation des verts dans le fond | maskAdjust hsl
+    fr | ajoute du contraste au premier plan | maskAdjust
+    fr | assombri le ciel un peu | maskAdjust selectiveAdjust
+    fr | inverse le masque du ciel | maskEdit
+    fr | adoucis les bords du masque | maskEdit
+    fr | agrandis un peu le masque | maskEdit
+    fr | ajoute le chien au masque | maskEdit
+    fr | retire le visage du masque | maskEdit
+    fr | le masque déborde rétrécis le | maskEdit
+    fr | cache le masque 2 | maskEdit
+    fr | renomme le masque en ciel du soir | maskEdit
+    fr | baisse l'opacité du masque à 50 | maskEdit
+    fr | montre moi le masque | maskEdit
+    fr | supprime le masque du ciel | maskDelete
+    fr | vire tous les masques | maskDelete
+    fr | efface le dernier masque | maskDelete
+    fr | sélectionne la personne au milieu | select
+    fr | prends juste le ciel | select maskAdjust
+    fr | prends tout ce qui est rouge | select
+    fr | selectionne larriere plan stp | select
+    fr | sélectionne les gens | select
+    fr | sélectionne le chat | select
+    fr | ajoute le chien à la sélection | select
+    fr | enlève le ciel de la sélection | select
+    fr | baguette magique sur le mur | select
+    fr | choisis la zone claire | select
+    fr | sélectionne la tasse à café | select
+    fr | agrandis la sélection de 20 pixels | selectionModify
+    fr | contracte la sélection | selectionModify
+    fr | adoucis le contour de la sélection | selectionModify
+    fr | désélectionne tout | selectionModify
+    fr | affine le contour des cheveux | selectionModify
+    fr | inverse ma sélection | selectionModify
+    fr | lisse un peu la sélection | selectionModify
+    fr | supprime ce qui est sélectionné | selectionApply
+    fr | floute la zone sélectionnée | selectionApply
+    fr | remplis la sélection en noir | selectionApply
+    fr | change la couleur de la sélection en rouge | selectionApply
+    fr | détoure ce que j'ai sélectionné | selectionApply
+    fr | éclaircis un peu la sélection | selectionApply maskAdjust
+    fr | remplace la sélection par des fleurs | selectionApply
+    fr | fais un masque avec la sélection | selectionApply
+    en | darken the top of the picture | maskAdjust
+    en | brighten just her face | maskAdjust selectiveAdjust
+    en | make the sky a deeper blue | maskAdjust selectiveAdjust
+    en | warm up the foreground | maskAdjust
+    en | cool down the background only | maskAdjust
+    en | add a graduated filter at the bottom | maskAdjust
+    en | radial filter on the subject | maskAdjust
+    en | more clarity on the mountains | maskAdjust
+    en | invert the sky mask | maskEdit
+    en | feather the mask more | maskEdit
+    en | add the dog to the mask | maskEdit
+    en | hide mask 2 | maskEdit
+    en | delete that mask | maskDelete
+    en | get rid of all the masks | maskDelete
+    en | select the blue mug | select
+    en | select everything that's green | select
+    en | pick the person on the left | select
+    en | add the sky to my selection | select
+    en | grow the selection by 10 pixels | selectionModify
+    en | soften the selection edge | selectionModify
+    en | deselect everything | selectionModify
+    en | refine the hair edge | selectionModify
+    en | fill the selection with white | selectionApply
+    en | blur what I selected | selectionApply
+    en | erase what's selected | selectionApply
+    en | cut out what's selected | selectionApply
+    """
+
+    static let all: [Utterance] = parse(photo, .photo) + parse(photoW2, .photo) + parse(video, .video) + parse(pdf, .pdf)
 
     static func parse(_ table: String, _ domain: OpDomain) -> [Utterance] {
         table.split(separator: "\n").compactMap { line -> Utterance? in
@@ -438,6 +528,17 @@ final class HeldOutUtterancesTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(all.filter { $0.language == .fr }.count, 200)
         XCTAssertGreaterThanOrEqual(all.filter { $0.language == .en }.count, 100)
         XCTAssertEqual(Set(all.map { $0.text.lowercased() }).count, all.count, "no duplicates")
+    }
+
+    /// W2 (§8.10): at least 80 mask and selection utterances, 55 French and 25 English, the slips included.
+    func testTheW2BlockHasItsSizeAndMix() {
+        let w2 = HeldOutUtterances.parse(HeldOutUtterances.photoW2, .photo)
+        XCTAssertGreaterThanOrEqual(w2.count, 80)
+        XCTAssertGreaterThanOrEqual(w2.filter { $0.language == .fr }.count, 55)
+        XCTAssertGreaterThanOrEqual(w2.filter { $0.language == .en }.count, 25)
+        for slip in ["selectionne la tace bleu", "assombri le ba"] { XCTAssertTrue(w2.contains { $0.text == slip }, slip) }
+        let ops: Set<String> = ["maskAdjust", "maskEdit", "maskDelete", "select", "selectionModify", "selectionApply"]
+        XCTAssertEqual(Set(w2.flatMap(\.gold)).intersection(ops), ops, "every W2 operation is asked for")
     }
 
     func testEveryGoldIsACatalogOperationOfItsDomain() throws {

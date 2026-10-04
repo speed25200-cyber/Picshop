@@ -65,7 +65,6 @@ public struct PDFEditorView: View {
                 pickedImage = nil
             }
         }
-        .preferredColorScheme(.dark)
         .persistentSystemOverlays(.hidden)
     }
 
@@ -352,9 +351,10 @@ struct TextEditSheet: View {
                     } label: {
                         Text(face.title)
                             .font(Font(UIFont(name: face.name, size: 12) ?? UIFont.systemFont(ofSize: 12)))
-                            .foregroundStyle(active ? Color.white : PSTheme.textSecondary)
+                            .foregroundStyle(active ? Color.psOnAction : PSTheme.textSecondary)
                             .padding(.horizontal, 11).padding(.vertical, 6)
-                            .background(Capsule().fill(active ? PSTheme.accent : Color.white.opacity(0.06)))
+                            // W2: white is the action colour; a selected face is a white chip with a black label.
+                            .background(Capsule().fill(active ? Color.psActionPrimary : Color.psFillWell))
                     }
                     .buttonStyle(PSPressStyle())
                     .accessibilityAddTraits(active ? [.isSelected] : [])
@@ -377,7 +377,6 @@ struct TextEditSheet: View {
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(PSTheme.surface.ignoresSafeArea())
-        .preferredColorScheme(.dark)
         .onAppear { focused = true }
     }
 }
@@ -410,9 +409,9 @@ struct PagesStrip: View {
                                     .scaleEffect(selected ? 1 : 0.94)
                                     .opacity(selected ? 1 : 0.8)
                                 Text(verbatim: "\(index + 1)")
-                                    .font(PSFont.caption(10)).foregroundStyle(selected ? Color.white : PSTheme.textSecondary)
+                                    .font(PSFont.caption(10)).foregroundStyle(selected ? Color.psOnAction : PSTheme.textSecondary)
                                     .padding(.horizontal, 6).padding(.vertical, 2)
-                                    .background(Capsule().fill(selected ? PSTheme.accent : Color.clear))
+                                    .background(Capsule().fill(selected ? Color.psActionPrimary : Color.clear))
                             }
                             .animation(PSMotion.quick, value: selected)
                             .contentShape(Rectangle())
@@ -754,7 +753,6 @@ struct SignatureSheet: View {
             .navigationTitle(L("Signature"))
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { dismiss() } } }
         }
-        .preferredColorScheme(.dark)
         .presentationDetents([.medium])
     }
 }
@@ -859,7 +857,6 @@ struct PDFExportSheet: View {
             // (the previous run cancelled) whenever a flatten choice changes.
             .task(id: session.exportOptions) { await session.export() }
         }
-        .preferredColorScheme(.dark)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }

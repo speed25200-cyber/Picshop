@@ -52,6 +52,10 @@ public final class PerformanceGovernor {
     /// Bumped on every system memory warning, so screens can drop their own caches.
     public private(set) var memoryWarningCount = 0
 
+    /// A finger is on the canvas (W2): a mask handle, a brush, a lasso or a dial drag. The photo editor sets it from
+    /// the first touch to its end; the Live orb and the marching ants pause while it is set.
+    public var isCanvasInteracting = false
+
     private var tokens: [NSObjectProtocol] = []
     @ObservationIgnored private var memoryReliefTask: Task<Void, Never>?
 

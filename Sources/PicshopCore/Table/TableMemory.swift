@@ -55,10 +55,12 @@ extension PhotoDocument {
         return StableHash.hex(parts.joined(separator: ","))
     }
 
-    /// Edits that change tones and colours only: nothing moves, appears or goes.
+    /// Edits that change tones and colours only: nothing moves, appears or goes. A local adjustment (W2) is one,
+    /// so a mask edit never invalidates the scene map, the words cache or the SAM embedding.
     static func isTonal(_ kind: EditOperation.Kind) -> Bool {
         switch kind {
-        case .adjust, .adjustments, .toneCurve, .levels, .look, .autoEnhance, .colorMixer, .colorGrade, .lut, .colorMatch, .denoise, .sharpen, .relight:
+        case .adjust, .adjustments, .toneCurve, .levels, .look, .autoEnhance, .colorMixer, .colorGrade, .lut, .colorMatch, .denoise, .sharpen, .relight,
+             .localAdjust:
             return true
         default:
             return false

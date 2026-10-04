@@ -36,7 +36,7 @@ final class FoundationModelsLiveBrain: LiveBrain, @unchecked Sendable {
 
     func warmUp() async {
         guard await isAvailable() else { return }
-        currentSession().prewarm()
+        currentSession(for: nil).prewarm()
     }
 
     func respond(to turn: LiveUserTurn, tools: any LiveToolHandler) -> AsyncThrowingStream<LiveBrainEvent, Error> {
@@ -73,7 +73,7 @@ final class FoundationModelsLiveBrain: LiveBrain, @unchecked Sendable {
         let prompt = LivePrompt.onDevicePrompt(turn)
         var retried = false
         while true {
-            let session = currentSession()
+            let session = currentSession(for: turn)
             var emitted = false
             do {
                 let reply = try await stream(session, prompt: prompt, continuation: continuation, emitted: &emitted)
@@ -144,26 +144,36 @@ final class FoundationModelsLiveBrain: LiveBrain, @unchecked Sendable {
 
     // MARK: Sessions
 
-    private func currentSession() -> LanguageModelSession {
-        lock.withLock {
+    /// The turn's session. With the dynamic schema (W2, D15) apply_edits is rebuilt every turn from the core and
+    /// the turn's retrieved operations, and the session is rebuilt around it from the previous transcript; the
+    /// W1 tool (`LiveStepArguments`) otherwise.
+    private func currentSession(for turn: LiveUserTurn?) -> LanguageModelSession {
+        let applyEdits = applyEditsTool(for: turn)
+        return lock.withLock {
+            let tools: [any Tool] = [applyEdits, LiveUndoTool(bridge: bridge), LiveCompareTool(bridge: bridge), LiveProposeIdeasTool(bridge: bridge)]
             if let session, turnsInSession < Self.turnsPerSession {
                 turnsInSession += 1
-                return session
+                guard FeatureFlags.isOn(.fmDynamicSchema), turn != nil else { return session }
+                let rebuilt = LanguageModelSession(model: SystemLanguageModel.default, tools: tools, transcript: session.transcript)
+                self.session = rebuilt
+                return rebuilt
             }
             var instructions = LivePrompt.onDeviceInstructions(mode: mode)
             let summary = recap.suffix(4).joined(separator: " / ")
             if !summary.isEmpty { instructions += "\nRecap: " + String(summary.suffix(300)) }
-            let tools: [any Tool] = [
-                LiveApplyEditsTool(bridge: bridge),
-                LiveUndoTool(bridge: bridge),
-                LiveCompareTool(bridge: bridge),
-                LiveProposeIdeasTool(bridge: bridge),
-            ]
             let fresh = LanguageModelSession(tools: tools, instructions: instructions)
             session = fresh
             turnsInSession = 1
             return fresh
         }
+    }
+
+    /// apply_edits for this turn: the catalog schema of its operations, or the fixed W1 step.
+    private func applyEditsTool(for turn: LiveUserTurn?) -> any Tool {
+        guard FeatureFlags.isOn(.fmDynamicSchema) else { return LiveApplyEditsTool(bridge: bridge) }
+        let tree = FoundationModelsSchema.turnTool(for: turn, mode: mode).schema
+        guard let schema = try? FoundationModelsSchema.generationSchema(tree) else { return LiveApplyEditsTool(bridge: bridge) }
+        return LiveCatalogApplyEditsTool(bridge: bridge, parameters: schema)
     }
 
     private func dropSession() {
@@ -247,6 +257,31 @@ final class FoundationModelsToolBridge: @unchecked Sendable {
             let payload: JSONValue = ["error": "invalid_input", "problems": JSONValue.array(problems), "hint": "Fix these fields and call the tool again."]
             return ToolResultEncoder.compactText(LiveToolResult(isError: true, payload: payload, changedDocument: false))
         case .success(let intents):
+            return await perform(call, tool: .applyEdits(intents), name: .applyEdits)
+        }
+    }
+
+    /// The dynamic schema's arguments (`{"steps": [...]}` as JSON): the same coercer and validator as the local
+    /// model's calls.
+    func applyEdits(json: String) async -> String {
+        guard let call = claim() else { return "{\"ok\":false,\"error\":\"no active turn\"}" }
+        let context = await call.handler.context()
+        let arguments = (try? JSONValue.parse(json)) ?? .object([:])
+        let steps = Array(FoundationModelsSchema.steps(in: arguments).prefix(4))
+        let use = ToolArgumentCoercer.rawToolUse(id: call.id, name: LiveToolName.applyEdits.rawValue, arguments: ["steps": .array(steps)])
+        switch ToolInputValidator(mode: mode).validate(use, context: context) {
+        case .failure(let error):
+            let problems: [JSONValue]
+            switch error {
+            case .problems(let list): problems = list.prefix(8).map { JSONValue.string($0) }
+            case .invalidJSON: problems = ["invalid input"]
+            case .notAnObject: problems = ["not an object"]
+            case .unknownTool(let name): problems = [JSONValue.string("unknown tool \(name)")]
+            }
+            let payload: JSONValue = ["error": "invalid_input", "problems": JSONValue.array(problems), "hint": "Fix these fields and call the tool again."]
+            return ToolResultEncoder.compactText(LiveToolResult(isError: true, payload: payload, changedDocument: false))
+        case .success(let valid):
+            guard case .applyEdits(let intents) = valid.tool else { return "{\"ok\":false}" }
             return await perform(call, tool: .applyEdits(intents), name: .applyEdits)
         }
     }
@@ -412,6 +447,22 @@ struct LiveApplyEditsTool: Tool {
 
     func call(arguments: Arguments) async throws -> String {
         await bridge.applyEdits(arguments.steps)
+    }
+}
+
+/// apply_edits with this turn's catalog schema (W2, D15): the arguments arrive as generated content and go
+/// through the coercer and the validator as JSON.
+@available(iOS 26.0, *)
+struct LiveCatalogApplyEditsTool: Tool {
+    typealias Arguments = GeneratedContent
+
+    let bridge: FoundationModelsToolBridge
+    let name = "apply_edits"
+    let description = "Apply edits to the open photo or video, in order. Call it when the user asks for a change or accepts an idea. Never for questions."
+    let parameters: GenerationSchema
+
+    func call(arguments: GeneratedContent) async throws -> String {
+        await bridge.applyEdits(json: arguments.jsonString)
     }
 }
 

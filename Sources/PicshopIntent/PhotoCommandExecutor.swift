@@ -111,7 +111,7 @@ public struct PhotoCommandExecutor: Sendable {
             }
             var resumed = pending.pendingIntent
             resumed.target?.matchesAll = chosen.count > 1
-            return await apply(pendingIntent: resumed, candidates: chosen, document: document)
+            return await apply(pendingIntent: resumed, candidates: chosen, document: document, context: context)
 
         case .removeBackground:
             if context.table?.coversPicture == true { return (document, failure(PicshopError.noSubject)) }
@@ -188,8 +188,29 @@ public struct PhotoCommandExecutor: Sendable {
             guard let target = intent.target, let parameter = intent.parameter else {
                 return (document, .failed(fr ? "Dis-moi quoi retoucher, ou touche-le." : "Tell me what to change, or tap it."))
             }
+            // W2 (D2): an AI region (sky, subject, background…) lowers onto a local adjustment without the candidates.
+            if PhotoOperationHandlers.isAIRegion(target),
+               let lowered = await PhotoOperationHandlers.lowerSelective(intent, target: target, parameter: parameter, candidates: nil, document: document,
+                                                                         context: OperationRunContext(intent: context, language: language, services: services)) {
+                return await checkedSelective(lowered, intent: intent, before: document)
+            }
             do {
                 let candidates = try await services.candidates(for: target, in: document)
+                // W2: objects and face parts keep the legacy resolution (the question, not found, the exact landmark masks),
+                // then lower onto a local adjustment; a host without mask rasters keeps the legacy op below.
+                if FeatureFlags.isOn(.masks) {
+                    var chosen: [ObjectCandidate]?
+                    switch CandidateSelector.select(from: candidates, for: target) {
+                    case .single(let candidate): chosen = [candidate]
+                    case .multiple(let list): chosen = list
+                    case .ambiguous, .none: chosen = nil
+                    }
+                    if let chosen, let lowered = await PhotoOperationHandlers.lowerSelective(intent, target: target, parameter: parameter, candidates: chosen,
+                                                                                            document: document,
+                                                                                            context: OperationRunContext(intent: context, language: language, services: services)) {
+                        return await checkedSelective(lowered, intent: intent, before: document)
+                    }
+                }
                 switch CandidateSelector.select(from: candidates, for: target) {
                 case .single(let candidate):
                     let mask = try await services.mask(for: [candidate], target: target, in: document)
@@ -234,10 +255,13 @@ public struct PhotoCommandExecutor: Sendable {
             }
             let aspect = intent.aspect ?? .free
             if aspect == .original {
+                let previousBaseEdits = document.baseLayer?.edits
                 document.update(layerID: document.baseLayerID ?? UUID()) { layer in
                     layer.edits.operations.removeAll { if case .crop = $0.kind { return true } else { return false } }
                 }
                 if let base = document.baseLayer?.imageAsset { document.canvasSize = base.pixelSize }
+                // Removing the crops bypasses `apply`: masks and the selection follow the frame back here (D3).
+                if let previousBaseEdits { document.reconcileMasks(previousBaseEdits: previousBaseEdits) }
                 return (document, .applied("Reset Crop"))
             }
             if aspect == .free {
@@ -425,20 +449,18 @@ public struct PhotoCommandExecutor: Sendable {
         case .export: return (document, .effect(.export, label: ""))
         case .share: return (document, .effect(.share, label: ""))
         case .help: return (document, .effect(.help, label: ""))
-        case .confirm: return (document, .effect(.confirm, label: ""))
+        case .confirm:
+            // « oui » to a model offer (W2): the session downloads the model and runs the pending call once it is installed.
+            if let pending = context.pendingClarification, pending.candidates.isEmpty, let id = ModelOfferText.modelID(in: pending.question) {
+                return (document, ExecutionResult(outcome: .info(message: ModelOfferText.installing(id, french: fr)), effects: [.message(ModelOfferText.installPrefix + id)]))
+            }
+            return (document, .effect(.confirm, label: ""))
         case .cancel: return (document, .effect(.cancel, label: ""))
         case .unknown:
             return (document, ExecutionResult(outcome: .info(message: Replies.reply(for: intent, language: language))))
         case .operation:
             guard let call = intent.operation, FeatureFlags.isOn(.catalogOps) else { return (document, unsupported(intent.summary)) }
-            let run = OperationRunContext(intent: context, language: language, services: services)
-            var (updated, result) = await PhotoOperationHandlers.run(call, on: document, context: run)
-            // Structural postconditions, read off the two documents; Live's verify step reads them.
-            if result.outcome.isSuccess {
-                let report = OperationPostconditions.check(call, before: document, after: updated)
-                if !report.isEmpty { result.effects.append(OperationPostconditions.effect(report)) }
-            }
-            return (updated, result)
+            return await runOperation(call, on: document, context: context)
         default:
             return (document, unsupported(intent.summary))
         }
@@ -489,10 +511,20 @@ public struct PhotoCommandExecutor: Sendable {
         }
     }
 
-    func apply(pendingIntent intent: EditIntent, candidates: [ObjectCandidate], document input: PhotoDocument) async -> (PhotoDocument, ExecutionResult) {
+    func apply(pendingIntent intent: EditIntent, candidates: [ObjectCandidate], document input: PhotoDocument,
+               context: IntentContext = IntentContext(mode: .photo)) async -> (PhotoDocument, ExecutionResult) {
         var document = input
         let fr = language == .french
+        // A mask or selection call that asked which one (W2): it runs again on the pick.
+        if intent.action == .operation, let call = intent.operation {
+            return await runOperation(call, on: input, context: context, chosen: candidates)
+        }
         guard let target = intent.target else { return (document, .failed(fr ? "Dis-moi sur quoi agir, ou touche-le." : "Tell me what to act on, or tap it.")) }
+        if intent.action == .selectiveAdjust, let parameter = intent.parameter,
+           let lowered = await PhotoOperationHandlers.lowerSelective(intent, target: target, parameter: parameter, candidates: candidates, document: input,
+                                                                     context: OperationRunContext(intent: context, language: language, services: services)) {
+            return await checkedSelective(lowered, intent: intent, before: input)
+        }
         do {
             let mask = try await services.mask(for: candidates, target: target, in: document)
             switch intent.action {
@@ -536,7 +568,9 @@ public struct PhotoCommandExecutor: Sendable {
             return move(selection, box: selection.boundingBox, intent: intent, target: target, document: document, circled: true)
         }
         document.apply(.blurRegion(selection, amount: (intent.amount?.value ?? 1).clamped(to: 0.2...1)))
-        return (document, ExecutionResult(outcome: .applied(label: "Blur \(target.originalPhrase)"), effects: [.message("selectionUsed")], label: "Blur \(target.originalPhrase)"))
+        let said = language == .french ? "Je floute dans la sélection." : "Blurring in the selection."
+        return (document, ExecutionResult(outcome: .applied(label: "Blur \(target.originalPhrase)"), effects: [.message("selectionUsed"), .message("speak:" + said)],
+                                          label: "Blur \(target.originalPhrase)"))
     }
 
     /// Moves what `mask` covers (inside `box`) where the intent says, keeping it in the picture.
@@ -559,8 +593,71 @@ public struct PhotoCommandExecutor: Sendable {
         }
         document.apply(.moveObject(mask, offset: offset))
         let label = "Move \(target.originalPhrase)"
-        return (document, ExecutionResult(outcome: .applied(label: label), effects: circled ? [.message("selectionUsed")] : [], label: label))
+        let said = language == .french ? "Je déplace ce qui est dans la sélection." : "Moving what is in the selection."
+        return (document, ExecutionResult(outcome: .applied(label: label), effects: circled ? [.message("selectionUsed"), .message("speak:" + said)] : [], label: label))
     }
+
+    // MARK: - Catalog operations (W2: pixel postconditions)
+
+    /// A catalog operation through its handler, then its postconditions: the structural ones read off the two
+    /// documents, and the pixel ones (D14) when the spec has them and `pixelPostconditions` is on, measured on
+    /// 256 px proxies within 2 s. Live's verify step reads the merged report.
+    func runOperation(_ call: OperationCall, on document: PhotoDocument, context: IntentContext, chosen: [ObjectCandidate]? = nil) async -> (PhotoDocument, ExecutionResult) {
+        let run = OperationRunContext(intent: context, language: language, services: services, chosen: chosen)
+        var (updated, result) = await PhotoOperationHandlers.run(call, on: document, context: run)
+        guard result.outcome.isSuccess else { return (updated, result) }
+        var report = OperationPostconditions.check(call, before: document, after: updated)
+        if let spec = OperationCatalog.shared.spec(call.id), FeatureFlags.isOn(.pixelPostconditions) {
+            let pixelConditions = spec.verify.filter { if case .pixels = $0 { return true } else { return false } }.count
+            if pixelConditions > 0 {
+                let verdict = await pixelVerdict(PixelPostconditions.plan(for: call, before: document, after: updated), before: document, after: updated)
+                report = report.merged(with: verdict.report, replacing: pixelConditions)
+                for note in verdict.notes { result.effects.append(.message("speak:" + PixelPostconditions.Note.text(note, french: language == .french))) }
+            }
+        }
+        if !report.isEmpty { result.effects.append(OperationPostconditions.effect(report)) }
+        return (updated, result)
+    }
+
+    /// selectiveAdjust lowered onto a local adjustment, with its pixel check (its parameter inside that mask).
+    func checkedSelective(_ lowered: (PhotoDocument, ExecutionResult), intent: EditIntent, before: PhotoDocument) async -> (PhotoDocument, ExecutionResult) {
+        var (updated, result) = lowered
+        guard result.outcome.isSuccess, FeatureFlags.isOn(.pixelPostconditions) else { return (updated, result) }
+        let verdict = await pixelVerdict(PixelPostconditions.plan(forSelective: intent, before: before, after: updated), before: before, after: updated)
+        if !verdict.report.isEmpty { result.effects.append(OperationPostconditions.effect(verdict.report)) }
+        return (updated, result)
+    }
+
+    /// The probes of a plan, all within one 2 s deadline (D14): a timeout or a host without probes is unverifiable.
+    func pixelVerdict(_ plan: PixelPostconditions.Plan, before: PhotoDocument, after: PhotoDocument) async -> PixelPostconditions.Verdict {
+        guard !plan.checks.isEmpty else { return PixelPostconditions.evaluate(plan, results: []) }
+        let services = self.services
+        let requests = plan.requests
+        var others: [(PixelPostconditions.Baseline, PhotoDocument, [PixelProbeRequest])] = []
+        for baseline in plan.otherBaselines {
+            guard case .withoutAdjustment(let id) = baseline else { continue }
+            var without = after
+            without.removeLocalAdjustment(id: id)
+            others.append((baseline, without, plan.checks.filter { $0.baseline == baseline }.map(\.request)))
+        }
+        let baselines = others
+        let measured = await Deadline.race(.seconds(2)) { () -> ProbeRun? in
+            let main = requests.isEmpty ? [] : await services.pixelProbes(requests, before: before, after: after)
+            var extra: [PixelPostconditions.Baseline: [PixelProbeResult]] = [:]
+            for (baseline, document, list) in baselines { extra[baseline] = await services.pixelProbes(list, before: document, after: after) }
+            return ProbeRun(main: main, others: extra)
+        }
+        return PixelPostconditions.evaluate(plan, results: measured?.main, others: measured?.others ?? [:])
+    }
+}
+
+/// The measured probes of one plan.
+struct ProbeRun: Sendable {
+    var main: [PixelProbeResult]
+    var others: [PixelPostconditions.Baseline: [PixelProbeResult]]
+}
+
+extension PhotoCommandExecutor {
 
     /// The adjustment for a region, with what a retoucher would add: whiter
     /// teeth are brighter and less yellow, not only brighter.

@@ -323,7 +323,8 @@ public final class VideoEditorSession {
         IntentContext(mode: .video, currentAdjustments: selectedClip?.adjustments ?? .neutral, hasSelection: selectedClipID != nil, selectedIndex: selectedClipIndex,
                       clipCount: timeline.clips.count, textLayerCount: timeline.overlays.filter { $0.textElement != nil }.count, playheadSeconds: player.currentTime,
                       timelineDuration: timeline.duration, frameRate: timeline.frameRate, pendingClarification: pendingClarification, lastTapPoint: lastTapPoint,
-                      canUndo: history.canUndo, canRedo: history.canRedo, preferredLanguage: app.settings.languageHint)
+                      canUndo: history.canUndo, canRedo: history.canRedo, preferredLanguage: app.settings.languageHint,
+                      documentRevision: revision)
     }
 
     // MARK: - History

@@ -178,19 +178,81 @@ public final class CoreMLImageModel: @unchecked Sendable {
 }
 
 /// Neural inpainter (LaMa) running through `CoreMLImageModel`.
-public final class CoreMLInpainter: Inpainter {
+///
+/// W2 (D12): it registers with the model broker once loaded, so the broker can unload it to make room (SAM, an
+/// export); the next erase asks the broker again (`.userWaiting`) and reloads, and when the broker refuses, that
+/// erase runs on PatchMatch instead of failing.
+public final class CoreMLInpainter: Inpainter, @unchecked Sendable {
     public let name = "LaMa"
     public let preferredLongestSide: Int
-    private let model: CoreMLImageModel
+    private let url: URL
+    private let lock = NSLock()
+    private var loaded: CoreMLImageModel?
+    private static var bytes: Int { ModelBrokerPolicy.estimatedBytes(.lama) }
 
     public init(compiledModelURL: URL) throws {
-        model = try CoreMLImageModel(compiledModelURL: compiledModelURL)
+        url = compiledModelURL
+        let model = try CoreMLImageModel(compiledModelURL: compiledModelURL)
+        loaded = model
         preferredLongestSide = model.colorInput.map { max($0.width, $0.height) } ?? 512
+        let bytes = Self.bytes
+        Task { [weak self] in
+            await ModelResidency.noteLoaded(.lama, bytes: bytes, unload: { [weak self] in self?.unload() })
+        }
+    }
+
+    /// An eraser that loads nothing yet: its first erase asks the broker (`.userWaiting`) and loads then, or runs on
+    /// PatchMatch when the broker refuses. What the editor keeps when the broker refused the preload at open.
+    public init(deferredCompiledModelURL url: URL, preferredLongestSide: Int = 512) {
+        self.url = url
+        self.preferredLongestSide = preferredLongestSide
+        loaded = nil
+    }
+
+    /// The broker-aware way to make the eraser: asks the broker first, nil when it refuses (W2, D12). The editor's
+    /// speculative load at open asks at `.preload`, so it never evicts a model for an eraser that may go unused.
+    public static func load(compiledModelURL: URL, priority: ModelPriority = .userWaiting) async throws -> CoreMLInpainter? {
+        guard await ModelResidency.admit(.lama, bytes: bytes, priority: priority) else { return nil }
+        return try CoreMLInpainter(compiledModelURL: compiledModelURL)
+    }
+
+    /// Drops the model (the broker's eviction); the next erase reloads it.
+    public func unload() {
+        let hadModel = lock.withLock { () -> Bool in
+            defer { loaded = nil }
+            return loaded != nil
+        }
+        if hadModel { Task { await ModelResidency.noteUnloaded(.lama) } }
+    }
+
+    /// The model, reloaded after an eviction when the broker agrees; nil when it refuses.
+    private func model() async -> CoreMLImageModel? {
+        if let model = lock.withLock({ loaded }) { return model }
+        guard await ModelResidency.admit(.lama, bytes: Self.bytes, priority: .userWaiting),
+              let model = try? CoreMLImageModel(compiledModelURL: url) else { return nil }
+        lock.withLock { loaded = model }
+        await ModelResidency.noteLoaded(.lama, bytes: Self.bytes, unload: { [weak self] in self?.unload() })
+        return model
     }
 
     public func inpaint(rgba: [UInt8], mask: [UInt8], width: Int, height: Int) async throws -> [UInt8] {
-        let model = self.model
-        return try await Task.detached(priority: .userInitiated) {
+        guard let model = await model() else {
+            // The broker needs the memory now: this erase is PatchMatch's.
+            return try await PatchMatchInpainter().inpaint(rgba: rgba, mask: mask, width: width, height: height)
+        }
+        await ModelResidency.markBusy(.lama, true)
+        do {
+            let result = try await predict(model, rgba: rgba, mask: mask, width: width, height: height)
+            await ModelResidency.markBusy(.lama, false)
+            return result
+        } catch {
+            await ModelResidency.markBusy(.lama, false)
+            throw error
+        }
+    }
+
+    private func predict(_ model: CoreMLImageModel, rgba: [UInt8], mask: [UInt8], width: Int, height: Int) async throws -> [UInt8] {
+        try await Task.detached(priority: .userInitiated) {
             let result = try model.predict(rgba: rgba, mask: mask, width: width, height: height)
             guard let cg = ImageSupport.rgbaImage(width: result.width, height: result.height, bytes: result.rgba),
                   let resized = ImageSupport.resized(cg, to: CGSize(width: width, height: height)) else {
@@ -220,8 +282,23 @@ public struct Upscaler: Sendable {
 
     public func upscale(_ image: CIImage, factor: Double) async throws -> CIImage {
         let factor = factor.clamped(to: 1...4)
-        if let modelURL, let neural = try? CoreMLImageModel(compiledModelURL: modelURL), let input = neural.colorInput {
-            return try await neuralUpscale(image, model: neural, tile: input.width, factor: factor)
+        // W2 (D12): the network loads for this upscale only, once the broker agrees; refused, Lanczos does it.
+        let bytes = ModelBrokerPolicy.estimatedBytes(.upscaler)
+        var admitted = false
+        if modelURL != nil { admitted = await ModelResidency.admit(.upscaler, bytes: bytes, priority: .userWaiting) }
+        if admitted, let modelURL, let neural = try? CoreMLImageModel(compiledModelURL: modelURL), let input = neural.colorInput {
+            await ModelResidency.noteLoaded(.upscaler, bytes: bytes, unload: {})
+            await ModelResidency.markBusy(.upscaler, true)
+            do {
+                let result = try await neuralUpscale(image, model: neural, tile: input.width, factor: factor)
+                await ModelResidency.markBusy(.upscaler, false)
+                await ModelResidency.noteUnloaded(.upscaler)
+                return result
+            } catch {
+                await ModelResidency.markBusy(.upscaler, false)
+                await ModelResidency.noteUnloaded(.upscaler)
+                throw error
+            }
         }
         let lanczos = CIFilter.lanczosScaleTransform()
         lanczos.inputImage = image

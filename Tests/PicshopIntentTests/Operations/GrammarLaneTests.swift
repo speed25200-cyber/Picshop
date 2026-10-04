@@ -42,6 +42,55 @@ final class GrammarLaneTests: XCTestCase {
         XCTAssertLessThanOrEqual(Double(after.count) / Double(ProbeCorpus.all.count), 0.008)
     }
 
+    /// W2 (§8.4): at most 1 confidently wrong answer across the mask and selection probes, and the phrases a
+    /// « sélectionne… » or tone-on-a-region rule could steal keep their owners.
+    func testW2ProbesAreNeverConfidentlyWrong() {
+        XCTAssertGreaterThanOrEqual(ProbeCorpus.w2.count, 60)
+        var wrong: [String] = []
+        for probe in ProbeCorpus.w2 {
+            let plan = OperationAbstention.capped(engine.parse(probe.text, context: Self.context(probe.domain)), utterance: probe.text, domain: probe.domain)
+            let ops = answered(plan)
+            guard !ops.isEmpty, plan.confidence >= 0.85, ops.isDisjoint(with: probe.gold) else { continue }
+            wrong.append("« \(probe.text) » → \(ops.sorted())")
+        }
+        XCTAssertLessThanOrEqual(wrong.count, 1, "\(wrong)")
+        let owners = ["sélectionne le calque 2": "selectLayer", "remplace le ciel par un coucher de soleil": "generativeFill",
+                      "supprime le fond": "removeBackground", "floute le fond": "blurBackground"]
+        for (text, owner) in owners {
+            let ops = answered(engine.parse(text, context: Self.context(.photo)))
+            XCTAssertFalse(ops.contains { ["select", "selectionModify", "selectionApply", "maskAdjust", "maskEdit", "maskDelete"].contains($0) }, "\(text) → \(ops)")
+            if !ops.isEmpty { XCTAssertTrue(ops.contains(owner), "\(text) → \(ops)") }
+        }
+    }
+
+    /// The grammar's own W2 patterns (§8.4) answer at 0.9 with the right operation and arguments.
+    func testTheSignaturePatternsAnswer() {
+        let cases: [(String, String, [String: OpValue])] = [
+            ("assombris le bas", "maskAdjust", ["where": "bottom", "parameter": "exposure"]),
+            ("plus de contraste sur le sujet", "maskAdjust", ["where": "subject", "parameter": "contrast", "amount": 20]),
+            ("more contrast on the subject", "maskAdjust", ["where": "subject", "parameter": "contrast", "amount": 20]),
+            ("darken the bottom", "maskAdjust", ["where": "bottom", "parameter": "exposure"]),
+            ("sélectionne la tasse bleue", "select", ["what": "object", "target": "cup", "attributes": .list(["blue"])]),
+            ("select the subject", "select", ["what": "subject"]),
+            ("sélectionne le sujet", "select", ["what": "subject"]),
+            ("inverse la sélection", "selectionModify", ["invert": true]),
+            ("désélectionne", "selectionModify", ["deselect": true]),
+            ("efface la sélection", "selectionApply", ["use": "erase"]),
+            ("remplis la sélection de blanc", "selectionApply", ["use": "fill", "color": "white"]),
+        ]
+        for (text, id, args) in cases {
+            let plan = engine.parse(text, context: Self.context(.photo))
+            guard let call = plan.intents.first?.operation else { XCTFail("\(text): \(plan.intents.map(\.action))"); continue }
+            XCTAssertEqual(call.id.raw, id, text)
+            XCTAssertEqual(call.source, .grammar, text)
+            XCTAssertGreaterThanOrEqual(plan.confidence, 0.9, text)
+            for (key, value) in args { XCTAssertEqual(call.args[key], value, "\(text) \(key)") }
+        }
+        // « éclaircis le ciel » stays on the selectiveAdjust path the executor lowers.
+        let sky = engine.parse("éclaircis le ciel", context: Self.context(.photo))
+        XCTAssertEqual(sky.intents.first?.action, .selectiveAdjust)
+    }
+
     /// Across the positive examples of grammar-owned operations that the grammar answers right,
     /// abstention changes the confidence in at most 1 % of cases.
     func testAbstentionKeepsTheGrammarsRightAnswers() {

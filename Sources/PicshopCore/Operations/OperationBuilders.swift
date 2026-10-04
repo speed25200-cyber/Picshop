@@ -38,9 +38,10 @@ func legacy(_ action: IntentAction, in domains: Set<OpDomain>, _ category: OpCat
 
 /// Requirements, set in one expression.
 func needs(subject: Bool = false, selection: Bool = false, table: Bool = false, captions: Bool = false, generativeEngine: Bool = false,
-           importedLUT: Bool = false, nonBaseLayer: Bool = false, referenceAsset: AssetKind? = nil, cost: OpCost = .instant,
+           importedLUT: Bool = false, nonBaseLayer: Bool = false, localMask: Bool = false, referenceAsset: AssetKind? = nil, cost: OpCost = .instant,
            geometryChange: Bool = false, destructive: Bool = false) -> OpRequirements {
     var requirements = OpRequirements()
+    requirements.localMask = localMask
     requirements.subject = subject
     requirements.selection = selection
     requirements.table = table

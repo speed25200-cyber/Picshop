@@ -77,8 +77,8 @@ public struct PhotoEditorView: View {
                 referenceItem = nil
             }
         }
+        .background { SelectionSheets(session: session) }
         .environment(isStudio ? zoomMirror : nil)
-        .preferredColorScheme(.dark)
         .persistentSystemOverlays(.hidden)
     }
 
@@ -116,12 +116,23 @@ public struct PhotoEditorView: View {
                                  case .percent(let level):
                                      let current = Double(mirror.percent ?? 100) / 100
                                      session.zoomRequest = PhotoEditorSession.ZoomRequest(amount: .multiplier(Double(level) / 100 / max(0.01, current)), target: nil)
+                                 case .actualPixels:
+                                     session.zoomToActualPixels()
                                  }
                              })
     }
 
     /// Configures the session, then starts Live on its own when Settings asks for it.
     private func open() async {
+        // The command palette (W2): a suggestion opens its tool (an inventory control in the mode its gesture
+        // needs), or runs its operation through the one path the panels and the voice use. The session owns Live,
+        // which owns the handler: the closures hold the session weakly, or a closed editor would never be freed.
+        let session = session
+        if !session.live.isTornDown {
+            session.live.paletteHandler = CommandPaletteHandler(domain: .photo,
+                                                                openTool: { [weak session] id in session?.openControl(id) },
+                                                                run: { [weak session] call in session?.perform(EditIntent(action: .operation, operation: call)) })
+        }
         await session.configure()
         guard app?.settings.liveAutoStart == true else { return }
         try? await Task.sleep(for: .milliseconds(600))
@@ -133,6 +144,24 @@ public struct PhotoEditorView: View {
     private func candidateThumbnail(_ index: Int) async -> UIImage? {
         guard let candidates = session.pendingClarification?.candidates, candidates.indices.contains(index - 1) else { return nil }
         return await session.candidateThumbnail(candidates[index - 1])
+    }
+}
+
+/// The Color Range and Select & Mask sheets (W2), half height over the canvas. A leaf: their working values
+/// change with every slider step, and only this view and the sheet read them.
+private struct SelectionSheets: View {
+    let session: PhotoEditorSession
+
+    var body: some View {
+        let state = session.selectionState
+        Color.clear
+            .sheet(isPresented: Binding(get: { state.colorRange != nil }, set: { if !$0 { session.closeColorRange() } })) {
+                ColorRangeSheet(session: session)
+            }
+            .sheet(isPresented: Binding(get: { state.refine != nil }, set: { if !$0 { session.closeSelectAndMask() } })) {
+                SelectAndMaskSheet(session: session)
+            }
+            .accessibilityHidden(true)
     }
 }
 

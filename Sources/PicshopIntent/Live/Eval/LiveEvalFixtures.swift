@@ -129,6 +129,38 @@ public enum LiveEvalFixtures {
                         background: .white)
     }
 
+    // MARK: A lake photo (W2: masks and selections)
+
+    public static let lakeCanvas = PSSize(width: 1600, height: 1200)
+    public static let lakeAssetPath = "media/lake.jpg"
+    static let lakePerson = PSRect(x: 0.12, y: 0.3, width: 0.24, height: 0.62)
+    static let lakeCup = PSRect(x: 0.62, y: 0.62, width: 0.12, height: 0.16)
+
+    /// A portrait by a lake (W2): a person on the left (o1), a blue cup on a table on the right (o2), sky above,
+    /// water behind. No text.
+    public static func lakeScene() -> SceneMap {
+        let objects = [
+            SceneMap.Object(id: "o1", label: "person", box: lakePerson, confidence: 0.95, kind: .person),
+            SceneMap.Object(id: "o2", label: "cup", box: lakeCup, confidence: 0.9, kind: .object),
+        ]
+        return SceneMap(stateKey: lakeDocument().baseStateKey, canvasSize: lakeCanvas, kind: .photo, texts: [], objects: objects, freeAreas: [],
+                        background: PSColor(hex: "#8FB8D8"))
+    }
+
+    public static func lakeDocument() -> PhotoDocument {
+        PhotoDocument(title: "Lake", baseImage: MediaAsset(kind: .image, relativePath: lakeAssetPath, pixelSize: lakeCanvas))
+    }
+
+    /// The services of the lake photo: the scene above, the person as the subject, and the mask simulation
+    /// (SAM and depth installed, one face, the person and the cup as Vision's objects).
+    public static func lakeServices(failingChecks: Set<String> = []) -> LiveEvalServices {
+        let person = ObjectCandidate(label: "person", boundingBox: lakePerson, confidence: 0.95)
+        let cup = ObjectCandidate(label: "cup", boundingBox: lakeCup, confidence: 0.9)
+        let masks = MaskSimulation(faces: [PSRect(x: 0.18, y: 0.32, width: 0.1, height: 0.12)], objects: [person, cup])
+        return LiveEvalServices(grid: nil, scene: lakeScene(), failingChecks: failingChecks, subject: MaskReference(source: .subject, boundingBox: lakePerson),
+                                masks: masks, grounds: true)
+    }
+
     // MARK: A poster photo
 
     public static let posterCanvas = PSSize(width: 1080, height: 1350)
@@ -197,18 +229,29 @@ public struct LiveEvalServices: PhotoAIServices {
     public var calls: Counter
     /// The subject mask when the picture has one (a poster with a person); nil throws noSubject.
     public var subject: MaskReference?
+    /// The W2 mask and selection services, structurally (`MaskSimulation`); nil keeps the W1 host (no masks: the
+    /// handlers say so and selectiveAdjust keeps its legacy op).
+    public var masks: MaskSimulation?
+    /// The vision-language model's boxes (`groundBox`); off by default, as on a device without one.
+    public var grounds: Bool
 
     public init(grid: TableGrid? = LiveEvalFixtures.benchmark(), scene: SceneMap? = nil, failingChecks: Set<String> = [], calls: Counter = Counter(),
-                subject: MaskReference? = nil) {
+                subject: MaskReference? = nil, masks: MaskSimulation? = nil, grounds: Bool = false) {
         self.grid = grid
         self.scene = scene
         self.failingChecks = failingChecks
         self.calls = calls
         self.subject = subject
+        self.masks = masks
+        self.grounds = grounds
     }
 
     public func candidates(for target: ObjectTarget, in document: PhotoDocument) async throws -> [ObjectCandidate] {
-        (scene?.objects ?? []).filter { $0.label == target.label || target.label == "object" }.map {
+        // A face part (W2's lowering): one candidate per face the mask simulation knows, as Vision's landmarks.
+        if let faces = masks?.faces, ["teeth", "eyes", "lips", "skin", "face", "mouth"].contains(target.label) {
+            return faces.map { ObjectCandidate(label: target.label, boundingBox: $0, confidence: 0.9) }
+        }
+        return (scene?.objects ?? []).filter { $0.label == target.label || target.label == "object" }.map {
             ObjectCandidate(label: $0.label, boundingBox: $0.box, confidence: $0.confidence)
         }
     }
@@ -243,6 +286,57 @@ public struct LiveEvalServices: PhotoAIServices {
         return scene
     }
 
+    // MARK: Masks and selections (W2)
+
+    func simulation() throws -> MaskSimulation {
+        guard let masks else { throw PicshopError.unsupportedOperation("Masks") }
+        return masks
+    }
+
+    public func aiMask(_ request: AIMaskRequest, in document: PhotoDocument) async throws -> AIMaskResult {
+        calls.hit("aiMask")
+        return try simulation().aiMask(request, in: document)
+    }
+
+    public func depthMap(in document: PhotoDocument) async throws -> RasterRef {
+        try simulation().depthMap(in: document)
+    }
+
+    public func rasterize(_ stack: MaskStack, in document: PhotoDocument) async throws -> AIMaskResult {
+        try simulation().rasterize(stack, in: document)
+    }
+
+    public func combineSelection(_ current: PhotoSelection?, with new: RasterRef, mode: CombineMode?, in document: PhotoDocument) async throws -> PhotoSelection {
+        try simulation().combineSelection(current, with: new, mode: mode, in: document)
+    }
+
+    public func modifySelection(_ selection: PhotoSelection, _ change: SelectionChange, in document: PhotoDocument) async throws -> PhotoSelection {
+        try simulation().modifySelection(selection, change, in: document)
+    }
+
+    public func refineSelection(_ selection: PhotoSelection, _ refinement: SelectionRefinement, in document: PhotoDocument) async throws -> PhotoSelection {
+        try simulation().refineSelection(selection, refinement, in: document)
+    }
+
+    public func sampleColors(at points: [PSPoint], radius: Int, in document: PhotoDocument) async throws -> [LabColor] {
+        try simulation().sampleColors(at: points, radius: radius)
+    }
+
+    public func wandMask(at point: PSPoint, tolerance: Double, contiguous: Bool, sampleSize: Int, in document: PhotoDocument) async throws -> AIMaskResult {
+        try simulation().wandMask(at: point, tolerance: tolerance, contiguous: contiguous, in: document)
+    }
+
+    public func pixelProbes(_ requests: [PixelProbeRequest], before: PhotoDocument, after: PhotoDocument) async -> [PixelProbeResult] {
+        calls.hit("pixelProbes")
+        return masks?.pixelProbes(requests, before: before, after: after) ?? []
+    }
+
+    public func groundBox(_ phrase: String, in document: PhotoDocument) async -> PSRect? {
+        calls.hit("groundBox")
+        guard grounds else { return nil }
+        return masks?.groundBox(phrase)
+    }
+
     public func verify(_ requests: [VerificationRequest], in document: PhotoDocument) async throws -> [VerificationReport] {
         calls.hit("verify")
         return requests.map { request in
@@ -254,5 +348,346 @@ public struct LiveEvalServices: PhotoAIServices {
             }
             return report
         }
+    }
+}
+
+// MARK: - Masks and selections, structurally (W2)
+
+/// The W2 mask and selection services as a structural simulation, for the hosts that have no pixels (LiveEval, the
+/// M lane, the S lane): deterministic rasters (coverage 0.3 unless the request says more), boxes from the
+/// candidates, selections that combine coverages (add a + b·(1 − a), subtract a·(1 − b), intersect a·b), and
+/// pixel probes whose Lab statistics move the way the documents say (a dial inside its mask, a fill colour, a
+/// blur), so the pixel postconditions pass on correct edits and fail on wrong ones without a renderer.
+public struct MaskSimulation: Sendable {
+    /// What the picture has: AI regions not listed in `absent` are found.
+    public var absent: Set<MaskRegion>
+    /// Colour names (and Color Range presets) that are not in the picture: a colour range of them covers nothing.
+    public var absentColors: Set<String>
+    /// SAM installed: boxes and points always segment; without it only an overlapping candidate does.
+    public var samInstalled: Bool
+    /// The camera disparity or the depth model: without it near and far throw modelUnavailable.
+    public var hasDepth: Bool
+    /// The faces left to right (people parts with an index), and the boxes of the scene's objects.
+    public var faces: [PSRect]
+    public var objects: [ObjectCandidate]
+    /// What only the vision-language model finds (Vision's candidates miss it): `groundBox` answers for these too.
+    public var groundable: [ObjectCandidate]
+
+    public init(absent: Set<MaskRegion> = [], absentColors: Set<String> = ["purple", "violet", "magentas"], samInstalled: Bool = true,
+                hasDepth: Bool = true, faces: [PSRect] = [PSRect(x: 0.4, y: 0.25, width: 0.15, height: 0.18)], objects: [ObjectCandidate] = [],
+                groundable: [ObjectCandidate] = []) {
+        self.absent = absent
+        self.absentColors = absentColors
+        self.samInstalled = samInstalled
+        self.hasDepth = hasDepth
+        self.faces = faces
+        self.objects = objects
+        self.groundable = groundable
+    }
+
+    /// The default coverage of a simulated AI raster.
+    public static let coverage = 0.3
+    static let side = PhotoSelection.workingLongestSide
+
+    /// A raster whose path carries its coverage ("masks/sim-<hash>-c0.300.png"), so a later combine reads it back.
+    public static func raster(_ origin: RasterRef.Origin, label: String?, key: String, coverage: Double, box: PSRect = .unit, document: PhotoDocument,
+                              bitDepth: Int = 8) -> RasterRef {
+        let aspect = max(0.1, document.canvasSize.aspectRatio.isFinite && document.canvasSize.aspectRatio > 0 ? document.canvasSize.aspectRatio : 1)
+        let width = aspect >= 1 ? side : Int((Double(side) * aspect).rounded())
+        let height = aspect >= 1 ? Int((Double(side) / aspect).rounded()) : side
+        let path = "masks/sim-\(StableHash.hex(key + "|" + origin.rawValue + "|" + (label ?? "")))-c\(String(format: "%.3f", coverage)).png"
+        return RasterRef(path: path, origin: origin, pixelWidth: width, pixelHeight: height, bitDepth: bitDepth, boundingBox: box.clampedToUnit(),
+                         label: label, stateKey: document.baseStateKey)
+    }
+
+    /// The coverage a simulated raster's path carries, else the default.
+    public static func coverage(of path: String) -> Double {
+        guard let range = path.range(of: "-c", options: .backwards), path.hasSuffix(".png") else { return coverage }
+        return Double(path[range.upperBound...].dropLast(4)) ?? coverage
+    }
+
+    func result(_ origin: RasterRef.Origin, label: String?, key: String, coverage: Double = MaskSimulation.coverage, box: PSRect = .unit,
+                document: PhotoDocument, usedModel: Bool = false, approximate: Bool = false) -> AIMaskResult {
+        AIMaskResult(raster: Self.raster(origin, label: label, key: key, coverage: coverage, box: box, document: document), coverage: coverage,
+                     usedModel: usedModel, isApproximate: approximate)
+    }
+
+    /// The coverage of a box mask: a share of its area.
+    static func boxCoverage(_ box: PSRect) -> Double { (box.clampedToUnit().area * 0.8).clamped(to: 0.01...0.95) }
+
+    public func aiMask(_ request: AIMaskRequest, in document: PhotoDocument) throws -> AIMaskResult {
+        func found(_ region: MaskRegion) throws {
+            if absent.contains(region) { throw PicshopError.objectNotFound(region.rawValue) }
+        }
+        switch request {
+        case .subject:
+            try found(.subject)
+            return result(.subject, label: nil, key: "subject", coverage: 0.35, box: PSRect(x: 0.3, y: 0.2, width: 0.4, height: 0.7), document: document)
+        case .background:
+            try found(.subject)
+            return result(.background, label: nil, key: "background", coverage: 0.65, document: document)
+        case .people:
+            try found(.people)
+            return result(.people, label: nil, key: "people", coverage: 0.3, document: document)
+        case .sky:
+            try found(.sky)
+            return result(.sky, label: nil, key: "sky", coverage: 0.35, box: PSRect(x: 0, y: 0, width: 1, height: 0.4), document: document,
+                          approximate: !samInstalled)
+        case .vegetation:
+            try found(.vegetation)
+            return result(.vegetation, label: nil, key: "vegetation", coverage: 0.2, document: document)
+        case .water:
+            try found(.water)
+            return result(.water, label: nil, key: "water", coverage: 0.15, document: document)
+        case .person(let index):
+            try found(.people)
+            guard index >= 1, index <= max(1, faces.count) else { throw PicshopError.objectNotFound("person") }
+            return result(.person, label: String(index), key: "person\(index)", coverage: 0.2, document: document)
+        case .personPart(let region, let person):
+            try found(region)
+            if region == .hair || region == .bodySkin { throw PicshopError.objectNotFound(region.rawValue) }
+            let index = person ?? 1
+            guard index >= 1, index <= faces.count else { throw PicshopError.objectNotFound("face") }
+            let face = faces[index - 1]
+            return result(.facePart, label: "\(region.rawValue):\(index)", key: "\(region.rawValue)\(index)", coverage: Self.boxCoverage(face) * 0.4, box: face,
+                          document: document)
+        case .candidates(let list, let target):
+            guard !list.isEmpty else { throw PicshopError.objectNotFound(target.label) }
+            let box = list.map(\.boundingBox).reduce(list[0].boundingBox) { $0.union($1) }
+            let part = ["face", "skin", "eyes", "lips", "teeth", "hair"].contains(target.label)
+            let label = part ? "\(target.label == "skin" ? "faceSkin" : target.label):1" : target.label
+            return result(part ? .facePart : .object, label: label, key: "candidates-\(target.label)-\(box)", coverage: Self.boxCoverage(box), box: box,
+                          document: document)
+        case .object(let target):
+            guard let object = objects.first(where: { $0.label == target.label }) else {
+                if samInstalled { throw PicshopError.objectNotFound(target.label) }
+                throw PicshopError.modelUnavailable(ModelOfferText.samID)
+            }
+            return result(.object, label: target.label, key: "object-\(target.label)", coverage: Self.boxCoverage(object.boundingBox), box: object.boundingBox,
+                          document: document, usedModel: samInstalled)
+        case .sceneObject(let number):
+            guard number >= 1, number <= objects.count else { throw PicshopError.objectNotFound("object") }
+            let object = objects[number - 1]
+            return result(.object, label: object.label, key: "o\(number)", coverage: Self.boxCoverage(object.boundingBox), box: object.boundingBox,
+                          document: document, usedModel: samInstalled)
+        case .box(let rect, let label):
+            if !samInstalled, !objects.contains(where: { $0.boundingBox.intersection(rect).area > rect.area * 0.3 }) {
+                throw PicshopError.modelUnavailable(ModelOfferText.samID)
+            }
+            return result(.object, label: label, key: "box-\(rect)", coverage: Self.boxCoverage(rect), box: rect, document: document, usedModel: samInstalled)
+        case .points(let prompts, let label):
+            guard let first = prompts.first(where: \.isPositive) else { throw PicshopError.objectNotFound(label ?? "object") }
+            let box = PSRect(x: first.point.x - 0.1, y: first.point.y - 0.1, width: 0.2, height: 0.2).clampedToUnit()
+            if !samInstalled, !objects.contains(where: { $0.boundingBox.contains(first.point) }) {
+                throw PicshopError.modelUnavailable(ModelOfferText.samID)
+            }
+            return result(.object, label: label, key: "points-\(prompts)", coverage: Self.boxCoverage(box), box: box, document: document,
+                          usedModel: samInstalled, approximate: !samInstalled)
+        }
+    }
+
+    public func depthMap(in document: PhotoDocument) throws -> RasterRef {
+        guard hasDepth else { throw PicshopError.modelUnavailable(ModelOfferText.depthID) }
+        return Self.raster(.depth, label: nil, key: "depth", coverage: 1, document: document, bitDepth: 16)
+    }
+
+    /// A stack's estimated coverage: its first component's, then the stack's expand, invert and density.
+    public func coverage(of stack: MaskStack) -> Double {
+        var value = 0.0
+        for component in stack.components {
+            var part: Double
+            switch component.kind {
+            case .raster(let raster): part = Self.coverage(of: raster.path)
+            case .brush(let spec): part = spec.strokes.isEmpty ? 0 : 0.1
+            case .linear: part = 0.35
+            case .radial(let spec): part = (Double.pi * spec.radiusX * spec.radiusY).clamped(to: 0.01...1)
+            case .colorRange(let spec):
+                let names = Set(spec.samples.map { "\(Int($0.l)),\(Int($0.a)),\(Int($0.b))" })
+                let preset = spec.preset?.rawValue
+                let missing = (preset.map(absentColors.contains) ?? false) || spec.samples.contains { sample in absentLabs.contains { abs($0.a - sample.a) + abs($0.b - sample.b) < 12 } }
+                part = missing || (names.isEmpty && preset == nil) ? 0 : 0.2 + spec.fuzziness * 0.1
+            case .luminanceRange(let spec): part = (spec.high - spec.low).clamped(to: 0...1) * 0.8
+            case .depthRange(let spec): part = (spec.high - spec.low).clamped(to: 0...1) * 0.7
+            case .unsupported: continue
+            }
+            if component.isInverted { part = 1 - part }
+            part *= component.opacity
+            switch component.mode {
+            case .add: value = value + part * (1 - value)
+            case .subtract: value = value * (1 - part)
+            case .intersect: value = value * part
+            }
+        }
+        if stack.expand != 0 { value = (value + stack.expand * 0.05).clamped(to: 0...1) }
+        if stack.isInverted { value = 1 - value }
+        return (value * stack.density).clamped(to: 0...1)
+    }
+
+    /// The Lab colours the absent colour names stand for.
+    var absentLabs: [LabColor] {
+        absentColors.compactMap { PSColor.named($0) }.map { MaskMath.lab($0) }
+    }
+
+    public func rasterize(_ stack: MaskStack, in document: PhotoDocument) -> AIMaskResult {
+        let value = coverage(of: stack)
+        return result(.selection, label: nil, key: "stack-\(stack.contentKey)", coverage: value, document: document)
+    }
+
+    public func combineSelection(_ current: PhotoSelection?, with new: RasterRef, mode: CombineMode?, in document: PhotoDocument) -> PhotoSelection {
+        let b = Self.coverage(of: new.path)
+        let a = current?.coverage ?? 0
+        let value: Double
+        switch (current == nil ? nil : mode) {
+        case nil: value = b
+        case .add?: value = min(1, a + b * (1 - a))
+        case .subtract?: value = a * (1 - b)
+        case .intersect?: value = a * b
+        }
+        let previous = current?.mask.boundingBox ?? .unit
+        let box: PSRect
+        switch (current == nil ? nil : mode) {
+        case nil: box = new.boundingBox
+        case .add?: box = previous.union(new.boundingBox)
+        case .subtract?: box = previous
+        case .intersect?: box = previous.intersection(new.boundingBox)
+        }
+        return selection(value, steps: current?.steps ?? [], refinement: current?.refinement, layerID: document.localAdjustmentsLayerID ?? UUID(),
+                         key: "\(current?.mask.relativePath ?? "")|\(new.path)|\(mode?.rawValue ?? "new")", box: box, document: document)
+    }
+
+    func selection(_ coverage: Double, steps: [SelectionStep], refinement: SelectionRefinement?, layerID: UUID, key: String, box: PSRect = .unit,
+                   document: PhotoDocument) -> PhotoSelection {
+        let raster = Self.raster(.selection, label: nil, key: key, coverage: coverage, box: box, document: document)
+        return PhotoSelection(mask: MaskReference(relativePath: raster.path, source: .region("selection"), boundingBox: raster.boundingBox), layerID: layerID,
+                              steps: steps, refinement: refinement, coverage: coverage, pixelWidth: raster.pixelWidth, pixelHeight: raster.pixelHeight)
+    }
+
+    public func modifySelection(_ current: PhotoSelection, _ change: SelectionChange, in document: PhotoDocument) -> PhotoSelection {
+        let a = current.coverage
+        let value: Double
+        switch change {
+        case .invert: value = 1 - a
+        case .grow(let pixels): value = min(1, a + pixels / 1000 * 0.2)
+        case .shrink(let pixels): value = max(0, a - pixels / 1000 * 0.2)
+        case .feather, .smooth: value = a
+        }
+        let box = change == .invert ? PSRect.unit : current.mask.boundingBox
+        return selection(value, steps: current.steps, refinement: current.refinement, layerID: current.layerID,
+                         key: "\(current.mask.relativePath)|\(change)", box: box, document: document)
+    }
+
+    public func refineSelection(_ current: PhotoSelection, _ refinement: SelectionRefinement, in document: PhotoDocument) -> PhotoSelection {
+        let value = (current.coverage + refinement.shiftEdge * 0.02).clamped(to: 0...1)
+        return selection(value, steps: current.steps, refinement: refinement, layerID: current.layerID,
+                         key: "\(current.mask.relativePath)|refine|\(refinement)", box: current.mask.boundingBox, document: document)
+    }
+
+    public func sampleColors(at points: [PSPoint], radius: Int) -> [LabColor] {
+        points.map { point in LabColor(l: 40 + point.y * 30, a: 10 - point.x * 20, b: 20 - point.y * 30) }
+    }
+
+    public func wandMask(at point: PSPoint, tolerance: Double, contiguous: Bool, in document: PhotoDocument) -> AIMaskResult {
+        result(.selection, label: nil, key: "wand-\(point)-\(tolerance)-\(contiguous)", coverage: (0.05 + tolerance * 0.3).clamped(to: 0.01...0.9),
+               box: PSRect(x: point.x - 0.15, y: point.y - 0.15, width: 0.3, height: 0.3), document: document)
+    }
+
+    /// The box of what a phrase names: the first candidate whose label is in the phrase.
+    public func groundBox(_ phrase: String) -> PSRect? {
+        let words = Set(TextFolding.tokens(phrase))
+        return (objects + groundable).first { words.contains($0.label) }?.boundingBox
+    }
+
+    // MARK: Pixel probes
+
+    /// The probe proxy's pixel count (256 × 256).
+    static let pixels = 65_536.0
+    /// The picture's statistics before any edit, inside a mask and outside it.
+    static let base = PixelStats(meanL: 50, stdL: 18, meanChroma: 20, meanA: 4, meanB: 12, weight: 1)
+
+    public func pixelProbes(_ requests: [PixelProbeRequest], before: PhotoDocument, after: PhotoDocument) -> [PixelProbeResult] {
+        requests.map { request in
+            let oneMask = request.probe == .maskedParameter || request.probe == .selectionUse
+            switch request.region {
+            case .localAdjustment(let id):
+                let old = before.localAdjustment(id: id), new = after.localAdjustment(id: id)
+                let maskBefore = oneMask ? (new ?? old) : old
+                let maskAfter = oneMask ? (new ?? old) : new
+                return PixelProbeResult(request: request,
+                                        before: maskBefore.map { regions(document: before, mask: $0, adjustment: before.localAdjustment(id: id)) },
+                                        after: maskAfter.map { regions(document: after, mask: $0, adjustment: new) })
+            case .selection:
+                let old = before.selection, new = after.selection
+                let maskBefore = oneMask ? (new ?? old) : old
+                let maskAfter = oneMask ? (new ?? old) : new
+                return PixelProbeResult(request: request,
+                                        before: maskBefore.map { selectionRegions(document: before, coverage: $0.coverage, edited: nil) },
+                                        after: maskAfter.map { selectionRegions(document: after, coverage: $0.coverage, edited: before) })
+            case .box, .whole:
+                let stats = global(Self.base, document: after)
+                return PixelProbeResult(request: request, before: PixelStats.Regions(inside: global(Self.base, document: before), outside: Self.base, coverage: 1),
+                                        after: PixelStats.Regions(inside: stats, outside: stats, coverage: 1))
+            }
+        }
+    }
+
+    /// The document's global dials, on any region.
+    func global(_ stats: PixelStats, document: PhotoDocument) -> PixelStats {
+        var result = stats
+        let dials = document.activeAdjustments
+        result.meanL += 30 * (dials[.exposure] + dials[.brightness])
+        return result
+    }
+
+    /// Inside a local adjustment's mask (its dials applied) and outside it (untouched), with the stack's coverage
+    /// and softness (feather shrinks the area at m < 0.05).
+    func regions(document: PhotoDocument, mask: LocalAdjustment, adjustment: LocalAdjustment?) -> PixelStats.Regions {
+        let coverage = coverage(of: mask.stack)
+        var inside = global(Self.base, document: document)
+        if let adjustment, adjustment.isVisible {
+            let dials = adjustment.adjustments, amount = adjustment.amount
+            inside.meanL += 30 * amount * (dials[.exposure] + dials[.brightness] + 0.5 * (dials[.shadows] + dials[.highlights]) + 0.4 * (dials[.whites] + dials[.blacks]))
+            inside.stdL = max(0, inside.stdL + 15 * amount * (dials[.contrast] + dials[.clarity]))
+            inside.meanChroma = max(0, inside.meanChroma + 25 * amount * (dials[.saturation] + dials[.vibrance]))
+            inside.meanB += 25 * amount * dials[.temperature]
+            inside.meanA += 25 * amount * dials[.tint]
+        }
+        inside.weight = coverage * Self.pixels
+        var outside = global(Self.base, document: document)
+        outside.weight = max(0, (1 - coverage - mask.stack.feather * 0.2 * (1 - coverage)) * Self.pixels)
+        return PixelStats.Regions(inside: inside, outside: outside, coverage: coverage)
+    }
+
+    /// Inside the selection: what the last step painted there (a fill layer, a recolour, a blur).
+    func selectionRegions(document: PhotoDocument, coverage: Double, edited: PhotoDocument?) -> PixelStats.Regions {
+        var inside = global(Self.base, document: document)
+        if let edited {
+            let old = Set(edited.layers.flatMap { $0.edits.operations.map(\.id) })
+            let added = document.layers.flatMap(\.edits.operations).filter { !old.contains($0.id) }.map(\.kind)
+            for kind in added {
+                switch kind {
+                case .recolor(_, let color, _):
+                    let lab = MaskMath.lab(color)
+                    inside.meanA = lab.a
+                    inside.meanB = lab.b
+                case .blurRegion:
+                    inside.stdL = max(0, inside.stdL - 6)
+                default: break
+                }
+            }
+            let fills = document.layers.filter { layer in !edited.layers.contains { $0.id == layer.id } }.compactMap { layer -> PSColor? in
+                if case .fill(let color) = layer.content { return color }
+                return nil
+            }
+            if let fill = fills.last {
+                let lab = MaskMath.lab(fill)
+                inside.meanL = lab.l
+                inside.meanA = lab.a
+                inside.meanB = lab.b
+            }
+        }
+        inside.weight = coverage * Self.pixels
+        var outside = global(Self.base, document: document)
+        outside.weight = (1 - coverage) * Self.pixels
+        return PixelStats.Regions(inside: inside, outside: outside, coverage: coverage)
     }
 }

@@ -45,6 +45,8 @@ enum CatalogPhotoColor {
                 fr("mets la couleur du clip 1 sur tous les clips", ["clipNumber": 1, "scope": "all"]),
                 fr("harmonise les couleurs avec le premier clip", ["clipNumber": 1]),
                 en("match the colours of another photo"),
+                en("copy the colours of another picture"),
+                near("applique un filtre vintage", .fr, expected: "applyLook"),
             ]
             s.verify = [.unverifiable("needs the reference picked by the user")]
             s.grammar = .owned
@@ -66,6 +68,9 @@ enum CatalogPhotoColor {
                 fr("rends la voiture rouge", ["target": "car", "color": "red"]),
                 fr("mets le t-shirt en bleu", ["target": "shirt", "color": "blue"]),
                 en("make the car red", ["target": "car", "color": "red"]),
+                fr("passe la voiture en vert", ["target": "car", "color": "green"]),
+                en("turn the shirt blue", ["target": "shirt", "color": "blue"]),
+                near("rends les verts moins saturés", .fr, expected: "hsl"),
             ]
             s.verify = [.unverifiable("a change on one object: the pixel check comes in W2")]
             s.grammar = .owned
@@ -134,9 +139,9 @@ enum CatalogPhotoColor {
             s.exclusiveGroups = ["tint"]
             s.triggers = [
                 .fr: ["étalonnage", "ombres bleues", "ombres froides", "ombres chaudes", "hautes lumières orangées", "hautes lumières chaudes",
-                      "teinte les ombres", "virage partiel", "roues chromatiques", "étalonne"],
+                      "teinte les ombres", "virage partiel", "roues chromatiques", "étalonne", "ombres turquoise"],
                 .en: ["colour grade", "color grade", "color grading", "split toning", "teal shadows", "orange highlights", "warm highlights",
-                      "cool shadows", "colour wheels", "color wheels"],
+                      "cool shadows", "blue shadows", "tint the shadows", "colour wheels", "color wheels"],
             ]
             s.examples = [
                 fr("ombres bleues", ["range": "shadows", "color": "blue", "amount": 30]),
@@ -167,6 +172,8 @@ enum CatalogPhotoColor {
                 fr("applique mon LUT à fond", ["amount": 100]),
                 en("LUT intensity 70", ["amount": 70]),
                 para("mets un LUT", .fr, ["amount": 100]),
+                en("set the LUT to half strength", ["amount": 50]),
+                near("enlève le LUT", .fr, expected: "removeLUT"),
             ]
             s.verify = [.structural(.lutIntensity, .equalsParam("amount"))]
             s.uiTool = "color"
@@ -186,6 +193,8 @@ enum CatalogPhotoColor {
                 fr("retire la LUT"),
                 en("remove the LUT"),
                 near("enlève le filtre", .fr, expected: "applyLook"),
+                fr("supprime le LUT importé"),
+                en("take the LUT off"),
             ]
             s.verify = [.structural(.lutIntensity, .decreased)]
             s.uiTool = "color"

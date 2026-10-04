@@ -61,6 +61,9 @@ public enum OperationAbstention {
         guard !acting.isEmpty else { return nil }
         let stems = TextFolding.stems(utterance)
         if let id = unownedOperation(stems, tokens: TextFolding.tokens(utterance), domain: domain, catalog: index.catalog) { return .unownedOperation(id) }
+        if let id = maskOperation(TextFolding.tokens(utterance), domain: domain), !acting.contains(where: { $0.operation?.id == id }) {
+            return .unownedOperation(id)
+        }
         if let phrase = planned(TextFolding.tokens(utterance), domain: domain) { return .plannedOperation(phrase) }
         for intent in acting where intent.action != .operation {
             if let spec = index.catalog.spec(lowering: intent.action), !spec.domains.contains(domain) { return .outsideDomain(intent.action) }
@@ -92,6 +95,28 @@ public enum OperationAbstention {
         let notOwned = catalog.specs(in: domain).filter { $0.grammar == .none }
         if !slots.bands.isEmpty, let spec = notOwned.first(where: { $0.params.contains { $0.key == "band" } }) { return spec.id }
         if !slots.tintedRanges.isEmpty, let spec = notOwned.first(where: { $0.params.contains { $0.key == "range" } }) { return spec.id }
+        return nil
+    }
+
+    /// The words of the W2 mask and selection operations the grammar does not own (it owns only their signature
+    /// phrases): a plan that names one is the model's to read. Folded words, matched as runs.
+    static let maskPhrases: [(phrase: [String], id: OpID)] = [
+        ("le masque", "maskEdit"), ("un masque", "maskAdjust"), ("du masque", "maskEdit"), ("au masque", "maskEdit"), ("masque de", "maskAdjust"),
+        ("ce masque", "maskEdit"), ("les masques", "maskDelete"), ("degrade", "maskAdjust"), ("filtre gradue", "maskAdjust"),
+        ("filtre radial", "maskAdjust"), ("plage de couleurs", "select"), ("plage de couleur", "select"), ("affine les bords", "selectionModify"),
+        ("contour progressif", "selectionModify"), ("selectionner et masquer", "selectionModify"), ("the mask", "maskEdit"), ("a mask", "maskAdjust"),
+        ("graduated filter", "maskAdjust"), ("radial filter", "maskAdjust"), ("color range", "select"), ("colour range", "select"),
+        ("refine edges", "selectionModify"), ("refine the edges", "selectionModify"), ("select and mask", "selectionModify"),
+    ].map { (TextFolding.tokens($0.0), $0.1) }
+
+    static func maskOperation(_ tokens: [String], domain: OpDomain) -> OpID? {
+        guard domain == .photo else { return nil }
+        // « masque de fusion » / "layer mask" are W3's (planned), not a local adjustment.
+        if OperationIndex.Document.contains(tokens, ["masque", "de", "fusion"]) || OperationIndex.Document.contains(tokens, ["layer", "mask"]) { return nil }
+        for entry in maskPhrases where OperationIndex.Document.contains(tokens, entry.phrase) {
+            guard OperationGate.isEnabled(entry.id) else { continue }
+            return entry.id
+        }
         return nil
     }
 
@@ -128,8 +153,9 @@ public enum OperationAbstention {
         return lexicons
     }()
 
-    /// Operations planned for later waves (W2–W5): the grammar has no rule for them and maps their
-    /// words to something else, so a plan that names one is never trusted.
+    /// Operations planned for later waves (W3–W5): the grammar has no rule for them and maps their
+    /// words to something else, so a plan that names one is never trusted. W2's selections and gradients left
+    /// the list: they are catalog operations now (maskPhrases above).
     public static let plannedPhrases: [OpDomain: [String]] = [
         .photo: [
             "flou de mouvement", "motion blur", "flou gaussien", "gaussian blur", "flou radial", "tilt shift", "yeux rouges", "red eye", "colorise",
@@ -137,8 +163,8 @@ public enum OperationAbstention {
             "rectangles", "cercle", "cercles", "circle", "circles", "fleche", "fleches", "arrow", "arrows", "ombre portee", "drop shadow",
             "contour blanc", "contour noir", "outline", "bordure", "border",
             "filigrane", "filigranes", "watermark", "redimensionne", "redimensionner", "resize", "pixels de large", "pixels wide", "clone le", "clone the", "tampon de duplication",
-            "clone stamp", "selectionne le sujet", "select the subject", "inverse la selection", "invert the selection", "fusionne les calques",
-            "merge the layers", "merge layers", "aplatis", "flatten", "masque de fusion", "layer mask", "degrade", "gradient", "melangeur de couches", "channel mixer", "posterise", "posterize", "seuil", "threshold", "filtre photo", "photo filter",
+            "clone stamp", "fusionne les calques",
+            "merge the layers", "merge layers", "aplatis", "flatten", "masque de fusion", "layer mask", "melangeur de couches", "channel mixer", "posterise", "posterize", "seuil", "threshold", "filtre photo", "photo filter",
         ],
         .video: [
             "keyframe", "keyframes", "image cle", "images cles", "incrustation", "incrustations", "picture in picture", "chroma key", "chroma", "fond vert sur",

@@ -17,7 +17,9 @@ final class CodableForwardCompatTests: XCTestCase {
         return decoder
     }
 
-    private let futureKind = #"{"localAdjust":{"_0":{"components":[{"mode":"add","radius":0.25}],"invert":false},"_1":{"exposure":0.3},"curve":null}}"#
+    // A kind no build knows ("liquify"): W2 made "localAdjust" real, and W2ForwardCompatTests keeps the two
+    // malformed "localAdjust" payloads that must still decode as `.unsupported`.
+    private let futureKind = #"{"liquify":{"_0":{"components":[{"mode":"add","radius":0.25}],"invert":false},"_1":{"exposure":0.3},"curve":null}}"#
 
     private func operationJSON(kind: String) -> String {
         #"{"createdAt":"2026-10-01T10:00:00Z","id":"0A1B2C3D-0000-4000-8000-000000000001","kind":"# + kind + #","label":"Local Adjust"}"#
@@ -26,7 +28,7 @@ final class CodableForwardCompatTests: XCTestCase {
     func testAnUnknownKindIsKeptAsJSON() throws {
         let operation = try decoder().decode(EditOperation.self, from: Data(operationJSON(kind: futureKind).utf8))
         guard case .unsupported(let json) = operation.kind else { return XCTFail("\(operation.kind)") }
-        XCTAssertTrue(json.hasPrefix(#"{"localAdjust":"#), json)
+        XCTAssertTrue(json.hasPrefix(#"{"liquify":"#), json)
         XCTAssertEqual(operation.label, "Local Adjust")
         XCTAssertFalse(operation.kind.isGeometric)
         XCTAssertFalse(operation.kind.isExpensive)
@@ -45,7 +47,7 @@ final class CodableForwardCompatTests: XCTestCase {
     func testADocumentWithAnUnknownKindRoundTrips() throws {
         var document = PhotoDocument(title: "Test", baseImage: MediaAsset(kind: .image, relativePath: "media/a.jpg", pixelSize: PSSize(width: 400, height: 300)))
         document.apply(.adjust(.exposure, value: 0.2))
-        document.apply(.unsupported(#"{"localAdjust":{"_0":{"invert":true}}}"#))
+        document.apply(.unsupported(#"{"liquify":{"_0":{"invert":true}}}"#))
         document.apply(.levels(Levels(rgb: Levels.Channel(inBlack: 0.05, inWhite: 0.95, gamma: 1.2))))
         let first = try sortedEncoder().encode(document)
         let decoded = try decoder().decode(PhotoDocument.self, from: first)

@@ -28,13 +28,14 @@ final class LiveDialogueEvalTests: XCTestCase {
     ///     question   16    16     16 (100%)        16 (100%)         16 (100%)         0 (0)
     ///     recovery   11    11     11 (100%)        11 (100%)         11 (100%)         5 (0)
     ///     verify     11    11     11 (100%)        11 (100%)         11 (100%)         5 (0)
+    ///     masks      32    96     79 (82%)         96 (100%)         96 (100%)         13 (0)      (W2)
     static let grammarFloors: [LiveDialogueCase.Category: Int] = [
-        .table: 45, .text: 31, .followUp: 52, .reference: 22, .compound: 21, .question: 16, .recovery: 11, .verify: 11,
+        .table: 45, .text: 31, .followUp: 52, .reference: 22, .compound: 21, .question: 16, .recovery: 11, .verify: 11, .masks: 79,
     ]
 
     /// Targets (reported): the bar this corpus measures the grammar against.
     static let grammarTargets: [LiveDialogueCase.Category: Int] = [
-        .table: 95, .text: 90, .followUp: 90, .reference: 80, .compound: 85, .question: 100, .recovery: 80, .verify: 90,
+        .table: 95, .text: 90, .followUp: 90, .reference: 80, .compound: 85, .question: 100, .recovery: 80, .verify: 90, .masks: 80,
     ]
 
     func testCorpusShape() {
@@ -42,7 +43,12 @@ final class LiveDialogueEvalTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(cases.count, 150, "at least 150 new cases")
         XCTAssertEqual(Set(cases.map(\.name)).count, cases.count, "names are unique")
         let minimum: [LiveDialogueCase.Category: Int] = [.table: 40, .text: 30, .followUp: 25, .reference: 20, .compound: 20, .question: 15, .recovery: 10,
-                                                         .verify: 10]
+                                                         .verify: 10, .masks: 30]
+        // W2 (§8.10): the mask and selection dialogues, 20 French and 10 English, three turns or more each.
+        let masks = cases.filter { $0.category == .masks }
+        XCTAssertGreaterThanOrEqual(masks.filter { $0.language == .french }.count, 20)
+        XCTAssertGreaterThanOrEqual(masks.filter { $0.language == .english }.count, 10)
+        XCTAssertTrue(masks.allSatisfy { $0.turns.count >= 3 && $0.picture == .lake })
         for category in LiveDialogueCase.Category.allCases {
             XCTAssertGreaterThanOrEqual(cases.filter { $0.category == category }.count, minimum[category] ?? 0, category.rawValue)
         }

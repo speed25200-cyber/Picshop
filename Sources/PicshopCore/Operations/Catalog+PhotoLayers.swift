@@ -19,6 +19,9 @@ enum CatalogPhotoLayers {
                 fr("sélectionne le calque 2", ["choiceIndex": 2]),
                 fr("sélectionne le texte", ["text": "text"]),
                 en("select layer 2", ["choiceIndex": 2]),
+                fr("passe au calque 1", ["choiceIndex": 1]),
+                en("select the text layer", ["text": "text"]),
+                near("sélectionne la tasse rouge", .fr, expected: "select"),
             ]
             s.verify = [.unverifiable("only the selection changes")]
             s.grammar = .owned
@@ -37,6 +40,9 @@ enum CatalogPhotoLayers {
                 fr("duplique le calque"),
                 fr("copie le calque"),
                 en("duplicate the layer"),
+                fr("fais une copie du calque"),
+                en("copy this layer"),
+                near("supprime le calque", .fr, expected: "deleteLayer"),
             ]
             s.verify = [.structural(.layerCount, .increased)]
             s.grammar = .owned
@@ -56,6 +62,9 @@ enum CatalogPhotoLayers {
                 fr("supprime le calque"),
                 fr("enlève le calque"),
                 en("delete the layer"),
+                fr("retire ce calque"),
+                en("remove this layer"),
+                near("masque le calque", .fr, expected: "layerVisibility"),
             ]
             s.verify = [.structural(.layerCount, .decreased)]
             s.grammar = .owned
@@ -85,6 +94,8 @@ enum CatalogPhotoLayers {
                 fr("rends le texte à moitié transparent", ["ref": "l1", "opacity": 50]),
                 en("set the layer opacity to 50", ["opacity": 50]),
                 para("opa du calque à 80", .fr, ["opacity": 80]),
+                en("make the layer half transparent", ["opacity": 50]),
+                near("cache le calque", .fr, expected: "layerVisibility"),
             ]
             s.verify = [.structural(.layerOpacity, .equalsParam("opacity"))]
             s.uiTool = "layers"
@@ -151,6 +162,7 @@ enum CatalogPhotoLayers {
                 fr("cache le calque du texte", ["ref": "l1", "visible": false]),
                 en("hide the layer", ["visible": false]),
                 near("supprime le calque", .fr, expected: "deleteLayer"),
+                en("show layer l1 again", ["ref": "l1", "visible": true]),
             ]
             s.verify = [.structural(.layerVisibility, .equalsParam("visible"))]
             s.uiTool = "layers"
