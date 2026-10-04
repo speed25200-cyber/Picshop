@@ -191,7 +191,7 @@ public actor SAMSegmenter {
             "feats_s0": embedding.s0,
             "feats_s1": embedding.s1,
         ]
-        let output = try models.decoder.prediction(from: MLDictionaryFeatureProvider(dictionary: inputs))
+        let output = try await models.decoder.prediction(from: MLDictionaryFeatureProvider(dictionary: inputs))
         guard let masks = output.featureValue(for: "low_res_masks")?.multiArrayValue,
               let scores = output.featureValue(for: "scores")?.multiArrayValue else {
             throw PicshopError.renderFailed("SAM decoder output")

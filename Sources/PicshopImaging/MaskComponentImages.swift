@@ -111,7 +111,7 @@ enum MaskComponentImages {
     /// space, so the cube's output is the raw mask value (D5 item 2).
     static func cube(_ data: Data, dimension: Int, on preLocal: CIImage, extent: CGRect) -> CIImage {
         guard let sRGB = CGColorSpace(name: CGColorSpace.sRGB) else { return black(extent) }
-        let encoded = preLocal.convertingWorkingSpaceToColorSpace(sRGB)
+        let encoded = preLocal.matchedFromWorkingSpace(to: sRGB) ?? preLocal
         let filter = CIFilter.colorCube()
         filter.inputImage = encoded
         filter.cubeDimension = Float(dimension)
