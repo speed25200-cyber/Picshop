@@ -47,6 +47,12 @@ public struct RuleBasedIntentEngine: IntentEngine {
                             reply: Replies.reply(for: choice, language: language), engine: .rules)
         }
 
+        // A greeting or a thank-you said alone, read on the whole utterance (« parfait, elle est à l'endroit » is not one).
+        if context.pendingClarification == nil, let talk = parseSmallTalk(normalized) {
+            return EditPlan(utterance: utterance, intents: [talk], confidence: talk.confidence, language: language.rawValue,
+                            reply: Replies.reply(for: talk, language: language), engine: .rules)
+        }
+
         // Table commands read the whole utterance: " et " would split "entre 50 et 90".
         if context.mode == .photo, let table = parseTablePlan(normalized, original: utterance, context: context) {
             let intents = table.intents.map { withOriginalWords($0, from: utterance) }
@@ -369,7 +375,8 @@ public struct RuleBasedIntentEngine: IntentEngine {
                                               "much", "so", "ok", "okay", "super", "top", "parfait", "genial", "cool", "bien", "tres", "a", "toi",
                                               "picshop", "et", "oui", "nickel", "bravo", "great", "perfect", "nice"]
     static let greetingWords: Set<String> = ["salut", "bonjour", "bonsoir", "coucou", "hello", "hi", "hey", "yo", "re"]
-    static let thanksWords: Set<String> = ["merci", "thanks", "thank", "bravo", "parfait", "nickel", "super", "top", "genial", "great", "perfect", "nice"]
+    /// Only a thank-you itself counts: « parfait » or « super » alone is an acknowledgement, handled elsewhere.
+    static let thanksWords: Set<String> = ["merci", "thanks", "thank"]
 
     /// A greeting or thanks with no command in it: an answer, never an edit (« Salut » used to fall to « Je n'ai pas compris »).
     func parseSmallTalk(_ u: NormalizedUtterance) -> EditIntent? {
@@ -381,7 +388,6 @@ public struct RuleBasedIntentEngine: IntentEngine {
     }
 
     func parseMeta(_ u: NormalizedUtterance, context: IntentContext) -> EditIntent? {
-        if let talk = parseSmallTalk(u) { return talk }
         if u.contains(["tu peux m aider", "peux tu m aider", "pouvez vous m aider", "vous pouvez m aider", "m aider", "help me", "can you help",
                        "comment ca marche", "comment ca fonctionne", "je fais comment", "comment on fait", "how does it work", "how do i"]) {
             return EditIntent(action: .help)
@@ -761,9 +767,8 @@ public struct RuleBasedIntentEngine: IntentEngine {
     // MARK: - Auto enhance
 
     func parseAutoEnhance(_ u: NormalizedUtterance) -> EditIntent? {
-        guard u.contains(["plus belle", "plus beau", "plus jolie", "plus joli", "plus belles", "plus beaux", "plus pro", "plus professionnelle",
-                          "plus professionnel", "rend la plus belle", "rend la photo plus belle", "rends la photo plus belle", "fais la plus belle",
-                          "embellis la photo", "embellir la photo", "make it prettier", "prettier", "more beautiful", "make it pro",
+        guard u.contains(["plus belle", "plus beau", "plus jolie", "plus joli", "plus belles", "plus beaux", "rend la plus belle", "rend la photo plus belle", "rends la photo plus belle", "fais la plus belle",
+                          "embellis la photo", "embellir la photo", "make it prettier", "prettier", "more beautiful",
                           "auto enhance", "auto", "automatique", "automatic", "enhance", "enhance it", "enhance the photo", "enhance the picture", "enhance the video", "ameliore", "ameliorer", "ameliore la photo", "ameliore l image", "ameliore la video", "improve", "improve it", "improve the photo", "fix it", "fix the photo", "fix the picture", "fix the lighting", "corrige", "corrige la photo", "corrige la lumiere", "corrige les couleurs", "fix the colors", "fix the colours", "magic", "magique", "baguette magique", "magic wand", "make it better", "make it look better", "make it nicer", "make it beautiful", "rends la plus belle", "rends la plus jolie", "embellis", "embellir", "optimise", "optimize", "optimise la photo", "retouche automatique", "auto retouch", "sublime", "sublimer", "one tap", "make it pop", "fais la briller", "rends la meilleure", "mets la en valeur", "arrange la photo", "arrange ca", "touch up", "touch it up", "retouche", "retoucher", "quick fix", "auto fix", "autofix", "smart enhance", "enhance colors", "enhance colours", "c est moche", "it looks bad", "looks bad", "ca rend mal", "pas terrible", "not great", "make it nice", "make it look nice", "make it look good", "fix this", "fix this photo", "repare la photo", "ameliore ca", "ameliore tout", "fais quelque chose", "do something", "do your magic", "fais ta magie", "surprise me", "surprends moi", "rends la belle", "make it better", "make this better", "fais mieux", "fais au mieux", "do your best", "help me with this photo", "aide moi avec cette photo", "c est pas top", "meh"]) else { return nil }
         let magnitude = AmountParser.magnitude(in: u)
         let strength: Double = magnitude.qualifier == .slight ? 0.5 : magnitude.qualifier == .strong ? 1.0 : 0.8
