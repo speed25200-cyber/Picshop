@@ -1,6 +1,6 @@
 import Foundation
 
-/// Kill switches for the W1, W2 and W3 features, one per feature.
+/// Kill switches for the W1, W2 and W3 features and UX 2.0, one per feature.
 public enum FeatureFlag: String, CaseIterable, Sendable {
     /// Catalog operations (IntentAction.operation) in Live and the planner (E2).
     case catalogOps
@@ -68,6 +68,11 @@ public enum FeatureFlag: String, CaseIterable, Sendable {
     /// The prefix snapshot persisted across launches (L5).
     case persistedPrefix
 
+    // UX 2.0 (ux-spec §6.1): the new editor frame (EditorShell, labelled bars, InspectorPanel v2) and the new Home.
+    /// UX 2.0: Home and the photo editor in the new frame (increment 1); video and PDF join later. Off brings back
+    /// the previous Home and editors, from Réglages › Avancé › Expérimental.
+    case ux2
+
     /// On in Release when nobody overrode it. Testers get each wave through TestFlight, so a
     /// finished feature ships on; a feature left unfinished is turned off here, and
     /// its owner says so. Debug builds have every flag on.
@@ -80,6 +85,10 @@ public enum FeatureFlag: String, CaseIterable, Sendable {
         // W3 (D24): on; L5 turns off in P2 anything a lane reports unfinished.
         case .proLayers, .freeTransform, .layersColumn, .paramInspector, .contentHashCache, .interactiveSnapshot, .tiledRendering,
              .proExport, .psdExport, .layerOps, .outlineFill, .recipes, .kvEngine, .persistedPrefix:
+            return true
+        // UX 2.0: on in Release too while the owner judges it through TestFlight (§6.1 has it off until sign-off;
+        // the owner chose on). The previous UI stays one switch away under Réglages › Avancé › Expérimental.
+        case .ux2:
             return true
         }
     }

@@ -117,4 +117,107 @@ struct CompareButton: View {
         isPressing = false
     }
 }
+// MARK: - UX 2.0: « ◐ Avant » (ux-spec §4.10)
+
+/// What « ◐ Avant » shows and does in an editor.
+struct BeforeAfterControl {
+    /// The original is showing (the toggle is on, or a hold peeks).
+    var showsOriginal: Bool
+    /// There is something to compare: an edit, or edits from an earlier session. Disabled before the first edit.
+    var isEnabled: Bool
+    /// Shows or hides the original. Comparing is never a trap: the editor itself turns it off before any slider
+    /// drag, brush stroke, editing gesture, tool or panel change, ↶ / ↷ or AI result (AC-19), with a soft haptic
+    /// and the announcement « Retouches affichées ».
+    var setShowsOriginal: (Bool) -> Void
+}
+
+/// « ◐ Avant », the same word in photo, video and PDF, in canvas zone B (top right). A tap toggles the original
+/// (the button stays white while it shows); a hold peeks while the finger is down. There is no hold-to-compare on
+/// the canvas any more: this button is the one way to compare (P11).
+struct CompareAvantButton: View {
+    let control: BeforeAfterControl
+
+    @State private var isPressing = false
+    @State private var isPeeking = false
+    @State private var wasOn = false
+    @State private var holdTask: Task<Void, Never>?
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    /// How long a press must last to become a peek.
+    static let holdDelay: Duration = .milliseconds(250)
+
+    var body: some View {
+        let isOn = control.showsOriginal
+        HStack(spacing: PSSpacing.xSmall + 2) {
+            Image(systemName: "circle.lefthalf.filled")
+            Text(L("Before"))
+                .lineLimit(1)
+        }
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(isOn ? Color.psOnAction : Color.psTextPrimary)
+        .padding(.horizontal, PSSpacing.medium + 2)
+        .frame(height: PSMetrics.barButton)
+        .background { if isOn { Capsule().fill(Color.psActionPrimary) } }
+        .contentShape(Capsule())
+        .scaleEffect(isPressing ? 0.95 : 1)
+        .psGlass(interactive: true, shape: AnyShape(Capsule()))
+        .opacity(control.isEnabled ? 1 : (contrast == .increased ? 0.5 : 0.35))
+        .animation(PSSpring.press, value: isPressing)
+        .animation(PSSpring.quick, value: isOn)
+        .gesture(press, including: control.isEnabled ? .all : .none)
+        .onDisappear(perform: reset)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L("Before"))
+        .accessibilityValue(isOn ? L("Showing the original") : "")
+        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : [.isButton])
+        .accessibilityAction { if control.isEnabled { toggle() } }
+        .accessibilityShowsLargeContentViewer {
+            Label(L("Before"), systemImage: "circle.lefthalf.filled")
+        }
+        .uxProbe(id: "canvas.compare", role: .compare)
+    }
+
+    /// One touch: a hold of 250 ms peeks until release; a shorter touch toggles.
+    private var press: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                guard !isPressing else { return }
+                isPressing = true
+                holdTask?.cancel()
+                holdTask = Task { @MainActor in
+                    try? await Task.sleep(for: Self.holdDelay)
+                    guard !Task.isCancelled, isPressing else { return }
+                    wasOn = control.showsOriginal
+                    isPeeking = true
+                    Haptics.soft(0.6)
+                    control.setShowsOriginal(true)
+                }
+            }
+            .onEnded { _ in
+                holdTask?.cancel()
+                holdTask = nil
+                isPressing = false
+                if isPeeking {
+                    isPeeking = false
+                    control.setShowsOriginal(wasOn)
+                } else {
+                    toggle()
+                }
+            }
+    }
+
+    private func toggle() {
+        Haptics.tick()
+        control.setShowsOriginal(!control.showsOriginal)
+    }
+
+    private func reset() {
+        holdTask?.cancel()
+        holdTask = nil
+        if isPeeking { control.setShowsOriginal(wasOn) }
+        isPeeking = false
+        isPressing = false
+    }
+}
 #endif

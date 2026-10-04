@@ -236,7 +236,7 @@ final class W3SeamTests: XCTestCase {
         let w3: [FeatureFlag] = [.proLayers, .freeTransform, .layersColumn, .paramInspector, .contentHashCache, .interactiveSnapshot, .tiledRendering,
                                  .proExport, .psdExport, .layerOps, .outlineFill, .recipes, .kvEngine, .persistedPrefix]
         XCTAssertEqual(Set(w3).count, 14)
-        XCTAssertEqual(FeatureFlag.allCases.count, 30)
+        XCTAssertEqual(FeatureFlag.allCases.count, 31)
         XCTAssertTrue(w3.allSatisfy(\.releaseDefault))
         XCTAssertEqual(RefKind.layerGroup.prefix, "g")
         XCTAssertEqual(Set(RefKind.allCases.map(\.prefix)).count, RefKind.allCases.count)

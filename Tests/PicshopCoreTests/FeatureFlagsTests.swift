@@ -32,6 +32,8 @@ final class FeatureFlagsTests: XCTestCase {
             // W3
             "proLayers", "freeTransform", "layersColumn", "paramInspector", "contentHashCache", "interactiveSnapshot", "tiledRendering",
             "proExport", "psdExport", "layerOps", "outlineFill", "recipes", "kvEngine", "persistedPrefix",
+            // UX 2.0
+            "ux2",
         ])
     }
 
@@ -41,7 +43,7 @@ final class FeatureFlagsTests: XCTestCase {
         let w2: [FeatureFlag] = [.masks, .aiSelection, .samModel, .depthModel, .pixelPostconditions, .fmDynamicSchema,
                                  .commandPalette, .metalOrb, .graphiteSurround, .modelBroker]
         XCTAssertEqual(w2.count, 10)
-        XCTAssertEqual(FeatureFlag.allCases.count, 30)
+        XCTAssertEqual(FeatureFlag.allCases.count, 31)
         for flag in w2 {
             XCTAssertTrue(flag.releaseDefault, flag.rawValue)
             XCTAssertEqual(FeatureFlags.key(flag), "picshop.flag.\(flag.rawValue)")
@@ -72,6 +74,20 @@ final class FeatureFlagsTests: XCTestCase {
             }
             FeatureFlags.set(flag, nil)
         }
+    }
+
+    /// UX 2.0 ships on in Release too (the owner judges it through TestFlight) and switches off on its own, which
+    /// brings back the previous Home and editors.
+    func testTheUX2FlagShipsOnAndSwitchesOffAlone() {
+        XCTAssertTrue(FeatureFlag.ux2.releaseDefault)
+        XCTAssertEqual(FeatureFlags.key(.ux2), "picshop.flag.ux2")
+        FeatureFlags.set(.ux2, false)
+        XCTAssertFalse(FeatureFlags.isOn(.ux2))
+        for other in FeatureFlag.allCases where other != .ux2 {
+            XCTAssertEqual(FeatureFlags.isOn(other), FeatureFlags.defaultValue(other), other.rawValue)
+        }
+        FeatureFlags.set(.ux2, nil)
+        XCTAssertEqual(FeatureFlags.isOn(.ux2), FeatureFlags.defaultValue(.ux2))
     }
 
     func testSignpostsAreANoOpWhereThereIsNoOSLog() {

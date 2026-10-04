@@ -261,6 +261,7 @@ struct AdvancedSettingsView: View {
         case .recipes: return L("Recipes")
         case .kvEngine: return L("KV engine")
         case .persistedPrefix: return L("Persisted prefix")
+        case .ux2: return L("New Home and editor (UX 2.0)")
         }
     }
 
