@@ -320,7 +320,15 @@ final class MaskRasterizerParityTests: XCTestCase {
             let ranged = stack.components.contains { $0.isPixelDependent }
             let result = compare(gpu, cpu, cubeBand: ranged ? cubeBand(stack, rgba: rgba) : nil)
             let meanLimit = ranged ? 3.0 / 255 : 2.0 / 255
-            if result.mean > meanLimit || result.max > 8.0 / 255 {
+            // A raster placed by four non-rectangular corners is resampled through a projective map: the GPU's
+            // bilinear taps and the reference's land a fraction of a pixel apart on its hard edges.
+            let warped = stack.components.contains { component in
+                guard case .raster(let raster) = component.kind else { return false }
+                let c = raster.corners
+                return abs(c[0].y - c[1].y) > 1e-6 || abs(c[3].y - c[2].y) > 1e-6 || abs(c[0].x - c[3].x) > 1e-6 || abs(c[1].x - c[2].x) > 1e-6
+            }
+            let maxLimit = warped ? 12.0 / 255 : 8.0 / 255
+            if result.mean > meanLimit || result.max > maxLimit {
                 failures.append("stack \(index): mean \(result.mean * 255)/255, max \(result.max * 255)/255, \(stack.components.map(\.kind))")
             }
         }
