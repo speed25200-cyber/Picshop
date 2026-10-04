@@ -3,7 +3,7 @@ import SwiftUI
 
 /// One ring of a carousel (ux-spec §3.5.4): a parameter (« Luminosité ») or an action ring (« ✦ Auto »,
 /// « Pipette »).
-struct AdjustRing: Identifiable, Equatable {
+struct CarouselRing: Identifiable, Equatable {
     /// The parameter id ("brightness"); the carousel remembers the last-used one.
     var id: String
     /// The caption2 label under the ring, always shown (AC-02).
@@ -28,8 +28,8 @@ struct AdjustRing: Identifiable, Equatable {
     }
 
     /// An action ring (« ✦ Auto »).
-    static func action(id: String, title: String, systemImage: String) -> AdjustRing {
-        AdjustRing(id: id, title: title, systemImage: systemImage, isAction: true)
+    static func action(id: String, title: String, systemImage: String) -> CarouselRing {
+        CarouselRing(id: id, title: title, systemImage: systemImage, isAction: true)
     }
 
     var isOffNeutral: Bool { !isAction && abs(value - neutral) > (range.upperBound - range.lowerBound) / 400 }
@@ -51,7 +51,7 @@ struct AdjustRing: Identifiable, Equatable {
 struct AdjustCarousel: View {
     /// "photo.light": keys the remembered ring.
     let carouselID: String
-    let rings: [AdjustRing]
+    let rings: [CarouselRing]
     /// The selected ring's id.
     @Binding var selection: String
     /// The selected ring's value, driven by the dial: bind it to a leaf's state.
@@ -60,7 +60,7 @@ struct AdjustCarousel: View {
     var onAction: (String) -> Void
     var onEditingChanged: ((Bool) -> Void)?
 
-    init(carouselID: String, rings: [AdjustRing], selection: Binding<String>, value: Binding<Double>,
+    init(carouselID: String, rings: [CarouselRing], selection: Binding<String>, value: Binding<Double>,
          format: @escaping (Double) -> String = PSSlider.signed, onAction: @escaping (String) -> Void = { _ in },
          onEditingChanged: ((Bool) -> Void)? = nil) {
         self.carouselID = carouselID
@@ -84,7 +84,7 @@ struct AdjustCarousel: View {
 
     private static func key(_ carouselID: String) -> String { "ux2.carousel.\(carouselID)" }
 
-    private var selected: AdjustRing? { rings.first { $0.id == selection } }
+    private var selected: CarouselRing? { rings.first { $0.id == selection } }
 
     var body: some View {
         VStack(spacing: PSSpacing.xSmall) {
@@ -92,7 +92,7 @@ struct AdjustCarousel: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: PSMetrics.carouselRingSpacing - PSMetrics.carouselRing) {
                         ForEach(rings) { ring in
-                            AdjustRingButton(ring: ring, isSelected: ring.id == selection) { tap(ring) }
+                            CarouselRingButton(ring: ring, isSelected: ring.id == selection) { tap(ring) }
                                 .id(ring.id)
                         }
                     }
@@ -113,7 +113,7 @@ struct AdjustCarousel: View {
         .sensoryFeedback(.selection, trigger: selection)
     }
 
-    private func tap(_ ring: AdjustRing) {
+    private func tap(_ ring: CarouselRing) {
         if ring.isAction {
             onAction(ring.id)
             return
@@ -125,8 +125,8 @@ struct AdjustCarousel: View {
 }
 
 /// A ring: a 44-point circle with the value's arc (yellow off neutral) or the action's glyph, its label under it.
-private struct AdjustRingButton: View {
-    let ring: AdjustRing
+private struct CarouselRingButton: View {
+    let ring: CarouselRing
     let isSelected: Bool
     let action: () -> Void
 
