@@ -122,11 +122,13 @@ workflows:
           include: true
           source: true
       cancel_previous_builds: true
+    # No package tests here (the owner's choice): GitHub Actions runs them on every push (Linux, macOS, iOS and
+    # Pro builds). A build that compiles reaches TestFlight, about 15 minutes sooner, before the next push can
+    # cancel it.
     scripts:
       - *toolchain
       - *models
       - *generate
-      - *tests
       - name: Signing files
         script: |
           set -e
