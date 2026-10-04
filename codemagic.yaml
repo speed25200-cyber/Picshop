@@ -137,11 +137,22 @@ workflows:
       - name: Build number
         script: |
           set -e
-          LATEST=0
-          if [ -n "${APP_STORE_APPLE_ID:-}" ]; then
-            LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null | tail -n 1 || true)
+          # Follow Picshop's own numbering in App Store Connect: one more than the highest build already uploaded
+          # (TestFlight or App Store), found from the bundle ID with the team's App Store Connect key.
+          APP_ID="${APP_STORE_APPLE_ID:-}"
+          if [ -z "$APP_ID" ]; then
+            APP_ID=$(app-store-connect apps list --bundle-id-identifier "$BUNDLE_ID" --strict-match-identifier --json 2>/dev/null \
+              | python3 -c 'import sys, json; apps = json.load(sys.stdin); print(apps[0]["id"] if apps else "")' || true)
           fi
-          case "$LATEST" in ''|*[!0-9]*) LATEST=0 ;; esac
+          echo "App Store Connect app id: ${APP_ID:-unknown}"
+          LATEST=0
+          if [ -n "$APP_ID" ]; then
+            for N in $(app-store-connect get-latest-testflight-build-number "$APP_ID" 2>/dev/null | tail -n 1 || true) \
+                     $(app-store-connect get-latest-app-store-build-number "$APP_ID" 2>/dev/null | tail -n 1 || true); do
+              echo "latest uploaded build: $N"
+              case "$N" in ''|*[!0-9]*) ;; *) if [ "$N" -gt "$LATEST" ]; then LATEST="$N"; fi ;; esac
+            done
+          fi
           NEXT=$(( LATEST + 1 ))
           if [ "$NEXT" -lt "${BUILD_NUMBER:-1}" ]; then NEXT="$BUILD_NUMBER"; fi
           echo "Build number: $NEXT"
