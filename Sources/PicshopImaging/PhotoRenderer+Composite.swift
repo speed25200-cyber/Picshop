@@ -217,7 +217,17 @@ enum ContentPlacement {
 
     /// `content` placed through `map` onto `canvas`, cropped to it. Linear sampling; Core Image's high-quality
     /// downsample when the content shrinks beyond half.
+    ///
+    /// A resampling placement filters premultiplied working-space pixels, whatever the content's source: Core Image
+    /// otherwise moves the transform under per-pixel steps (a straight-alpha file's premultiply and colour match) and
+    /// filters the file's own samples, so a lazily decoded PNG (a full-resolution render, an export) got other edges
+    /// than the same content materialised (the content cache, a snapshot frame, D13): up to 25/255 around every
+    /// transformed layer, and a frame that jumped when the drag ended.
     static func place(_ content: CIImage, map: PSHomography, canvas: CGRect) -> CIImage {
+        resample(content, map: map, canvas: canvas, premultipliedSource: true)
+    }
+
+    private static func resample(_ content: CIImage, map: PSHomography, canvas: CGRect, premultipliedSource: Bool) -> CIImage {
         let extent = content.extent
         guard !extent.isInfinite, extent.width >= 1, extent.height >= 1 else { return CIImage(color: .clear).cropped(to: canvas) }
         if var transform = affine(map, extent: extent, canvas: canvas) {
@@ -228,13 +238,14 @@ enum ContentPlacement {
                 transform = CGAffineTransform(translationX: transform.tx.rounded(), y: transform.ty.rounded())
                 return (transform.isIdentity ? content : content.transformed(by: transform)).cropped(to: canvas)
             }
+            let source = premultipliedSource ? content.insertingIntermediate(cache: false) : content
             let shrink = sqrt(abs(transform.a * transform.d - transform.b * transform.c))
-            let placed = shrink < 0.5 ? content.transformed(by: transform, highQualityDownsample: true) : content.transformed(by: transform)
+            let placed = shrink < 0.5 ? source.transformed(by: transform, highQualityDownsample: true) : source.transformed(by: transform)
             return placed.cropped(to: canvas)
         }
         let points = corners(map, canvas: canvas)
         let warp = CIFilter.perspectiveTransform()
-        warp.inputImage = content
+        warp.inputImage = premultipliedSource ? content.insertingIntermediate(cache: false) : content
         warp.topLeft = points[0]
         warp.topRight = points[1]
         warp.bottomRight = points[2]
@@ -244,7 +255,7 @@ enum ContentPlacement {
 
     /// A gray mask placed the same way (outside the content it reads 0).
     static func placeMask(_ mask: CIImage, map: PSHomography, canvas: CGRect) -> CIImage {
-        place(mask, map: map, canvas: canvas).composited(over: MaskComponentImages.black(canvas)).cropped(to: canvas)
+        resample(mask, map: map, canvas: canvas, premultipliedSource: false).composited(over: MaskComponentImages.black(canvas)).cropped(to: canvas)
     }
 
     /// The canvas-pixel box of the placed content (integral, clipped to the canvas); null when it misses the canvas.

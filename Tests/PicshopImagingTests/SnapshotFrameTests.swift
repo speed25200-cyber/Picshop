@@ -122,7 +122,8 @@ final class SnapshotFrameTests: XCTestCase {
         for exposure in [0.0, 0.02, 0.05, 0.1] {
             var dialled = document
             dialled.apply(.adjust(.exposure, value: exposure), to: baseID)
-            // The local adjustment's mask is frozen at capture, so a small move stays within 4/255.
+            // The luminance range reads the developed picture the dial moves: the frame draws it again from its own, as
+            // the actor does (a mask frozen at capture was 7/255 off over a quadrant at exposure 0.05).
             try await assertFrameMatches(fixture, snapshot, dialled, tolerance: 4, "exposure \(exposure)")
         }
     }
@@ -249,7 +250,75 @@ final class SnapshotFrameTests: XCTestCase {
         for (index, centre) in [PSPoint(x: 0.6, y: 0.5), PSPoint(x: 0.3, y: 0.35)].enumerated() {
             var moved = document
             moved.update(layerID: base.id) { $0.transform = LayerTransform(center: centre, scale: 1.5, rotation: 20 * Double(index)) }
-            try await assertFrameMatches(fixture, snapshot, moved, tolerance: 2, "clip base move \(index)")
+            let worst = try await assertFrameMatches(fixture, snapshot, moved, tolerance: 2, "clip base move \(index)")
+            if worst > 2 { try await diagnoseClipFrame(fixture, snapshot, moved, baseID: base.id, tolerance: 2, "clip base move \(index)") }
+        }
+    }
+
+    /// Prints where a clip-base frame differs from the actor's render (no assertion): inside and outside the moved
+    /// base's pixel box, grown by a pixel for its resampled edge; whether the frame and the actor each draw the same
+    /// pixels twice; how each compares with the actor's render with the base hidden, which hides its clipped layer
+    /// too, so outside the box both must equal it; and probe pixels. CI once saw 53 % of the channels off at the first
+    /// move (worst 35) with the plan, inputs and backdrop identical by construction, and 1056 edge channels at the
+    /// next. With PICSHOP_PSD_OUT set (CI uploads it), the three pictures are written there as PNGs.
+    private func diagnoseClipFrame(_ fixture: LayerFixtures.Project, _ snapshot: RenderSnapshot, _ document: PhotoDocument, baseID: UUID,
+                                   tolerance: Int, _ label: String) async throws {
+        func frameBytes() -> [UInt8]? {
+            guard let image = snapshot.frame(document) else { return nil }
+            return ImageSupport.rgbaBytes(of: image, rect: image.extent.integral)
+        }
+        guard let frame = frameBytes(), let frameAgain = frameBytes(), let base = document.layer(id: baseID),
+              let contentSize = LayerPlacement.contentSize(of: base) else { return print("SNAPSHOT clip diag \(label): no frame") }
+        let actor = try await fixture.renderer.renderedRGBA(document, options: options)
+        let actorAgain = try await fixture.renderer.renderedRGBA(document, options: options)
+        var hiddenBase = document
+        hiddenBase.update(layerID: baseID) { $0.isVisible = false }
+        let backdrop = try await fixture.renderer.renderedRGBA(hiddenBase, options: options)
+        let width = actor.width, height = actor.height
+        guard frame.count == actor.bytes.count, frameAgain.count == frame.count, actorAgain.bytes.count == frame.count,
+              backdrop.bytes.count == frame.count else { return print("SNAPSHOT clip diag \(label): sizes differ") }
+        let canvas = CGRect(x: 0, y: 0, width: width, height: height)
+        let map = LayerPlacement.map(for: base, contentSize: contentSize, canvasSize: document.canvasSize, isBase: false)
+        let box = ContentPlacement.bounds(map, canvas: canvas)
+        guard !box.isNull else { return print("SNAPSHOT clip diag \(label): the base misses the canvas") }
+        let grown = box.insetBy(dx: -1, dy: -1)
+        // Channel index → inside the grown box (rows top-down, Core Image's y up).
+        func isInside(_ index: Int) -> Bool {
+            let pixel = index / 4
+            return grown.contains(CGPoint(x: Double(pixel % width) + 0.5, y: Double(height - 1 - pixel / width) + 0.5))
+        }
+        func split(_ a: [UInt8], _ b: [UInt8]) -> String {
+            var inside = (count: 0, worst: 0), outside = (count: 0, worst: 0)
+            for index in a.indices {
+                let difference = abs(Int(a[index]) - Int(b[index]))
+                if isInside(index) {
+                    inside.worst = max(inside.worst, difference)
+                    if difference > tolerance { inside.count += 1 }
+                } else {
+                    outside.worst = max(outside.worst, difference)
+                    if difference > tolerance { outside.count += 1 }
+                }
+            }
+            return "inside \(inside.count) (worst \(inside.worst)), outside \(outside.count) (worst \(outside.worst))"
+        }
+        print("SNAPSHOT clip diag \(label): box \(box); frame vs actor: \(split(frame, actor.bytes))")
+        print("SNAPSHOT clip diag \(label): frame vs frame again: \(split(frame, frameAgain)); actor vs actor again: \(split(actor.bytes, actorAgain.bytes))")
+        print("SNAPSHOT clip diag \(label): vs the base hidden: frame \(split(frame, backdrop.bytes)); actor \(split(actor.bytes, backdrop.bytes))")
+        let probes = [(2, 2), (width - 3, 2), (2, height - 3), (width - 3, height - 3), (width / 4, height / 4), (3 * width / 4, 3 * height / 4),
+                      (Int(box.midX), height - 1 - Int(box.midY))]
+        for (x, row) in probes where x >= 0 && x < width && row >= 0 && row < height {
+            let start = (row * width + x) * 4
+            func pixel(_ bytes: [UInt8]) -> [UInt8] { Array(bytes[start..<(start + 4)]) }
+            print("SNAPSHOT clip diag \(label): (\(x), \(row)) frame \(pixel(frame)) again \(pixel(frameAgain)) actor \(pixel(actor.bytes)) "
+                  + "again \(pixel(actorAgain.bytes)) base hidden \(pixel(backdrop.bytes))")
+        }
+        guard let root = ProcessInfo.processInfo.environment["PICSHOP_PSD_OUT"] else { return }
+        let directory = URL(fileURLWithPath: root).appendingPathComponent("snapshot-diagnostics")
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let stem = label.replacingOccurrences(of: " ", with: "-")
+        for (name, bytes) in [("frame", frame), ("actor", actor.bytes), ("base-hidden", backdrop.bytes)] {
+            guard let image = ImageSupport.rgbaImage(width: width, height: height, bytes: bytes, colorSpace: RenderContext.colorSpace) else { continue }
+            try? ImageSupport.write(image, to: directory.appendingPathComponent("\(stem)-\(name).png"), type: .png)
         }
     }
 

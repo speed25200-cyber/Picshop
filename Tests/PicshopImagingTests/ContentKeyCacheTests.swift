@@ -106,7 +106,8 @@ final class ContentKeyCacheTests: XCTestCase {
         XCTAssertEqual(after, runs, "no expensive work at all")
     }
 
-    /// The content key is the same for equal content and differs when an operation before the result changes.
+    /// The content key is the same for equal content and differs when an operation before the result changes its input.
+    /// Tonal kinds are developed after the operation loop (D9, D12): they get no key and change none, wherever they sit.
     func testOperationKeysChainTheSteps() throws {
         let engine = CountingInpainter()
         let (fixture, mask) = try project(engine)
@@ -115,13 +116,22 @@ final class ContentKeyCacheTests: XCTestCase {
         let erase = EditOperation(kind: .removeObject(mask))
         let dimmer = EditOperation(kind: .adjust(.exposure, value: 0.2))
         let brighter = EditOperation(kind: .adjust(.exposure, value: 0.4))
+        let crop = EditOperation(kind: .crop(PSRect(x: 0.1, y: 0.1, width: 0.8, height: 0.8)))
+        let tighter = EditOperation(kind: .crop(PSRect(x: 0.2, y: 0.2, width: 0.6, height: 0.6)))
         let a = RenderKeys.operationKeys(source: asset, edits: EditStack(operations: [erase, dimmer]))
         let b = RenderKeys.operationKeys(source: asset, edits: EditStack(operations: [erase, brighter]))
         let c = RenderKeys.operationKeys(source: asset, edits: EditStack(operations: [dimmer, erase]))
+        let d = RenderKeys.operationKeys(source: asset, edits: EditStack(operations: [crop, erase]))
+        let e = RenderKeys.operationKeys(source: asset, edits: EditStack(operations: [tighter, erase]))
         XCTAssertNotNil(a[erase.id])
         XCTAssertEqual(a[erase.id], b[erase.id], "the erase's key ignores the later dial")
-        XCTAssertNotEqual(a[dimmer.id], b[brighter.id])
-        XCTAssertNotEqual(a[erase.id], c[erase.id], "an exposure before the erase changes its key")
+        XCTAssertNil(a[dimmer.id], "a dial is developed after the loop: no key")
+        XCTAssertNil(b[brighter.id])
+        XCTAssertEqual(a[erase.id], c[erase.id], "an exposure before the erase does not change its input")
+        XCTAssertNotNil(d[crop.id])
+        XCTAssertNotEqual(a[erase.id], d[erase.id], "a crop before the erase changes its key")
+        XCTAssertNotEqual(d[crop.id], e[tighter.id])
+        XCTAssertNotEqual(d[erase.id], e[erase.id], "and so does editing that crop")
     }
 }
 #endif

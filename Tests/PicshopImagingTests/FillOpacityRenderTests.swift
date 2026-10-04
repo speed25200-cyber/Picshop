@@ -8,10 +8,13 @@ import PicshopCore
 /// they give the same pixels, in every mode, and they multiply.
 final class FillOpacityRenderTests: XCTestCase {
     private let width = 24, height = 16
+    /// One id for every render: dissolve seeds its grain from the layer id, so two layers with fresh ids take
+    /// different pixels whatever their fill and opacity (the comparison is of the same layer, set two ways).
+    private let layerID = UUID(uuidString: "6F1D0000-0000-4000-8000-00000000F111")!
 
     private func render(_ fixture: LayerFixtures.Project, mode: BlendMode, opacity: Double, fill: Double, layer: MediaAsset) async throws -> [UInt8] {
         var document = fixture.document
-        document.layers.append(Layer(name: "Layer", content: .image(layer), opacity: opacity, blendMode: mode, fillOpacity: fill))
+        document.layers.append(Layer(id: layerID, name: "Layer", content: .image(layer), opacity: opacity, blendMode: mode, fillOpacity: fill))
         return try await fixture.renderer.renderedRGBA(document, options: .full).bytes
     }
 

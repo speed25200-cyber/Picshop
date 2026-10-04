@@ -37,7 +37,8 @@ final class UnderstandingFixesTests: XCTestCase {
                     XCTAssertTrue(doc.baseOrientation.isUpright, "\(first) \(second) \(third)")
                     XCTAssertEqual(changed, doc.baseLayer!.edits.operations.count > before)
                     XCTAssertLessThanOrEqual(doc.baseLayer!.edits.operations.count - before, 2)
-                    XCTAssertEqual(doc.baseLayer!.edits.resolvedCrop, PSRect(x: 0.1, y: 0.1, width: 0.8, height: 0.8), "earlier edits stay")
+                    // The crop as it was applied (on whole pixels of the 1709 × 2048 photo: 0.1 × 1709 is not one).
+                    XCTAssertEqual(doc.baseLayer!.edits.resolvedCrop, cropped.baseLayer!.edits.resolvedCrop, "earlier edits stay")
                     XCTAssertEqual(doc.canvasSize, cropped.canvasSize, "upright again means the frame is the cropped photo's own shape")
                 }
             }

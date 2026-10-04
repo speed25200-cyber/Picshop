@@ -430,4 +430,27 @@ public extension EditOperation.Kind {
             return size
         }
     }
+
+    /// The whole pixels a crop keeps of an image of `size` (top-left origin): each side the rounded size
+    /// `outputPixelSize(from:)` gives, the origin rounded and kept inside. The renderer crops exactly these, so its
+    /// canvas is the document's (`.integral` of the scaled rect grows a side on float noise: (1 − 0.95) × 180 =
+    /// 8.99999999999999). Nil when nothing is left or the size is unknown.
+    static func pixelCrop(_ rect: PSRect, in size: PSSize) -> PSRect? {
+        guard let r = effectiveCrop(rect), size.width.isFinite, size.height.isFinite, size.width >= 1, size.height >= 1 else { return nil }
+        let width = min(size.width, max(1, (size.width * r.width).rounded()))
+        let height = min(size.height, max(1, (size.height * r.height).rounded()))
+        let x = min(max(0, (size.width * r.minX).rounded()), size.width - width)
+        let y = min(max(0, (size.height * r.minY).rounded()), size.height - height)
+        return PSRect(x: x, y: y, width: width, height: height)
+    }
+
+    /// `rect` on the whole-pixel grid of an image of `size` (`pixelCrop`), normalised again; `rect` itself when there
+    /// is none. `PhotoDocument.apply` stores crops this way, so the geometry chain (masks, D10b) maps exactly the
+    /// pixels the renderer keeps: a layer via copy stays on its pixels instead of being resampled by 130 / 129.6.
+    /// Idempotent; a crop already on whole pixels is unchanged.
+    static func snappedCrop(_ rect: PSRect, in size: PSSize) -> PSRect {
+        guard let pixels = pixelCrop(rect, in: size) else { return rect }
+        return PSRect(x: pixels.minX / size.width, y: pixels.minY / size.height,
+                      width: pixels.width / size.width, height: pixels.height / size.height)
+    }
 }

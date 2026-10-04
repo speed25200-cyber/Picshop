@@ -781,11 +781,16 @@ public actor PhotoRenderer {
         if tag == "lazy" {
             image = try ImageSupport.loadCIImage(at: url)
             bytes = 0
+        } else if eagerExport {
+            // The file's own samples, as the lazy full-resolution render reads them (a thumbnail redraws them).
+            let decoded = try ImageSupport.loadDecodedImage(at: url)
+            image = decoded.image
+            bytes = decoded.bytes
+            exportSourceBytes += bytes
         } else {
-            let cg = try ImageSupport.loadCGImage(at: url, maxPixelSize: eagerExport ? nil : targetSide)
+            let cg = try ImageSupport.loadCGImage(at: url, maxPixelSize: targetSide)
             image = CIImage(cgImage: cg)
             bytes = cg.bytesPerRow * cg.height
-            if eagerExport { exportSourceBytes += bytes }
         }
         sourceCache[key] = (image, bytes)
         sourceOrder.append(key)
@@ -1100,8 +1105,12 @@ public actor PhotoRenderer {
             return LensBlur.apply(to: input, subjectMask: maskImage, focus: focus, aperture: aperture)
 
         case .crop(let rect):
-            let cropRect = rect.ciRect(in: extent).integral.intersection(extent)
-            guard !cropRect.isEmpty else { return input }
+            // The whole pixels Core counts (the document's canvas, D10b), top-left origin turned to Core Image's, on the
+            // image's own rounded pixel grid: a non-quarter rotate leaves a fractional extent, which Core rounds, and a
+            // whole-pixel crop rect and translation never resample the picture.
+            let grid = CGRect(x: extent.minX.rounded(), y: extent.minY.rounded(), width: extent.width.rounded(), height: extent.height.rounded())
+            guard let pixels = EditOperation.Kind.pixelCrop(rect, in: PSSize(width: Double(grid.width), height: Double(grid.height))) else { return input }
+            let cropRect = CGRect(x: grid.minX + CGFloat(pixels.minX), y: grid.maxY - CGFloat(pixels.maxY), width: CGFloat(pixels.width), height: CGFloat(pixels.height))
             return input.cropped(to: cropRect).transformed(by: CGAffineTransform(translationX: -cropRect.minX, y: -cropRect.minY))
 
         case .rotate(let degrees):

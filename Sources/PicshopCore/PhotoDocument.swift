@@ -150,6 +150,12 @@ public struct PhotoDocument: Hashable, Codable, Sendable, Identifiable {
             setLocalAdjustment(adjustment, label: label, on: target)
             return true
         }
+        var kind = kind
+        // A crop keeps whole pixels of the layer's output (the canvas for the base), as the renderer does (D10b).
+        if case .crop(let rect) = kind, let layer = layer(id: target),
+           let size = target == baseLayerID ? Optional(canvasSize) : LayerPlacement.contentSize(of: layer) {
+            kind = .crop(EditOperation.Kind.snappedCrop(rect, in: size))
+        }
         append(EditOperation(kind: kind, label: label), to: target)
         return true
     }

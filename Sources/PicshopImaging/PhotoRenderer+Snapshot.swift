@@ -157,28 +157,55 @@ extension PhotoRenderer {
             let effectiveScale = Double(extent.width) / max(1, asset.pixelSize.width)
             let recipe = developRecipe(for: target)
             DevelopRenderer.warm(recipe, colorCube: colorCube, lutURL: lutURL)
-            // The local adjustments' masks, frozen at capture (D13), from the developed picture as the actor draws them.
+            // The local adjustments' masks as the actor draws them, from the developed picture before any of them: a
+            // static stack (brush, gradient, raster) is frozen at capture (D13); a colour or luminance range reads the
+            // pixels the dial moves, so the frame draws it again from its own developed picture (its cube baked here),
+            // as the settled render does: a frozen range would jump when the finger lifts.
             let developed = DevelopRenderer.apply(recipe, to: preDevelop, scale: effectiveScale, cubes: .interactive, colorCube: colorCube, lutURL: lutURL)
             var localMasks: [UUID: CIImage] = [:]
-            if FeatureFlags.isOn(.masks), options.includesLocalAdjustments {
+            var liveLocalMasks: Set<UUID> = []
+            var drawer: SnapshotMaskDrawer?
+            func liveDrawer() -> SnapshotMaskDrawer {
+                if let drawer { return drawer }
+                let made = SnapshotMaskDrawer(maskStore: maskStore)
+                drawer = made
+                return made
+            }
+            let drawsLocal = FeatureFlags.isOn(.masks) && options.includesLocalAdjustments
+            if drawsLocal {
                 for adjustment in target.edits.resolvedLocalAdjustments.prefix(LocalAdjustment.maxPerLayer) where adjustment.isVisible && !adjustment.isNeutral {
-                    let mask = rasterizer.mask(adjustment.stack, extent: extent, preLocal: developed, mode: rasterMode, owner: adjustment.id)
-                    localMasks[adjustment.id] = materializedMask(mask)
+                    if adjustment.stack.hasPixelDependentComponents {
+                        _ = liveDrawer().mask(adjustment.stack, extent: developed.extent, preLocal: developed, owner: adjustment.id)
+                        liveLocalMasks.insert(adjustment.id)
+                    } else {
+                        let mask = rasterizer.mask(adjustment.stack, extent: extent, preLocal: developed, mode: rasterMode, owner: adjustment.id)
+                        localMasks[adjustment.id] = materializedMask(mask)
+                    }
                     _ = LocalAdjustRenderer.adjusted(developed, by: adjustment, scale: effectiveScale, interactive: false)
                 }
             }
-            // The layer's own masks (legacy × a linked stack) in content space; an unlinked one stays on the pieces.
+            // The layer's own masks (legacy × a linked stack) in content space; an unlinked one stays on the pieces. A
+            // linked range reads the layer's finished content (`layerMasked`), so the frame draws it from its own.
             var linked: CIImage?
             if let legacy = target.mask { linked = loadMask(legacy, fitting: extent) }
+            var drawsLinkedStackLive = false
             if target.isMaskEnabled, let stack = target.maskStack, !stack.isEmpty, target.isMaskLinked {
-                let drawn = rasterizer.mask(stack, extent: extent, preLocal: developed, mode: rasterMode, owner: target.id)
-                linked = linked.map { Self.multiply($0, drawn) } ?? drawn
+                if stack.hasPixelDependentComponents {
+                    // Warmed here (its cubes baked); the frame passes the finished content.
+                    _ = liveDrawer().mask(stack, extent: developed.extent, preLocal: developed, owner: target.id)
+                    drawsLinkedStackLive = true
+                } else {
+                    let drawn = rasterizer.mask(stack, extent: extent, preLocal: developed, mode: rasterMode, owner: target.id)
+                    linked = linked.map { Self.multiply($0, drawn) } ?? drawn
+                }
             }
             pieces.canvasMask = materializedMask(pieces.canvasMask)
             pieces.content = nil
             payload.targetPieces = pieces
             payload.develop = SnapshotPayload.Develop(preDevelop: preDevelop, effectiveScale: effectiveScale, localMasks: localMasks,
-                                                      linkedMask: materializedMask(linked), includesLocalAdjustments: options.includesLocalAdjustments)
+                                                      liveLocalMasks: liveLocalMasks, linkedMask: materializedMask(linked),
+                                                      drawsLinkedStackLive: drawsLinkedStackLive, maskDrawer: drawer,
+                                                      includesLocalAdjustments: options.includesLocalAdjustments)
 
         case .adjustmentLayer:
             payload.targetCanvasMask = materializedMask(frame.masks[targetID])

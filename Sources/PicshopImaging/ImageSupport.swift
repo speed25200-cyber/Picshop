@@ -117,6 +117,21 @@ public enum ImageSupport {
         return image
     }
 
+    /// W3 (D14): the whole image decoded now, its samples as the file stores them, upright: the pixels
+    /// `loadCIImage` reads lazily, held once for an export pass. Not the thumbnail path: even at full size ImageIO
+    /// draws a thumbnail again (premultiplied, through its scaler), so an export decoded that way would not equal
+    /// the full-resolution render. Also returns the bitmap's bytes.
+    public static func loadDecodedImage(at url: URL) throws -> (image: CIImage, bytes: Int) {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let cg = CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else {
+            throw PicshopError.mediaUnavailable(url.lastPathComponent)
+        }
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let orientation = (properties?[kCGImagePropertyOrientation] as? UInt32).flatMap { CGImagePropertyOrientation(rawValue: $0) } ?? .up
+        let image = CIImage(cgImage: cg)
+        return (orientation == .up ? image : image.oriented(orientation), cg.bytesPerRow * cg.height)
+    }
+
     /// W3 (D14): whether an export pass decodes this source once, eagerly, into an 8-bit bitmap: an 8-bit JPEG or
     /// PNG, which Core Image would otherwise decode whole for every strip. HEIC (tiled decode), RAW and deeper files
     /// stay lazy, at their full precision.

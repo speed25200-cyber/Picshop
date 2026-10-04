@@ -81,6 +81,34 @@ final class LayerFollowsBaseTests: XCTestCase {
         }
     }
 
+    func testACropOffThePixelGridKeepsTheViaCopyOnTheRenderersPixels() throws {
+        // 0.54 × 240 = 129.6 px: the renderer keeps 130 whole pixels from x = 48 (`pixelCrop`), and the stored crop is
+        // those pixels, so after a quarter turn the copy maps every source pixel onto a whole canvas pixel (scale 1),
+        // not 130 / 129.6 of it (TransformRenderTests on the GPU).
+        let small = MediaAsset(kind: .image, relativePath: "media/small.png", pixelSize: PSSize(width: 240, height: 180))
+        var document = PhotoDocument(title: "grid", baseImage: small)
+        let baseID = try XCTUnwrap(document.baseLayerID)
+        let region = MaskStack(components: [MaskComponent(.radial(RadialGradientSpec(center: PSPoint(x: 0.5, y: 0.5), radiusX: 0.2, radiusY: 0.2)))])
+        let via = try XCTUnwrap(document.applyStructureEdit(.viaCopy(source: baseID, region: region, name: nil)).layerID)
+        let requested = PSRect(x: 0.2, y: 0.05, width: 0.54, height: 0.9)
+        let pixels = try XCTUnwrap(EditOperation.Kind.pixelCrop(requested, in: small.pixelSize))
+        XCTAssertEqual(pixels, PSRect(x: 48, y: 9, width: 130, height: 162))
+        XCTAssertTrue(document.apply(.crop(requested), to: baseID))
+        XCTAssertEqual(document.canvasSize, PSSize(width: 130, height: 162))
+        let stored = try XCTUnwrap(document.baseLayer?.edits.resolvedCrop)
+        XCTAssertEqual(stored.width * 240, 130, accuracy: 1e-9)
+        XCTAssertEqual(EditOperation.Kind.snappedCrop(stored, in: small.pixelSize), stored, "idempotent")
+        XCTAssertTrue(document.apply(.rotate(degrees: 90), to: baseID))
+        XCTAssertEqual(document.canvasSize, PSSize(width: 162, height: 130))
+        // The renderer: crop, then a clockwise quarter turn of 130 × 162, (x, y) → (162 − y, x).
+        let want = [(0.0, 0.0), (240.0, 0.0), (240.0, 180.0), (0.0, 180.0)].map { PSPoint(x: 162 - ($0.1 - 9), y: $0.0 - 48) }
+        let quad = placedQuad(try XCTUnwrap(document.layer(id: via)), in: document)
+        for (got, want) in zip(quad, want) {
+            XCTAssertEqual(got.x * 162, want.x, accuracy: 1e-9)
+            XCTAssertEqual(got.y * 130, want.y, accuracy: 1e-9)
+        }
+    }
+
     func testATextLayerKeepsItsPixelSizeAndItsPlace() throws {
         var document = W3.base(92, title: "text")
         let text = W3.text(9202, "Soldes", center: PSPoint(x: 0.3, y: 0.4))

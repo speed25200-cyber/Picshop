@@ -207,11 +207,27 @@ public final class RenderSnapshot: @unchecked Sendable {
             let recipe = DevelopRenderer.Recipe(edits: target.edits)
             var image = DevelopRenderer.apply(recipe, to: develop.preDevelop, scale: develop.effectiveScale, cubes: .nonBlocking,
                                               colorCube: colorCube, lutURL: lutURL)
+            // Every local mask reads the developed picture before any local adjustment (`applyLocalAdjustments`).
+            let preLocal = image
             for adjustment in target.edits.resolvedLocalAdjustments.prefix(LocalAdjustment.maxPerLayer) {
-                guard develop.includesLocalAdjustments, adjustment.isVisible, !adjustment.isNeutral, let mask = develop.localMasks[adjustment.id] else { continue }
+                guard develop.includesLocalAdjustments, adjustment.isVisible, !adjustment.isNeutral else { continue }
+                let mask: CIImage
+                if let frozen = develop.localMasks[adjustment.id] {
+                    mask = frozen
+                } else if develop.liveLocalMasks.contains(adjustment.id), let drawer = develop.maskDrawer {
+                    mask = drawer.mask(adjustment.stack, extent: preLocal.extent, preLocal: preLocal, owner: adjustment.id)
+                } else {
+                    continue
+                }
                 image = LocalAdjustRenderer.apply(adjustment, mask: mask, to: image, scale: develop.effectiveScale, interactive: true, nonBlocking: true)
             }
-            if let linked = develop.linkedMask { image = AdjustmentPipeline.applyingAlpha(mask: linked, to: image) }
+            // The layer's own linked masks on the finished content (`layerMasked`): a range reads that content.
+            var linked = develop.linkedMask
+            if develop.drawsLinkedStackLive, let drawer = develop.maskDrawer, let stack = target.maskStack {
+                let drawn = drawer.mask(stack, extent: image.extent, preLocal: image, owner: target.id)
+                linked = linked.map { PhotoRenderer.multiply($0, drawn) } ?? drawn
+            }
+            if let linked { image = AdjustmentPipeline.applyingAlpha(mask: linked, to: image) }
             pieces.content = image
             return pieces.placed(on: canvas)
         case .fillLayer:
@@ -321,7 +337,7 @@ public final class RenderSnapshot: @unchecked Sendable {
     }
 
     /// The operations the develop step does not draw (the loop's: geometry, retouch, expensive): equal, the
-    /// captured pre-develop picture still holds. Local adjustments are compared apart (their masks are frozen).
+    /// captured pre-develop picture still holds. Local adjustments are compared apart (their stacks are captured).
     static func placedOperations(_ edits: EditStack) -> [EditOperation] {
         edits.operations.filter { !isDevelop($0.kind) }
     }
@@ -372,12 +388,20 @@ struct SnapshotPayload {
         var followsGroup: Bool
     }
 
-    /// `.layerDevelop`: the pre-develop picture and the frozen local masks, in content space.
+    /// `.layerDevelop`: the pre-develop picture and the local masks, in content space: static stacks frozen, colour
+    /// and luminance ranges drawn by `maskDrawer` from each frame's own pixels, as the actor draws them.
     struct Develop {
         var preDevelop: CIImage
         var effectiveScale: Double
+        /// Static local masks, frozen at capture.
         var localMasks: [UUID: CIImage]
+        /// Local adjustments whose range mask reads the developed picture: drawn each frame.
+        var liveLocalMasks: Set<UUID>
+        /// The legacy mask × a static linked stack (or the legacy mask alone when the stack is drawn live).
         var linkedMask: CIImage?
+        /// The linked stack reads the finished content (a range): drawn each frame.
+        var drawsLinkedStackLive: Bool
+        var maskDrawer: SnapshotMaskDrawer?
         var includesLocalAdjustments: Bool
     }
 
