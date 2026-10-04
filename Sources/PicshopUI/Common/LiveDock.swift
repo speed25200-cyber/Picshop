@@ -131,6 +131,8 @@ struct LiveDock: View {
     var candidateThumbnail: ((Int) async -> UIImage?)?
     var showsToolsButton: Bool
     var showsOnDeviceCue: Bool
+    /// UX 2.0 hides the idea chips over the field (the reply capsule sat on them); a question's choices still show.
+    var showsIdeaChips: Bool
 
     @Namespace private var glass
     @State private var keyboardOpen = false
@@ -139,12 +141,13 @@ struct LiveDock: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(live: LiveSession, onTools: @escaping () -> Void, candidateThumbnail: ((Int) async -> UIImage?)? = nil,
-         showsToolsButton: Bool = true, showsOnDeviceCue: Bool = false) {
+         showsToolsButton: Bool = true, showsOnDeviceCue: Bool = false, showsIdeaChips: Bool = true) {
         self.live = live
         self.onTools = onTools
         self.candidateThumbnail = candidateThumbnail
         self.showsToolsButton = showsToolsButton
         self.showsOnDeviceCue = showsOnDeviceCue
+        self.showsIdeaChips = showsIdeaChips
     }
 
     var body: some View {
@@ -208,6 +211,7 @@ struct LiveDock: View {
     /// No empty band: PDF has no ideas (its choices still show), and every idea may be dismissed.
     private var showsChipRow: Bool {
         if live.choices != nil { return true }
+        if !showsIdeaChips { return false }
         if !live.canGoLive, case .loading = live.ideas { return false }
         if case .ready(let list) = live.ideas, list.isEmpty { return false }
         return true

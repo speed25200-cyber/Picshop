@@ -253,7 +253,7 @@ struct StudioChrome<Canvas: View, Panel: View>: View {
                         if isUX2 {
                             ZStack(alignment: .bottom) { bottom }
                             if !isToolOpen {
-                                StudioCategoryBar(categories: rail ?? catalog, catalog: catalog, onSearch: openTools)
+                                StudioCategoryBar(categories: rail ?? catalog, catalog: catalog)
                                     .frame(maxWidth: 620)
                                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                             }
@@ -271,6 +271,7 @@ struct StudioChrome<Canvas: View, Panel: View>: View {
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomHeight = $0 }
                     .padding(.bottom, keyboardVisible ? 8 : restingBottom)
                 }
+                .frame(width: proxy.size.width)
                 .ignoresSafeArea(.container, edges: .bottom)
                 // W1: the local brain's offer and download sit at the end of the Ask field
                 // (LiveDock, flat in the field's glass), not in a glass badge over the picture.
@@ -312,7 +313,7 @@ struct StudioChrome<Canvas: View, Panel: View>: View {
                 .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.move(edge: .bottom).combined(with: .opacity))
         } else {
             LiveDock(live: live, onTools: openTools, candidateThumbnail: candidateThumbnail,
-                     showsToolsButton: !showsRail && !isUX2, showsOnDeviceCue: isStudio)
+                     showsToolsButton: !showsRail, showsOnDeviceCue: isStudio, showsIdeaChips: !isUX2)
                 .transition(.opacity)
         }
     }
@@ -407,16 +408,57 @@ struct StudioTopBar: View {
     private static let historyUnion = "history"
 
     var body: some View {
+        if isUX2 {
+            ux2Bar
+        } else {
+            classicBar
+        }
+    }
+
+    /// UX 2.0: « ‹ Projets » · title · ◐ · ↶ (↷) · Exporter, never wider than the screen: when the words do not fit,
+    /// the title goes first, then « Projets » shrinks to its ‹.
+    private var ux2Bar: some View {
+        PSGlassContainer(spacing: PSSpacing.small) {
+            ViewThatFits(in: .horizontal) {
+                ux2Row(showsTitle: true, namesBack: true)
+                ux2Row(showsTitle: false, namesBack: true)
+                ux2Row(showsTitle: false, namesBack: false)
+            }
+        }
+        .padding(.horizontal, PSSpacing.editorSide)
+        .padding(.top, 4)
+        .frame(height: PSMetrics.topBar, alignment: .bottom)
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+    }
+
+    private func ux2Row(showsTitle: Bool, namesBack: Bool) -> some View {
+        HStack(spacing: PSSpacing.small) {
+            if namesBack {
+                PSCapsuleButton(L("Projects"), systemImage: "chevron.backward", kind: .glass, action: actions.close)
+                    .fixedSize()
+            } else {
+                PSCircleButton(systemImage: "chevron.backward", accessibilityLabel: L("Projects"), action: actions.close)
+            }
+            Spacer(minLength: 4)
+            if showsTitle, let context {
+                StudioContextMenu(context: context, onZoom: actions.zoom)
+                    .fixedSize()
+                Spacer(minLength: 4)
+            }
+            if let compare {
+                CompareButton(control: compare)
+            }
+            UndoRedoCluster(bar: bar, actions: actions, glass: glass)
+            PSCapsuleButton(L("Export"), action: actions.export)
+                .fixedSize()
+        }
+    }
+
+    private var classicBar: some View {
         PSGlassContainer(spacing: PSSpacing.small) {
             HStack(spacing: PSSpacing.small) {
-                if isUX2 {
-                    PSCapsuleButton(L("Projects"), systemImage: "chevron.backward", kind: .glass, action: actions.close)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .glassEffectID("close", in: glass)
-                } else {
-                    PSCircleButton(systemImage: "xmark", accessibilityLabel: L("Close"), action: actions.close)
-                        .glassEffectID("close", in: glass)
-                }
+                PSCircleButton(systemImage: "xmark", accessibilityLabel: L("Close"), action: actions.close)
+                    .glassEffectID("close", in: glass)
                 Spacer(minLength: 4)
                 if let context {
                     StudioContextMenu(context: context, onZoom: actions.zoom)
@@ -432,8 +474,7 @@ struct StudioTopBar: View {
                         .glassEffectID("compare", in: glass)
                         .glassEffectUnion(id: Self.historyUnion, namespace: glass)
                 }
-                UndoRedoCluster(bar: bar, actions: actions, glass: glass, unionID: compare != nil ? Self.historyUnion : nil,
-                                alwaysShowsRedo: isUX2)
+                UndoRedoCluster(bar: bar, actions: actions, glass: glass, unionID: compare != nil ? Self.historyUnion : nil)
                 // Never truncated by the centre, whatever its words.
                 PSCapsuleButton(L("Export"), action: actions.export)
                     .fixedSize(horizontal: true, vertical: false)

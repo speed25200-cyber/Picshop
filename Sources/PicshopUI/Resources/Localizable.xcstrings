@@ -15489,22 +15489,6 @@
         }
       }
     },
-    "Search": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Search"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rechercher"
-          }
-        }
-      }
-    },
     "Search projects": {
       "localizations": {
         "en": {

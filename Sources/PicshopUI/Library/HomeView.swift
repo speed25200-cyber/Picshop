@@ -377,11 +377,10 @@ private struct HomeStudioHeader: View {
                     if showsSearch {
                         PSCircleButton(systemImage: "magnifyingglass", accessibilityLabel: L("Search projects")) { open() }
                             .glassEffectID("search", in: glass)
-                            .glassEffectUnion(id: "header", namespace: glass)
                     }
+                    // Two separate circles: melted into one shape, they drew an empty bubble between them.
                     HomeSettingsButton(app: app, action: onSettings)
                         .glassEffectID("settings", in: glass)
-                        .glassEffectUnion(id: "header", namespace: glass)
                 }
             }
         }

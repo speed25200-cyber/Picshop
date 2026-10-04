@@ -5,19 +5,16 @@ import PicshopCore
 /// UX 2.0 (ux-spec §4.3, §4.4): the editor's tool bar at rest, every category named under its glyph (Magie,
 /// Ajuster, Filtres, Recadrer…). A category with one panel opens it at once; a category with several shows its
 /// tools in the same bar, a leading ‹ going back to the categories. A panel opening puts the categories back;
-/// a one-tap action (Magie) keeps its strip, so the next action is one tap away. « Rechercher » ends the bar and
-/// opens the tool search (the Outils sheet), so every tool stays reachable by its name.
+/// a one-tap action (Magie) keeps its strip, so the next action is one tap away. Every tool stays reachable by its
+/// name from the Outils button beside the Ask field.
 struct StudioCategoryBar: View {
     /// The categories and their yellow dots (the rail's catalog when it is cheaper to build).
     let categories: () -> ToolCatalog
     /// The full catalog (Magie's ranked actions), read when a category opens.
     let catalog: () -> ToolCatalog
-    let onSearch: () -> Void
 
     @State private var openCategory: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private static let searchID = "search"
 
     var body: some View {
         Group {
@@ -38,11 +35,10 @@ struct StudioCategoryBar: View {
     }
 
     private func categoryItems(_ built: ToolCatalog) -> [PSToolBarItem] {
-        let named = built.categories.map { category in
+        built.categories.map { category in
             PSToolBarItem(id: category.id, title: category.title, systemImage: category.symbol,
                           isModified: category.items.contains { $0.isModified })
         }
-        return named + [PSToolBarItem(id: Self.searchID, title: L("Search"), systemImage: "magnifyingglass")]
     }
 
     private static func item(_ tool: ToolItem) -> PSToolBarItem {
@@ -50,10 +46,6 @@ struct StudioCategoryBar: View {
     }
 
     private func select(_ id: String) {
-        guard id != Self.searchID else {
-            onSearch()
-            return
-        }
         guard let category = catalog().categories.first(where: { $0.id == id }) else { return }
         if category.items.count == 1, let only = category.items.first {
             run(only)

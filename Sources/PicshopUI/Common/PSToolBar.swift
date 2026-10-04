@@ -109,8 +109,17 @@ struct PSToolBar: View {
                     fittedRow
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: PSSpacing.xSmall) { cells }
+                            .padding(.trailing, PSSpacing.large)
                     }
                     .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+                    // More items to the right: the edge fades instead of cutting a label in half.
+                    .mask {
+                        HStack(spacing: 0) {
+                            Rectangle()
+                            LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                                .frame(width: PSSpacing.large * 2)
+                        }
+                    }
                 }
             }
             .padding(.horizontal, PSMetrics.toolBarInset)

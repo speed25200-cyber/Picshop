@@ -18,16 +18,14 @@ struct HomeCreateRow: View {
                 .foregroundStyle(Color.psTextPrimary)
                 .accessibilityAddTraits(.isHeader)
                 .padding(.horizontal, PSSpacing.page)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: PSSpacing.small) {
-                    HomeCreateTile(title: L("Photo"), systemImage: "photo", tint: Color.psValueAccent, action: pickPhoto)
-                    HomeCreateTile(title: L("Video"), systemImage: "video", tint: Color.psWarning, action: pickVideo)
-                    HomeCreateTile(title: L("PDF"), systemImage: "doc.text", tint: Color.psDanger, action: importPDF)
-                    HomeCreateTile(title: L("Magic movie"), systemImage: "sparkles.tv", tint: Color.psSuccess, action: magicMovie)
-                }
-                .padding(.horizontal, PSSpacing.page)
+            // Four equal tiles across the screen: nothing hides off the edge.
+            HStack(spacing: PSSpacing.small) {
+                HomeCreateTile(title: L("Photo"), systemImage: "photo", tint: Color.psValueAccent, action: pickPhoto)
+                HomeCreateTile(title: L("Video"), systemImage: "video", tint: Color.psWarning, action: pickVideo)
+                HomeCreateTile(title: L("PDF"), systemImage: "doc.text", tint: Color.psDanger, action: importPDF)
+                HomeCreateTile(title: L("Magic movie"), systemImage: "sparkles.tv", tint: Color.psSuccess, action: magicMovie)
             }
-            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .padding(.horizontal, PSSpacing.page)
         }
     }
 }
@@ -49,13 +47,15 @@ private struct HomeCreateTile: View {
                     .foregroundStyle(tint)
                     .frame(height: 28)
                 Text(title)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(Color.psTextPrimary)
-                    .lineLimit(1)
-                    .fixedSize()
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(minWidth: 92, minHeight: 84)
-            .padding(.horizontal, PSSpacing.small)
+            .frame(maxWidth: .infinity, minHeight: 88)
+            .padding(.horizontal, PSSpacing.xSmall)
             .background(RoundedRectangle(cornerRadius: PSRadius.tile, style: .continuous).fill(Color.psElevated))
             .contentShape(RoundedRectangle(cornerRadius: PSRadius.tile, style: .continuous))
         }
